@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biomedical Image Segmentation Interface</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            background: rgba(255,255,255,0.2);
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: white;
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .step-nav {
+            display: flex;
+            justify-content: space-between;
+            background: #f8f9fa;
+            padding: 20px 40px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .step.active {
+            color: #4CAF50;
+        }
+
+        .step.completed {
+            color: #28a745;
+        }
+
+        .step-number {
+            background: #dee2e6;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .step.active .step-number {
+            background: #4CAF50;
+        }
+
+        .step.completed .step-number {
+            background: #28a745;
+        }
+
+        .main-content {
+            padding: 40px;
+            min-height: 500px;
+            max-height: 90vh; /* Prevent the content from getting too tall */
+            overflow-y: auto; /* Allow scrolling if content is too tall */
+        }
+
+        .step-content {
+            display: none;
+            max-height: 85vh; /* Constrain individual step content */
+            overflow-y: auto; /* Allow scrolling within steps */
+        }
+
+        .step-content.active {
+            display: block;
+        }
+
+        /* Step 1: File Upload */
+        .upload-section {
+            border: 3px dashed #ddd;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-section:hover {
+            border-color: #4CAF50;
+            background-color: #f9f9f9;
+        }
+
+        .upload-section.dragover {
+            border-color: #4CAF50;
+            background-color: #e8f5e8;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.secondary {
+            background: #6c757d;
+        }
+
+        .btn.secondary:hover {
+            background: #545b62;
+        }
+
+        .validation-info {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .validation-error {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            color: #d32f2f;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        /* Step 2: Configuration */
+        .config-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .config-group {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+        }
+
+        .config-group h3 {
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+
+        .form-field {
+            margin-bottom: 20px;
+        }
+
+        .form-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-field input, .form-field select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-field input:focus, .form-field select:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .checkbox-field {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-field input[type="checkbox"] {
+            width: auto;
+            scale: 1.2;
+        }
+
+        /* Step 3: Training Progress */
+        .training-container {
+            text-align: center;
+        }
+
+        .training-status {
+            background: #e3f2fd;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .training-progress {
+            margin: 20px 0;
+        }
+
+        .training-progress-bar {
+            background: #e0e0e0;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .training-progress-fill {
+            background: linear-gradient(90deg, #4CAF50, #81C784);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+
+        .metrics-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .metric-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .metric-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+            max-height: 350px; /* Prevent charts container from growing too tall */
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            height: 300px; /* Fixed height to prevent growing */
+            position: relative;
+        }
+
+        .chart-container canvas {
+            max-height: 250px !important; /* Constrain canvas height */
+            width: 100% !important;
+        }
+
+        .chart-container h4 {
+            margin-bottom: 15px;
+            text-align: center;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 1;
+        }
+
+        /* Step 4: Inference */
+        .inference-section {
+            text-align: center;
+        }
+
+        .model-info {
+            background: #f0f8ff;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        /* Step 5: 3D Visualization */
+        .visualization-container {
+            height: 600px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .viz-controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider {
+            width: 150px;
+        }
+
+        .navigation-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+
+        .error-message {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            color: #d32f2f;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .success-message {
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .config-form {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Biomedical Image Segmentation</h1>
+            <p>Complete ML Pipeline: Data Upload → Training → Inference → 3D Visualization</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="overallProgress"></div>
+            </div>
+        </div>
+
+        <div class="step-nav">
+            <div class="step active" data-step="1">
+                <div class="step-number">1</div>
+                <span>Data Upload</span>
+            </div>
+            <div class="step" data-step="2">
+                <div class="step-number">2</div>
+                <span>Configuration</span>
+            </div>
+            <div class="step" data-step="3">
+                <div class="step-number">3</div>
+                <span>Training</span>
+            </div>
+            <div class="step" data-step="4">
+                <div class="step-number">4</div>
+                <span>Inference</span>
+            </div>
+            <div class="step" data-step="5">
+                <div class="step-number">5</div>
+                <span>3D Visualization</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Step 1: Data Upload -->
+            <div class="step-content active" id="step1">
+                <h2>Step 1: Upload Training Data</h2>
+                <p>Upload your TIFF image stacks for training. Both raw images and annotations are required.</p>
+                
+                <div class="upload-section" id="rawUploadSection">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">
+                        <h3>Raw Images (.tif stack)</h3>
+                        <p>Drag and drop your raw image TIFF stack here, or click to select</p>
+                    </div>
+                    <input type="file" id="rawImagesInput" class="file-input" accept=".tif,.tiff">
+                    <button class="btn" onclick="document.getElementById('rawImagesInput').click()">
+                        Choose Raw Images
+                    </button>
+                </div>
+
+                <div class="upload-section" id="annotationsUploadSection">
+                    <div class="upload-icon">🏷️</div>
+                    <div class="upload-text">
+                        <h3>Annotations (.tif stack)</h3>
+                        <p>Drag and drop your annotations TIFF stack here, or click to select</p>
+                    </div>
+                    <input type="file" id="annotationsInput" class="file-input" accept=".tif,.tiff">
+                    <button class="btn" onclick="document.getElementById('annotationsInput').click()">
+                        Choose Annotations
+                    </button>
+                </div>
+
+                <div id="validationResult"></div>
+
+                <div class="navigation-buttons">
+                    <div></div>
+                    <button class="btn" id="step1Next" onclick="nextStep()" disabled>Next: Configuration</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Configuration -->
+            <div class="step-content" id="step2">
+                <h2>Step 2: Training Configuration</h2>
+                <p>Configure your model and training parameters.</p>
+
+                <div class="config-form">
+                    <div class="config-group">
+                        <h3>Dataset Configuration</h3>
+                        <div class="form-field">
+                            <label for="patchSize">Patch Size</label>
+                            <input type="number" id="patchSize" value="512" min="64" max="1024" step="64">
+                        </div>
+                        <div class="form-field">
+                            <label for="patchesPerImage">Patches per Image</label>
+                            <input type="number" id="patchesPerImage" value="10" min="1" max="50">
+                        </div>
+                        <div class="form-field">
+                            <label for="batchSize">Batch Size</label>
+                            <input type="number" id="batchSize" value="8" min="1" max="32">
+                        </div>
+                        <div class="form-field checkbox-field">
+                            <input type="checkbox" id="augmentation" checked>
+                            <label for="augmentation">Apply Data Augmentation</label>
+                        </div>
+                    </div>
+
+                    <div class="config-group">
+                        <h3>Model Architecture</h3>
+                        <div class="form-field">
+                            <label for="numFeatures">Number of Features</label>
+                            <input type="number" id="numFeatures" value="64" min="16" max="256" step="16">
+                        </div>
+                        <div class="form-field">
+                            <label for="numLayers">Number of Layers</label>
+                            <input type="number" id="numLayers" value="4" min="2" max="6">
+                        </div>
+                    </div>
+
+                    <div class="config-group">
+                        <h3>Training Parameters</h3>
+                        <div class="form-field">
+                            <label for="learningRate">Learning Rate</label>
+                            <input type="number" id="learningRate" value="0.001" min="0.0001" max="0.1" step="0.0001">
+                        </div>
+                        <div class="form-field">
+                            <label for="numEpochs">Number of Epochs</label>
+                            <input type="number" id="numEpochs" value="100" min="10" max="500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="navigation-buttons">
+                    <button class="btn secondary" onclick="previousStep()">Previous</button>
+                    <button class="btn" onclick="startTraining()">Start Training</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Training Progress -->
+            <div class="step-content" id="step3">
+                <h2>Step 3: Training Progress</h2>
+                
+                <div class="training-status">
+                    <h3 id="trainingStatusText">Initializing training...</h3>
+                    <div class="training-progress">
+                        <div>Epoch <span id="currentEpoch">0</span> of <span id="totalEpochs">0</span></div>
+                        <div class="training-progress-bar">
+                            <div class="training-progress-fill" id="trainingProgressFill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-display">
+                    <div class="metric-card">
+                        <div class="metric-value" id="trainLoss">--</div>
+                        <div class="metric-label">Training Loss</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="valLoss">--</div>
+                        <div class="metric-label">Validation Loss</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="trainDice">--</div>
+                        <div class="metric-label">Training Dice</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="valDice">--</div>
+                        <div class="metric-label">Validation Dice</div>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div class="chart-container">
+                        <h4>Loss Curves</h4>
+                        <div style="position: relative; height: 220px; margin-top: 40px;">
+                            <canvas id="lossChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h4>Dice Score</h4>
+                        <div style="position: relative; height: 220px; margin-top: 40px;">
+                            <canvas id="diceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="navigation-buttons">
+                    <button class="btn secondary" onclick="previousStep()" id="trainingBackBtn">Previous</button>
+                    <button class="btn" onclick="nextStep()" id="trainingNextBtn" disabled>Next: Inference</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Inference -->
+            <div class="step-content" id="step4">
+                <h2>Step 4: Run Inference</h2>
+                
+                <div class="model-info">
+                    <h3>Trained Model Ready</h3>
+                    <p>Your model has been trained successfully. You can now run inference on new data or download the model.</p>
+                    <div style="margin-top: 15px;">
+                        <button class="btn" onclick="downloadModel()">Download Model & Config</button>
+                    </div>
+                </div>
+
+                <div class="inference-section">
+                    <h3>Upload New Data for Inference</h3>
+                    <div class="upload-section" id="inferenceUploadSection">
+                        <div class="upload-icon">🔍</div>
+                        <div class="upload-text">
+                            <p>Upload TIFF stack for segmentation</p>
+                        </div>
+                        <input type="file" id="inferenceInput" class="file-input" accept=".tif,.tiff">
+                        <button class="btn" onclick="document.getElementById('inferenceInput').click()">
+                            Choose Inference Data
+                        </button>
+                    </div>
+                    
+                    <button class="btn" id="runInferenceBtn" onclick="runInference()" disabled>
+                        Run Segmentation
+                    </button>
+                </div>
+
+                <div class="navigation-buttons">
+                    <button class="btn secondary" onclick="previousStep()">Previous</button>
+                    <button class="btn" onclick="nextStep()" id="inferenceNextBtn" disabled>Next: 3D Visualization</button>
+                </div>
+            </div>
+
+            <!-- Step 5: 3D Visualization -->
+            <div class="step-content" id="step5">
+                <h2>Step 5: 3D Interactive Visualization</h2>
+                
+                <div class="visualization-container" id="threejsContainer">
+                    <!-- Three.js visualization will be rendered here -->
+                </div>
+
+                <div class="viz-controls">
+                    <div class="control-group">
+                        <label>Opacity</label>
+                        <input type="range" class="slider" id="opacitySlider" min="0" max="1" step="0.1" value="0.8">
+                    </div>
+                    <div class="control-group">
+                        <label>Slice</label>
+                        <input type="range" class="slider" id="sliceSlider" min="0" max="100" value="50">
+                    </div>
+                    <div class="control-group">
+                        <label>Class Filter</label>
+                        <select id="classFilter">
+                            <option value="all">All Classes</option>
+                            <option value="0">Background</option>
+                            <option value="1">Class 1</option>
+                            <option value="2">Class 2</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="btn" onclick="downloadResults()">Download Segmentation Results</button>
+                    <button class="btn secondary" onclick="resetWorkflow()">Start New Analysis</button>
+                </div>
+
+                <div class="navigation-buttons">
+                    <button class="btn secondary" onclick="previousStep()">Previous</button>
+                    <div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3 id="loadingText">Processing...</h3>
+            <p id="loadingDescription">Please wait while we process your request.</p>
+        </div>
+    </div>
+
+    <!-- Error Messages -->
+    <div class="error-message" id="errorMessage"></div>
+
+    <script>
+        // Global variables
+        let currentStep = 1;
+        let socket = null;
+        let currentTrainingId = null;
+        let currentInferenceId = null;
+        let lossChart = null;
+        let diceChart = null;
+        let scene = null;
+        let camera = null;
+        let renderer = null;
+        let trainingPollInterval = null;
+        let uploadedFiles = {
+            rawImages: null,
+            annotations: null,
+            inferenceData: null
+        };
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSocketConnection();
+            initializeFileUpload();
+            initializeCharts();
+            updateProgressBar();
+        });
+
+        function initializeSocketConnection() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to server via WebSocket');
+            });
+            
+            socket.on('training-progress', function(data) {
+                console.log('Received training progress:', data);
+                updateTrainingProgress(data);
+            });
+            
+            socket.on('training-complete', function(data) {
+                console.log('Training completed:', data);
+                onTrainingComplete(data);
+            });
+            
+            socket.on('inference-room-joined', function(data) {
+                console.log('Joined inference room confirmed:', data);
+            });
+            
+            socket.on('inference-progress', function(data) {
+                console.log('Received inference progress:', data);
+                updateInferenceProgress(data);
+            });
+            
+            socket.on('inference-complete', function(data) {
+                console.log('Inference completed:', data);
+                onInferenceComplete(data);
+            });
+            
+            socket.on('disconnect', function() {
+                console.log('Disconnected from server');
+            });
+        }
+
+        function initializeFileUpload() {
+            // Raw images upload
+            const rawInput = document.getElementById('rawImagesInput');
+            const rawSection = document.getElementById('rawUploadSection');
+            
+            setupFileUpload(rawInput, rawSection, 'rawImages');
+            
+            // Annotations upload
+            const annotationsInput = document.getElementById('annotationsInput');
+            const annotationsSection = document.getElementById('annotationsUploadSection');
+            
+            setupFileUpload(annotationsInput, annotationsSection, 'annotations');
+            
+            // Inference upload
+            const inferenceInput = document.getElementById('inferenceInput');
+            const inferenceSection = document.getElementById('inferenceUploadSection');
+            
+            setupFileUpload(inferenceInput, inferenceSection, 'inferenceData');
+        }
+
+        function setupFileUpload(input, section, type) {
+            // Drag and drop
+            section.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                section.classList.add('dragover');
+            });
+
+            section.addEventListener('dragleave', () => {
+                section.classList.remove('dragover');
+            });
+
+            section.addEventListener('drop', (e) => {
+                e.preventDefault();
+                section.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileUpload(files[0], type);
+                }
+            });
+
+            section.addEventListener('click', () => {
+                input.click();
+            });
+
+            input.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileUpload(e.target.files[0], type);
+                }
+            });
+        }
+
+        async function handleFileUpload(file, type) {
+            if (!file.name.toLowerCase().endsWith('.tif') && !file.name.toLowerCase().endsWith('.tiff')) {
+                showError('Please select a TIFF file.');
+                return;
+            }
+
+            uploadedFiles[type] = file;
+            
+            if (type === 'rawImages' || type === 'annotations') {
+                updateUploadStatus(type, file.name);
+                
+                // If both files are uploaded, validate them
+                if (uploadedFiles.rawImages && uploadedFiles.annotations) {
+                    await validateTiffStacks();
+                }
+            } else if (type === 'inferenceData') {
+                document.getElementById('runInferenceBtn').disabled = false;
+                updateUploadStatus(type, file.name);
+            }
+        }
+
+        function updateUploadStatus(type, filename) {
+            const sectionMap = {
+                'rawImages': 'rawUploadSection',
+                'annotations': 'annotationsUploadSection',
+                'inferenceData': 'inferenceUploadSection'
+            };
+            
+            const section = document.getElementById(sectionMap[type]);
+            const uploadText = section.querySelector('.upload-text');
+            
+            uploadText.innerHTML = `
+                <h3>✅ ${filename}</h3>
+                <p>File uploaded successfully</p>
+            `;
+            section.style.borderColor = '#4CAF50';
+            section.style.backgroundColor = '#e8f5e8';
+        }
+
+        async function validateTiffStacks() {
+            showLoading('Validating TIFF stacks...', 'Please wait while we check file compatibility.');
+            
+            const formData = new FormData();
+            formData.append('raw_images', uploadedFiles.rawImages);
+            formData.append('annotations', uploadedFiles.annotations);
+
+            try {
+                const response = await fetch('/upload-data', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                hideLoading();
+
+                if (result.success) {
+                    showValidationSuccess(result.validation);
+                    document.getElementById('step1Next').disabled = false;
+                } else {
+                    showValidationError(result.error);
+                }
+            } catch (error) {
+                hideLoading();
+                showError('Error during validation: ' + error.message);
+            }
+        }
+
+        function showValidationSuccess(validation) {
+            const validationDiv = document.getElementById('validationResult');
+            validationDiv.innerHTML = `
+                <div class="validation-info">
+                    <h3>✅ Validation Successful</h3>
+                    <p><strong>Stack Shape:</strong> ${validation.info.shape.join(' × ')}</p>
+                    <p><strong>Number of Slices:</strong> ${validation.info.num_slices}</p>
+                    <p><strong>Slice Dimensions:</strong> ${validation.info.slice_dimensions.join(' × ')}</p>
+                    <p><strong>Raw Images Size:</strong> ${validation.info.raw_size_mb} MB</p>
+                    <p><strong>Annotations Size:</strong> ${validation.info.annotation_size_mb} MB</p>
+                    <p><strong>Annotation Classes:</strong> ${validation.info.annotation_stats.unique_values.join(', ')}</p>
+                </div>
+            `;
+        }
+
+        function showValidationError(error) {
+            const validationDiv = document.getElementById('validationResult');
+            validationDiv.innerHTML = `
+                <div class="validation-error">
+                    <h3>❌ Validation Failed</h3>
+                    <p>${error}</p>
+                </div>
+            `;
+        }
+
+        async function startTraining() {
+            // Get configuration
+            const config = {
+                patch_size: parseInt(document.getElementById('patchSize').value),
+                patches_per_image: parseInt(document.getElementById('patchesPerImage').value),
+                batch_size: parseInt(document.getElementById('batchSize').value),
+                augment: document.getElementById('augmentation').checked,
+                features: parseInt(document.getElementById('numFeatures').value),
+                num_layers: parseInt(document.getElementById('numLayers').value),
+                learning_rate: parseFloat(document.getElementById('learningRate').value),
+                num_epochs: parseInt(document.getElementById('numEpochs').value)
+            };
+
+            // Validate configuration
+            if (!validateConfiguration(config)) {
+                return;
+            }
+
+            showLoading('Starting training...', 'Preparing your model and data for training.');
+
+            try {
+                // Send configuration
+                const configResponse = await fetch('/configure-training', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (!configResponse.ok) {
+                    throw new Error('Configuration failed');
+                }
+
+                // Start training
+                const trainingResponse = await fetch('/start-training', {
+                    method: 'POST'
+                });
+
+                const result = await trainingResponse.json();
+                hideLoading();
+
+                if (result.success) {
+                    currentTrainingId = result.training_id;
+                    console.log('Training started with ID:', currentTrainingId);
+                    
+                    // Initialize training UI
+                    document.getElementById('totalEpochs').textContent = config.num_epochs;
+                    document.getElementById('currentEpoch').textContent = '0';
+                    document.getElementById('trainingStatusText').textContent = 'Training started... Preparing data...';
+                    
+                    socket.emit('join-training', currentTrainingId);
+                    console.log('Joined training room:', currentTrainingId);
+                    
+                    // Start polling as backup
+                    startTrainingPolling();
+                    
+                    nextStep();
+                    document.getElementById('trainingBackBtn').disabled = true;
+                } else {
+                    showError('Failed to start training: ' + result.error);
+                }
+            } catch (error) {
+                hideLoading();
+                showError('Error starting training: ' + error.message);
+            }
+        }
+
+        function validateConfiguration(config) {
+            // Add validation logic here
+            if (config.patch_size < 64 || config.patch_size > 1024) {
+                showError('Patch size must be between 64 and 1024');
+                return false;
+            }
+            // Add more validation as needed
+            return true;
+        }
+
+        function updateTrainingProgress(data) {
+            console.log('Updating training progress with:', data);
+            
+            const { epoch, total_epochs, metrics } = data;
+            
+            // Validate data
+            if (!epoch || !total_epochs || !metrics) {
+                console.warn('Incomplete training progress data:', data);
+                return;
+            }
+            
+            // Update progress bar
+            const progress = (epoch / total_epochs) * 100;
+            document.getElementById('trainingProgressFill').style.width = progress + '%';
+            
+            // Update epoch display
+            document.getElementById('currentEpoch').textContent = epoch;
+            document.getElementById('totalEpochs').textContent = total_epochs;
+            
+            // Update metrics with error checking
+            if (metrics.train_loss !== undefined) {
+                document.getElementById('trainLoss').textContent = metrics.train_loss.toFixed(4);
+            }
+            if (metrics.val_loss !== undefined) {
+                document.getElementById('valLoss').textContent = metrics.val_loss.toFixed(4);
+            }
+            if (metrics.train_dice !== undefined) {
+                document.getElementById('trainDice').textContent = metrics.train_dice.toFixed(4);
+            }
+            if (metrics.val_dice !== undefined) {
+                document.getElementById('valDice').textContent = metrics.val_dice.toFixed(4);
+            }
+            
+            // Update status
+            document.getElementById('trainingStatusText').textContent = `Training in progress... Epoch ${epoch}/${total_epochs}`;
+            
+            // Update charts
+            updateCharts(epoch, metrics);
+        }
+
+        function onTrainingComplete(data) {
+            console.log('Training completed with data:', data);
+            
+            if (data.success) {
+                document.getElementById('trainingStatusText').textContent = 'Training completed successfully!';
+                document.getElementById('trainingNextBtn').disabled = false;
+                document.getElementById('trainingBackBtn').disabled = false;
+                
+                // Make sure we have the training ID for inference
+                console.log('Training completed successfully. Training ID:', currentTrainingId);
+                
+            } else {
+                document.getElementById('trainingStatusText').textContent = 'Training failed!';
+                showError('Training failed. Please check your configuration and try again.');
+            }
+            
+            // Stop polling
+            if (trainingPollInterval) {
+                clearInterval(trainingPollInterval);
+                trainingPollInterval = null;
+            }
+        }
+
+        function startTrainingPolling() {
+            if (trainingPollInterval) {
+                clearInterval(trainingPollInterval);
+            }
+            
+            trainingPollInterval = setInterval(async () => {
+                if (!currentTrainingId) return;
+                
+                try {
+                    const response = await fetch(`/training-status/${currentTrainingId}`);
+                    const status = await response.json();
+                    
+                    console.log('Polling training status:', status);
+                    
+                    // Update UI if we have progress data
+                    if (status.current_epoch && status.total_epochs && status.metrics) {
+                        const progressData = {
+                            epoch: status.current_epoch,
+                            total_epochs: status.total_epochs,
+                            metrics: status.metrics
+                        };
+                        updateTrainingProgress(progressData);
+                    }
+                    
+                    // Check if training is complete
+                    if (status.status === 'completed' || status.status === 'failed') {
+                        onTrainingComplete({ success: status.status === 'completed' });
+                    }
+                    
+                } catch (error) {
+                    console.error('Error polling training status:', error);
+                }
+            }, 5000); // Poll every 5 seconds
+        }
+
+        function updateInferenceProgress(data) {
+            console.log('Updating inference progress with:', data);
+            
+            const { current_slice, total_slices, progress_percent } = data;
+            
+            // Validate data
+            if (current_slice === undefined || total_slices === undefined || progress_percent === undefined) {
+                console.warn('Incomplete inference progress data:', data);
+                return;
+            }
+            
+            console.log(`Progress update: ${current_slice}/${total_slices} (${progress_percent}%)`);
+            
+            // Update slice counters
+            const currentSliceEl = document.getElementById('currentSlice');
+            if (currentSliceEl) {
+                currentSliceEl.textContent = current_slice;
+                console.log('Updated current slice to:', current_slice);
+            } else {
+                console.warn('currentSlice element not found');
+            }
+            
+            const totalSlicesEl = document.getElementById('totalSlices');
+            if (totalSlicesEl) {
+                totalSlicesEl.textContent = total_slices;
+                console.log('Updated total slices to:', total_slices);
+            } else {
+                console.warn('totalSlices element not found');
+            }
+            
+            // Update progress bar
+            const progressBarEl = document.getElementById('inferenceProgressBar');
+            if (progressBarEl) {
+                const safeProgress = Math.min(100, Math.max(0, progress_percent));
+                progressBarEl.style.width = safeProgress + '%';
+                console.log('Updated progress bar to:', safeProgress + '%');
+            } else {
+                console.warn('inferenceProgressBar element not found');
+            }
+            
+            const progressPercentEl = document.getElementById('inferenceProgressPercent');
+            if (progressPercentEl) {
+                progressPercentEl.textContent = Math.round(progress_percent) + '%';
+                console.log('Updated progress text to:', Math.round(progress_percent) + '%');
+            } else {
+                console.warn('inferenceProgressPercent element not found');
+            }
+            
+            // If elements don't exist, try to recreate the UI
+            if (!currentSliceEl || !totalSlicesEl || !progressBarEl || !progressPercentEl) {
+                console.log('Some progress elements not found, checking loading overlay...');
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                if (loadingOverlay && loadingOverlay.style.display !== 'none') {
+                    console.log('Loading overlay is visible, recreating progress UI...');
+                    updateInferenceLoadingUI();
+                    // Retry updating with the new elements
+                    setTimeout(() => updateInferenceProgress(data), 100);
+                } else {
+                    console.log('Loading overlay is not visible, cannot update progress');
+                }
+            }
+        }
+
+        function onInferenceComplete(data) {
+            console.log('Inference completed:', data);
+            
+            hideLoading();
+            
+            if (data.success) {
+                document.getElementById('inferenceNextBtn').disabled = false;
+                
+                // Store inference result for 3D visualization
+                if (data.result) {
+                    window.inferenceResult = data.result;
+                } else {
+                    // Create a basic result if not provided
+                    window.inferenceResult = {
+                        success: true,
+                        output_path: `results/${currentTrainingId}/inference_result.tif`,
+                        metadata_path: `results/${currentTrainingId}/inference_result_metadata.json`,
+                        visualization_path: `results/${currentTrainingId}/visualization_data.json`
+                    };
+                }
+                
+                showSuccess('Inference completed successfully! Your segmentation is ready.');
+            } else {
+                showError('Inference failed: ' + (data.error || 'Unknown error'));
+            }
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            
+            // Insert after the inference section
+            const inferenceSection = document.querySelector('.inference-section');
+            inferenceSection.parentNode.insertBefore(successDiv, inferenceSection.nextSibling);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                successDiv.remove();
+            }, 5000);
+        }
+
+        function updateInferenceLoadingUI() {
+            // Update the loading overlay with progress elements
+            document.getElementById('loadingText').textContent = 'Processing slices...';
+            document.getElementById('loadingDescription').innerHTML = `
+                <div id="inferenceProgressContainer" style="margin-top: 20px; text-align: center;">
+                    <div style="margin-bottom: 15px; font-size: 16px;">
+                        Slice <span id="currentSlice" style="font-weight: bold; color: #4CAF50;">0</span> 
+                        of <span id="totalSlices" style="font-weight: bold; color: #4CAF50;">...</span>
+                    </div>
+                    <div style="background: #e0e0e0; height: 15px; border-radius: 8px; margin: 15px 0; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                        <div id="inferenceProgressBar" style="background: linear-gradient(90deg, #4CAF50, #81C784); height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 8px;"></div>
+                    </div>
+                    <div id="inferenceProgressPercent" style="font-size: 18px; font-weight: bold; color: #4CAF50;">0%</div>
+                    <div style="margin-top: 15px; font-size: 14px; color: #666;">
+                        <div>Initializing segmentation process...</div>
+                        <div style="margin-top: 5px; font-size: 12px; color: #999;">
+                            Progress updates will appear once processing begins
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initializeCharts() {
+            // Loss chart
+            const lossCtx = document.getElementById('lossChart').getContext('2d');
+            lossChart = new Chart(lossCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Training Loss',
+                        data: [],
+                        borderColor: '#ff6b6b',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }, {
+                        label: 'Validation Loss',
+                        data: [],
+                        borderColor: '#4ecdc4',
+                        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, /* Key fix - allows custom sizing */
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Epoch'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Loss'
+                            }
+                        }
+                    },
+                    elements: {
+                        line: {
+                            borderWidth: 2
+                        }
+                    }
+                }
+            });
+
+            // Dice chart
+            const diceCtx = document.getElementById('diceChart').getContext('2d');
+            diceChart = new Chart(diceCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Training Dice',
+                        data: [],
+                        borderColor: '#45b7d1',
+                        backgroundColor: 'rgba(69, 183, 209, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }, {
+                        label: 'Validation Dice',
+                        data: [],
+                        borderColor: '#96ceb4',
+                        backgroundColor: 'rgba(150, 206, 180, 0.1)',
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, /* Key fix - allows custom sizing */
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Epoch'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            title: {
+                                display: true,
+                                text: 'Dice Score'
+                            }
+                        }
+                    },
+                    elements: {
+                        line: {
+                            borderWidth: 2
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts(epoch, metrics) {
+            // Validate that charts exist
+            if (!lossChart || !diceChart) {
+                console.warn('Charts not initialized, skipping update');
+                return;
+            }
+
+            // Validate metrics
+            if (!metrics || typeof metrics !== 'object') {
+                console.warn('Invalid metrics data:', metrics);
+                return;
+            }
+
+            try {
+                // Update loss chart
+                if (metrics.train_loss !== undefined && metrics.val_loss !== undefined) {
+                    lossChart.data.labels.push(epoch);
+                    lossChart.data.datasets[0].data.push(metrics.train_loss);
+                    lossChart.data.datasets[1].data.push(metrics.val_loss);
+                    lossChart.update('none'); // Use 'none' mode for better performance
+                }
+
+                // Update dice chart
+                if (metrics.train_dice !== undefined && metrics.val_dice !== undefined) {
+                    diceChart.data.labels.push(epoch);
+                    diceChart.data.datasets[0].data.push(metrics.train_dice);
+                    diceChart.data.datasets[1].data.push(metrics.val_dice);
+                    diceChart.update('none'); // Use 'none' mode for better performance
+                }
+            } catch (error) {
+                console.error('Error updating charts:', error);
+            }
+        }
+
+        async function runInference() {
+            if (!uploadedFiles.inferenceData) {
+                showError('Please upload inference data first.');
+                return;
+            }
+            
+            if (!currentTrainingId) {
+                showError('No training session found. Please complete training first.');
+                return;
+            }
+
+            console.log('Starting inference with training ID:', currentTrainingId);
+            showLoading('Preparing inference...', 'Uploading data and starting segmentation.');
+
+            const formData = new FormData();
+            formData.append('inference_data', uploadedFiles.inferenceData);
+
+            try {
+                // Upload inference data
+                const uploadResponse = await fetch('/upload-inference', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const uploadResult = await uploadResponse.json();
+                if (!uploadResult.success) {
+                    throw new Error(uploadResult.error);
+                }
+
+                console.log('Inference data uploaded successfully, now starting inference...');
+
+                // Start inference
+                const inferenceResponse = await fetch('/run-inference', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model_path: `models/${currentTrainingId}/best_model.pth`,
+                        data_path: uploadResult.file_path,
+                        output_path: `results/${currentTrainingId}/inference_result.tif`,
+                        training_id: currentTrainingId
+                    })
+                });
+
+                const inferenceResult = await inferenceResponse.json();
+                console.log('Inference response:', inferenceResult);
+
+                if (inferenceResult.success) {
+                    currentInferenceId = inferenceResult.inference_id;
+                    console.log('Inference starting with ID:', currentInferenceId);
+                    
+                    // Join inference room immediately for progress updates
+                    socket.emit('join-inference', currentInferenceId);
+                    console.log('Joined inference room:', currentInferenceId);
+                    
+                    // Update UI to show progress tracking
+                    updateInferenceLoadingUI();
+                    
+                    // Initialize progress display
+                    document.getElementById('currentSlice').textContent = '0';
+                    document.getElementById('totalSlices').textContent = '...';
+                    document.getElementById('inferenceProgressPercent').textContent = '0%';
+                    document.getElementById('inferenceProgressBar').style.width = '0%';
+                    
+                } else {
+                    hideLoading();
+                    showError('Failed to start inference: ' + (inferenceResult.error || 'Unknown error') + 
+                             (inferenceResult.details ? '\n' + inferenceResult.details : ''));
+                }
+            } catch (error) {
+                hideLoading();
+                showError('Error during inference: ' + error.message);
+                console.error('Inference error:', error);
+            }
+        }
+
+        function downloadModel() {
+            if (currentTrainingId) {
+                window.open(`/download-model/${currentTrainingId}`, '_blank');
+            }
+        }
+
+        function downloadResults() {
+            if (window.inferenceResult) {
+                window.open(window.inferenceResult.result_path, '_blank');
+            }
+        }
+
+        function nextStep() {
+            if (currentStep < 5) {
+                setStep(currentStep + 1);
+            }
+        }
+
+        function previousStep() {
+            if (currentStep > 1) {
+                setStep(currentStep - 1);
+            }
+        }
+
+        function setStep(step) {
+            // Hide current step
+            document.querySelector('.step-content.active').classList.remove('active');
+            document.querySelector('.step.active').classList.remove('active');
+            
+            // Show new step
+            document.getElementById(`step${step}`).classList.add('active');
+            document.querySelector(`[data-step="${step}"]`).classList.add('active');
+            
+            // Mark previous steps as completed
+            for (let i = 1; i < step; i++) {
+                document.querySelector(`[data-step="${i}"]`).classList.add('completed');
+            }
+            
+            currentStep = step;
+            updateProgressBar();
+            
+            // Initialize 3D visualization when reaching step 5
+            if (step === 5 && window.inferenceResult) {
+                setTimeout(initialize3DVisualization, 100);
+            }
+        }
+
+        function updateProgressBar() {
+            const progress = ((currentStep - 1) / 4) * 100;
+            document.getElementById('overallProgress').style.width = progress + '%';
+        }
+
+        function initialize3DVisualization() {
+            const container = document.getElementById('threejsContainer');
+            
+            // Initialize Three.js scene
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setClearColor(0x222222);
+            container.appendChild(renderer.domElement);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Position camera
+            camera.position.set(0, 0, 5);
+            
+            // Add placeholder geometry (replace with actual segmentation data)
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshLambertMaterial({ color: 0x4CAF50, transparent: true, opacity: 0.8 });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            
+            // Add controls (basic rotation)
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const deltaMove = {
+                        x: e.clientX - previousMousePosition.x,
+                        y: e.clientY - previousMousePosition.y
+                    };
+                    
+                    cube.rotation.y += deltaMove.x * 0.01;
+                    cube.rotation.x += deltaMove.y * 0.01;
+                    
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                }
+            });
+            
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            // Add zoom with mouse wheel
+            renderer.domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                camera.position.z += e.deltaY * 0.01;
+                camera.position.z = Math.max(1, Math.min(10, camera.position.z));
+            });
+            
+            // Visualization controls
+            document.getElementById('opacitySlider').addEventListener('input', (e) => {
+                material.opacity = parseFloat(e.target.value);
+            });
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+        }
+
+        function resetWorkflow() {
+            // Reset all states
+            currentStep = 1;
+            currentTrainingId = null;
+            currentInferenceId = null;
+            uploadedFiles = { rawImages: null, annotations: null, inferenceData: null };
+            
+            // Reset UI
+            setStep(1);
+            document.getElementById('step1Next').disabled = true;
+            document.getElementById('validationResult').innerHTML = '';
+            
+            // Reset upload sections
+            const uploadSections = ['rawUploadSection', 'annotationsUploadSection', 'inferenceUploadSection'];
+            uploadSections.forEach(id => {
+                const section = document.getElementById(id);
+                section.style.borderColor = '#ddd';
+                section.style.backgroundColor = 'transparent';
+            });
+            
+            // Clear and reinitialize charts to prevent sizing issues
+            if (lossChart) {
+                lossChart.destroy();
+                lossChart = null;
+            }
+            if (diceChart) {
+                diceChart.destroy();
+                diceChart = null;
+            }
+            
+            // Reinitialize charts
+            setTimeout(() => {
+                initializeCharts();
+            }, 100);
+        }
+
+        // Utility functions
+        function showLoading(title, description) {
+            document.getElementById('loadingText').textContent = title;
+            document.getElementById('loadingDescription').textContent = description;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
