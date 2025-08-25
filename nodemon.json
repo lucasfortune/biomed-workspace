@@ -1,0 +1,25 @@
+{
+  "ignore": [
+    "uploads/*",
+    "results/*", 
+    "models/*",
+    "*.log",
+    "*.pth",
+    "*.json",
+    "node_modules/*",
+    "venv/*",
+    "env/*",
+    "__pycache__/*",
+    "*.pyc",
+    ".git/*",
+    "python/__pycache__/*"
+  ],
+  "watch": [
+    "server.js",
+    "public/"
+  ],
+  "ext": "js,html,css",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

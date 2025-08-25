@@ -1,0 +1,10 @@
+{
+  "patch_size": 64,
+  "patches_per_image": 10,
+  "batch_size": 8,
+  "augment": true,
+  "features": 64,
+  "num_layers": 4,
+  "learning_rate": 0.0001,
+  "num_epochs": 10
+}
