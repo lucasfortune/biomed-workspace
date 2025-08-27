@@ -35,3 +35,9 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Segmentation files
+
+models/
+results/
+uploads/

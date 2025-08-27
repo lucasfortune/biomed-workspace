@@ -462,19 +462,15 @@ async function validateTiffStacks(rawPath, annotationPath) {
     });
 
     pythonScript.on('close', (code) => {
-      // Always try to parse the JSON output first, regardless of exit code
-      // The Python script always outputs valid JSON
-      try {
-        const result = JSON.parse(output);
-        resolve(result);
-      } catch (e) {
-        // If JSON parsing fails, fall back to generic error
-        console.error('Failed to parse validation output:', output);
-        console.error('Stderr:', error);
-        resolve({ 
-          valid: false, 
-          error: error || 'Invalid validation output - failed to parse JSON response'
-        });
+      if (code === 0) {
+        try {
+          const result = JSON.parse(output);
+          resolve(result);
+        } catch (e) {
+          resolve({ valid: false, error: 'Invalid validation output' });
+        }
+      } else {
+        resolve({ valid: false, error: error });
       }
     });
   });
@@ -579,6 +575,7 @@ function startTrainingProcess(params, io) {
 }
 
 async function validateInferenceTiff(filePath) {
+  // Similar to validateTiffStacks but for single file
   return new Promise((resolve) => {
     const pythonScript = spawn('python', [
       'python/validate_inference_tiff.py',
@@ -586,30 +583,15 @@ async function validateInferenceTiff(filePath) {
     ]);
 
     let output = '';
-    let error = '';
-
     pythonScript.stdout.on('data', (data) => {
       output += data.toString();
     });
 
-    pythonScript.stderr.on('data', (data) => {
-      error += data.toString();
-    });
-
     pythonScript.on('close', (code) => {
-      // Always try to parse the JSON output first, regardless of exit code
-      // The Python script always outputs valid JSON
-      try {
-        const result = JSON.parse(output);
-        resolve(result);
-      } catch (e) {
-        // If JSON parsing fails, fall back to generic error
-        console.error('Failed to parse validation output:', output);
-        console.error('Stderr:', error);
-        resolve({ 
-          valid: false, 
-          error: error || 'Invalid validation output - failed to parse JSON response'
-        });
+      if (code === 0) {
+        resolve(JSON.parse(output));
+      } else {
+        resolve({ valid: false, error: 'Validation failed' });
       }
     });
   });

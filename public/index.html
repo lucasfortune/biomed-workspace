@@ -105,7 +105,7 @@
         .main-content {
             padding: 40px;
             min-height: 500px;
-            max-height: 90vh; /* Prevent the content from getting too tall */
+            max-height: 110vh; /* Prevent the content from getting too tall */
             overflow-y: auto; /* Allow scrolling if content is too tall */
         }
 
@@ -899,7 +899,9 @@
                     showValidationSuccess(result.validation);
                     document.getElementById('step1Next').disabled = false;
                 } else {
-                    showValidationError(result.error);
+                    // Use result.details for the actual error message from Python validation
+                    const errorMessage = result.details || result.error || 'Unknown validation error';
+                    showValidationError(errorMessage);
                 }
             } catch (error) {
                 hideLoading();
