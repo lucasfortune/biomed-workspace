@@ -684,21 +684,32 @@
 
                 <div class="viz-controls">
                     <div class="control-group">
-                        <label>Opacity</label>
-                        <input type="range" class="slider" id="opacitySlider" min="0" max="1" step="0.1" value="0.8">
+                        <label for="opacitySlider">Opacity</label>
+                        <input type="range" id="opacitySlider" class="slider" min="10" max="100" value="80">
+                        <span id="opacityValue">80%</span>
                     </div>
+                    
                     <div class="control-group">
-                        <label>Slice</label>
-                        <input type="range" class="slider" id="sliceSlider" min="0" max="100" value="50">
+                        <label for="sliceRange">Slice Range</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="range" id="sliceRangeMin" class="slider" min="0" max="100" value="0" style="width: 70px;">
+                            <span>to</span>
+                            <input type="range" id="sliceRangeMax" class="slider" min="0" max="100" value="100" style="width: 70px;">
+                        </div>
+                        <div style="font-size: 12px; color: #666;">
+                            <span id="sliceRangeValue">0% - 100%</span>
+                        </div>
                     </div>
+                    
                     <div class="control-group">
-                        <label>Class Filter</label>
-                        <select id="classFilter">
+                        <label for="classFilter">Class Filter</label>
+                        <select id="classFilter" style="padding: 5px; border-radius: 5px; border: 1px solid #ddd;">
                             <option value="all">All Classes</option>
-                            <option value="0">Background</option>
-                            <option value="1">Class 1</option>
-                            <option value="2">Class 2</option>
                         </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <button class="btn secondary" onclick="resetView()">Reset View</button>
                     </div>
                 </div>
 
@@ -744,6 +755,12 @@
             annotations: null,
             inferenceData: null
         };
+        // Add these global variables at the top of your JavaScript section
+        let segmentationMesh = null;
+        let segmentationData = null;
+        let availableClasses = [];
+        let visibleClasses = [];
+        let currentSliceRange = [0, 100]; // percentage range
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
@@ -1172,17 +1189,20 @@
         }
 
         function onInferenceComplete(data) {
-            console.log('Inference completed:', data);
+            console.log('=== INFERENCE COMPLETE DEBUG ===');
+            console.log('Raw inference data received:', data);
             
             hideLoading();
             
             if (data.success) {
                 document.getElementById('inferenceNextBtn').disabled = false;
                 
-                // Store inference result for 3D visualization
+                // Store inference result for 3D visualization with detailed logging
                 if (data.result) {
+                    console.log('Storing inference result from data.result:', data.result);
                     window.inferenceResult = data.result;
                 } else {
+                    console.log('No data.result found, creating fallback result');
                     // Create a basic result if not provided
                     window.inferenceResult = {
                         success: true,
@@ -1192,10 +1212,15 @@
                     };
                 }
                 
+                console.log('Final stored window.inferenceResult:', window.inferenceResult);
+                console.log('Visualization path will be:', window.inferenceResult.visualization_path);
+                
                 showSuccess('Inference completed successfully! Your segmentation is ready.');
             } else {
+                console.log('Inference failed:', data.error || 'Unknown error');
                 showError('Inference failed: ' + (data.error || 'Unknown error'));
             }
+            console.log('=== END INFERENCE DEBUG ===');
         }
 
         function showSuccess(message) {
@@ -1491,26 +1516,26 @@
             }
         }
 
-        function setStep(step) {
-            // Hide current step
-            document.querySelector('.step-content.active').classList.remove('active');
-            document.querySelector('.step.active').classList.remove('active');
+        function nextStep() {
+            const currentStep = document.querySelector('.step.active').getAttribute('data-step');
+            const nextStepNum = parseInt(currentStep) + 1;
             
-            // Show new step
-            document.getElementById(`step${step}`).classList.add('active');
-            document.querySelector(`[data-step="${step}"]`).classList.add('active');
-            
-            // Mark previous steps as completed
-            for (let i = 1; i < step; i++) {
-                document.querySelector(`[data-step="${i}"]`).classList.add('completed');
-            }
-            
-            currentStep = step;
-            updateProgressBar();
-            
-            // Initialize 3D visualization when reaching step 5
-            if (step === 5 && window.inferenceResult) {
-                setTimeout(initialize3DVisualization, 100);
+            if (nextStepNum <= 5) {
+                // Hide current step
+                document.querySelector(`.step-content.active`).classList.remove('active');
+                document.querySelector(`.step.active`).classList.remove('active');
+                
+                // Show next step
+                document.querySelector(`[data-step="${nextStepNum}"]`).classList.add('active');
+                document.querySelector(`#step${nextStepNum}`).classList.add('active');
+                
+                // Initialize 3D visualization when reaching step 5
+                if (nextStepNum === 5) {
+                    console.log('Initializing 3D visualization...');
+                    initialize3DVisualization();
+                }
+                
+                updateProgressBar();
             }
         }
 
@@ -1519,7 +1544,9 @@
             document.getElementById('overallProgress').style.width = progress + '%';
         }
 
-        function initialize3DVisualization() {
+        async function initialize3DVisualization() {
+            console.log('=== 3D VISUALIZATION INIT (Alpha Method) ===');
+            
             const container = document.getElementById('threejsContainer');
             
             // Initialize Three.js scene
@@ -1542,13 +1569,76 @@
             // Position camera
             camera.position.set(0, 0, 5);
             
-            // Add placeholder geometry (replace with actual segmentation data)
-            const geometry = new THREE.BoxGeometry(2, 2, 2);
-            const material = new THREE.MeshLambertMaterial({ color: 0x4CAF50, transparent: true, opacity: 0.8 });
-            const cube = new THREE.Mesh(geometry, material);
-            scene.add(cube);
+            // Try to load actual segmentation data
+            try {
+                if (window.inferenceResult && window.inferenceResult.visualization_path) {
+                    console.log('Loading segmentation data...');
+                    
+                    // Load the segmentation data
+                    segmentationData = await loadSegmentationData(window.inferenceResult.visualization_path);
+                    
+                    // Create geometry with alpha channel
+                    const geometry = createSegmentationGeometry(segmentationData);
+                    
+                    // Create custom material with per-vertex alpha support
+                    const material = createAlphaVertexMaterial();
+                    
+                    // Create the mesh and store reference
+                    segmentationMesh = new THREE.Mesh(geometry, material);
+                    scene.add(segmentationMesh);
+                    
+                    console.log('Segmentation mesh created with alpha-based filtering');
+                    
+                    // Setup UI controls
+                    setupVisualizationControls();
+                    populateClassFilter();
+                    
+                    console.log('=== SEGMENTATION VISUALIZATION COMPLETE ===');
+                    
+                } else {
+                    console.log('No inference data available, showing placeholder');
+                    
+                    // Fallback to placeholder
+                    const geometry = new THREE.BoxGeometry(2, 2, 2);
+                    const material = new THREE.MeshLambertMaterial({ 
+                        color: 0x4CAF50, 
+                        transparent: true, 
+                        opacity: 0.8 
+                    });
+                    segmentationMesh = new THREE.Mesh(geometry, material);
+                    scene.add(segmentationMesh);
+                    
+                    setupVisualizationControls();
+                }
+                
+            } catch (error) {
+                console.error('Segmentation loading failed:', error);
+                
+                // Error fallback
+                const geometry = new THREE.BoxGeometry(2, 2, 2);
+                const material = new THREE.MeshLambertMaterial({ 
+                    color: 0xff6b6b, 
+                    transparent: true, 
+                    opacity: 0.8 
+                });
+                segmentationMesh = new THREE.Mesh(geometry, material);
+                scene.add(segmentationMesh);
+                
+                setupVisualizationControls();
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.style.position = 'absolute';
+                errorDiv.style.top = '10px';
+                errorDiv.style.left = '10px';
+                errorDiv.style.background = 'rgba(255, 107, 107, 0.9)';
+                errorDiv.style.color = 'white';
+                errorDiv.style.padding = '10px';
+                errorDiv.style.borderRadius = '5px';
+                errorDiv.textContent = `Failed to load segmentation data: ${error.message}`;
+                container.appendChild(errorDiv);
+            }
             
-            // Add controls (basic rotation)
+            // Mouse controls (same as before)
             let isDragging = false;
             let previousMousePosition = { x: 0, y: 0 };
             
@@ -1564,8 +1654,8 @@
                         y: e.clientY - previousMousePosition.y
                     };
                     
-                    cube.rotation.y += deltaMove.x * 0.01;
-                    cube.rotation.x += deltaMove.y * 0.01;
+                    scene.rotation.y += deltaMove.x * 0.01;
+                    scene.rotation.x += deltaMove.y * 0.01;
                     
                     previousMousePosition = { x: e.clientX, y: e.clientY };
                 }
@@ -1575,16 +1665,10 @@
                 isDragging = false;
             });
             
-            // Add zoom with mouse wheel
             renderer.domElement.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 camera.position.z += e.deltaY * 0.01;
                 camera.position.z = Math.max(1, Math.min(10, camera.position.z));
-            });
-            
-            // Visualization controls
-            document.getElementById('opacitySlider').addEventListener('input', (e) => {
-                material.opacity = parseFloat(e.target.value);
             });
             
             // Animation loop
@@ -1594,12 +1678,447 @@
             }
             animate();
             
-            // Handle window resize
-            window.addEventListener('resize', () => {
-                camera.aspect = container.clientWidth / container.clientHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(container.clientWidth, container.clientHeight);
+            console.log('=== 3D VISUALIZATION INIT COMPLETE ===');
+        }
+
+        // Function to setup UI control event listeners
+        function setupVisualizationControls() {
+            console.log('Setting up visualization controls (combined alpha method)');
+            
+            // Opacity slider - now properly combined with per-vertex alpha
+            const opacitySlider = document.getElementById('opacitySlider');
+            const opacityValue = document.getElementById('opacityValue');
+            
+            if (opacitySlider && opacityValue) {
+                console.log('Opacity controls found');
+                opacitySlider.addEventListener('input', (e) => {
+                    const opacity = e.target.value / 100;
+                    opacityValue.textContent = e.target.value + '%';
+                    console.log('Global opacity changed to:', opacity);
+                    
+                    if (segmentationMesh && segmentationMesh.material && segmentationMesh.material.uniforms) {
+                        // Update the global opacity uniform in the custom shader
+                        segmentationMesh.material.uniforms.globalOpacity.value = opacity;
+                        console.log('Applied global opacity uniform:', opacity);
+                    } else if (segmentationMesh && segmentationMesh.material) {
+                        // Fallback for non-custom materials (like the placeholder cube)
+                        segmentationMesh.material.opacity = opacity;
+                        console.log('Applied fallback opacity:', opacity);
+                    } else {
+                        console.log('No mesh or material available for opacity change');
+                    }
+                });
+            } else {
+                console.log('Opacity controls not found!');
+            }
+            
+            // Slice range sliders - fast alpha method
+            const sliceRangeMin = document.getElementById('sliceRangeMin');
+            const sliceRangeMax = document.getElementById('sliceRangeMax');
+            const sliceRangeValue = document.getElementById('sliceRangeValue');
+            
+            function updateSliceRange() {
+                const minVal = parseInt(sliceRangeMin.value);
+                const maxVal = parseInt(sliceRangeMax.value);
+                
+                console.log('Slice range update:', minVal, 'to', maxVal);
+                
+                if (minVal > maxVal) {
+                    sliceRangeMin.value = maxVal;
+                    currentSliceRange = [maxVal, maxVal];
+                } else {
+                    currentSliceRange = [minVal, maxVal];
+                }
+                
+                sliceRangeValue.textContent = `${currentSliceRange[0]}% - ${currentSliceRange[1]}%`;
+                console.log('Updated slice range to:', currentSliceRange);
+                updateVoxelVisibility();
+            }
+            
+            if (sliceRangeMin && sliceRangeMax && sliceRangeValue) {
+                console.log('Slice range controls found');
+                sliceRangeMin.addEventListener('input', updateSliceRange);
+                sliceRangeMax.addEventListener('input', updateSliceRange);
+            } else {
+                console.log('Slice range controls not found!');
+            }
+            
+            // Class filter dropdown - fast alpha method
+            const classFilter = document.getElementById('classFilter');
+            if (classFilter) {
+                console.log('Class filter found');
+                classFilter.addEventListener('change', (e) => {
+                    console.log('Class filter changed to:', e.target.value);
+                    
+                    if (e.target.value === 'all') {
+                        visibleClasses = [...availableClasses];
+                    } else {
+                        const selectedClass = parseInt(e.target.value);
+                        visibleClasses = [selectedClass];
+                    }
+                    
+                    console.log('Visible classes updated to:', visibleClasses);
+                    updateVoxelVisibility();
+                });
+            } else {
+                console.log('Class filter not found!');
+            }
+        }
+
+        // Reset view function
+        function resetView() {
+            console.log('Resetting view to defaults');
+            
+            // Reset sliders
+            document.getElementById('opacitySlider').value = 80;
+            document.getElementById('opacityValue').textContent = '80%';
+            document.getElementById('sliceRangeMin').value = 0;
+            document.getElementById('sliceRangeMax').value = 100;
+            document.getElementById('sliceRangeValue').textContent = '0% - 100%';
+            document.getElementById('classFilter').value = 'all';
+            
+            // Reset variables
+            currentSliceRange = [0, 100];
+            visibleClasses = [...availableClasses];
+            
+            // Apply changes to material
+            if (segmentationMesh && segmentationMesh.material) {
+                if (segmentationMesh.material.uniforms) {
+                    // Custom shader material
+                    segmentationMesh.material.uniforms.globalOpacity.value = 0.8;
+                    console.log('Reset global opacity uniform to 0.8');
+                } else {
+                    // Fallback material
+                    segmentationMesh.material.opacity = 0.8;
+                    console.log('Reset fallback opacity to 0.8');
+                }
+            }
+            
+            // Reset per-vertex alpha values
+            updateVoxelVisibility();
+            
+            console.log('View reset completed');
+        }
+
+        // Add this function to load segmentation data
+        async function loadSegmentationData(visualizationPath) {
+            console.log('=== LOAD SEGMENTATION DATA DEBUG ===');
+            console.log('Attempting to load from path:', visualizationPath);
+            
+            try {
+                // Check if path looks valid
+                if (!visualizationPath) {
+                    throw new Error('No visualization path provided');
+                }
+                
+                if (!visualizationPath.includes('visualization_data.json')) {
+                    console.warn('Path does not seem to point to visualization_data.json file');
+                }
+                
+                console.log('Making fetch request to:', visualizationPath);
+                
+                // Fetch the JSON data from your server
+                const response = await fetch(visualizationPath);
+                
+                console.log('Fetch response received:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    ok: response.ok,
+                    url: response.url
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load data: ${response.status} ${response.statusText} from ${response.url}`);
+                }
+                
+                console.log('Attempting to parse JSON...');
+                const data = await response.json();
+                
+                console.log('Successfully parsed JSON. Data summary:', {
+                    hasShape: !!data.shape,
+                    shapeValue: data.shape,
+                    hasData: !!data.data,
+                    dataLength: data.data ? data.data.length : 'no data array',
+                    hasDownsampleFactor: !!data.downsample_factor,
+                    hasOriginalShape: !!data.original_shape
+                });
+                
+                // Validate the data structure
+                if (!data.shape || !Array.isArray(data.shape)) {
+                    throw new Error('Invalid data: missing or invalid shape array');
+                }
+                
+                if (!data.data || !Array.isArray(data.data)) {
+                    throw new Error('Invalid data: missing or invalid data array');
+                }
+                
+                if (data.data.length === 0) {
+                    throw new Error('Invalid data: data array is empty');
+                }
+                
+                console.log('Data validation passed. Ready to create geometry.');
+                console.log('=== END LOAD DATA DEBUG ===');
+                
+                return data;
+                
+            } catch (error) {
+                console.error('=== LOAD DATA ERROR ===');
+                console.error('Error loading segmentation data:', error);
+                console.error('Path that failed:', visualizationPath);
+                console.error('Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+                console.error('=== END LOAD DATA ERROR ===');
+                throw error;
+            }
+        }
+
+        function createSegmentationGeometry(data) {
+            console.log('Creating 3D geometry with per-vertex alpha...');
+            
+            // Handle sparse data format
+            let voxelData;
+            let shape;
+            
+            if (data.format === 'sparse') {
+                voxelData = data.data;
+                shape = data.shape;
+                console.log(`Sparse data: ${voxelData.length} non-zero voxels`);
+            } else {
+                // Convert dense to sparse
+                const [depth, height, width] = data.shape;
+                const volumeData = data.data;
+                shape = data.shape;
+                
+                voxelData = [];
+                for (let z = 0; z < depth; z++) {
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            const index = z * height * width + y * width + x;
+                            const value = volumeData[index];
+                            if (value > 0) {
+                                voxelData.push({x, y, z, value});
+                            }
+                        }
+                    }
+                }
+            }
+            
+            const [depth, height, width] = shape;
+            const totalVoxelCount = voxelData.length;
+            
+            // Store available classes and metadata
+            availableClasses = [...new Set(voxelData.map(v => v.value))].sort();
+            visibleClasses = [...availableClasses];
+            
+            console.log('Available segmentation classes:', availableClasses);
+            console.log(`Processing ${totalVoxelCount} voxels`);
+            
+            // Define colors
+            const segmentationColors = {
+                1: [0.3, 0.8, 0.3], 2: [0.8, 0.3, 0.3], 3: [0.3, 0.3, 0.8], 
+                4: [0.8, 0.8, 0.3], 5: [0.8, 0.3, 0.8], 6: [0.3, 0.8, 0.8],
+            };
+            
+            // Pre-allocate arrays for ALL voxels
+            const totalVertices = totalVoxelCount * 8; // 8 vertices per voxel
+            const totalIndices = totalVoxelCount * 36;  // 36 indices per voxel
+            
+            const vertices = new Float32Array(totalVertices * 3); // x,y,z per vertex
+            const colors = new Float32Array(totalVertices * 3);   // r,g,b per vertex
+            const alphas = new Float32Array(totalVertices);       // NEW: alpha per vertex
+            const indices = new Uint32Array(totalIndices);
+            
+            // Store metadata for each voxel for filtering
+            const voxelMetadata = new Array(totalVoxelCount);
+            
+            const voxelSize = 0.05;
+            const centerX = width * voxelSize / 2;
+            const centerY = height * voxelSize / 2;
+            const centerZ = depth * voxelSize / 2;
+            
+            console.log('Building geometry with alpha channel...');
+            
+            // Process all voxels in one pass
+            voxelData.forEach((voxel, voxelIndex) => {
+                const {x, y, z, value} = voxel;
+                
+                // Calculate world position
+                const worldX = (x * voxelSize) - centerX;
+                const worldY = (y * voxelSize) - centerY;
+                const worldZ = (z * voxelSize) - centerZ;
+                
+                // Store metadata for this voxel
+                voxelMetadata[voxelIndex] = {
+                    class: value,
+                    slice: z,
+                    slicePercent: (z / (depth - 1)) * 100,
+                    voxelIndex: voxelIndex
+                };
+                
+                // Create 8 vertices for this voxel
+                const voxelVertices = [
+                    [worldX, worldY, worldZ],                                    // 0
+                    [worldX + voxelSize, worldY, worldZ],                       // 1
+                    [worldX + voxelSize, worldY + voxelSize, worldZ],          // 2
+                    [worldX, worldY + voxelSize, worldZ],                       // 3
+                    [worldX, worldY, worldZ + voxelSize],                       // 4
+                    [worldX + voxelSize, worldY, worldZ + voxelSize],          // 5
+                    [worldX + voxelSize, worldY + voxelSize, worldZ + voxelSize], // 6
+                    [worldX, worldY + voxelSize, worldZ + voxelSize],          // 7
+                ];
+                
+                // Get color for this class
+                const color = segmentationColors[value] || [0.5, 0.5, 0.5];
+                
+                // Fill vertex data
+                for (let v = 0; v < 8; v++) {
+                    const vertexIndex = voxelIndex * 8 + v;
+                    const posIndex = vertexIndex * 3;
+                    
+                    // Position
+                    vertices[posIndex] = voxelVertices[v][0];
+                    vertices[posIndex + 1] = voxelVertices[v][1];
+                    vertices[posIndex + 2] = voxelVertices[v][2];
+                    
+                    // Color
+                    colors[posIndex] = color[0];
+                    colors[posIndex + 1] = color[1];
+                    colors[posIndex + 2] = color[2];
+                    
+                    // Alpha - initially fully opaque
+                    alphas[vertexIndex] = 1.0;
+                }
+                
+                // Create indices for this voxel's faces
+                const baseVertex = voxelIndex * 8;
+                const indexOffset = voxelIndex * 36;
+                const voxelIndices = [
+                    // Front face
+                    baseVertex+0, baseVertex+1, baseVertex+2, baseVertex+0, baseVertex+2, baseVertex+3,
+                    // Back face
+                    baseVertex+4, baseVertex+6, baseVertex+5, baseVertex+4, baseVertex+7, baseVertex+6,
+                    // Left face
+                    baseVertex+0, baseVertex+3, baseVertex+7, baseVertex+0, baseVertex+7, baseVertex+4,
+                    // Right face
+                    baseVertex+1, baseVertex+5, baseVertex+6, baseVertex+1, baseVertex+6, baseVertex+2,
+                    // Top face
+                    baseVertex+3, baseVertex+2, baseVertex+6, baseVertex+3, baseVertex+6, baseVertex+7,
+                    // Bottom face
+                    baseVertex+0, baseVertex+4, baseVertex+5, baseVertex+0, baseVertex+5, baseVertex+1
+                ];
+                
+                indices.set(voxelIndices, indexOffset);
             });
+            
+            // Create Three.js geometry
+            const geometry = new THREE.BufferGeometry();
+            geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1)); // NEW: Alpha attribute
+            
+            // Store metadata for filtering
+            geometry.voxelMetadata = voxelMetadata;
+            geometry.totalVoxels = totalVoxelCount;
+            geometry.shape = shape;
+            
+            console.log(`Geometry created with ${totalVoxelCount} voxels and alpha channel`);
+            return geometry;
+        }
+
+        function updateVoxelVisibility() {
+            console.log('=== UPDATE VOXEL VISIBILITY ===');
+            console.log('Current slice range:', currentSliceRange);
+            console.log('Visible classes:', visibleClasses);
+            
+            if (!segmentationMesh || !segmentationMesh.geometry.voxelMetadata) {
+                console.log('No mesh or metadata available');
+                return;
+            }
+            
+            // Check current global opacity
+            let currentGlobalOpacity = 'unknown';
+            if (segmentationMesh.material.uniforms && segmentationMesh.material.uniforms.globalOpacity) {
+                currentGlobalOpacity = segmentationMesh.material.uniforms.globalOpacity.value;
+            }
+            console.log('Current global opacity uniform:', currentGlobalOpacity);
+            
+            const geometry = segmentationMesh.geometry;
+            const metadata = geometry.voxelMetadata;
+            const alphaAttribute = geometry.attributes.alpha;
+            
+            console.log('Updating alpha values...');
+            
+            let visibleCount = 0;
+            let hiddenByClass = 0;
+            let hiddenBySlice = 0;
+            
+            // Update alpha for each voxel based on filters
+            metadata.forEach((voxel, voxelIndex) => {
+                const isClassVisible = visibleClasses.includes(voxel.class);
+                const isSliceVisible = voxel.slicePercent >= currentSliceRange[0] && 
+                                    voxel.slicePercent <= currentSliceRange[1];
+                
+                // Determine if this voxel should be visible
+                const shouldBeVisible = isClassVisible && isSliceVisible;
+                const alpha = shouldBeVisible ? 1.0 : 0.0;
+                
+                if (shouldBeVisible) {
+                    visibleCount++;
+                } else {
+                    if (!isClassVisible) hiddenByClass++;
+                    if (!isSliceVisible) hiddenBySlice++;
+                }
+                
+                // Update alpha for all 8 vertices of this voxel
+                for (let v = 0; v < 8; v++) {
+                    const vertexIndex = voxelIndex * 8 + v;
+                    alphaAttribute.array[vertexIndex] = alpha;
+                }
+            });
+            
+            // Mark the alpha attribute as needing update
+            alphaAttribute.needsUpdate = true;
+            
+            console.log(`Visibility stats:
+            - Total voxels: ${metadata.length}
+            - Visible: ${visibleCount}
+            - Hidden by class filter: ${hiddenByClass}
+            - Hidden by slice filter: ${hiddenBySlice}
+            - Global opacity will be applied on top: ${currentGlobalOpacity}`);
+            
+            console.log('=== END UPDATE VOXEL VISIBILITY ===');
+        }
+
+        // Function to populate class filter dropdown
+        function populateClassFilter() {
+            const classSelect = document.getElementById('classFilter');
+            if (!classSelect || availableClasses.length === 0) {
+                return;
+            }
+            
+            // Clear existing options
+            classSelect.innerHTML = '';
+            
+            // Add "All Classes" option
+            const allOption = document.createElement('option');
+            allOption.value = 'all';
+            allOption.textContent = 'All Classes';
+            allOption.selected = true;
+            classSelect.appendChild(allOption);
+            
+            // Add option for each class
+            availableClasses.forEach(classId => {
+                const option = document.createElement('option');
+                option.value = classId.toString();
+                option.textContent = `Class ${classId}`;
+                classSelect.appendChild(option);
+            });
+            
+            console.log('Populated class filter with classes:', availableClasses);
         }
 
         function resetWorkflow() {
@@ -1636,6 +2155,44 @@
             setTimeout(() => {
                 initializeCharts();
             }, 100);
+        }
+
+        function createAlphaVertexMaterial() {
+            // Custom shader material that combines global opacity with per-vertex alpha
+            const vertexShader = `
+                attribute float alpha;
+                varying vec3 vColor;
+                varying float vAlpha;
+                
+                void main() {
+                    vColor = color;
+                    vAlpha = alpha;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `;
+            
+            const fragmentShader = `
+                uniform float globalOpacity;
+                varying vec3 vColor;
+                varying float vAlpha;
+                
+                void main() {
+                    // Combine global opacity with per-vertex alpha
+                    float finalAlpha = globalOpacity * vAlpha;
+                    gl_FragColor = vec4(vColor, finalAlpha);
+                }
+            `;
+            
+            return new THREE.ShaderMaterial({
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader,
+                uniforms: {
+                    globalOpacity: { value: 0.8 } // Initial opacity value
+                },
+                transparent: true,
+                vertexColors: true,
+                side: THREE.DoubleSide
+            });
         }
 
         // Utility functions
