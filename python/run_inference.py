@@ -308,54 +308,148 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
     return metadata
 
 def create_3d_visualization_data(segmented_stack, output_dir):
-    """Create data files for 3D visualization with aggressive downsampling"""
+    """Create data files for 3D visualization with proper JSON serialization"""
     print("Creating 3D visualization data with web optimization...", flush=True)
     
-    # More aggressive downsampling for web performance
-    # Target max 64x64x64 for web visualization (262,144 voxels max)
-    max_dimension = 64
-    downsample_factor = max(1, max(segmented_stack.shape) // max_dimension)
+    original_shape = segmented_stack.shape
+    print(f"Original segmentation shape: {original_shape}", flush=True)
     
-    print(f"Original shape: {segmented_stack.shape}", flush=True)
-    print(f"Downsample factor: {downsample_factor}", flush=True)
+    # Calculate non-zero voxel count to estimate final data size
+    non_zero_count = np.count_nonzero(segmented_stack)
+    print(f"Non-zero voxels in original: {non_zero_count:,}", flush=True)
     
+    # Intelligent downsampling based on data density and size
+    target_min_voxels = 50000
+    target_max_voxels = 500000
+    
+    if non_zero_count <= target_max_voxels:
+        downsample_factor = 1
+        print("Using original resolution - data size is optimal", flush=True)
+    elif non_zero_count <= target_max_voxels * 4:
+        downsample_factor = 2
+        print("Using 2x downsampling for moderate optimization", flush=True)
+    elif non_zero_count <= target_max_voxels * 16:
+        downsample_factor = 4
+        print("Using 4x downsampling for performance", flush=True)
+    else:
+        max_dimension = 256
+        downsample_factor = max(1, max(original_shape) // max_dimension)
+        print(f"Using adaptive downsampling: {downsample_factor}x", flush=True)
+    
+    # Apply downsampling
     if downsample_factor > 1:
         downsampled = segmented_stack[::downsample_factor, ::downsample_factor, ::downsample_factor]
+        print(f"Downsampled to: {downsampled.shape}", flush=True)
     else:
         downsampled = segmented_stack
+        print("No downsampling applied", flush=True)
     
-    print(f"Downsampled shape: {downsampled.shape}", flush=True)
+    # Calculate final non-zero count after downsampling
+    final_non_zero_count = np.count_nonzero(downsampled)
+    print(f"Final non-zero voxels: {final_non_zero_count:,}", flush=True)
     
-    # Further reduce data by only keeping non-zero voxels with their positions
+    # Create sparse representation with explicit type conversion
     non_zero_indices = np.nonzero(downsampled)
     non_zero_values = downsampled[non_zero_indices]
     
-    # Create sparse representation
+    print("Creating sparse data structure with JSON-safe types...", flush=True)
     sparse_data = []
-    for i in range(len(non_zero_values)):
-        sparse_data.append({
-            'x': int(non_zero_indices[2][i]),  # width
-            'y': int(non_zero_indices[1][i]),  # height  
-            'z': int(non_zero_indices[0][i]),  # depth
-            'value': int(non_zero_values[i])
-        })
     
-    # Save optimized data structure
+    # Process in batches for memory efficiency
+    batch_size = 10000
+    total_voxels = len(non_zero_values)
+    
+    for batch_start in range(0, total_voxels, batch_size):
+        batch_end = min(batch_start + batch_size, total_voxels)
+        
+        for i in range(batch_start, batch_end):
+            # FIXED: Explicit conversion to native Python int to avoid JSON serialization issues
+            sparse_data.append({
+                'x': int(non_zero_indices[2][i].item()),  # .item() ensures native Python int
+                'y': int(non_zero_indices[1][i].item()),  # .item() ensures native Python int
+                'z': int(non_zero_indices[0][i].item()),  # .item() ensures native Python int
+                'value': int(non_zero_values[i].item())   # .item() ensures native Python int
+            })
+        
+        # Progress reporting for large datasets
+        if total_voxels > 50000:
+            progress = (batch_end / total_voxels) * 100
+            print(f"Sparse data creation progress: {progress:.1f}%", flush=True)
+    
+    # Calculate statistics with explicit type conversion
+    unique_classes = np.unique(non_zero_values)
+    
+    # FIXED: Ensure all values are native Python types for JSON serialization
+    class_counts = {}
+    for cls in unique_classes:
+        count = np.sum(non_zero_values == cls)
+        class_counts[int(cls.item())] = int(count.item())  # Convert both key and value
+    
+    # Convert unique classes to native Python int list
+    classes_list = [int(cls.item()) for cls in unique_classes]
+    
+    # FIXED: Ensure all numeric values are native Python types
     viz_data = {
         'format': 'sparse',
-        'shape': list(downsampled.shape),
+        'version': '2.0',
+        'shape': [int(dim) for dim in downsampled.shape],  # Convert shape dimensions
         'data': sparse_data,
-        'downsample_factor': downsample_factor,
-        'original_shape': list(segmented_stack.shape),
-        'voxel_count': len(sparse_data)
+        'downsample_factor': int(downsample_factor),  # Ensure native Python int
+        'original_shape': [int(dim) for dim in original_shape],  # Convert shape dimensions
+        'statistics': {
+            'total_voxels': len(sparse_data),  # Already Python int from len()
+            'original_non_zero_voxels': int(non_zero_count.item()) if hasattr(non_zero_count, 'item') else int(non_zero_count),
+            'classes': classes_list,
+            'class_counts': class_counts,
+            'density': float(len(sparse_data) / (downsampled.shape[0] * downsampled.shape[1] * downsampled.shape[2]))
+        }
     }
     
+    # Save to file with error handling
     viz_path = os.path.join(output_dir, 'visualization_data.json')
-    with open(viz_path, 'w') as f:
-        json.dump(viz_data, f)
+    print("Saving visualization data to JSON...", flush=True)
     
-    print(f"3D visualization data saved: {len(sparse_data)} voxels", flush=True)
-    print(f"Saved to: {viz_path}", flush=True)
+    try:
+        with open(viz_path, 'w') as f:
+            json.dump(viz_data, f, separators=(',', ':'))  # Compact JSON format
+        
+        print("JSON serialization successful", flush=True)
+        
+    except TypeError as e:
+        print(f"JSON serialization error: {e}", flush=True)
+        print("Attempting to identify problematic data types...", flush=True)
+        
+        # Debug: Check data types in the structure
+        def check_types(obj, path="root"):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    check_types(value, f"{path}.{key}")
+            elif isinstance(obj, list):
+                if len(obj) > 0:
+                    check_types(obj[0], f"{path}[0]")
+            else:
+                obj_type = type(obj)
+                if 'numpy' in str(obj_type):
+                    print(f"Found numpy type at {path}: {obj_type}", flush=True)
+        
+        check_types(viz_data)
+        raise e
+    
+    # Calculate file size
+    file_size_mb = os.path.getsize(viz_path) / (1024 * 1024)
+    
+    print("=" * 50, flush=True)
+    print("3D VISUALIZATION DATA SUMMARY:", flush=True)
+    print(f"  Original shape: {original_shape}", flush=True)
+    print(f"  Final shape: {downsampled.shape}", flush=True)
+    print(f"  Downsample factor: {downsample_factor}x", flush=True)
+    print(f"  Voxels stored: {len(sparse_data):,}", flush=True)
+    print(f"  Classes found: {classes_list}", flush=True)
+    print(f"  Data density: {viz_data['statistics']['density']:.1%}", flush=True)
+    print(f"  File size: {file_size_mb:.2f} MB", flush=True)
+    print(f"  Saved to: {viz_path}", flush=True)
+    print("=" * 50, flush=True)
+    
     return viz_path
 
 def main():
@@ -405,21 +499,37 @@ def main():
         print("Saving results...", flush=True)
         metadata = save_segmentation_results(segmented_stack, args.output, args.input, model_config)
         
-        # Create 3D visualization data
-        print("Creating 3D visualization data...", flush=True)
-        viz_path = create_3d_visualization_data(segmented_stack, output_dir)
-        
-        # Prepare results
-        result = {
-            'success': True,
-            'output_path': args.output,
-            'metadata_path': args.output.replace('.tif', '_metadata.json'),
-            'visualization_path': viz_path,
-            'metrics': metadata['metrics']
-        }
-        
-        print("Inference completed successfully!", flush=True)
-        print(f"Results: {result}", flush=True)
+        try:
+            # Create 3D visualization data
+            print("Creating 3D visualization data...", flush=True)
+            viz_path = create_3d_visualization_data(segmented_stack, output_dir)
+            
+            # Prepare results
+            result = {
+                'success': True,
+                'output_path': args.output,
+                'metadata_path': args.output.replace('.tif', '_metadata.json'),
+                'visualization_path': viz_path,
+                'metrics': metadata['metrics']
+            }
+            
+            print("Inference completed successfully!", flush=True)
+            print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
+            
+        except Exception as viz_error:
+            print(f"Error creating visualization data: {viz_error}", flush=True)
+            # Still report success for the main inference, just without visualization
+            result = {
+                'success': True,
+                'output_path': args.output,
+                'metadata_path': args.output.replace('.tif', '_metadata.json'),
+                'visualization_path': None,
+                'visualization_error': str(viz_error),
+                'metrics': metadata['metrics']
+            }
+            
+            print("Inference completed with visualization error!", flush=True)
+            print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
         
         # Send final result with special prefix for easy parsing
         print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
