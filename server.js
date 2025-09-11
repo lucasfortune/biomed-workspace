@@ -719,7 +719,10 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
             inference.endTime = new Date();
           }
           
-          io.to(`inference-${inferenceId}`).emit('inference-complete', { success: finalResult.success });
+          io.to(`inference-${inferenceId}`).emit('inference-complete', { 
+            success: true, 
+            result: finalResult 
+          });
           
           if (finalResult.success) {
             resolve(finalResult);
@@ -742,7 +745,10 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
                 inference.status = 'completed';
                 inference.endTime = new Date();
               }
-              io.to(`inference-${inferenceId}`).emit('inference-complete', { success: true });
+              io.to(`inference-${inferenceId}`).emit('inference-complete', { 
+                success: true, 
+                result: finalResult 
+              });
               resolve(result);
               return;
             }
@@ -762,7 +768,10 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
               inference.status = 'completed';
               inference.endTime = new Date();
             }
-            io.to(`inference-${inferenceId}`).emit('inference-complete', { success: true });
+            io.to(`inference-${inferenceId}`).emit('inference-complete', { 
+              success: true, 
+              result: finalResult 
+            });
             resolve(manualResult);
             
           } catch (e) {
