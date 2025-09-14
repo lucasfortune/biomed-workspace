@@ -691,13 +691,29 @@
                     
                     <div class="control-group">
                         <label for="sliceRange">Slice Range</label>
+                        
+                        <!-- Slice Direction Selector -->
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 12px; color: #666;">Direction:</label>
+                            <select id="sliceDirectionSelect" style="margin-left: 5px; padding: 2px; font-size: 12px; border-radius: 3px;">
+                                <option value="z">Front ↔ Back (Z)</option>
+                                <option value="x">Left ↔ Right (X)</option>
+                                <option value="y">Bottom ↔ Top (Y)</option>
+                            </select>
+                            <span id="sliceDirectionIndicator" style="margin-left: 10px; font-size: 11px; color: #888;">Front ↔ Back</span>
+                        </div>
+                        
+                        <!-- Range Sliders -->
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <input type="range" id="sliceRangeMin" class="slider" min="0" max="100" value="0" style="width: 70px;">
                             <span>to</span>
                             <input type="range" id="sliceRangeMax" class="slider" min="0" max="100" value="100" style="width: 70px;">
                         </div>
-                        <div style="font-size: 12px; color: #666;">
+                        
+                        <!-- Range Value Display -->
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">
                             <span id="sliceRangeValue">0% - 100%</span>
+                            <button onclick="resetSliceRange()" style="margin-left: 10px; padding: 2px 6px; font-size: 11px; border: none; background: #f0f0f0; border-radius: 3px; cursor: pointer;">Reset</button>
                         </div>
                     </div>
                     
@@ -761,6 +777,11 @@
         let availableClasses = [];
         let visibleClasses = [];
         let currentSliceRange = [0, 100]; // percentage range
+
+        let classMeshes = {}; // Object to store separate meshes per class
+        let meshGroup = null; // Group to contain all class meshes
+
+        let sliceDirection = 'z'; // 'x', 'y', or 'z'
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
@@ -1553,46 +1574,50 @@
                 return;
             }
             
-            // Initialize Three.js scene with better settings
-            scene = new THREE.Scene();
-            scene.fog = new THREE.Fog(0x222222, 1, 20); // Add atmospheric fog
-            
-            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-            
-            renderer = new THREE.WebGLRenderer({ 
-                antialias: true,
-                alpha: true,
-                powerPreference: "high-performance"
-            });
-            
-            renderer.setSize(container.clientWidth, container.clientHeight);
-            renderer.setClearColor(0x222222);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            container.appendChild(renderer.domElement);
-            
-            // Enhanced lighting setup
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
-            scene.add(ambientLight);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(2, 2, 2);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 2048;
-            directionalLight.shadow.mapSize.height = 2048;
-            scene.add(directionalLight);
-            
-            // Add a second light from different angle
-            const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
-            fillLight.position.set(-1, -1, 1);
-            scene.add(fillLight);
-            
-            // Initial camera position
-            camera.position.set(3, 2, 5);
-            camera.lookAt(0, 0, 0);
-            
-            // Try to load segmentation data
             try {
+                // Initialize Three.js scene with better settings
+                scene = new THREE.Scene();
+                scene.fog = new THREE.Fog(0x222222, 1, 20); // Add atmospheric fog
+                
+                camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                
+                renderer = new THREE.WebGLRenderer({ 
+                    antialias: true,
+                    alpha: true,
+                    powerPreference: "high-performance"
+                });
+                
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                renderer.setClearColor(0x222222);
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // IMPORTANT: Enable clipping planes for slice range functionality
+                renderer.localClippingEnabled = true;
+                
+                container.appendChild(renderer.domElement);
+                
+                // Enhanced lighting setup
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+                scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(2, 2, 2);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                scene.add(directionalLight);
+                
+                // Add a second light from different angle
+                const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+                fillLight.position.set(-1, -1, 1);
+                scene.add(fillLight);
+                
+                // Initial camera position
+                camera.position.set(3, 2, 5);
+                camera.lookAt(0, 0, 0);
+                
+                // Try to load segmentation data
                 if (window.inferenceResult && window.inferenceResult.visualization_path) {
                     console.log('Loading segmentation data for surface mesh creation...');
                     console.log('Visualization path:', window.inferenceResult.visualization_path);
@@ -1601,200 +1626,238 @@
                     segmentationData = await loadSegmentationData(window.inferenceResult.visualization_path);
                     console.log('Segmentation data loaded successfully');
                     
-                    // Create surface mesh geometry (NOT voxel cubes)
-                    console.log('Creating surface mesh geometry...');
-                    const geometry = createSurfaceMeshGeometry(segmentationData);
+                    // ===================================================
+                    // UPDATED: Create separate meshes instead of single geometry
+                    // ===================================================
+                    console.log('Creating separate class meshes...');
+                    meshGroup = createSeparateClassMeshes(segmentationData);
                     
-                    // Create material that supports vertex colors
-                    const material = new THREE.MeshPhongMaterial({
-                        vertexColors: true,    // Use colors from geometry
-                        transparent: true,     // Allow transparency
-                        opacity: 0.9,         // Slightly transparent
-                        side: THREE.DoubleSide // Show both sides of surfaces
-                    });
-                    
-                    // Create the mesh
-                    segmentationMesh = new THREE.Mesh(geometry, material);
-                    segmentationMesh.castShadow = true;
-                    segmentationMesh.receiveShadow = true;
-                    scene.add(segmentationMesh);
-                    
-                    console.log('Surface mesh created and added to scene');
-                    
-                    // =========================
-                    // DETAILED DEBUGGING OUTPUT
-                    // =========================
-                    console.log('=== DETAILED MESH DEBUG ===');
-                    console.log('Mesh exists:', !!segmentationMesh);
-                    console.log('Geometry vertices:', segmentationMesh.geometry.attributes.position.count);
-                    console.log('Has color attribute:', !!segmentationMesh.geometry.attributes.color);
-                    console.log('Has normal attribute:', !!segmentationMesh.geometry.attributes.normal);
-                    
-                    // Detailed bounding box
-                    const bbox = segmentationMesh.geometry.boundingBox;
-                    console.log('Bounding box:');
-                    console.log('  Min:', bbox.min.x.toFixed(3), bbox.min.y.toFixed(3), bbox.min.z.toFixed(3));
-                    console.log('  Max:', bbox.max.x.toFixed(3), bbox.max.y.toFixed(3), bbox.max.z.toFixed(3));
-                    console.log('  Size X:', (bbox.max.x - bbox.min.x).toFixed(3));
-                    console.log('  Size Y:', (bbox.max.y - bbox.min.y).toFixed(3));
-                    console.log('  Size Z:', (bbox.max.z - bbox.min.z).toFixed(3));
-                    
-                    // Check camera distance to mesh
-                    const meshCenter = bbox.getCenter(new THREE.Vector3());
-                    const cameraDistanceBeforeAdjust = camera.position.distanceTo(meshCenter);
-                    console.log('Mesh center:', meshCenter.x.toFixed(3), meshCenter.y.toFixed(3), meshCenter.z.toFixed(3));
-                    console.log('Camera position (before adjust):', camera.position.x.toFixed(3), camera.position.y.toFixed(3), camera.position.z.toFixed(3));
-                    console.log('Camera distance to mesh (before adjust):', cameraDistanceBeforeAdjust.toFixed(3));
-                    
-                    // Check material
-                    console.log('Material type:', segmentationMesh.material.type);
-                    console.log('Material opacity:', segmentationMesh.material.opacity);
-                    console.log('Material transparent:', segmentationMesh.material.transparent);
-                    console.log('Material visible:', segmentationMesh.material.visible);
-                    console.log('Material vertexColors:', segmentationMesh.material.vertexColors);
-                    console.log('===========================');
-                    
-                    // =========================
-                    // AUTOMATIC CAMERA ADJUSTMENT
-                    // =========================
-                    if (segmentationMesh && segmentationMesh.geometry.boundingBox) {
-                        const size = bbox.getSize(new THREE.Vector3());
+                   if (meshGroup && meshGroup.children.length > 0) {
+                        console.log('Separate class meshes created successfully');
+                        
+                        // =========================
+                        // DETAILED DEBUGGING OUTPUT (UPDATED)
+                        // =========================
+                        console.log('=== DETAILED MESH DEBUG ===');
+                        console.log('Mesh group exists:', !!meshGroup);
+                        console.log('Number of class meshes:', Object.keys(classMeshes).length);
+                        console.log('Available classes:', availableClasses);
+                        
+                        // Debug each class mesh
+                        Object.keys(classMeshes).forEach(classValue => {
+                            const mesh = classMeshes[classValue];
+                            console.log(`Class ${classValue}:`, {
+                                vertices: mesh.geometry.attributes.position.count,
+                                visible: mesh.visible,
+                                material: mesh.material.type,
+                                opacity: mesh.material.opacity
+                            });
+                        });
+                        
+                        // Calculate bounding box of entire group
+                        const box = new THREE.Box3().setFromObject(meshGroup);
+                        const center = box.getCenter(new THREE.Vector3());
+                        const size = box.getSize(new THREE.Vector3());
+                        
+                        console.log('Group bounding box:');
+                        console.log('  Center:', center.x.toFixed(3), center.y.toFixed(3), center.z.toFixed(3));
+                        console.log('  Size:', size.x.toFixed(3), size.y.toFixed(3), size.z.toFixed(3));
+                        
+                        // =========================
+                        // IMPROVED CAMERA POSITIONING
+                        // =========================
                         const maxDim = Math.max(size.x, size.y, size.z);
+                        console.log('Max dimension for camera positioning:', maxDim.toFixed(3));
                         
-                        console.log('Auto-adjusting camera for mesh size:', maxDim.toFixed(3));
-                        
-                        // Position camera at appropriate distance
-                        const distance = Math.max(maxDim * 3, 5); // At least 5 units away
-                        camera.position.set(distance, distance * 0.7, distance);
-                        camera.lookAt(meshCenter);
-                        
-                        // Update camera controls if they exist
-                        if (typeof controls !== 'undefined' && controls) {
-                            controls.target.copy(meshCenter);
-                            controls.update();
+                        // Position camera at a reasonable distance (for small scaled meshes)
+                        let distance;
+                        if (maxDim < 2) {
+                            distance = 8;  // Close for very small meshes
+                        } else if (maxDim < 5) {
+                            distance = maxDim * 2.5;  // Medium distance for small meshes
+                        } else if (maxDim < 10) {
+                            distance = maxDim * 2;    // Standard distance for medium meshes
+                        } else {
+                            distance = maxDim * 1.5;  // Closer for large meshes
                         }
                         
-                        console.log('Camera repositioned to:', camera.position.x.toFixed(3), camera.position.y.toFixed(3), camera.position.z.toFixed(3));
-                        console.log('Camera looking at:', meshCenter.x.toFixed(3), meshCenter.y.toFixed(3), meshCenter.z.toFixed(3));
-                        console.log('New camera distance:', camera.position.distanceTo(meshCenter).toFixed(3));
+                        // Ensure minimum distance
+                        distance = Math.max(distance, 5);
+                        
+                        console.log(`Calculated camera distance: ${distance.toFixed(3)}`);
+                        
+                        // Position camera in a nice viewing angle
+                        const cameraX = distance * 0.7;  // 70% to the right
+                        const cameraY = distance * 0.5;  // 50% up
+                        const cameraZ = distance * 0.7;  // 70% forward
+                        
+                        camera.position.set(cameraX, cameraY, cameraZ);
+                        camera.lookAt(center);
+                        
+                        console.log('Camera positioned at:', camera.position.x.toFixed(3), camera.position.y.toFixed(3), camera.position.z.toFixed(3));
+                        console.log('Camera looking at:', center.x.toFixed(3), center.y.toFixed(3), center.z.toFixed(3));
+                        console.log('Actual camera distance:', camera.position.distanceTo(center).toFixed(3));
+                        
+                        // Adjust camera near/far planes for the mesh size
+                        camera.near = distance * 0.01;  // Very close
+                        camera.far = distance * 10;     // Far enough
+                        camera.updateProjectionMatrix();
+                        
+                        console.log(`Camera near/far planes: ${camera.near.toFixed(3)} / ${camera.far.toFixed(3)}`);
+                        
+                        // Set global reference for backward compatibility
+                        segmentationMesh = meshGroup;
+                        
+                    } else {
+                        console.warn('No meshes were created from segmentation data');
+                        createFallbackMesh();
                     }
-                    
-                    // Setup visualization controls
-                    setupVisualizationControls();
-                    populateClassFilter();
                     
                 } else {
                     console.log('No visualization data available, creating placeholder');
-                    
-                    // Placeholder fallback - simple green cube
-                    const geometry = new THREE.BoxGeometry(2, 2, 2);
-                    const material = new THREE.MeshPhongMaterial({ 
-                        color: 0x4CAF50, 
-                        transparent: true, 
-                        opacity: 0.8 
-                    });
-                    segmentationMesh = new THREE.Mesh(geometry, material);
-                    scene.add(segmentationMesh);
-                    
-                    console.log('Placeholder cube created');
-                    
-                    // Set dummy classes for controls
-                    availableClasses = [1];
-                    visibleClasses = [1];
-                    
-                    setupVisualizationControls();
+                    createFallbackMesh();
                 }
+                
+                // Setup visualization controls
+                setupVisualizationControls();
+                
+                // Setup enhanced controls for mesh interaction
+                setupEnhancedControls();
+                
+                // Start render loop
+                startRenderLoop();
+                
+                console.log('=== 3D VISUALIZATION INITIALIZATION COMPLETE ===');
                 
             } catch (error) {
                 console.error('3D visualization failed:', error);
                 console.error('Error details:', error.message);
                 console.error('Stack trace:', error.stack);
                 
-                // Error fallback - red cube to show something went wrong
-                const geometry = new THREE.BoxGeometry(2, 2, 2);
-                const material = new THREE.MeshPhongMaterial({ 
-                    color: 0xff0000,  // Red for error
-                    transparent: true, 
-                    opacity: 0.8 
-                });
-                segmentationMesh = new THREE.Mesh(geometry, material);
-                scene.add(segmentationMesh);
+                // Error fallback
+                createErrorFallbackMesh();
                 
-                console.log('Error fallback cube created');
-                
-                // Set dummy classes for controls
-                availableClasses = [1];
-                visibleClasses = [1];
-                
+                // Still setup basic controls so the interface works
                 setupVisualizationControls();
+                setupEnhancedControls();
+                startRenderLoop();
             }
+        }
+
+        // Helper function to create a fallback mesh when no data is available
+        function createFallbackMesh() {
+            console.log('Creating fallback placeholder mesh');
             
-            // Enhanced mouse controls with smoother interaction
-            setupEnhancedControls();
+            // Create a simple placeholder cube
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x4CAF50,  // Green for placeholder
+                transparent: true, 
+                opacity: 0.8 
+            });
             
-            // Animation loop
+            const placeholderMesh = new THREE.Mesh(geometry, material);
+            scene.add(placeholderMesh);
+            
+            // Set up dummy data for controls
+            availableClasses = [1];
+            visibleClasses = [1];
+            classMeshes = { 1: placeholderMesh };
+            meshGroup = new THREE.Group();
+            meshGroup.add(placeholderMesh);
+            segmentationMesh = meshGroup;
+            
+            console.log('Placeholder mesh created');
+        }
+
+        // Helper function to create an error mesh when something goes wrong
+        function createErrorFallbackMesh() {
+            console.log('Creating error fallback mesh');
+            
+            // Create a red cube to indicate error
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0xff0000,  // Red for error
+                transparent: true, 
+                opacity: 0.8 
+            });
+            
+            const errorMesh = new THREE.Mesh(geometry, material);
+            scene.add(errorMesh);
+            
+            // Set up dummy data for controls
+            availableClasses = [1];
+            visibleClasses = [1];
+            classMeshes = { 1: errorMesh };
+            meshGroup = new THREE.Group();
+            meshGroup.add(errorMesh);
+            segmentationMesh = meshGroup;
+            
+            console.log('Error fallback mesh created');
+        }
+
+        // Helper function to start the render loop
+        function startRenderLoop() {
             function animate() {
                 requestAnimationFrame(animate);
                 
-                // Update any material uniforms for animation effects if needed
-                if (segmentationMesh && segmentationMesh.material.uniforms) {
-                    segmentationMesh.material.uniforms.time.value = Date.now() * 0.001;
+                // Render the scene
+                if (renderer && scene && camera) {
+                    renderer.render(scene, camera);
                 }
-                
-                renderer.render(scene, camera);
             }
-            animate();
             
-            console.log('=== 3D VISUALIZATION INITIALIZATION COMPLETE ===');
+            animate();
+            console.log('Render loop started');
         }
 
-        // Helper function for enhanced mouse controls
-        function setupEnhancedControls() {
-            console.log('Setting up enhanced mouse controls');
+       function setupEnhancedControls() {
+            console.log('Setting up enhanced mesh-centered controls');
             
             const canvas = renderer.domElement;
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
             
-            let isMouseDown = false;
-            let mouseX = 0, mouseY = 0;
-            let rotationSpeed = 0.005;
-            
-            canvas.addEventListener('mousedown', (event) => {
-                isMouseDown = true;
-                mouseX = event.clientX;
-                mouseY = event.clientY;
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
                 canvas.style.cursor = 'grabbing';
             });
             
-            canvas.addEventListener('mousemove', (event) => {
-                if (!isMouseDown || !segmentationMesh) return;
-                
-                const deltaX = event.clientX - mouseX;
-                const deltaY = event.clientY - mouseY;
-                
-                // Rotate the mesh instead of the camera for better control
-                segmentationMesh.rotation.y += deltaX * rotationSpeed;
-                segmentationMesh.rotation.x += deltaY * rotationSpeed;
-                
-                mouseX = event.clientX;
-                mouseY = event.clientY;
+            canvas.addEventListener('mousemove', (e) => {
+                if (isDragging && meshGroup) {
+                    const deltaMove = {
+                        x: e.clientX - previousMousePosition.x,
+                        y: e.clientY - previousMousePosition.y
+                    };
+                    
+                    // Rotate the entire mesh group
+                    meshGroup.rotation.y += deltaMove.x * 0.01;
+                    meshGroup.rotation.x += deltaMove.y * 0.01;
+                    
+                    // Clamp vertical rotation
+                    meshGroup.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, meshGroup.rotation.x));
+                    
+                    previousMousePosition = { x: e.clientX, y: e.clientY };
+                }
             });
             
             canvas.addEventListener('mouseup', () => {
-                isMouseDown = false;
+                isDragging = false;
                 canvas.style.cursor = 'grab';
             });
             
             canvas.addEventListener('mouseleave', () => {
-                isMouseDown = false;
+                isDragging = false;
                 canvas.style.cursor = 'grab';
             });
             
-            // Mouse wheel for zooming
-            canvas.addEventListener('wheel', (event) => {
-                event.preventDefault();
+            // Zoom controls
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
                 
-                const zoomSpeed = 0.1;
-                const delta = event.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+                const zoomSpeed = 0.2;
+                const delta = e.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
                 
                 camera.position.multiplyScalar(delta);
                 
@@ -1807,35 +1870,34 @@
                 }
             });
             
-            // Keyboard controls for fine adjustment
+            // Keyboard controls
             document.addEventListener('keydown', (event) => {
-                if (!segmentationMesh) return;
+                if (!meshGroup) return;
                 
-                const fineTuneSpeed = 0.1;
+                const rotationSpeed = 0.1;
                 
                 switch(event.key.toLowerCase()) {
                     case 'arrowleft':
-                        segmentationMesh.rotation.y -= fineTuneSpeed;
+                        meshGroup.rotation.y -= rotationSpeed;
                         break;
                     case 'arrowright':
-                        segmentationMesh.rotation.y += fineTuneSpeed;
+                        meshGroup.rotation.y += rotationSpeed;
                         break;
                     case 'arrowup':
-                        segmentationMesh.rotation.x -= fineTuneSpeed;
+                        meshGroup.rotation.x -= rotationSpeed;
                         break;
                     case 'arrowdown':
-                        segmentationMesh.rotation.x += fineTuneSpeed;
+                        meshGroup.rotation.x += rotationSpeed;
                         break;
                     case 'r':
                         // Reset rotation
-                        segmentationMesh.rotation.set(0, 0, 0);
+                        meshGroup.rotation.set(0, 0, 0);
                         break;
                 }
             });
             
             canvas.style.cursor = 'grab';
             console.log('Enhanced mesh-centered controls setup complete');
-            console.log('Use arrow keys for fine rotation, R to reset rotation');
         }
 
         // Function to setup UI control event listeners
@@ -1916,24 +1978,141 @@
             
             console.log('Opacity changed to:', opacity);
             
-            if (segmentationMesh && segmentationMesh.material) {
-                segmentationMesh.material.opacity = opacity;
-                segmentationMesh.material.transparent = true;
-                segmentationMesh.material.needsUpdate = true;
-                console.log('Applied opacity to mesh:', opacity);
+            // Apply opacity to all visible class meshes
+            if (classMeshes) {
+                Object.keys(classMeshes).forEach(classValue => {
+                    const classMesh = classMeshes[classValue];
+                    if (classMesh.visible && classMesh.material) {
+                        classMesh.material.opacity = opacity;
+                        classMesh.material.transparent = true;
+                        classMesh.material.needsUpdate = true;
+                        classMesh.userData.originalOpacity = opacity;
+                    }
+                });
+                
+                console.log('Applied opacity to all visible class meshes');
                 
                 // Force re-render
                 if (typeof renderer !== 'undefined') {
                     renderer.render(scene, camera);
                 }
             } else {
-                console.log('No mesh or material available for opacity change');
+                console.log('No class meshes available for opacity change');
             }
         }
 
-        /**
-         * SLICE RANGE CHANGE HANDLER
-         */
+       function applySliceRangeToMeshes() {
+            if (!classMeshes || !segmentationData) {
+                console.log('No meshes or data available for slice filtering');
+                return;
+            }
+            
+            const [depth, height, width] = segmentationData.shape;
+            
+            // Calculate range based on the selected direction
+            let minCoord, maxCoord, axis, planeDimension;
+            
+            switch(sliceDirection) {
+                case 'x': // Left to Right
+                    planeDimension = width;
+                    axis = 'X';
+                    break;
+                case 'y': // Bottom to Top  
+                    planeDimension = height;
+                    axis = 'Y';
+                    break;
+                case 'z': // Front to Back (this should be the correct one for most medical data)
+                    planeDimension = depth;
+                    axis = 'Z';
+                    break;
+                default:
+                    planeDimension = depth;
+                    axis = 'Z';
+                    sliceDirection = 'z';
+            }
+            
+            // Calculate coordinate range based on percentage (centered around origin)
+            const halfDim = planeDimension / 2;
+            const rangeSize = (currentSliceRange[1] - currentSliceRange[0]) / 100 * planeDimension;
+            const rangeCenter = (currentSliceRange[0] + currentSliceRange[1]) / 2 / 100 * planeDimension - halfDim;
+            
+            minCoord = rangeCenter - rangeSize / 2;
+            maxCoord = rangeCenter + rangeSize / 2;
+            
+            console.log(`Applying ${axis}-axis slice filter: ${minCoord.toFixed(2)} to ${maxCoord.toFixed(2)}`);
+            console.log(`Range: ${currentSliceRange[0]}% to ${currentSliceRange[1]}% of ${planeDimension} ${axis}-dimension`);
+            
+            // Create clipping planes based on direction
+            let clippingPlanes;
+            
+            switch(sliceDirection) {
+                case 'x':
+                    clippingPlanes = [
+                        new THREE.Plane(new THREE.Vector3(1, 0, 0), -minCoord),   // Clip left of minX
+                        new THREE.Plane(new THREE.Vector3(-1, 0, 0), maxCoord)    // Clip right of maxX
+                    ];
+                    break;
+                case 'y':
+                    clippingPlanes = [
+                        new THREE.Plane(new THREE.Vector3(0, 1, 0), -minCoord),   // Clip below minY
+                        new THREE.Plane(new THREE.Vector3(0, -1, 0), maxCoord)    // Clip above maxY
+                    ];
+                    break;
+                case 'z':
+                    clippingPlanes = [
+                        new THREE.Plane(new THREE.Vector3(0, 0, 1), -minCoord),   // Clip behind minZ
+                        new THREE.Plane(new THREE.Vector3(0, 0, -1), maxCoord)    // Clip in front of maxZ
+                    ];
+                    break;
+            }
+            
+            // Apply clipping planes to all visible meshes
+            Object.keys(classMeshes).forEach(classValue => {
+                const classMesh = classMeshes[classValue];
+                if (!classMesh.visible) return;
+                
+                // Remove existing clipping planes
+                classMesh.material.clippingPlanes = clippingPlanes;
+                classMesh.material.clipShadows = true;
+                classMesh.material.needsUpdate = true;
+            });
+            
+            // Enable clipping planes in renderer
+            renderer.localClippingEnabled = true;
+            
+            // Force re-render
+            if (typeof renderer !== 'undefined') {
+                renderer.render(scene, camera);
+            }
+        }
+
+        // Function to change slice direction
+        function setSliceDirection(direction) {
+            const validDirections = ['x', 'y', 'z'];
+            if (!validDirections.includes(direction.toLowerCase())) {
+                console.error('Invalid slice direction. Use "x", "y", or "z"');
+                return;
+            }
+            
+            sliceDirection = direction.toLowerCase();
+            console.log(`Slice direction changed to ${direction.toUpperCase()}-axis`);
+            
+            // Update the slice direction indicator if it exists
+            const indicator = document.getElementById('sliceDirectionIndicator');
+            if (indicator) {
+                const directionNames = {
+                    'x': 'Left ↔ Right',
+                    'y': 'Bottom ↔ Top', 
+                    'z': 'Front ↔ Back'
+                };
+                indicator.textContent = directionNames[sliceDirection];
+            }
+            
+            // Re-apply current slice range with new direction
+            applySliceRangeToMeshes();
+        }
+
+        // Updated slice range change handler 
         function handleSliceRangeChange() {
             const sliceRangeMin = document.getElementById('sliceRangeMin');
             const sliceRangeMax = document.getElementById('sliceRangeMax');
@@ -1956,25 +2135,77 @@
             sliceRangeValue.textContent = `${currentSliceRange[0]}% - ${currentSliceRange[1]}%`;
             console.log('Updated slice range to:', currentSliceRange);
             
-            // For surface meshes, slice range affects opacity based on how much of the range is visible
-            updateSurfaceMeshSliceVisibility();
+            // Apply slice-based filtering to meshes with current direction
+            applySliceRangeToMeshes();
         }
 
-        /**
-         * CLASS FILTER CHANGE HANDLER
-         */
-        function handleClassFilterChange(e) {
+        // Debug function to test all slice directions
+        function testSliceDirections() {
+            const directions = ['x', 'y', 'z'];
+            const directionNames = {
+                'x': 'Left-Right (X-axis)',
+                'y': 'Bottom-Top (Y-axis)', 
+                'z': 'Front-Back (Z-axis)'
+            };
+            
+            console.log('=== TESTING SLICE DIRECTIONS ===');
+            
+            directions.forEach((dir, index) => {
+                setTimeout(() => {
+                    setSliceDirection(dir);
+                    console.log(`${index + 1}. Testing ${directionNames[dir]}`);
+                    
+                    // Set slice range to middle 50% for testing
+                    const sliceMin = document.getElementById('sliceRangeMin');
+                    const sliceMax = document.getElementById('sliceRangeMax');
+                    if (sliceMin && sliceMax) {
+                        sliceMin.value = 25;
+                        sliceMax.value = 75;
+                        handleSliceRangeChange();
+                    }
+                }, index * 3000); // 3 seconds between each test
+            });
+            
+            // Reset to full range after testing
+            setTimeout(() => {
+                const sliceMin = document.getElementById('sliceRangeMin');
+                const sliceMax = document.getElementById('sliceRangeMax');
+                if (sliceMin && sliceMax) {
+                    sliceMin.value = 0;
+                    sliceMax.value = 100;
+                    handleSliceRangeChange();
+                }
+                console.log('Slice direction testing completed. Reset to full range.');
+            }, directions.length * 3000 + 1000);
+        }
+
+       function handleClassFilterChange(e) {
             console.log('Class filter changed to:', e.target.value);
             
             if (e.target.value === 'all') {
+                // Show all classes
                 visibleClasses = [...availableClasses];
+                Object.keys(classMeshes).forEach(classValue => {
+                    classMeshes[classValue].visible = true;
+                });
             } else {
+                // Show only selected class
                 const selectedClass = parseInt(e.target.value);
                 visibleClasses = [selectedClass];
+                
+                Object.keys(classMeshes).forEach(classValue => {
+                    const classValueInt = parseInt(classValue);
+                    classMeshes[classValue].visible = (classValueInt === selectedClass);
+                });
             }
             
             console.log('Visible classes updated to:', visibleClasses);
-            updateSurfaceMeshClassVisibility();
+            console.log('Mesh visibility updated');
+            
+            // Force re-render
+            if (typeof renderer !== 'undefined') {
+                renderer.render(scene, camera);
+            }
         }
 
         /**
@@ -2058,6 +2289,176 @@
             if (typeof renderer !== 'undefined') {
                 renderer.render(scene, camera);
             }
+        }
+        
+        /**
+         * Handle slice direction dropdown change
+         */
+        function handleSliceDirectionChange(e) {
+            const newDirection = e.target.value;
+            setSliceDirection(newDirection);
+            console.log(`Slice direction changed via UI to: ${newDirection}`);
+        }
+
+        /**
+         * Reset slice range to full (0% - 100%)
+         */
+        function resetSliceRange() {
+            const sliceRangeMin = document.getElementById('sliceRangeMin');
+            const sliceRangeMax = document.getElementById('sliceRangeMax');
+            const sliceRangeValue = document.getElementById('sliceRangeValue');
+            
+            if (sliceRangeMin) sliceRangeMin.value = 0;
+            if (sliceRangeMax) sliceRangeMax.value = 100;
+            if (sliceRangeValue) sliceRangeValue.textContent = '0% - 100%';
+            
+            currentSliceRange = [0, 100];
+            
+            // Remove all clipping planes (show full mesh)
+            if (classMeshes) {
+                Object.keys(classMeshes).forEach(classValue => {
+                    const classMesh = classMeshes[classValue];
+                    if (classMesh.material) {
+                        classMesh.material.clippingPlanes = [];
+                        classMesh.material.needsUpdate = true;
+                    }
+                });
+            }
+            
+            // Disable clipping
+            if (renderer) {
+                renderer.localClippingEnabled = false;
+            }
+            
+            console.log('Slice range reset to full view');
+        }
+
+        /**
+         * Updated setupVisualizationControls to include slice direction
+         */
+        function setupVisualizationControls() {
+            console.log('Setting up visualization controls for surface mesh');
+            
+            // =========================
+            // OPACITY SLIDER
+            // =========================
+            const opacitySlider = document.getElementById('opacitySlider');
+            const opacityValue = document.getElementById('opacityValue');
+            
+            if (opacitySlider && opacityValue) {
+                console.log('Opacity controls found');
+                opacitySlider.removeEventListener('input', handleOpacityChange);
+                opacitySlider.addEventListener('input', handleOpacityChange);
+                console.log('Opacity slider listener attached');
+            } else {
+                console.log('Opacity controls not found!');
+            }
+            
+            // =========================
+            // SLICE RANGE SLIDERS
+            // =========================
+            const sliceRangeMin = document.getElementById('sliceRangeMin');
+            const sliceRangeMax = document.getElementById('sliceRangeMax');
+            const sliceRangeValue = document.getElementById('sliceRangeValue');
+            
+            if (sliceRangeMin && sliceRangeMax && sliceRangeValue) {
+                console.log('Slice range controls found');
+                
+                // Remove existing listeners
+                sliceRangeMin.removeEventListener('input', handleSliceRangeChange);
+                sliceRangeMax.removeEventListener('input', handleSliceRangeChange);
+                
+                // Add new listeners
+                sliceRangeMin.addEventListener('input', handleSliceRangeChange);
+                sliceRangeMax.addEventListener('input', handleSliceRangeChange);
+                
+                console.log('Slice range listeners attached');
+            } else {
+                console.log('Slice range controls not found!');
+            }
+            
+            // =========================
+            // SLICE DIRECTION SELECTOR (NEW)
+            // =========================
+            const sliceDirectionSelect = document.getElementById('sliceDirectionSelect');
+            if (sliceDirectionSelect) {
+                console.log('Slice direction selector found');
+                
+                // Remove existing listener
+                sliceDirectionSelect.removeEventListener('change', handleSliceDirectionChange);
+                
+                // Add new listener
+                sliceDirectionSelect.addEventListener('change', handleSliceDirectionChange);
+                
+                // Set initial direction to Z (front-back)
+                sliceDirectionSelect.value = 'z';
+                sliceDirection = 'z';
+                
+                console.log('Slice direction selector attached, set to Z-axis (front-back)');
+            } else {
+                console.log('Slice direction selector not found - using default Z-axis');
+                sliceDirection = 'z';
+            }
+            
+            // =========================
+            // CLASS FILTER DROPDOWN
+            // =========================
+            const classFilter = document.getElementById('classFilter');
+            if (classFilter) {
+                console.log('Class filter found');
+                classFilter.removeEventListener('change', handleClassFilterChange);
+                classFilter.addEventListener('change', handleClassFilterChange);
+                console.log('Class filter listener attached');
+            } else {
+                console.log('Class filter not found!');
+            }
+            
+            console.log('All visualization controls setup complete');
+        }
+
+        /**
+         * Quick function to test if slice direction is working correctly
+         * Call this in console: testCurrentSliceDirection()
+         */
+        function testCurrentSliceDirection() {
+            console.log(`=== TESTING CURRENT SLICE DIRECTION (${sliceDirection.toUpperCase()}) ===`);
+            
+            const originalRange = [...currentSliceRange];
+            
+            // Test different ranges in current direction
+            const testRanges = [
+                [0, 25],   // First quarter
+                [25, 75],  // Middle half  
+                [75, 100], // Last quarter
+                [40, 60]   // Small middle section
+            ];
+            
+            testRanges.forEach((range, index) => {
+                setTimeout(() => {
+                    const sliceMin = document.getElementById('sliceRangeMin');
+                    const sliceMax = document.getElementById('sliceRangeMax');
+                    
+                    if (sliceMin && sliceMax) {
+                        sliceMin.value = range[0];
+                        sliceMax.value = range[1];
+                        handleSliceRangeChange();
+                        console.log(`Test ${index + 1}: ${range[0]}% - ${range[1]}%`);
+                    }
+                }, index * 2000);
+            });
+            
+            // Restore original range
+            setTimeout(() => {
+                const sliceMin = document.getElementById('sliceRangeMin');
+                const sliceMax = document.getElementById('sliceRangeMax');
+                
+                if (sliceMin && sliceMax) {
+                    sliceMin.value = originalRange[0];
+                    sliceMax.value = originalRange[1];
+                    handleSliceRangeChange();
+                    console.log(`Restored original range: ${originalRange[0]}% - ${originalRange[1]}%`);
+                }
+            }, testRanges.length * 2000 + 1000);
         }
 
         /**
@@ -2200,11 +2601,10 @@
             console.log('Use arrow keys for fine rotation, R to reset rotation');
         }
 
-        // Reset view function
         function resetView() {
             console.log('Resetting view to defaults');
             
-            // Reset sliders
+            // Reset UI controls
             const opacitySlider = document.getElementById('opacitySlider');
             const opacityValue = document.getElementById('opacityValue');
             const sliceRangeMin = document.getElementById('sliceRangeMin');
@@ -2219,26 +2619,42 @@
             if (sliceRangeValue) sliceRangeValue.textContent = '0% - 100%';
             if (classFilter) classFilter.value = 'all';
             
-            // Reset variables
+            // Reset global variables
             currentSliceRange = [0, 100];
             visibleClasses = [...availableClasses];
             
-            // Reset mesh rotation
-            if (segmentationMesh) {
-                segmentationMesh.rotation.set(0, 0, 0);
+            // Reset all class meshes
+            if (classMeshes) {
+                Object.keys(classMeshes).forEach(classValue => {
+                    const classMesh = classMeshes[classValue];
+                    
+                    // Reset visibility
+                    classMesh.visible = true;
+                    
+                    // Reset material properties
+                    if (classMesh.material) {
+                        classMesh.material.opacity = 0.8;
+                        classMesh.material.transparent = true;
+                        classMesh.material.clippingPlanes = []; // Remove clipping planes
+                        classMesh.material.needsUpdate = true;
+                    }
+                    
+                    // Reset rotation
+                    classMesh.rotation.set(0, 0, 0);
+                });
+            }
+            
+            // Reset mesh group rotation
+            if (meshGroup) {
+                meshGroup.rotation.set(0, 0, 0);
             }
             
             // Reset camera position
             camera.position.set(8, 6, 8);
             camera.lookAt(0, 0, 0);
             
-            // Apply material changes
-            if (segmentationMesh && segmentationMesh.material) {
-                segmentationMesh.material.opacity = 0.8;
-                segmentationMesh.material.transparent = true;
-                segmentationMesh.visible = true;
-                segmentationMesh.material.needsUpdate = true;
-            }
+            // Disable clipping planes
+            renderer.localClippingEnabled = false;
             
             // Force re-render
             if (typeof renderer !== 'undefined') {
@@ -2248,6 +2664,202 @@
             console.log('View reset completed');
         }
 
+        function testCameraPositions() {
+            if (!meshGroup) {
+                console.log('No mesh group available');
+                return;
+            }
+            
+            const box = new THREE.Box3().setFromObject(meshGroup);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            console.log('=== CAMERA POSITION TESTING ===');
+            console.log('Mesh center:', center);
+            console.log('Mesh size:', size);
+            console.log('Max dimension:', maxDim);
+            
+            // Try different camera positions
+            const positions = [
+                { name: 'Close front', pos: [maxDim * 2, 0, maxDim * 2] },
+                { name: 'Medium diagonal', pos: [maxDim * 3, maxDim * 2, maxDim * 3] },
+                { name: 'Far isometric', pos: [maxDim * 4, maxDim * 3, maxDim * 4] },
+                { name: 'Top down', pos: [0, maxDim * 5, 0] },
+                { name: 'Side view', pos: [maxDim * 5, 0, 0] }
+            ];
+            
+            positions.forEach((test, index) => {
+                setTimeout(() => {
+                    camera.position.set(test.pos[0], test.pos[1], test.pos[2]);
+                    camera.lookAt(center);
+                    console.log(`${index + 1}. ${test.name}: distance ${camera.position.distanceTo(center).toFixed(2)}`);
+                }, index * 2000); // 2 seconds between each test
+            });
+        }
+
+        /**
+         * Reset camera to a safe position
+         * Call this in console: resetCameraPosition()
+         */
+        function resetCameraPosition() {
+            if (!meshGroup) {
+                console.log('No mesh group available');
+                return;
+            }
+            
+            const box = new THREE.Box3().setFromObject(meshGroup);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            // Safe default position
+            const distance = Math.max(maxDim * 2.5, 8);
+            camera.position.set(distance, distance * 0.7, distance);
+            camera.lookAt(center);
+            
+            console.log('Camera reset to safe position:', camera.position);
+            console.log('Distance from center:', camera.position.distanceTo(center));
+        }
+
+        /**
+         * Add wireframe mode for better visibility
+         * Call this in console: toggleWireframe()
+         */
+        function toggleWireframe() {
+            if (!classMeshes) {
+                console.log('No class meshes available');
+                return;
+            }
+            
+            Object.keys(classMeshes).forEach(classValue => {
+                const mesh = classMeshes[classValue];
+                mesh.material.wireframe = !mesh.material.wireframe;
+                mesh.material.needsUpdate = true;
+            });
+            
+            console.log('Wireframe mode toggled');
+        }
+
+        /**
+         * Add temporary bounding box visualization
+         * Call this in console: showBoundingBox()
+         */
+        function showBoundingBox() {
+            if (!meshGroup) {
+                console.log('No mesh group available');
+                return;
+            }
+            
+            // Remove existing bounding box if any
+            const existingBox = scene.getObjectByName('debugBoundingBox');
+            if (existingBox) {
+                scene.remove(existingBox);
+            }
+            
+            const box = new THREE.Box3().setFromObject(meshGroup);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            // Create wireframe box
+            const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                wireframe: true
+            });
+            
+            const boundingBox = new THREE.Mesh(geometry, material);
+            boundingBox.position.copy(center);
+            boundingBox.name = 'debugBoundingBox';
+            
+            scene.add(boundingBox);
+            
+            console.log('Bounding box visualization added (yellow wireframe)');
+            console.log('Center:', center);
+            console.log('Size:', size);
+        }
+
+        /**
+         * Quick mesh info summary
+         * Call this in console: getMeshInfo()
+         */
+        function getMeshInfo() {
+            console.log('=== MESH INFORMATION ===');
+            
+            if (!meshGroup) {
+                console.log('No mesh group available');
+                return;
+            }
+            
+            const box = new THREE.Box3().setFromObject(meshGroup);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            
+            console.log('Mesh group children:', meshGroup.children.length);
+            console.log('Available classes:', availableClasses);
+            console.log('Visible classes:', visibleClasses);
+            console.log('Group center:', center);
+            console.log('Group size:', size);
+            console.log('Camera position:', camera.position);
+            console.log('Camera distance:', camera.position.distanceTo(center));
+            
+            if (classMeshes) {
+                Object.keys(classMeshes).forEach(classValue => {
+                    const mesh = classMeshes[classValue];
+                    console.log(`Class ${classValue}:`, {
+                        vertices: mesh.geometry.attributes.position.count,
+                        visible: mesh.visible,
+                        opacity: mesh.material.opacity,
+                        wireframe: mesh.material.wireframe
+                    });
+                });
+            }
+        }
+
+        /**
+         * Test all controls to make sure they work
+         * Call this in console: testAllControls()
+         */
+        function testAllControls() {
+            console.log('=== TESTING ALL CONTROLS ===');
+            
+            // Test opacity
+            console.log('Testing opacity control...');
+            const opacitySlider = document.getElementById('opacitySlider');
+            if (opacitySlider) {
+                opacitySlider.value = 50;
+                handleOpacityChange({ target: { value: 50 } });
+                console.log('✓ Opacity set to 50%');
+            }
+            
+            // Test class filter
+            console.log('Testing class filter...');
+            const classFilter = document.getElementById('classFilter');
+            if (classFilter && availableClasses.length > 0) {
+                classFilter.value = availableClasses[0];
+                handleClassFilterChange({ target: { value: availableClasses[0] } });
+                console.log(`✓ Class filter set to class ${availableClasses[0]}`);
+                
+                setTimeout(() => {
+                    classFilter.value = 'all';
+                    handleClassFilterChange({ target: { value: 'all' } });
+                    console.log('✓ Class filter reset to all');
+                }, 2000);
+            }
+            
+            // Test slice range
+            console.log('Testing slice range...');
+            const sliceMin = document.getElementById('sliceRangeMin');
+            const sliceMax = document.getElementById('sliceRangeMax');
+            if (sliceMin && sliceMax) {
+                sliceMin.value = 25;
+                sliceMax.value = 75;
+                handleSliceRangeChange();
+                console.log('✓ Slice range set to 25%-75%');
+            }
+            
+            console.log('Control tests completed');
+        }
 
         // Add this function to load segmentation data
         async function loadSegmentationData(visualizationPath) {
@@ -2300,56 +2912,62 @@
             }
         }
 
-        function createSurfaceMeshGeometry(data) {
-            console.log('=== CREATING SURFACE MESH GEOMETRY ===');
+        function createSeparateClassMeshes(data) {
+            console.log('=== CREATING SEPARATE CLASS MESHES WITH SCALING ===');
             const startTime = performance.now();
             
             // Extract basic information
-            const voxelData = data.data;  // Array of {x, y, z, value} objects from your Python script
-            const shape = data.shape;     // [depth, height, width] from your Python script
+            const voxelData = data.data;
+            const shape = data.shape;
             const [depth, height, width] = shape;
             
             console.log(`Processing ${voxelData.length} voxels in ${depth}x${height}x${width} volume`);
             
-            // IMPORTANT: Set global variables that other functions need
+            // Set global variables
             availableClasses = [...new Set(voxelData.map(v => v.value))].sort();
             visibleClasses = [...availableClasses];
             console.log('Available classes:', availableClasses);
             
-            // Step 1: Convert sparse voxel data to dense 3D volume
+            // Convert sparse voxel data to dense 3D volume
             const volume = new Uint8Array(depth * height * width);
             voxelData.forEach(voxel => {
                 const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
                 volume[index] = voxel.value;
             });
             
-            // Step 2: Create surface mesh for each class
-            const allVertices = [];
-            const allNormals = [];
-            const allColors = [];
-            
-            // Class colors (matching your original scheme)
+            // Class colors
             const classColors = {
-                1: [0.2, 0.9, 0.2], // Green for foreground
-                2: [0.9, 0.2, 0.2], // Red for boundaries
+                1: [0.2, 0.9, 0.2], // Green
+                2: [0.9, 0.2, 0.2], // Red
                 3: [0.2, 0.2, 0.9], // Blue
                 4: [0.9, 0.9, 0.2], // Yellow
                 5: [0.9, 0.2, 0.9]  // Magenta
             };
             
-            // Process each class
-            for (const classValue of availableClasses) {
-                console.log(`Creating surface for class ${classValue}...`);
+            // Create a group to hold all class meshes
+            meshGroup = new THREE.Group();
+            classMeshes = {}; // Reset the meshes object
+            
+            // Calculate target scale to make mesh a reasonable size (around 10 units max dimension)
+            const maxOriginalDim = Math.max(depth, height, width);
+            const targetMaxSize = 8; // Target maximum dimension
+            const scaleFactor = targetMaxSize / maxOriginalDim;
+            
+            console.log(`Original dimensions: ${width}x${height}x${depth}`);
+            console.log(`Scale factor: ${scaleFactor.toFixed(4)} (target max size: ${targetMaxSize})`);
+            
+            // Create separate mesh for each class
+            availableClasses.forEach(classValue => {
+                console.log(`Creating mesh for class ${classValue}...`);
                 
                 const classVertices = [];
                 const classNormals = [];
                 
-                // Find surface faces for this class
+                // Extract surface vertices for this class only
                 for (let z = 0; z < depth; z++) {
                     for (let y = 0; y < height; y++) {
                         for (let x = 0; x < width; x++) {
                             
-                            // Check if this voxel belongs to our current class
                             const currentValue = getVoxelValue(volume, x, y, z, width, height, depth);
                             if (currentValue !== classValue) continue;
                             
@@ -2375,74 +2993,149 @@
                             });
                         }
                     }
+                }
+                
+                if (classVertices.length > 0) {
+                    // Create geometry for this class
+                    const geometry = new THREE.BufferGeometry();
                     
-                    // Progress update
-                    if (z % 20 === 0) {
-                        const progress = (z / depth) * 100;
-                        console.log(`  Class ${classValue} progress: ${progress.toFixed(1)}%`);
-                    }
+                    // Convert to Float32Array 
+                    const vertices = new Float32Array(classVertices);
+                    const normals = new Float32Array(classNormals);
+                    
+                    // STEP 1: Center geometry around origin
+                    centerAndScaleGeometry(vertices, shape, scaleFactor);
+                    
+                    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                    geometry.computeBoundingBox();
+                    
+                    // Create material with class-specific color
+                    const color = classColors[classValue] || [0.6, 0.6, 0.6];
+                    const material = new THREE.MeshPhongMaterial({
+                        color: new THREE.Color(color[0], color[1], color[2]),
+                        transparent: true,
+                        opacity: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    
+                    // Create mesh for this class
+                    const classMesh = new THREE.Mesh(geometry, material);
+                    classMesh.userData = {
+                        classValue: classValue,
+                        originalOpacity: 0.8
+                    };
+                    
+                    // Store mesh reference
+                    classMeshes[classValue] = classMesh;
+                    
+                    // Add to group
+                    meshGroup.add(classMesh);
+                    
+                    console.log(`Class ${classValue}: ${vertices.length / 3} vertices created`);
+                    
+                    // Debug bounding box for this class
+                    const bbox = geometry.boundingBox;
+                    console.log(`  Class ${classValue} bounds: size(${(bbox.max.x - bbox.min.x).toFixed(2)}, ${(bbox.max.y - bbox.min.y).toFixed(2)}, ${(bbox.max.z - bbox.min.z).toFixed(2)})`);
+                    
+                } else {
+                    console.log(`Class ${classValue}: No vertices found`);
                 }
-                
-                // Add this class's geometry to the total
-                const color = classColors[classValue] || [0.6, 0.6, 0.6];
-                
-                for (let i = 0; i < classVertices.length; i += 3) {
-                    allVertices.push(classVertices[i], classVertices[i + 1], classVertices[i + 2]);
-                    allNormals.push(classNormals[i], classNormals[i + 1], classNormals[i + 2]);
-                    allColors.push(color[0], color[1], color[2]);
-                }
-                
-                console.log(`  Class ${classValue}: ${classVertices.length / 3} vertices`);
-            }
+            });
             
-            if (allVertices.length === 0) {
-                console.error('No surface vertices created! Check your data.');
-                // Create a simple test cube so you can see something
-                const testVertices = [
-                    0, 0, 0,  1, 0, 0,  1, 1, 0,  // Triangle 1
-                    0, 0, 0,  1, 1, 0,  0, 1, 0   // Triangle 2
-                ];
-                const testNormals = [
-                    0, 0, 1,  0, 0, 1,  0, 0, 1,  // Triangle 1 normals
-                    0, 0, 1,  0, 0, 1,  0, 0, 1   // Triangle 2 normals
-                ];
-                const testColors = [
-                    1, 0, 0,  1, 0, 0,  1, 0, 0,  // Red
-                    1, 0, 0,  1, 0, 0,  1, 0, 0   // Red
-                ];
-                
-                allVertices.push(...testVertices);
-                allNormals.push(...testNormals);
-                allColors.push(...testColors);
-                
-                console.log('Added test geometry to debug empty result');
-            }
+            // Add the group to the scene
+            scene.add(meshGroup);
             
-            // Step 3: Center the geometry
-            centerGeometry(allVertices, shape);
-            
-            // Step 4: Create Three.js geometry
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(allVertices), 3));
-            geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(allNormals), 3));
-            geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(allColors), 3));
-            
-            // Add metadata that the controls expect
-            geometry.surfaceMeshMetadata = {
-                availableClasses: availableClasses,
-                totalVertices: allVertices.length / 3,
-                shape: shape
-            };
-            
-            geometry.computeBoundingBox();
+            // Update global reference for compatibility with existing code
+            segmentationMesh = meshGroup;
             
             const endTime = performance.now();
-            console.log(`Surface mesh completed in ${((endTime - startTime) / 1000).toFixed(2)} seconds`);
-            console.log(`Final result: ${allVertices.length / 3} vertices`);
-            console.log('Geometry bounding box:', geometry.boundingBox);
-            console.log('===============================================');
+            console.log(`Mesh creation completed in ${(endTime - startTime).toFixed(2)}ms`);
+            console.log(`Created ${Object.keys(classMeshes).length} separate class meshes`);
             
-            return geometry;
+            // Calculate and log final group bounds
+            const groupBox = new THREE.Box3().setFromObject(meshGroup);
+            const groupSize = groupBox.getSize(new THREE.Vector3());
+            const groupCenter = groupBox.getCenter(new THREE.Vector3());
+            
+            console.log(`Final group center: (${groupCenter.x.toFixed(3)}, ${groupCenter.y.toFixed(3)}, ${groupCenter.z.toFixed(3)})`);
+            console.log(`Final group size: (${groupSize.x.toFixed(3)}, ${groupSize.y.toFixed(3)}, ${groupSize.z.toFixed(3)})`);
+            
+            // Populate class filter dropdown
+            populateClassFilter();
+            
+            return meshGroup;
+        }
+
+        function centerAndScaleGeometry(vertices, shape, scaleFactor) {
+            const [depth, height, width] = shape;
+            
+            console.log(`Centering and scaling geometry with factor ${scaleFactor.toFixed(4)}`);
+            
+            // Calculate center offset (before scaling)
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const centerZ = depth / 2;
+            
+            // Apply centering AND scaling to all vertices
+            for (let i = 0; i < vertices.length; i += 3) {
+                // Center first, then scale
+                vertices[i] = (vertices[i] - centerX) * scaleFactor;         // X
+                vertices[i + 1] = (vertices[i + 1] - centerY) * scaleFactor; // Y
+                vertices[i + 2] = (vertices[i + 2] - centerZ) * scaleFactor; // Z
+            }
+            
+            console.log(`Geometry centered at origin and scaled by ${scaleFactor.toFixed(4)}`);
+        }
+
+        // Helper function to center geometry for individual classes
+        function centerGeometryForClass(vertices, shape) {
+            const [depth, height, width] = shape;
+            
+            // Calculate bounds for this geometry
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+            
+            for (let i = 0; i < vertices.length; i += 3) {
+                minX = Math.min(minX, vertices[i]);
+                maxX = Math.max(maxX, vertices[i]);
+                minY = Math.min(minY, vertices[i + 1]);
+                maxY = Math.max(maxY, vertices[i + 1]);
+                minZ = Math.min(minZ, vertices[i + 2]);
+                maxZ = Math.max(maxZ, vertices[i + 2]);
+            }
+            
+            // Calculate center offset based on full volume
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const centerZ = depth / 2;
+            
+            // Apply centering
+            for (let i = 0; i < vertices.length; i += 3) {
+                vertices[i] -= centerX;     // X
+                vertices[i + 1] -= centerY; // Y
+                vertices[i + 2] -= centerZ; // Z
+            }
+        }
+
+        // Function to populate class filter dropdown
+        function populateClassFilter() {
+            const classFilter = document.getElementById('classFilter');
+            if (!classFilter) return;
+            
+            // Clear existing options except "All Classes"
+            classFilter.innerHTML = '<option value="all">All Classes</option>';
+            
+            // Add option for each class
+            availableClasses.forEach(classValue => {
+                const option = document.createElement('option');
+                option.value = classValue;
+                option.textContent = `Class ${classValue}`;
+                classFilter.appendChild(option);
+            });
+            
+            console.log('Class filter populated with', availableClasses.length, 'classes');
         }
 
         function addQuadFace(vertices, normals, x, y, z, face) {
@@ -2784,34 +3477,6 @@
             };
             
             return colors[classValue] || [0.6, 0.6, 0.6]; // Default gray
-        }
-
-        // Function to populate class filter dropdown
-        function populateClassFilter() {
-            const classSelect = document.getElementById('classFilter');
-            if (!classSelect || availableClasses.length === 0) {
-                return;
-            }
-            
-            // Clear existing options
-            classSelect.innerHTML = '';
-            
-            // Add "All Classes" option
-            const allOption = document.createElement('option');
-            allOption.value = 'all';
-            allOption.textContent = 'All Classes';
-            allOption.selected = true;
-            classSelect.appendChild(allOption);
-            
-            // Add option for each class
-            availableClasses.forEach(classId => {
-                const option = document.createElement('option');
-                option.value = classId.toString();
-                option.textContent = `Class ${classId}`;
-                classSelect.appendChild(option);
-            });
-            
-            console.log('Populated class filter with classes:', availableClasses);
         }
 
         function resetWorkflow() {
