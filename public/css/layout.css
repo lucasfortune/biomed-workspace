@@ -1,0 +1,66 @@
+.step-nav {
+    display: flex;
+    justify-content: space-between;
+    background: #f8f9fa;
+    padding: 20px 40px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.step.active {
+    color: #4CAF50;
+}
+
+.step.completed {
+    color: #28a745;
+}
+
+.step-number {
+    background: #dee2e6;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.step.active .step-number {
+    background: #4CAF50;
+}
+
+.step.completed .step-number {
+    background: #28a745;
+}
+
+.main-content {
+    padding: 40px;
+    min-height: 500px;
+    max-height: 110vh; /* Prevent the content from getting too tall */
+    overflow-y: auto; /* Allow scrolling if content is too tall */
+}
+
+.step-content {
+    display: none;
+    max-height: 85vh; /* Constrain individual step content */
+    overflow-y: auto; /* Allow scrolling within steps */
+}
+
+.step-content.active {
+    display: block;
+}
+
+.navigation-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 30px;
+}
