@@ -1,3 +1,28 @@
+// Central function to handle step changes
+function setStep(stepNumber) {
+    if (stepNumber < 1 || stepNumber > 5) return;
+    
+    // Hide current step
+    document.querySelector(`.step-content.active`)?.classList.remove('active');
+    document.querySelector(`.step.active`)?.classList.remove('active');
+    
+    // Show new step
+    document.querySelector(`[data-step="${stepNumber}"]`)?.classList.add('active');
+    document.querySelector(`#step${stepNumber}`)?.classList.add('active');
+    
+    // Update global variable
+    currentStep = stepNumber;
+    
+    // Initialize 3D visualization when reaching step 5
+    if (stepNumber === 5) {
+        console.log('Initializing 3D visualization...');
+        initialize3DVisualization();
+    }
+    
+    // Update progress bar
+    updateProgressBar();
+}
+
 function nextStep() {
     if (currentStep < 5) {
         setStep(currentStep + 1);
@@ -7,29 +32,6 @@ function nextStep() {
 function previousStep() {
     if (currentStep > 1) {
         setStep(currentStep - 1);
-    }
-}
-
-function nextStep() {
-    const currentStep = document.querySelector('.step.active').getAttribute('data-step');
-    const nextStepNum = parseInt(currentStep) + 1;
-    
-    if (nextStepNum <= 5) {
-        // Hide current step
-        document.querySelector(`.step-content.active`).classList.remove('active');
-        document.querySelector(`.step.active`).classList.remove('active');
-        
-        // Show next step
-        document.querySelector(`[data-step="${nextStepNum}"]`).classList.add('active');
-        document.querySelector(`#step${nextStepNum}`).classList.add('active');
-        
-        // Initialize 3D visualization when reaching step 5
-        if (nextStepNum === 5) {
-            console.log('Initializing 3D visualization...');
-            initialize3DVisualization();
-        }
-        
-        updateProgressBar();
     }
 }
 
