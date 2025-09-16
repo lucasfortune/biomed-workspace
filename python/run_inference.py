@@ -308,49 +308,30 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
     return metadata
 
 def create_3d_visualization_data(segmented_stack, output_dir):
-    """Create data files for 3D visualization with proper JSON serialization"""
-    print("Creating 3D visualization data with web optimization...", flush=True)
+    """Create data files for 3D visualization with full resolution data"""
+    print("Creating 3D visualization data at full resolution...", flush=True)
     
     original_shape = segmented_stack.shape
-    print(f"Original segmentation shape: {original_shape}", flush=True)
+    print(f"Segmentation shape: {original_shape}", flush=True)
     
     # Calculate non-zero voxel count to estimate final data size
     non_zero_count = np.count_nonzero(segmented_stack)
-    print(f"Non-zero voxels in original: {non_zero_count:,}", flush=True)
+    print(f"Non-zero voxels to process: {non_zero_count:,}", flush=True)
     
-    # Intelligent downsampling based on data density and size
-    target_min_voxels = 50000
-    target_max_voxels = 500000
-    
-    if non_zero_count <= target_max_voxels:
-        downsample_factor = 1
-        print("Using original resolution - data size is optimal", flush=True)
-    elif non_zero_count <= target_max_voxels * 4:
-        downsample_factor = 2
-        print("Using 2x downsampling for moderate optimization", flush=True)
-    elif non_zero_count <= target_max_voxels * 16:
-        downsample_factor = 4
-        print("Using 4x downsampling for performance", flush=True)
+    # Performance warning for very large datasets
+    if non_zero_count > 1000000:
+        print("⚠️  Large dataset detected - processing may take longer and use more memory", flush=True)
+    elif non_zero_count > 500000:
+        print("📊 Medium-sized dataset - good balance of detail and performance", flush=True)
     else:
-        max_dimension = 256
-        downsample_factor = max(1, max(original_shape) // max_dimension)
-        print(f"Using adaptive downsampling: {downsample_factor}x", flush=True)
+        print("⚡ Optimal dataset size for real-time visualization", flush=True)
     
-    # Apply downsampling
-    if downsample_factor > 1:
-        downsampled = segmented_stack[::downsample_factor, ::downsample_factor, ::downsample_factor]
-        print(f"Downsampled to: {downsampled.shape}", flush=True)
-    else:
-        downsampled = segmented_stack
-        print("No downsampling applied", flush=True)
-    
-    # Calculate final non-zero count after downsampling
-    final_non_zero_count = np.count_nonzero(downsampled)
-    print(f"Final non-zero voxels: {final_non_zero_count:,}", flush=True)
+    # Use full resolution data (no downsampling)
+    print("Using full resolution data - no downsampling applied", flush=True)
     
     # Create sparse representation with explicit type conversion
-    non_zero_indices = np.nonzero(downsampled)
-    non_zero_values = downsampled[non_zero_indices]
+    non_zero_indices = np.nonzero(segmented_stack)
+    non_zero_values = segmented_stack[non_zero_indices]
     
     print("Creating sparse data structure with JSON-safe types...", flush=True)
     sparse_data = []
@@ -392,16 +373,15 @@ def create_3d_visualization_data(segmented_stack, output_dir):
     viz_data = {
         'format': 'sparse',
         'version': '2.0',
-        'shape': [int(dim) for dim in downsampled.shape],  # Convert shape dimensions
+        'shape': [int(dim) for dim in segmented_stack.shape],  # Use original shape directly
         'data': sparse_data,
-        'downsample_factor': int(downsample_factor),  # Ensure native Python int
-        'original_shape': [int(dim) for dim in original_shape],  # Convert shape dimensions
+        'original_shape': [int(dim) for dim in original_shape],  # Keep for compatibility
         'statistics': {
             'total_voxels': len(sparse_data),  # Already Python int from len()
             'original_non_zero_voxels': int(non_zero_count.item()) if hasattr(non_zero_count, 'item') else int(non_zero_count),
             'classes': classes_list,
             'class_counts': class_counts,
-            'density': float(len(sparse_data) / (downsampled.shape[0] * downsampled.shape[1] * downsampled.shape[2]))
+            'density': float(len(sparse_data) / (segmented_stack.shape[0] * segmented_stack.shape[1] * segmented_stack.shape[2]))
         }
     }
     
@@ -440,9 +420,8 @@ def create_3d_visualization_data(segmented_stack, output_dir):
     
     print("=" * 50, flush=True)
     print("3D VISUALIZATION DATA SUMMARY:", flush=True)
-    print(f"  Original shape: {original_shape}", flush=True)
-    print(f"  Final shape: {downsampled.shape}", flush=True)
-    print(f"  Downsample factor: {downsample_factor}x", flush=True)
+    print(f"  Data shape: {original_shape}", flush=True)
+    print(f"  Resolution: Full resolution (no downsampling)", flush=True)
     print(f"  Voxels stored: {len(sparse_data):,}", flush=True)
     print(f"  Classes found: {classes_list}", flush=True)
     print(f"  Data density: {viz_data['statistics']['density']:.1%}", flush=True)
