@@ -14,7 +14,7 @@ let uploadedFiles = {
     annotations: null,
     inferenceData: null
 };
-// Add these global variables at the top of your JavaScript section
+
 let segmentationMesh = null;
 let segmentationData = null;
 let availableClasses = [];

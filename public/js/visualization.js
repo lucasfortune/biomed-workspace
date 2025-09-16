@@ -30,21 +30,51 @@ async function initialize3DVisualization() {
         
         container.appendChild(renderer.domElement);
         
-        // Enhanced lighting setup
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+        // ENHANCED LIGHTING SETUP - Much Brighter and More Dynamic
+        console.log('Setting up enhanced lighting system...');
+
+        // 1. BRIGHTER AMBIENT LIGHT - This provides the base illumination
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Increased from 0.4 to 0.6, pure white
         scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(2, 2, 2);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        scene.add(directionalLight);
-        
-        // Add a second light from different angle
-        const fillLight = new THREE.DirectionalLight(0x8888ff, 0.3);
-        fillLight.position.set(-1, -1, 1);
+
+        // 2. PRIMARY DIRECTIONAL LIGHT - Main light source from top-right
+        const primaryLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increased intensity
+        primaryLight.position.set(10, 10, 5);
+        primaryLight.castShadow = true;
+        primaryLight.shadow.mapSize.width = 2048;
+        primaryLight.shadow.mapSize.height = 2048;
+        primaryLight.shadow.camera.near = 0.1;
+        primaryLight.shadow.camera.far = 50;
+        primaryLight.shadow.camera.left = -20;
+        primaryLight.shadow.camera.right = 20;
+        primaryLight.shadow.camera.top = 20;
+        primaryLight.shadow.camera.bottom = -20;
+        scene.add(primaryLight);
+
+        // 3. FILL LIGHT - Soft light from the opposite side to fill shadows
+        const fillLight = new THREE.DirectionalLight(0xb3d9ff, 0.8); // Soft blue-white, increased intensity
+        fillLight.position.set(-8, 5, -3);
         scene.add(fillLight);
+
+        // 4. BACK LIGHT - Creates nice rim lighting and depth
+        const backLight = new THREE.DirectionalLight(0xfff5b3, 0.6); // Warm yellow-white
+        backLight.position.set(2, -5, -10);
+        scene.add(backLight);
+
+        // 5. TOP-DOWN LIGHT - Provides even illumination from above
+        const topLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        topLight.position.set(0, 15, 0);
+        scene.add(topLight);
+
+        // 6. HEMISPHERE LIGHT - Adds natural sky/ground lighting
+        const hemisphereLight = new THREE.HemisphereLight(
+            0xffffff,  // Sky color (white)
+            0x444444,  // Ground color (dark gray)
+            0.4        // Intensity
+        );
+        scene.add(hemisphereLight);
+
+        console.log('Enhanced lighting system setup complete');
         
         // Initial camera position
         camera.position.set(3, 2, 5);
@@ -271,6 +301,20 @@ function setupEnhancedControls() {
             // Clamp vertical rotation
             meshGroup.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, meshGroup.rotation.x));
             
+            // UPDATE: Update slice direction indicator in real-time
+            updateSliceDirectionIndicator();
+            
+            // UPDATE: Re-apply all current slice ranges with new rotation
+            if (classControlStates) {
+                Object.keys(classControlStates).forEach(classValue => {
+                    const state = classControlStates[classValue];
+                    if (state.rangeMin !== 0 || state.rangeMax !== 100) {
+                        // Re-apply the slice range with the new rotation
+                        applyRangeToSingleClass(parseInt(classValue), state.rangeMin, state.rangeMax);
+                    }
+                });
+            }
+            
             previousMousePosition = { x: e.clientX, y: e.clientY };
         }
     });
@@ -289,7 +333,7 @@ function setupEnhancedControls() {
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         
-        const zoomSpeed = 0.2;
+        const zoomSpeed = 0.05;
         const delta = e.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
         
         camera.position.multiplyScalar(delta);
@@ -308,24 +352,40 @@ function setupEnhancedControls() {
         if (!meshGroup) return;
         
         const rotationSpeed = 0.1;
+        let rotationChanged = false;
         
         switch(event.key.toLowerCase()) {
             case 'arrowleft':
                 meshGroup.rotation.y -= rotationSpeed;
+                rotationChanged = true;
                 break;
             case 'arrowright':
                 meshGroup.rotation.y += rotationSpeed;
+                rotationChanged = true;
                 break;
             case 'arrowup':
                 meshGroup.rotation.x -= rotationSpeed;
+                rotationChanged = true;
                 break;
             case 'arrowdown':
                 meshGroup.rotation.x += rotationSpeed;
+                rotationChanged = true;
                 break;
             case 'r':
                 // Reset rotation
                 meshGroup.rotation.set(0, 0, 0);
+                rotationChanged = true;
                 break;
+        }
+        
+        // Re-apply all current slice ranges with new rotation
+        if (classControlStates) {
+            Object.keys(classControlStates).forEach(classValue => {
+                const state = classControlStates[classValue];
+                if (state.rangeMin !== 0 || state.rangeMax !== 100) {
+                    applyRangeToSingleClass(parseInt(classValue), state.rangeMin, state.rangeMax);
+                }
+            });
         }
     });
     
@@ -333,95 +393,941 @@ function setupEnhancedControls() {
     console.log('Enhanced mesh-centered controls setup complete');
 }
 
-// Function to setup UI control event listeners
+// Global object to store individual class control states
+let classControlStates = {};
+
+/**
+ * Generate individual control panels for each class
+ * This replaces the old shared control system
+ */
+function generateClassControlPanels() {
+    console.log('Generating individual control panels for classes:', availableClasses);
+    
+    const container = document.getElementById('classControlPanels');
+    if (!container) {
+        console.error('Class control panels container not found!');
+        return;
+    }
+    
+    // Clear existing panels
+    container.innerHTML = '';
+    
+    // Initialize control states for each class
+    availableClasses.forEach(classValue => {
+        classControlStates[classValue] = {
+            visible: true,
+            opacity: 80,
+            rangeMin: 0,
+            rangeMax: 100
+        };
+    });
+    
+    // Create panel for each class
+    availableClasses.forEach(classValue => {
+        const panel = createClassControlPanel(classValue);
+        container.appendChild(panel);
+    });
+    
+    console.log('Class control panels generated successfully');
+}
+
+/**
+ * Create a control panel for a specific class with improved styling
+ * @param {number} classValue - The class number
+ * @returns {HTMLElement} - The created panel element
+ */
+function createClassControlPanel(classValue) {
+    // Create main panel div
+    const panel = document.createElement('div');
+    panel.className = 'class-control-panel';
+    panel.setAttribute('data-class', classValue);
+    
+    // Get class color for visual identification
+    const classColor = getClassColor(classValue);
+    
+    // Create checkbox section
+    const checkboxSection = document.createElement('div');
+    checkboxSection.className = 'class-checkbox-section';
+    checkboxSection.innerHTML = `
+        <input type="checkbox" 
+               class="class-checkbox" 
+               id="classCheckbox_${classValue}" 
+               checked>
+        <div class="class-label" style="color: ${classColor};">
+            Class ${classValue}
+        </div>
+    `;
+    
+    // Create opacity section
+    const opacitySection = document.createElement('div');
+    opacitySection.className = 'class-opacity-section';
+    opacitySection.innerHTML = `
+        <label class="class-opacity-label">Opacity:</label>
+        <input type="range" 
+               class="slider class-opacity-slider" 
+               id="classOpacity_${classValue}"
+               min="10" 
+               max="100" 
+               value="80">
+        <span class="class-opacity-value" id="classOpacityValue_${classValue}">80%</span>
+    `;
+    
+    // Create range section with dual slider
+    const rangeSection = document.createElement('div');
+    rangeSection.className = 'class-range-section';
+    
+    const rangeLabel = document.createElement('label');
+    rangeLabel.className = 'class-range-label';
+    rangeLabel.textContent = 'Range:';
+    
+    const dualRangeSlider = createDualRangeSlider(classValue);
+    
+    const rangeValue = document.createElement('span');
+    rangeValue.className = 'class-range-value';
+    rangeValue.id = `classRangeValue_${classValue}`;
+    rangeValue.textContent = '0% - 100%';
+    
+    rangeSection.appendChild(rangeLabel);
+    rangeSection.appendChild(dualRangeSlider);
+    rangeSection.appendChild(rangeValue);
+    
+    // Assemble the panel
+    panel.appendChild(checkboxSection);
+    panel.appendChild(opacitySection);
+    panel.appendChild(rangeSection);
+    
+    // Add event listeners to this panel's controls
+    setupClassControlListeners(classValue);
+    
+    return panel;
+}
+
+/**
+ * Set up event listeners for a specific class control panel (updated for dual-range)
+ * @param {number} classValue - The class number
+ */
+function setupClassControlListeners(classValue) {
+    // We use setTimeout to ensure the DOM elements are ready
+    setTimeout(() => {
+        // Checkbox listener
+        const checkbox = document.getElementById(`classCheckbox_${classValue}`);
+        if (checkbox) {
+            checkbox.addEventListener('change', (e) => handleClassVisibilityChange(classValue, e.target.checked));
+        }
+        
+        // Opacity slider listener
+        const opacitySlider = document.getElementById(`classOpacity_${classValue}`);
+        if (opacitySlider) {
+            opacitySlider.addEventListener('input', (e) => handleClassOpacityChange(classValue, e.target.value));
+        }
+        
+        // Dual-range slider listeners are already set up in createDualRangeSlider()
+        // No need to add them again here
+        
+        console.log(`Event listeners set up for class ${classValue}`);
+    }, 10);
+}
+
+/**
+ * Get the exact color used for a class in the 3D model
+ * This matches the classColors object used in createSeparateClassMeshes()
+ * @param {number} classValue - The class number
+ * @returns {string} - CSS color value that matches the 3D model
+ */
+function getClassColor(classValue) {
+    // These must match the classColors object used for 3D mesh materials
+    const classColors = {
+        1: [0.2, 0.9, 0.2], // Green
+        2: [0.9, 0.2, 0.2], // Red
+        3: [0.2, 0.2, 0.9], // Blue
+        4: [0.9, 0.9, 0.2], // Yellow
+        5: [0.9, 0.2, 0.9]  // Magenta
+    };
+    
+    // Get the RGB array for this class, or default gray
+    const colorArray = classColors[classValue] || [0.6, 0.6, 0.6];
+    
+    // Convert from 0-1 range to 0-255 range and return CSS rgb string
+    const r = Math.round(colorArray[0] * 255);
+    const g = Math.round(colorArray[1] * 255);
+    const b = Math.round(colorArray[2] * 255);
+    
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+/**
+ * Handle visibility checkbox change for a specific class
+ * @param {number} classValue - The class number
+ * @param {boolean} isVisible - Whether the class should be visible
+ */
+function handleClassVisibilityChange(classValue, isVisible) {
+    console.log(`Class ${classValue} visibility changed to:`, isVisible);
+    
+    // Update our state
+    classControlStates[classValue].visible = isVisible;
+    
+    // Update the mesh visibility
+    if (classMeshes && classMeshes[classValue]) {
+        classMeshes[classValue].visible = isVisible;
+    }
+    
+    // Update the panel visual state
+    const panel = document.querySelector(`[data-class="${classValue}"]`);
+    if (panel) {
+        if (isVisible) {
+            panel.classList.remove('disabled');
+        } else {
+            panel.classList.add('disabled');
+        }
+    }
+    
+    // Update global visibleClasses array
+    if (isVisible) {
+        if (!visibleClasses.includes(classValue)) {
+            visibleClasses.push(classValue);
+        }
+    } else {
+        visibleClasses = visibleClasses.filter(c => c !== classValue);
+    }
+    
+    // Force re-render
+    if (typeof renderer !== 'undefined') {
+        renderer.render(scene, camera);
+    }
+    
+    console.log('Updated visible classes:', visibleClasses);
+}
+
+/**
+ * Handle opacity change for a specific class
+ * @param {number} classValue - The class number
+ * @param {string} opacityValue - The new opacity value (0-100)
+ */
+function handleClassOpacityChange(classValue, opacityValue) {
+    const opacity = parseInt(opacityValue) / 100;
+    console.log(`Class ${classValue} opacity changed to:`, opacity);
+    
+    // Update our state
+    classControlStates[classValue].opacity = parseInt(opacityValue);
+    
+    // Update the display value
+    const opacityValueSpan = document.getElementById(`classOpacityValue_${classValue}`);
+    if (opacityValueSpan) {
+        opacityValueSpan.textContent = opacityValue + '%';
+    }
+    
+    // Apply opacity to this specific class mesh
+    if (classMeshes && classMeshes[classValue]) {
+        const classMesh = classMeshes[classValue];
+        if (classMesh.material) {
+            classMesh.material.opacity = opacity;
+            classMesh.material.transparent = true;
+            classMesh.material.needsUpdate = true;
+        }
+    }
+    
+    // Force re-render
+    if (typeof renderer !== 'undefined') {
+        renderer.render(scene, camera);
+    }
+}
+
+/**
+ * Handle range slider changes for a specific class (updated for dual-handle slider)
+ * @param {number} classValue - The class number
+ */
+function handleClassRangeChange(classValue) {
+    const rangeMin = document.getElementById(`dualRangeMin_${classValue}`);
+    const rangeMax = document.getElementById(`dualRangeMax_${classValue}`);
+    const rangeValue = document.getElementById(`classRangeValue_${classValue}`);
+    
+    if (!rangeMin || !rangeMax || !rangeValue) return;
+    
+    let minVal = parseInt(rangeMin.value);
+    let maxVal = parseInt(rangeMax.value);
+    
+    // Ensure min is not greater than max
+    if (minVal > maxVal) {
+        minVal = maxVal;
+        rangeMin.value = maxVal;
+    }
+    
+    // Update our state
+    classControlStates[classValue].rangeMin = minVal;
+    classControlStates[classValue].rangeMax = maxVal;
+    
+    // Update display
+    rangeValue.textContent = `${minVal}% - ${maxVal}%`;
+    
+    console.log(`Class ${classValue} range changed to: ${minVal}% - ${maxVal}%`);
+    
+    // Apply range filtering to this specific class
+    applyRangeToSingleClass(classValue, minVal, maxVal);
+}
+
+
+/**
+ * Apply range filtering to a single class mesh (FIXED: uses actual mesh coordinates)
+ * @param {number} classValue - The class number
+ * @param {number} minPercent - Minimum percentage (0-100)
+ * @param {number} maxPercent - Maximum percentage (0-100)
+ */
+/**
+ * Apply range filtering to a single class mesh (FIXED: Use actual vertex bounds)
+ */
+function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
+    if (!classMeshes || !classMeshes[classValue]) {
+        console.log(`Cannot apply range to class ${classValue} - mesh not available`);
+        return;
+    }
+    
+    const classMesh = classMeshes[classValue];
+    
+    // SAFETY FIX: Initialize clippingPlanes if it doesn't exist
+    if (classMesh.material && !classMesh.material.clippingPlanes) {
+        classMesh.material.clippingPlanes = [];
+        console.log(`Initialized clippingPlanes array for class ${classValue}`);
+    }
+    
+    // CRITICAL FIX: Calculate bounds directly from geometry vertices, not setFromObject()
+    const geometry = classMesh.geometry;
+    const positions = geometry.attributes.position.array;
+    
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity; 
+    let minZ = Infinity, maxZ = -Infinity;
+    
+    // Calculate actual vertex bounds
+    for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i];
+        const y = positions[i + 1];
+        const z = positions[i + 2];
+        
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+    }
+    
+    const actualBounds = {
+        min: { x: minX, y: minY, z: minZ },
+        max: { x: maxX, y: maxY, z: maxZ },
+        size: { x: maxX - minX, y: maxY - minY, z: maxZ - minZ },
+        center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 }
+    };
+    
+    console.log(`Class ${classValue} - Using ACTUAL vertex bounds:`, {
+        bounds: `X: ${minX.toFixed(3)} to ${maxX.toFixed(3)}, Y: ${minY.toFixed(3)} to ${maxY.toFixed(3)}, Z: ${minZ.toFixed(3)} to ${maxZ.toFixed(3)}`,
+        size: `(${actualBounds.size.x.toFixed(3)}, ${actualBounds.size.y.toFixed(3)}, ${actualBounds.size.z.toFixed(3)})`,
+        center: `(${actualBounds.center.x.toFixed(3)}, ${actualBounds.center.y.toFixed(3)}, ${actualBounds.center.z.toFixed(3)})`
+    });
+    
+    // Get the current slice direction
+    const currentDir = sliceDirection || 'z';
+    
+    // Calculate coordinates based on ACTUAL geometry bounds
+    let dimension, minCoord, maxCoord, centerCoord;
+    
+    switch(currentDir) {
+        case 'x':
+            dimension = actualBounds.size.x;
+            centerCoord = actualBounds.center.x;
+            minCoord = actualBounds.min.x + (minPercent / 100) * dimension;
+            maxCoord = actualBounds.min.x + (maxPercent / 100) * dimension;
+            break;
+        case 'y':
+            dimension = actualBounds.size.y;
+            centerCoord = actualBounds.center.y;
+            minCoord = actualBounds.min.y + (minPercent / 100) * dimension;
+            maxCoord = actualBounds.min.y + (maxPercent / 100) * dimension;
+            break;
+        case 'z':
+        default:
+            dimension = actualBounds.size.z;
+            centerCoord = actualBounds.center.z;
+            minCoord = actualBounds.min.z + (minPercent / 100) * dimension;
+            maxCoord = actualBounds.min.z + (maxPercent / 100) * dimension;
+            break;
+    }
+    
+    console.log(`VERTEX-BASED range calculation for class ${classValue}:`, {
+        direction: currentDir,
+        actualDimension: dimension.toFixed(3),
+        actualBounds: {
+            min: (currentDir === 'x' ? actualBounds.min.x : 
+                  currentDir === 'y' ? actualBounds.min.y : actualBounds.min.z).toFixed(3),
+            max: (currentDir === 'x' ? actualBounds.max.x : 
+                  currentDir === 'y' ? actualBounds.max.y : actualBounds.max.z).toFixed(3)
+        },
+        calculatedCoords: {
+            minCoord: minCoord.toFixed(3),
+            maxCoord: maxCoord.toFixed(3)
+        },
+        percentRange: `${minPercent}% - ${maxPercent}%`
+    });
+
+   // Create clipping planes (FIXED: Correct Three.js plane math)
+    let clippingPlanes = [];
+
+    // Only create clipping planes if we're actually clipping something
+    if (minPercent > 0 || maxPercent < 100) {
+        console.log(`Creating CORRECTED clipping planes for class ${classValue}`);
+        
+        // Get actual vertex bounds for the selected direction
+        let actualMin, actualMax;
+        switch(currentDir) {
+            case 'x':
+                actualMin = actualBounds.min.x;
+                actualMax = actualBounds.max.x;
+                break;
+            case 'y':
+                actualMin = actualBounds.min.y;
+                actualMax = actualBounds.max.y;
+                break;
+            case 'z':
+            default:
+                actualMin = actualBounds.min.z;
+                actualMax = actualBounds.max.z;
+                break;
+        }
+        
+        const actualRange = actualMax - actualMin;
+        const clipMin = actualMin + (minPercent / 100) * actualRange;
+        const clipMax = actualMin + (maxPercent / 100) * actualRange;
+        
+        console.log(`CORRECTED clipping: ${currentDir}-axis from ${clipMin.toFixed(3)} to ${clipMax.toFixed(3)}`);
+        console.log(`  This should KEEP geometry between ${clipMin.toFixed(3)} and ${clipMax.toFixed(3)}`);
+        console.log(`  Actual geometry range: ${actualMin.toFixed(3)} to ${actualMax.toFixed(3)}`);
+        
+        // CORRECTED Three.js plane math:
+        // Three.js clips where: normal⋅point + constant > 0
+        // To keep geometry between clipMin and clipMax, we need:
+        // - Plane 1: clips geometry < clipMin (keeps >= clipMin)  
+        // - Plane 2: clips geometry > clipMax (keeps <= clipMax)
+        
+        // FIXED: Corrected Three.js clipping plane math
+        if (minPercent > 0) {
+            // Clip everything below clipMin
+            // Want to clip where z < clipMin, so use normal pointing DOWN and adjust constant
+            let plane1;
+            switch(currentDir) {
+                case 'x':
+                    plane1 = new THREE.Plane(new THREE.Vector3(1, 0, 0), -clipMin);
+                    break;
+                case 'y':
+                    plane1 = new THREE.Plane(new THREE.Vector3(0, 1, 0), -clipMin);
+                    break;
+                case 'z':
+                default:
+                    plane1 = new THREE.Plane(new THREE.Vector3(0, 0, 1), -clipMin);
+                    break;
+            }
+            clippingPlanes.push(plane1);
+            console.log(`  FIXED plane 1: clips ${currentDir} < ${clipMin.toFixed(3)} (keeps >= ${clipMin.toFixed(3)})`);
+        }
+
+        if (maxPercent < 100) {
+            // Clip everything above clipMax  
+            // Want to clip where z > clipMax, so use normal pointing UP and adjust constant
+            let plane2;
+            switch(currentDir) {
+                case 'x':
+                    plane2 = new THREE.Plane(new THREE.Vector3(-1, 0, 0), clipMax);
+                    break;
+                case 'y':
+                    plane2 = new THREE.Plane(new THREE.Vector3(0, -1, 0), clipMax);
+                    break;
+                case 'z':
+                default:
+                    plane2 = new THREE.Plane(new THREE.Vector3(0, 0, -1), clipMax);
+                    break;
+            }
+            clippingPlanes.push(plane2);
+            console.log(`  FIXED plane 2: clips ${currentDir} > ${clipMax.toFixed(3)} (keeps <= ${clipMax.toFixed(3)})`);
+        }
+        
+        // ROTATION-AWARE: Transform clipping planes if the mesh is rotated
+        if (meshGroup && (meshGroup.rotation.x !== 0 || meshGroup.rotation.y !== 0 || meshGroup.rotation.z !== 0)) {
+            console.log(`Applying rotation transformation for class ${classValue}:`, {
+                rotation: `(${meshGroup.rotation.x.toFixed(3)}, ${meshGroup.rotation.y.toFixed(3)}, ${meshGroup.rotation.z.toFixed(3)})`
+            });
+            
+            // Get the rotation matrix
+            const rotationMatrix = new THREE.Matrix4();
+            rotationMatrix.makeRotationFromEuler(meshGroup.rotation);
+            
+            // Create a 3x3 matrix for transforming normals
+            const rotationMatrix3 = new THREE.Matrix3().setFromMatrix4(rotationMatrix);
+            
+            // Transform each clipping plane
+            clippingPlanes.forEach((plane, index) => {
+                // Store original for debugging
+                const originalNormal = plane.normal.clone();
+                
+                // Transform the normal vector
+                plane.normal.applyMatrix3(rotationMatrix3);
+                
+                console.log(`  Plane ${index + 1}: normal transformed from (${originalNormal.x.toFixed(3)}, ${originalNormal.y.toFixed(3)}, ${originalNormal.z.toFixed(3)}) to (${plane.normal.x.toFixed(3)}, ${plane.normal.y.toFixed(3)}, ${plane.normal.z.toFixed(3)})`);
+            });
+            
+            console.log(`Applied rotation transformation to ${clippingPlanes.length} planes`);
+        } else {
+            console.log('No rotation applied - mesh is at default orientation');
+        }
+        
+        console.log(`Created ${clippingPlanes.length} CORRECTED clipping planes for class ${classValue}`);
+    } else {
+        console.log(`No clipping needed for class ${classValue} - showing full range (0%-100%)`);
+    }
+    
+    // Apply clipping planes to this specific class mesh
+    if (classMesh.material) {
+        classMesh.material.clippingPlanes = clippingPlanes;
+        classMesh.material.needsUpdate = true;
+        console.log(`Applied ${clippingPlanes.length} clipping planes to class ${classValue} material`);
+    } else {
+        console.error(`No material found for class ${classValue}`);
+    }
+    
+    // Enable clipping if any class has clipping planes
+    let hasAnyClipping = false;
+    Object.keys(classMeshes).forEach(cv => {
+        const mesh = classMeshes[cv];
+        if (mesh && mesh.material && mesh.material.clippingPlanes && mesh.material.clippingPlanes.length > 0) {
+            hasAnyClipping = true;
+        }
+    });
+    
+    renderer.localClippingEnabled = hasAnyClipping;
+    console.log(`Renderer clipping enabled: ${hasAnyClipping}`);
+    
+    console.log(`=== FINAL: Applied range ${minPercent}%-${maxPercent}% to class ${classValue} (${clippingPlanes.length} planes) ===`);
+    
+    // Force re-render
+    if (typeof renderer !== 'undefined') {
+        renderer.render(scene, camera);
+    }
+}
+
+/**
+ * =================================
+ * ===== TESTING & DEBUGGING =======
+ * ============START================
+ */
+
+/**
+ * Debug specific clipping behavior with simple test
+ */
+function debugSpecificClipping() {
+    const classValue = 1;
+    const mesh = classMeshes[classValue];
+    
+    console.log('=== DEBUGGING CLIPPING DIRECTION ===');
+    
+    // Test 1: Simple plane that should keep the "front" half 
+    console.log('Test 1: Keeping Z >= 0 (should show front half)');
+    const planeFront = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+    mesh.material.clippingPlanes = [planeFront];
+    mesh.material.needsUpdate = true;
+    renderer.localClippingEnabled = true;
+    renderer.render(scene, camera);
+    
+    setTimeout(() => {
+        console.log('Test 2: Keeping Z <= 0 (should show back half)');
+        const planeBack = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        mesh.material.clippingPlanes = [planeBack];
+        mesh.material.needsUpdate = true;
+        renderer.render(scene, camera);
+    }, 3000);
+    
+    setTimeout(() => {
+        console.log('Test 3: No clipping (full model)');
+        mesh.material.clippingPlanes = [];
+        mesh.material.needsUpdate = true;
+        renderer.localClippingEnabled = false;
+        renderer.render(scene, camera);
+    }, 6000);
+}
+
+/**
+ * Test the corrected clipping math with known values
+ */
+function testClippingMath(classValue = 1) {
+    console.log('=== TESTING CORRECTED CLIPPING MATH ===');
+    
+    // Test: Show middle 50% of the model (25% to 75%)
+    console.log('Test 1: Should show middle 50% of model (25% to 75%)');
+    applyRangeToSingleClass(classValue, 25, 75);
+    
+    setTimeout(() => {
+        console.log('Test 2: Should show first 80% of model (0% to 80%)');
+        applyRangeToSingleClass(classValue, 0, 80);
+    }, 3000);
+    
+    setTimeout(() => {
+        console.log('Test 3: Should show last 60% of model (40% to 100%)');
+        applyRangeToSingleClass(classValue, 40, 100);
+    }, 6000);
+    
+    setTimeout(() => {
+        console.log('Test 4: Reset to full model (0% to 100%)');
+        applyRangeToSingleClass(classValue, 0, 100);
+    }, 9000);
+}
+
+/**
+ * Test clipping in all three axes to determine correct orientation
+ * Call this in console: testAllAxes()
+ */
+function testAllAxes(classValue = 1) {
+    if (!classMeshes || !classMeshes[classValue]) {
+        console.log('No mesh for class', classValue);
+        return;
+    }
+    
+    const mesh = classMeshes[classValue];
+    console.log('=== TESTING ALL AXES ===');
+    console.log('Watch which direction each clipping plane cuts from...');
+    
+    // Test X-axis clipping (constant = 0 should clip half)
+    setTimeout(() => {
+        console.log('Testing X-axis clipping (should clip from LEFT to RIGHT)...');
+        const planeX = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+        mesh.material.clippingPlanes = [planeX];
+        mesh.material.needsUpdate = true;
+        renderer.localClippingEnabled = true;
+        renderer.render(scene, camera);
+    }, 1000);
+    
+    // Test Y-axis clipping  
+    setTimeout(() => {
+        console.log('Testing Y-axis clipping (should clip from BOTTOM to TOP)...');
+        const planeY = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        mesh.material.clippingPlanes = [planeY];
+        mesh.material.needsUpdate = true;
+        renderer.render(scene, camera);
+    }, 3000);
+    
+    // Test Z-axis clipping
+    setTimeout(() => {
+        console.log('Testing Z-axis clipping (should clip from FRONT to BACK)...');
+        const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        mesh.material.clippingPlanes = [planeZ];
+        mesh.material.needsUpdate = true;
+        renderer.render(scene, camera);
+    }, 5000);
+    
+    // Clear clipping
+    setTimeout(() => {
+        console.log('Clearing all clipping...');
+        mesh.material.clippingPlanes = [];
+        mesh.material.needsUpdate = true;
+        renderer.localClippingEnabled = false;
+        renderer.render(scene, camera);
+    }, 7000);
+}
+
+/**
+ * Test clipping with very conservative planes that should definitely work
+ */
+function testSafeClipping(classValue = 1, percent = 50) {
+    if (!classMeshes || !classMeshes[classValue]) {
+        console.log('No mesh for class', classValue);
+        return;
+    }
+    
+    const mesh = classMeshes[classValue];
+    const geometry = mesh.geometry;
+    const positions = geometry.attributes.position.array;
+    
+    // Get actual Z bounds from vertices
+    let minZ = Infinity, maxZ = -Infinity;
+    for (let i = 2; i < positions.length; i += 3) {
+        const z = positions[i];
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+    }
+    
+    // Calculate a safe clipping coordinate
+    const range = maxZ - minZ;
+    const clipZ = minZ + (percent / 100) * range;
+    
+    console.log('=== SAFE CLIPPING TEST ===');
+    console.log(`Actual Z range: ${minZ.toFixed(3)} to ${maxZ.toFixed(3)}`);
+    console.log(`Clipping at Z = ${clipZ.toFixed(3)} (${percent}% through the range)`);
+    
+    // Create a single clipping plane
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -clipZ);
+    
+    mesh.material.clippingPlanes = [plane];
+    mesh.material.needsUpdate = true;
+    renderer.localClippingEnabled = true;
+    renderer.render(scene, camera);
+    
+    console.log(`Applied safe clipping - should show ${100-percent}% of model`);
+}
+
+/**
+ * Debug function to understand mesh coordinate mapping
+ * Call this in browser console: debugSliceCoordinates()
+ */
+function debugSliceCoordinates() {
+    if (!meshGroup) {
+        console.log('No mesh group available');
+        return;
+    }
+    
+    // Group bounds
+    const groupBox = new THREE.Box3().setFromObject(meshGroup);
+    const groupSize = groupBox.getSize(new THREE.Vector3());
+    
+    console.log('=== SLICE COORDINATE DEBUG (FIXED) ===');
+    console.log('Mesh GROUP Bounding Box:', `${groupBox.min.z.toFixed(3)} to ${groupBox.max.z.toFixed(3)} (size: ${groupSize.z.toFixed(3)})`);
+    
+    // Individual mesh bounds
+    console.log('Individual Class Mesh Bounds:');
+    Object.keys(classMeshes).forEach(classValue => {
+        const mesh = classMeshes[classValue];
+        if (mesh) {
+            const meshBox = new THREE.Box3().setFromObject(mesh);
+            const meshSize = meshBox.getSize(new THREE.Vector3());
+            console.log(`  Class ${classValue}: Z from ${meshBox.min.z.toFixed(3)} to ${meshBox.max.z.toFixed(3)} (size: ${meshSize.z.toFixed(3)})`);
+        }
+    });
+}
+
+/**
+ * Debug clipping plane behavior - call this after moving sliders
+ */
+function debugClippingPlanes(classValue = 1) {
+    if (!classMeshes || !classMeshes[classValue]) {
+        console.log('No mesh available for class', classValue);
+        return;
+    }
+    
+    const mesh = classMeshes[classValue];
+    const planes = mesh.material.clippingPlanes;
+    
+    console.log('=== CLIPPING PLANE DEBUG ===');
+    console.log(`Class ${classValue} has ${planes ? planes.length : 0} clipping planes`);
+    
+    if (planes && planes.length > 0) {
+        planes.forEach((plane, index) => {
+            console.log(`Plane ${index + 1}:`, {
+                normal: `(${plane.normal.x.toFixed(3)}, ${plane.normal.y.toFixed(3)}, ${plane.normal.z.toFixed(3)})`,
+                constant: plane.constant.toFixed(3),
+                // Calculate what Z coordinate this plane represents
+                planeZ: -plane.constant / plane.normal.z
+            });
+        });
+    }
+    
+    // Also check mesh geometry distribution
+    const geometry = mesh.geometry;
+    const positions = geometry.attributes.position.array;
+    
+    let minZ = Infinity, maxZ = -Infinity;
+    let zValues = [];
+    
+    // Sample some Z coordinates from the geometry
+    for (let i = 2; i < positions.length; i += 9) { // Every 3rd vertex, Z coordinate
+        const z = positions[i];
+        zValues.push(z);
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+    }
+    
+    // Sort Z values to see distribution
+    zValues.sort((a, b) => a - b);
+    const sampleSize = Math.min(20, zValues.length);
+    const sampleIndices = Array.from({length: sampleSize}, (_, i) => Math.floor(i * (zValues.length - 1) / (sampleSize - 1)));
+    const zSample = sampleIndices.map(i => zValues[i]);
+    
+    console.log('Mesh Geometry Z Distribution:');
+    console.log(`  Geometry Z range: ${minZ.toFixed(3)} to ${maxZ.toFixed(3)}`);
+    console.log(`  Sample Z values:`, zSample.map(z => z.toFixed(3)));
+}
+
+/**
+ * Simple test function - manually apply a basic clipping plane
+ * Call this in console: testBasicClipping()
+ */
+function testBasicClipping(classValue = 1) {
+    if (!classMeshes || !classMeshes[classValue]) {
+        console.log('No mesh for class', classValue);
+        return;
+    }
+    
+    const mesh = classMeshes[classValue];
+    console.log('=== BASIC CLIPPING TEST ===');
+    
+    // Create a simple clipping plane that should clip half the model
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // Clips everything with Z > 0
+    
+    mesh.material.clippingPlanes = [plane];
+    mesh.material.needsUpdate = true;
+    renderer.localClippingEnabled = true;
+    
+    console.log('Applied basic clipping plane - half the model should be gone');
+    console.log('Clipping planes count:', mesh.material.clippingPlanes.length);
+    
+    // Force render
+    renderer.render(scene, camera);
+}
+
+/**
+ * Test function to check if clipping planes persist
+ * Run this immediately after moving a slider
+ */
+function testClippingPersistence(classValue = 1) {
+    if (!classMeshes || !classMeshes[classValue]) {
+        console.log('No mesh for class', classValue);
+        return;
+    }
+    
+    const mesh = classMeshes[classValue];
+    console.log('=== CLIPPING PERSISTENCE TEST ===');
+    console.log(`Class ${classValue} material:`, mesh.material);
+    console.log(`Class ${classValue} clippingPlanes:`, mesh.material.clippingPlanes);
+    console.log(`ClippingPlanes length:`, mesh.material.clippingPlanes ? mesh.material.clippingPlanes.length : 'null');
+    console.log(`Renderer clipping enabled:`, renderer.localClippingEnabled);
+    
+    // Test: Set some dummy planes to see if they persist
+    console.log('Setting test clipping planes...');
+    const testPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    mesh.material.clippingPlanes = [testPlane];
+    mesh.material.needsUpdate = true;
+    
+    setTimeout(() => {
+        console.log('After 1 second - clippingPlanes:', mesh.material.clippingPlanes ? mesh.material.clippingPlanes.length : 'null');
+    }, 1000);
+}
+
+/**
+ * =============END=================
+ * ===== TESTING & DEBUGGING =======
+ * =================================
+ */
+
+
+/**
+ * Update slice direction indicator based on current model rotation
+ * This provides visual feedback about which direction slicing will occur
+ */
+function updateSliceDirectionIndicator() {
+    const indicator = document.getElementById('sliceDirectionIndicator');
+    if (!indicator || !meshGroup) return;
+    
+    const currentDir = sliceDirection || 'z';
+    
+    // Get current rotation in degrees for user-friendly display
+    const rotX = (meshGroup.rotation.x * 180 / Math.PI).toFixed(0);
+    const rotY = (meshGroup.rotation.y * 180 / Math.PI).toFixed(0);
+    const rotZ = (meshGroup.rotation.z * 180 / Math.PI).toFixed(0);
+    
+    // Base direction names
+    const directionNames = {
+        'x': 'Left ↔ Right',
+        'y': 'Bottom ↔ Top', 
+        'z': 'Front ↔ Back'
+    };
+    
+    // Show both the base direction and current rotation
+    const baseName = directionNames[currentDir];
+    indicator.textContent = `${baseName} (rotated: ${rotY}°, ${rotX}°, ${rotZ}°)`;
+    indicator.style.color = '#666';
+    indicator.style.fontSize = '11px';
+}
+
+/**
+ * Create a dual-handle range slider component
+ * @param {number} classValue - The class number
+ * @returns {HTMLElement} - The dual range slider container
+ */
+function createDualRangeSlider(classValue) {
+    const container = document.createElement('div');
+    container.className = 'dual-range-container';
+    
+    // Create the visual track
+    const track = document.createElement('div');
+    track.className = 'dual-range-track';
+    
+    // Create the fill area between handles
+    const fill = document.createElement('div');
+    fill.className = 'dual-range-fill';
+    fill.id = `dualRangeFill_${classValue}`;
+    
+    // Create the two invisible range inputs
+    const minInput = document.createElement('input');
+    minInput.type = 'range';
+    minInput.min = 0;
+    minInput.max = 100;
+    minInput.value = 0;
+    minInput.className = 'dual-range-input';
+    minInput.id = `dualRangeMin_${classValue}`;
+    
+    const maxInput = document.createElement('input');
+    maxInput.type = 'range';
+    maxInput.min = 0;
+    maxInput.max = 100;
+    maxInput.value = 100;
+    maxInput.className = 'dual-range-input';
+    maxInput.id = `dualRangeMax_${classValue}`;
+    
+    // Assemble the component
+    container.appendChild(track);
+    container.appendChild(fill);
+    container.appendChild(minInput);
+    container.appendChild(maxInput);
+    
+    // Set up the update function for this slider
+    const updateFill = () => {
+        const min = parseInt(minInput.value);
+        const max = parseInt(maxInput.value);
+        
+        // Ensure min doesn't exceed max
+        if (min > max) {
+            minInput.value = max;
+        }
+        
+        const minPercent = (minInput.value / 100) * 100;
+        const maxPercent = (maxInput.value / 100) * 100;
+        
+        // Update the fill area
+        fill.style.left = minPercent + '%';
+        fill.style.width = (maxPercent - minPercent) + '%';
+    };
+    
+    // Add event listeners
+    minInput.addEventListener('input', () => {
+        updateFill();
+        handleClassRangeChange(classValue);
+    });
+    
+    maxInput.addEventListener('input', () => {
+        updateFill();
+        handleClassRangeChange(classValue);
+    });
+    
+    // Initialize the fill
+    updateFill();
+    
+    return container;
+}
+
+// Updated function to setup the new individual class controls
 function setupVisualizationControls() {
-    console.log('Setting up visualization controls for surface mesh');
+    console.log('Setting up individual class visualization controls');
     
-    // =========================
-    // OPACITY SLIDER
-    // =========================
-    const opacitySlider = document.getElementById('opacitySlider');
-    const opacityValue = document.getElementById('opacityValue');
+    // Generate the individual control panels for each class
+    generateClassControlPanels();
     
-    if (opacitySlider && opacityValue) {
-        console.log('Opacity controls found');
-        
-        // Remove any existing listeners to avoid duplicates
-        opacitySlider.removeEventListener('input', handleOpacityChange);
-        
-        // Add new listener
-        opacitySlider.addEventListener('input', handleOpacityChange);
-        
-        console.log('Opacity slider listener attached');
-    } else {
-        console.log('Opacity controls not found!');
-    }
+    // Initialize the slice direction indicator
+    updateSliceDirectionIndicator();
     
-    // =========================
-    // SLICE RANGE SLIDERS
-    // =========================
-    const sliceRangeMin = document.getElementById('sliceRangeMin');
-    const sliceRangeMax = document.getElementById('sliceRangeMax');
-    const sliceRangeValue = document.getElementById('sliceRangeValue');
-    
-    if (sliceRangeMin && sliceRangeMax && sliceRangeValue) {
-        console.log('Slice range controls found');
-        
-        // Remove existing listeners
-        sliceRangeMin.removeEventListener('input', handleSliceRangeChange);
-        sliceRangeMax.removeEventListener('input', handleSliceRangeChange);
-        
-        // Add new listeners
-        sliceRangeMin.addEventListener('input', handleSliceRangeChange);
-        sliceRangeMax.addEventListener('input', handleSliceRangeChange);
-        
-        console.log('Slice range listeners attached');
-    } else {
-        console.log('Slice range controls not found!');
-    }
-    
-    // =========================
-    // SLICE DIRECTION SELECTOR
-    // =========================
-    const sliceDirectionSelect = document.getElementById('sliceDirectionSelect');
-    if (sliceDirectionSelect) {
-        console.log('Slice direction selector found');
-        
-        // Remove existing listener
-        sliceDirectionSelect.removeEventListener('change', handleSliceDirectionChange);
-        
-        // Add new listener
-        sliceDirectionSelect.addEventListener('change', handleSliceDirectionChange);
-        
-        // Set initial direction to Z (front-back)
-        sliceDirectionSelect.value = 'z';
-        sliceDirection = 'z';
-        
-        console.log('Slice direction selector attached, set to Z-axis (front-back)');
-    } else {
-        console.log('Slice direction selector not found - using default Z-axis');
-        sliceDirection = 'z';
-    }
-    
-    // =========================
-    // CLASS FILTER DROPDOWN
-    // =========================
-    const classFilter = document.getElementById('classFilter');
-    if (classFilter) {
-        console.log('Class filter found');
-        
-        // Remove existing listener
-        classFilter.removeEventListener('change', handleClassFilterChange);
-        
-        // Add new listener
-        classFilter.addEventListener('change', handleClassFilterChange);
-        
-        console.log('Class filter listener attached');
-    } else {
-        console.log('Class filter not found!');
-    }
-    
-    console.log('All visualization controls setup complete');
+    console.log('Individual class controls setup complete');
 }
 
 function handleOpacityChange(e) {
@@ -669,23 +1575,46 @@ function resetSliceRange() {
 function resetView() {
     console.log('Resetting view to defaults');
     
-    // Reset UI controls
-    const opacitySlider = document.getElementById('opacitySlider');
-    const opacityValue = document.getElementById('opacityValue');
-    const sliceRangeMin = document.getElementById('sliceRangeMin');
-    const sliceRangeMax = document.getElementById('sliceRangeMax');
-    const sliceRangeValue = document.getElementById('sliceRangeValue');
-    const classFilter = document.getElementById('classFilter');
-    
-    if (opacitySlider) opacitySlider.value = 80;
-    if (opacityValue) opacityValue.textContent = '80%';
-    if (sliceRangeMin) sliceRangeMin.value = 0;
-    if (sliceRangeMax) sliceRangeMax.value = 100;
-    if (sliceRangeValue) sliceRangeValue.textContent = '0% - 100%';
-    if (classFilter) classFilter.value = 'all';
+    // Reset individual class controls instead of shared ones
+    availableClasses.forEach(classValue => {
+        // Reset state
+        classControlStates[classValue] = {
+            visible: true,
+            opacity: 80,
+            rangeMin: 0,
+            rangeMax: 100
+        };
+        
+        // Reset UI controls
+        const checkbox = document.getElementById(`classCheckbox_${classValue}`);
+        const opacitySlider = document.getElementById(`classOpacity_${classValue}`);
+        const opacityValue = document.getElementById(`classOpacityValue_${classValue}`);
+        const rangeMin = document.getElementById(`dualRangeMin_${classValue}`);
+        const rangeMax = document.getElementById(`dualRangeMax_${classValue}`);
+        const rangeValue = document.getElementById(`classRangeValue_${classValue}`);
+        
+        if (checkbox) checkbox.checked = true;
+        if (opacitySlider) opacitySlider.value = 80;
+        if (opacityValue) opacityValue.textContent = '80%';
+        if (rangeMin) rangeMin.value = 0;
+        if (rangeMax) rangeMax.value = 100;
+        if (rangeValue) rangeValue.textContent = '0% - 100%';
+        
+        // Update dual-range fill
+        const fill = document.getElementById(`dualRangeFill_${classValue}`);
+        if (fill) {
+            fill.style.left = '0%';
+            fill.style.width = '100%';
+        }
+        
+        // Reset panel visual state
+        const panel = document.querySelector(`[data-class="${classValue}"]`);
+        if (panel) {
+            panel.classList.remove('disabled');
+        }
+    });
     
     // Reset global variables
-    currentSliceRange = [0, 100];
     visibleClasses = [...availableClasses];
     
     // Reset all class meshes
@@ -700,7 +1629,12 @@ function resetView() {
             if (classMesh.material) {
                 classMesh.material.opacity = 0.8;
                 classMesh.material.transparent = true;
-                classMesh.material.clippingPlanes = []; // Remove clipping planes
+                // Initialize clippingPlanes if it doesn't exist, then clear it
+                if (!classMesh.material.clippingPlanes) {
+                    classMesh.material.clippingPlanes = [];
+                } else {
+                    classMesh.material.clippingPlanes = []; // Remove clipping planes
+                }
                 classMesh.material.needsUpdate = true;
             }
             
@@ -721,12 +1655,17 @@ function resetView() {
     // Disable clipping planes
     renderer.localClippingEnabled = false;
     
+    // Update slice direction indicator
+    if (typeof updateSliceDirectionIndicator === 'function') {
+        updateSliceDirectionIndicator();
+    }
+    
     // Force re-render
     if (typeof renderer !== 'undefined') {
         renderer.render(scene, camera);
     }
     
-    console.log('View reset completed');
+    console.log('View reset complete with individual class controls');
 }
 
 // Add this function to load segmentation data

@@ -25,7 +25,7 @@ function initializeCharts() {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false, /* Key fix - allows custom sizing */
+            maintainAspectRatio: false,
             interaction: {
                 intersect: false,
                 mode: 'index'

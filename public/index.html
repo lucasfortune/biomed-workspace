@@ -242,50 +242,13 @@
                     <!-- Three.js visualization will be rendered here -->
                 </div>
 
-                <div class="viz-controls">
-                    <div class="control-group">
-                        <label for="opacitySlider">Opacity</label>
-                        <input type="range" id="opacitySlider" class="slider" min="10" max="100" value="80">
-                        <span id="opacityValue">80%</span>
+                <div class="viz-controls-container">
+                    <div class="controls-header">
+                        <h3 class="controls-title">Class Controls</h3>
+                        <button id="resetViewBtn" class="btn btn-reset" onclick="resetView()">Reset View</button>
                     </div>
-                    
-                    <div class="control-group">
-                        <label for="sliceRange">Slice Range</label>
-                        
-                        <!-- Slice Direction Selector -->
-                        <div style="margin-bottom: 8px;">
-                            <label style="font-size: 12px; color: #666;">Direction:</label>
-                            <select id="sliceDirectionSelect" style="margin-left: 5px; padding: 2px; font-size: 12px; border-radius: 3px;">
-                                <option value="z">Front → Back (Z)</option>
-                                <option value="x">Left → Right (X)</option>
-                                <option value="y">Bottom → Top (Y)</option>
-                            </select>
-                            <span id="sliceDirectionIndicator" style="margin-left: 10px; font-size: 11px; color: #888;">Front → Back</span>
-                        </div>
-                        
-                        <!-- Range Sliders -->
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <input type="range" id="sliceRangeMin" class="slider" min="0" max="100" value="0" style="width: 70px;">
-                            <span>to</span>
-                            <input type="range" id="sliceRangeMax" class="slider" min="0" max="100" value="100" style="width: 70px;">
-                        </div>
-                        
-                        <!-- Range Value Display -->
-                        <div style="font-size: 12px; color: #666; margin-top: 4px;">
-                            <span id="sliceRangeValue">0% - 100%</span>
-                            <button onclick="resetSliceRange()" style="margin-left: 10px; padding: 2px 6px; font-size: 11px; border: none; background: #f0f0f0; border-radius: 3px; cursor: pointer;">Reset</button>
-                        </div>
-                    </div>
-                    
-                    <div class="control-group">
-                        <label for="classFilter">Class Filter</label>
-                        <select id="classFilter" style="padding: 5px; border-radius: 5px; border: 1px solid #ddd;">
-                            <option value="all">All Classes</option>
-                        </select>
-                    </div>
-                    
-                    <div class="control-group">
-                        <button class="btn secondary" onclick="resetView()">Reset View</button>
+                    <div id="classControlPanels" class="class-control-panels">
+                        <!-- Individual class control panels will be dynamically generated here -->
                     </div>
                 </div>
 
