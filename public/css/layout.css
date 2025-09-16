@@ -45,14 +45,14 @@
 .main-content {
     padding: 40px;
     min-height: 500px;
-    max-height: 110vh; /* Prevent the content from getting too tall */
-    overflow-y: auto; /* Allow scrolling if content is too tall */
+    /* max-height: 110vh; /* Prevent the content from getting too tall */
+    /* overflow-y: auto; /* Allow scrolling if content is too tall */
 }
 
 .step-content {
     display: none;
-    max-height: 85vh; /* Constrain individual step content */
-    overflow-y: auto; /* Allow scrolling within steps */
+    /* max-height: 85vh; /* Constrain individual step content */
+    /* overflow-y: auto; /* Allow scrolling within steps */
 }
 
 .step-content.active {
