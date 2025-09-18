@@ -234,51 +234,47 @@ export function createDualRangeSlider(classValue) {
 }
 
 /**
- * Handle visibility checkbox change for a specific class
+ * Handle class visibility checkbox changes
  * @param {number} classValue - The class number
- * @param {boolean} isVisible - Whether the class should be visible
+ * @param {boolean} visible - Whether the class should be visible
  */
-export function handleClassVisibilityChange(classValue, isVisible) {
-    console.log(`Class ${classValue} visibility changed to:`, isVisible);
+export function handleClassVisibilityChange(classValue, visible) {
+    console.log(`Toggling class ${classValue} visibility: ${visible}`);
     
     const state = getGlobalState();
     
-    // Update our state
-    state.classControlStates[classValue].visible = isVisible;
-    
-    // Update the mesh visibility
-    if (state.classMeshes && state.classMeshes[classValue]) {
-        state.classMeshes[classValue].visible = isVisible;
+    // Update state
+    if (visible && !state.visibleClasses.includes(classValue)) {
+        state.visibleClasses.push(classValue);
+    } else if (!visible && state.visibleClasses.includes(classValue)) {
+        const index = state.visibleClasses.indexOf(classValue);
+        state.visibleClasses.splice(index, 1);
     }
     
-    // Update the panel visual state
-    const panel = document.querySelector(`[data-class="${classValue}"]`);
-    if (panel) {
-        if (isVisible) {
-            panel.classList.remove('disabled');
-        } else {
-            panel.classList.add('disabled');
-        }
+    // Handle both slice-based and original mesh systems
+    if (state.sliceMeshes && state.sliceMeshes[classValue]) {
+        // NEW: Slice-based system
+        console.log(`Updating slice visibility for class ${classValue}`);
+        
+        // Get current visible slice range
+        const sliceRange = state.sliceMetadata ? state.sliceMetadata.visibleSliceRange : [0, 19];
+        
+        state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
+            if (mesh) {
+                const inSliceRange = (sliceIndex >= sliceRange[0] && sliceIndex <= sliceRange[1]);
+                mesh.visible = visible && inSliceRange;
+            }
+        });
+    } else if (state.classMeshes && state.classMeshes[classValue]) {
+        // Original system
+        console.log(`Updating visibility for class ${classValue}`);
+        state.classMeshes[classValue].visible = visible;
     }
-    
-    // Update global visibleClasses array
-    if (isVisible) {
-        if (!state.visibleClasses.includes(classValue)) {
-            state.visibleClasses.push(classValue);
-        }
-    } else {
-        state.visibleClasses = state.visibleClasses.filter(c => c !== classValue);
-    }
-    
-    // Update global state
-    updateGlobalState({ visibleClasses: state.visibleClasses });
     
     // Force re-render
     if (state.renderer && state.scene && state.camera) {
         state.renderer.render(state.scene, state.camera);
     }
-    
-    console.log('Updated visible classes:', state.visibleClasses);
 }
 
 /**
@@ -286,23 +282,32 @@ export function handleClassVisibilityChange(classValue, isVisible) {
  * @param {number} classValue - The class number
  * @param {string} opacityValue - The new opacity value (0-100)
  */
-export function handleClassOpacityChange(classValue, opacityValue) {
-    const opacity = parseInt(opacityValue) / 100;
-    console.log(`Class ${classValue} opacity changed to:`, opacity);
+export function handleClassOpacityChange(classValue, opacityPercent) {
+    const opacity = opacityPercent / 100;
+    console.log(`Class ${classValue} opacity changed to: ${opacity}`);
     
     const state = getGlobalState();
     
-    // Update our state
-    state.classControlStates[classValue].opacity = parseInt(opacityValue);
-    
-    // Update the display value
-    const opacityValueSpan = document.getElementById(`classOpacityValue_${classValue}`);
-    if (opacityValueSpan) {
-        opacityValueSpan.textContent = opacityValue + '%';
+    // Update state
+    if (state.classControlStates && state.classControlStates[classValue]) {
+        state.classControlStates[classValue].opacity = opacity;
     }
     
-    // Apply opacity to this specific class mesh
-    if (state.classMeshes && state.classMeshes[classValue]) {
+    // Handle both slice-based and original mesh systems
+    if (state.sliceMeshes && state.sliceMeshes[classValue]) {
+        // NEW: Slice-based system - apply opacity to all slices of this class
+        console.log(`Updating opacity for all slices of class ${classValue}`);
+        
+        state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
+            if (mesh && mesh.material) {
+                mesh.material.opacity = opacity;
+                mesh.material.transparent = true;
+                mesh.material.needsUpdate = true;
+            }
+        });
+    } else if (state.classMeshes && state.classMeshes[classValue]) {
+        // Original system
+        console.log(`Updating opacity for class ${classValue} mesh`);
         const classMesh = state.classMeshes[classValue];
         if (classMesh.material) {
             classMesh.material.opacity = opacity;
@@ -443,11 +448,16 @@ export function handleSliceDirectionChange(e) {
  * Handle slice range slider changes (legacy compatibility)
  */
 export function handleSliceRangeChange() {
+    console.log('=== handleSliceRangeChange CALLED ===');
+    
     const sliceRangeMin = document.getElementById('sliceRangeMin');
     const sliceRangeMax = document.getElementById('sliceRangeMax');
     const sliceRangeValue = document.getElementById('sliceRangeValue');
     
-    if (!sliceRangeMin || !sliceRangeMax || !sliceRangeValue) return;
+    if (!sliceRangeMin || !sliceRangeMax || !sliceRangeValue) {
+        console.log('MISSING SLIDER ELEMENTS');
+        return;
+    }
     
     const minVal = parseInt(sliceRangeMin.value);
     const maxVal = parseInt(sliceRangeMax.value);
@@ -463,7 +473,7 @@ export function handleSliceRangeChange() {
     }
     
     sliceRangeValue.textContent = `${currentSliceRange[0]}% - ${currentSliceRange[1]}%`;
-    console.log('Updated slice range to:', currentSliceRange);
+    console.log('About to call applySliceRangeToMeshes with:', currentSliceRange);
     
     // Apply slice-based filtering to meshes with current direction
     applySliceRangeToMeshes(currentSliceRange);

@@ -29,8 +29,9 @@ export function initializeScene(container) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     
-    // IMPORTANT: Enable clipping planes for slice range functionality
-    renderer.localClippingEnabled = true;
+    // Clipping planes only needed for traditional rendering
+    // For slice-based rendering, this can be disabled
+    renderer.localClippingEnabled = false; // Changed to false for slice system
     
     container.appendChild(renderer.domElement);
     

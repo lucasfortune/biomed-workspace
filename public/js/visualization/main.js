@@ -7,10 +7,13 @@ import { loadSegmentationData, createSeparateClassMeshes } from './meshCreation.
 import { setupVisualizationControls } from './uiControls.js';
 import { setupEnhancedControls } from './interactions.js';
 import { createFallbackMesh, createErrorFallbackMesh } from './utils.js';
+import { removeCappingMeshes } from './clipping.js';
 
 // Global variables that need to be shared across modules
 export let scene, camera, renderer;
 export let meshGroup, segmentationMesh, classMeshes = {};
+export let sliceMeshes = {}; // NEW: slice-based mesh structure
+export let sliceMetadata = { sliceCount: 20, sliceDirection: 'z', visibleSliceRange: [0, 19] }; // NEW
 export let availableClasses = [], visibleClasses = [];
 export let segmentationData = null;
 export let sliceDirection = 'z';
@@ -47,17 +50,39 @@ export async function initialize3DVisualization() {
             
             // Create separate meshes for each class
             console.log('Creating separate class meshes...');
-            const meshResult = createSeparateClassMeshes(segmentationData, scene);
+            // Choose between original and slice-based system
+            const useSliceBasedSystem = true; // Set to true to use new slice system
+            let meshResult;
+
+            if (useSliceBasedSystem) {
+                // Import the new function
+                const { createSliceBasedClassMeshes } = await import('./meshCreation.js');
+                meshResult = createSliceBasedClassMeshes(segmentationData, scene, 20, 'z');
+            } else {
+                // Use original system
+                meshResult = createSeparateClassMeshes(segmentationData, scene);
+            }
             
             if (meshResult && meshResult.meshGroup && meshResult.meshGroup.children.length > 0) {
                 console.log('Separate class meshes created successfully');
                 
                 // Update global variables from mesh creation result
                 meshGroup = meshResult.meshGroup;
-                classMeshes = meshResult.classMeshes;
                 availableClasses = meshResult.availableClasses;
                 visibleClasses = meshResult.visibleClasses;
                 segmentationMesh = meshGroup;
+
+                // Handle different mesh structures
+                if (meshResult.sliceMeshes) {
+                    // New slice-based system
+                    sliceMeshes = meshResult.sliceMeshes;
+                    sliceMetadata = meshResult.sliceMetadata;
+                    console.log('Using slice-based mesh system');
+                } else {
+                    // Original system
+                    classMeshes = meshResult.classMeshes;
+                    console.log('Using original mesh system');
+                }
                 
                 // Detailed debugging output
                 logMeshDebugInfo();
@@ -163,6 +188,9 @@ function setupAllControls() {
 export function resetView() {
     console.log('Resetting view to defaults');
     
+    // Import the removeCappingMeshes function if not already imported
+    // (Make sure this import is at the top of the file)
+    
     // Reset individual class controls instead of shared ones
     availableClasses.forEach(classValue => {
         // Reset state
@@ -202,11 +230,55 @@ export function resetView() {
         }
     });
     
+    // Reset global slice range controls
+    const sliceRangeMin = document.getElementById('sliceRangeMin');
+    const sliceRangeMax = document.getElementById('sliceRangeMax');
+    const sliceRangeValue = document.getElementById('sliceRangeValue');
+    
+    if (sliceRangeMin) sliceRangeMin.value = 0;
+    if (sliceRangeMax) sliceRangeMax.value = 100;
+    if (sliceRangeValue) sliceRangeValue.textContent = '0% - 100%';
+    
     // Reset global variables
     visibleClasses = [...availableClasses];
     
-    // Reset all class meshes
-    if (classMeshes) {
+    // CRITICAL: Reset slice visibility to show ALL slices
+    if (sliceMeshes && Object.keys(sliceMeshes).length > 0) {
+        console.log('Resetting slice visibility to show all slices');
+        
+        // Show all slices for all classes
+        Object.keys(sliceMeshes).forEach(classValue => {
+            if (sliceMeshes[classValue]) {
+                sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
+                    if (mesh) {
+                        mesh.visible = true;
+                        // Reset opacity
+                        if (mesh.material) {
+                            mesh.material.opacity = 0.8;
+                            mesh.material.transparent = true;
+                            mesh.material.needsUpdate = true;
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Remove all capping meshes
+        removeCappingMeshes();
+        
+        // Reset slice metadata
+        if (sliceMetadata) {
+            updateGlobalState({
+                sliceMetadata: {
+                    ...sliceMetadata,
+                    visibleSliceRange: [0, sliceMetadata.sliceCount - 1]
+                }
+            });
+        }
+        
+    } else if (classMeshes) {
+        // Original mesh system fallback
+        console.log('Resetting original mesh system');
         Object.keys(classMeshes).forEach(classValue => {
             const classMesh = classMeshes[classValue];
             
@@ -217,18 +289,15 @@ export function resetView() {
             if (classMesh.material) {
                 classMesh.material.opacity = 0.8;
                 classMesh.material.transparent = true;
-                // Initialize clippingPlanes if it doesn't exist, then clear it
-                if (!classMesh.material.clippingPlanes) {
-                    classMesh.material.clippingPlanes = [];
-                } else {
-                    classMesh.material.clippingPlanes = []; // Remove clipping planes
-                }
+                classMesh.material.clippingPlanes = [];
                 classMesh.material.needsUpdate = true;
             }
-            
-            // Reset rotation
-            classMesh.rotation.set(0, 0, 0);
         });
+        
+        // Disable clipping
+        if (renderer) {
+            renderer.localClippingEnabled = false;
+        }
     }
     
     // Reset mesh group rotation
@@ -242,17 +311,12 @@ export function resetView() {
         camera.lookAt(0, 0, 0);
     }
     
-    // Disable clipping planes
-    if (renderer) {
-        renderer.localClippingEnabled = false;
-    }
-    
     // Force re-render
     if (renderer && scene && camera) {
         renderer.render(scene, camera);
     }
     
-    console.log('View reset complete with individual class controls');
+    console.log('View reset complete - should show full model');
 }
 
 // Export global variables so other modules can access them
@@ -264,6 +328,8 @@ export function getGlobalState() {
         meshGroup,
         segmentationMesh,
         classMeshes,
+        sliceMeshes,           // ADD THIS
+        sliceMetadata,         // ADD THIS  
         availableClasses,
         visibleClasses,
         segmentationData,
@@ -280,6 +346,8 @@ export function updateGlobalState(updates) {
     if (updates.meshGroup !== undefined) meshGroup = updates.meshGroup;
     if (updates.segmentationMesh !== undefined) segmentationMesh = updates.segmentationMesh;
     if (updates.classMeshes !== undefined) classMeshes = updates.classMeshes;
+    if (updates.sliceMeshes !== undefined) sliceMeshes = updates.sliceMeshes;           // ADD THIS
+    if (updates.sliceMetadata !== undefined) sliceMetadata = updates.sliceMetadata;     // ADD THIS
     if (updates.availableClasses !== undefined) availableClasses = updates.availableClasses;
     if (updates.visibleClasses !== undefined) visibleClasses = updates.visibleClasses;
     if (updates.segmentationData !== undefined) segmentationData = updates.segmentationData;

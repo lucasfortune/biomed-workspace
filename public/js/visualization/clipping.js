@@ -12,6 +12,14 @@ import { getGlobalState, updateGlobalState } from './main.js';
 export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
     const state = getGlobalState();
     
+    // Check if we're using the new slice-based system
+    if (state.sliceMeshes && state.sliceMeshes[classValue]) {
+        console.log(`Applying slice range to class ${classValue}: ${minPercent}% - ${maxPercent}%`);
+        applySliceRangeToSingleClass(classValue, minPercent, maxPercent);
+        return;
+    }
+    
+    // Fallback to original clipping system
     if (!state.classMeshes || !state.classMeshes[classValue]) {
         console.log(`Cannot apply range to class ${classValue} - mesh not available`);
         return;
@@ -64,183 +72,106 @@ export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
     const currentDir = state.sliceDirection || 'z';
     
     // Calculate coordinates based on ACTUAL geometry bounds
-    let dimension, minCoord, maxCoord, centerCoord;
+    let dimension, minCoord, maxCoord;
     
     switch(currentDir) {
         case 'x':
             dimension = actualBounds.size.x;
-            centerCoord = actualBounds.center.x;
             minCoord = actualBounds.min.x + (minPercent / 100) * dimension;
             maxCoord = actualBounds.min.x + (maxPercent / 100) * dimension;
             break;
         case 'y':
             dimension = actualBounds.size.y;
-            centerCoord = actualBounds.center.y;
             minCoord = actualBounds.min.y + (minPercent / 100) * dimension;
             maxCoord = actualBounds.min.y + (maxPercent / 100) * dimension;
             break;
         case 'z':
         default:
             dimension = actualBounds.size.z;
-            centerCoord = actualBounds.center.z;
             minCoord = actualBounds.min.z + (minPercent / 100) * dimension;
             maxCoord = actualBounds.min.z + (maxPercent / 100) * dimension;
             break;
     }
     
-    console.log(`VERTEX-BASED range calculation for class ${classValue}:`, {
-        direction: currentDir,
-        actualDimension: dimension.toFixed(3),
-        actualBounds: {
-            min: (currentDir === 'x' ? actualBounds.min.x : 
-                  currentDir === 'y' ? actualBounds.min.y : actualBounds.min.z).toFixed(3),
-            max: (currentDir === 'x' ? actualBounds.max.x : 
-                  currentDir === 'y' ? actualBounds.max.y : actualBounds.max.z).toFixed(3)
-        },
-        calculatedCoords: {
-            minCoord: minCoord.toFixed(3),
-            maxCoord: maxCoord.toFixed(3)
-        },
-        percentRange: `${minPercent}% - ${maxPercent}%`
-    });
-
-    // Create clipping planes (FIXED: Correct Three.js plane math)
+    console.log(`Applying range ${minPercent}%-${maxPercent}% to class ${classValue} in ${currentDir} direction`);
+    console.log(`Coordinate range: ${minCoord.toFixed(3)} to ${maxCoord.toFixed(3)}`);
+    
+    // Create clipping planes
     let clippingPlanes = [];
-
-    // Only create clipping planes if we're actually clipping something
+    
     if (minPercent > 0 || maxPercent < 100) {
-        console.log(`Creating CORRECTED clipping planes for class ${classValue}`);
-        
-        // Get actual vertex bounds for the selected direction
-        let actualMin, actualMax;
         switch(currentDir) {
             case 'x':
-                actualMin = actualBounds.min.x;
-                actualMax = actualBounds.max.x;
+                clippingPlanes = [
+                    new THREE.Plane(new THREE.Vector3(1, 0, 0), -minCoord),
+                    new THREE.Plane(new THREE.Vector3(-1, 0, 0), maxCoord)
+                ];
                 break;
             case 'y':
-                actualMin = actualBounds.min.y;
-                actualMax = actualBounds.max.y;
+                clippingPlanes = [
+                    new THREE.Plane(new THREE.Vector3(0, 1, 0), -minCoord),
+                    new THREE.Plane(new THREE.Vector3(0, -1, 0), maxCoord)
+                ];
                 break;
             case 'z':
-            default:
-                actualMin = actualBounds.min.z;
-                actualMax = actualBounds.max.z;
+                clippingPlanes = [
+                    new THREE.Plane(new THREE.Vector3(0, 0, 1), -minCoord),
+                    new THREE.Plane(new THREE.Vector3(0, 0, -1), maxCoord)
+                ];
                 break;
         }
-        
-        const actualRange = actualMax - actualMin;
-        const clipMin = actualMin + (minPercent / 100) * actualRange;
-        const clipMax = actualMin + (maxPercent / 100) * actualRange;
-        
-        console.log(`CORRECTED clipping: ${currentDir}-axis from ${clipMin.toFixed(3)} to ${clipMax.toFixed(3)}`);
-        console.log(`  This should KEEP geometry between ${clipMin.toFixed(3)} and ${clipMax.toFixed(3)}`);
-        console.log(`  Actual geometry range: ${actualMin.toFixed(3)} to ${actualMax.toFixed(3)}`);
-        
-        // CORRECTED Three.js plane math:
-        // Three.js clips where: normal·point + constant > 0
-        // To keep geometry between clipMin and clipMax, we need:
-        // - Plane 1: clips geometry < clipMin (keeps >= clipMin)  
-        // - Plane 2: clips geometry > clipMax (keeps <= clipMax)
-        
-        // FIXED: Corrected Three.js clipping plane math
-        if (minPercent > 0) {
-            // Clip everything below clipMin
-            let plane1;
-            switch(currentDir) {
-                case 'x':
-                    plane1 = new THREE.Plane(new THREE.Vector3(1, 0, 0), -clipMin);
-                    break;
-                case 'y':
-                    plane1 = new THREE.Plane(new THREE.Vector3(0, 1, 0), -clipMin);
-                    break;
-                case 'z':
-                default:
-                    plane1 = new THREE.Plane(new THREE.Vector3(0, 0, 1), -clipMin);
-                    break;
-            }
-            clippingPlanes.push(plane1);
-            console.log(`  FIXED plane 1: clips ${currentDir} < ${clipMin.toFixed(3)} (keeps >= ${clipMin.toFixed(3)})`);
-        }
+    }
+    
+    // Apply clipping planes to this class
+    classMesh.material.clippingPlanes = clippingPlanes;
+    classMesh.material.clipShadows = true;
+    classMesh.material.needsUpdate = true;
+    
+    // Enable clipping if needed
+    state.renderer.localClippingEnabled = clippingPlanes.length > 0;
+    
+    // Force re-render
+    if (state.renderer && state.scene && state.camera) {
+        state.renderer.render(state.scene, state.camera);
+    }
+    
+    console.log(`Applied ${clippingPlanes.length} clipping planes to class ${classValue}`);
+}
 
-        if (maxPercent < 100) {
-            // Clip everything above clipMax  
-            let plane2;
-            switch(currentDir) {
-                case 'x':
-                    plane2 = new THREE.Plane(new THREE.Vector3(-1, 0, 0), clipMax);
-                    break;
-                case 'y':
-                    plane2 = new THREE.Plane(new THREE.Vector3(0, -1, 0), clipMax);
-                    break;
-                case 'z':
-                default:
-                    plane2 = new THREE.Plane(new THREE.Vector3(0, 0, -1), clipMax);
-                    break;
-            }
-            clippingPlanes.push(plane2);
-            console.log(`  FIXED plane 2: clips ${currentDir} > ${clipMax.toFixed(3)} (keeps <= ${clipMax.toFixed(3)})`);
-        }
-        
-        // ROTATION-AWARE: Transform clipping planes if the mesh is rotated
-        if (state.meshGroup && (state.meshGroup.rotation.x !== 0 || state.meshGroup.rotation.y !== 0 || state.meshGroup.rotation.z !== 0)) {
-            console.log(`Applying rotation transformation for class ${classValue}:`, {
-                rotation: `(${state.meshGroup.rotation.x.toFixed(3)}, ${state.meshGroup.rotation.y.toFixed(3)}, ${state.meshGroup.rotation.z.toFixed(3)})`
-            });
-            
-            // Get the rotation matrix
-            const rotationMatrix = new THREE.Matrix4();
-            rotationMatrix.makeRotationFromEuler(state.meshGroup.rotation);
-            
-            // Create a 3x3 matrix for transforming normals
-            const rotationMatrix3 = new THREE.Matrix3().setFromMatrix4(rotationMatrix);
-            
-            // Transform each clipping plane
-            clippingPlanes.forEach((plane, index) => {
-                // Store original for debugging
-                const originalNormal = plane.normal.clone();
-                
-                // Transform the normal vector
-                plane.normal.applyMatrix3(rotationMatrix3);
-                
-                console.log(`  Plane ${index + 1}: normal transformed from (${originalNormal.x.toFixed(3)}, ${originalNormal.y.toFixed(3)}, ${originalNormal.z.toFixed(3)}) to (${plane.normal.x.toFixed(3)}, ${plane.normal.y.toFixed(3)}, ${plane.normal.z.toFixed(3)})`);
-            });
-            
-            console.log(`Applied rotation transformation to ${clippingPlanes.length} planes`);
-        } else {
-            console.log('No rotation applied - mesh is at default orientation');
-        }
-        
-        console.log(`Created ${clippingPlanes.length} CORRECTED clipping planes for class ${classValue}`);
-    } else {
-        console.log(`No clipping needed for class ${classValue} - showing full range (0%-100%)`);
+/**
+ * Apply range to a single class using slice visibility - NEW FUNCTION FOR SLICE SYSTEM
+ * @param {number} classValue - The class number
+ * @param {number} minPercent - Minimum percentage (0-100)
+ * @param {number} maxPercent - Maximum percentage (0-100)
+ */
+export function applySliceRangeToSingleClass(classValue, minPercent, maxPercent) {
+    const state = getGlobalState();
+    
+    if (!state.sliceMeshes || !state.sliceMeshes[classValue]) {
+        console.log(`No slice meshes available for class ${classValue}`);
+        return;
     }
     
-    // Apply clipping planes to this specific class mesh
-    if (classMesh.material) {
-        classMesh.material.clippingPlanes = clippingPlanes;
-        classMesh.material.needsUpdate = true;
-        console.log(`Applied ${clippingPlanes.length} clipping planes to class ${classValue} material`);
-    } else {
-        console.error(`No material found for class ${classValue}`);
-    }
+    const sliceCount = state.sliceMetadata.sliceCount;
     
-    // Enable clipping if any class has clipping planes
-    let hasAnyClipping = false;
-    Object.keys(state.classMeshes).forEach(cv => {
-        const mesh = state.classMeshes[cv];
-        if (mesh && mesh.material && mesh.material.clippingPlanes && mesh.material.clippingPlanes.length > 0) {
-            hasAnyClipping = true;
+    // Convert percentages to slice indices
+    const minSlice = Math.floor(minPercent / 100 * sliceCount);
+    const maxSlice = Math.ceil(maxPercent / 100 * sliceCount) - 1;
+    
+    console.log(`Class ${classValue} - showing slices ${minSlice} to ${maxSlice} (${minPercent}% - ${maxPercent}%)`);
+    
+    // Update visibility for this class only
+    state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
+        if (mesh) {
+            const shouldBeVisible = (sliceIndex >= minSlice && sliceIndex <= maxSlice);
+            mesh.visible = shouldBeVisible;
         }
     });
-    
-    if (state.renderer) {
-        state.renderer.localClippingEnabled = hasAnyClipping;
-    }
-    console.log(`Renderer clipping enabled: ${hasAnyClipping}`);
-    
-    console.log(`=== FINAL: Applied range ${minPercent}%-${maxPercent}% to class ${classValue} (${clippingPlanes.length} planes) ===`);
-    
+
+    // ADD THESE TWO LINES:
+    console.log('About to call updateVolumeCapping from single class function...');
+    updateVolumeCapping(minSlice, maxSlice, sliceCount);
+
     // Force re-render
     if (state.renderer && state.scene && state.camera) {
         state.renderer.render(state.scene, state.camera);
@@ -310,32 +241,53 @@ export function setSliceDirection(direction) {
 }
 
 /**
- * Apply slice-based filtering to meshes (legacy compatibility function)
+ * Apply slice-based filtering using visibility control - NEW SLICE SYSTEM
  * @param {Array} currentSliceRange - Array with [min, max] percentages
  */
 export function applySliceRangeToMeshes(currentSliceRange = [0, 100]) {
-    const state = getGlobalState();
+    console.log('=== applySliceRangeToMeshes CALLED ===');
+    console.log('currentSliceRange:', currentSliceRange);
     
-    if (!state.classMeshes || !state.segmentationData) {
-        console.log('No meshes or data available for slice filtering');
-        return;
+    const state = getGlobalState();
+    console.log('=== STATE DEBUG ===');
+    console.log('state exists:', !!state);
+    console.log('state.sliceMeshes exists:', !!state.sliceMeshes);
+    
+    if (state.sliceMeshes) {
+        console.log('sliceMeshes keys:', Object.keys(state.sliceMeshes));
+        console.log('sliceMeshes length:', Object.keys(state.sliceMeshes).length);
+        
+        // Debug the actual content of sliceMeshes
+        Object.keys(state.sliceMeshes).forEach(classValue => {
+            console.log(`Class ${classValue} has ${state.sliceMeshes[classValue].length} slices`);
+        });
     }
     
+    // Check if we're using the new slice-based system
+    if (state.sliceMeshes && Object.keys(state.sliceMeshes).length > 0) {
+        console.log('=== TAKING SLICE PATH ===');
+        updateSliceVisibility(currentSliceRange);
+        return;
+    } else {
+        console.log('=== TAKING FALLBACK PATH ===');
+        console.log('Reason: sliceMeshes is', !state.sliceMeshes ? 'null/undefined' : 'empty');
+    }
+    
+    // Original clipping logic for backward compatibility
     const [depth, height, width] = state.segmentationData.shape;
     
-    // Calculate range based on the selected direction
     let minCoord, maxCoord, axis, planeDimension;
     
     switch(state.sliceDirection) {
-        case 'x': // Left to Right
+        case 'x': 
             planeDimension = width;
             axis = 'X';
             break;
-        case 'y': // Bottom to Top  
+        case 'y': 
             planeDimension = height;
             axis = 'Y';
             break;
-        case 'z': // Front to Back (this should be the correct one for most medical data)
+        case 'z': 
             planeDimension = depth;
             axis = 'Z';
             break;
@@ -345,7 +297,6 @@ export function applySliceRangeToMeshes(currentSliceRange = [0, 100]) {
             updateGlobalState({ sliceDirection: 'z' });
     }
     
-    // Calculate coordinate range based on percentage (centered around origin)
     const halfDim = planeDimension / 2;
     const rangeSize = (currentSliceRange[1] - currentSliceRange[0]) / 100 * planeDimension;
     const rangeCenter = (currentSliceRange[0] + currentSliceRange[1]) / 2 / 100 * planeDimension - halfDim;
@@ -354,50 +305,406 @@ export function applySliceRangeToMeshes(currentSliceRange = [0, 100]) {
     maxCoord = rangeCenter + rangeSize / 2;
     
     console.log(`Applying ${axis}-axis slice filter: ${minCoord.toFixed(2)} to ${maxCoord.toFixed(2)}`);
-    console.log(`Range: ${currentSliceRange[0]}% to ${currentSliceRange[1]}% of ${planeDimension} ${axis}-dimension`);
     
-    // Create clipping planes based on direction
     let clippingPlanes;
     
     switch(state.sliceDirection) {
         case 'x':
             clippingPlanes = [
-                new THREE.Plane(new THREE.Vector3(1, 0, 0), -minCoord),   // Clip left of minX
-                new THREE.Plane(new THREE.Vector3(-1, 0, 0), maxCoord)    // Clip right of maxX
+                new THREE.Plane(new THREE.Vector3(1, 0, 0), -minCoord),
+                new THREE.Plane(new THREE.Vector3(-1, 0, 0), maxCoord)
             ];
             break;
         case 'y':
             clippingPlanes = [
-                new THREE.Plane(new THREE.Vector3(0, 1, 0), -minCoord),   // Clip below minY
-                new THREE.Plane(new THREE.Vector3(0, -1, 0), maxCoord)    // Clip above maxY
+                new THREE.Plane(new THREE.Vector3(0, 1, 0), -minCoord),
+                new THREE.Plane(new THREE.Vector3(0, -1, 0), maxCoord)
             ];
             break;
         case 'z':
             clippingPlanes = [
-                new THREE.Plane(new THREE.Vector3(0, 0, 1), -minCoord),   // Clip behind minZ
-                new THREE.Plane(new THREE.Vector3(0, 0, -1), maxCoord)    // Clip in front of maxZ
+                new THREE.Plane(new THREE.Vector3(0, 0, 1), -minCoord),
+                new THREE.Plane(new THREE.Vector3(0, 0, -1), maxCoord)
             ];
             break;
     }
     
-    // Apply clipping planes to all visible meshes
     Object.keys(state.classMeshes).forEach(classValue => {
         const classMesh = state.classMeshes[classValue];
         if (!classMesh.visible) return;
         
-        // Apply clipping planes
         classMesh.material.clippingPlanes = clippingPlanes;
         classMesh.material.clipShadows = true;
         classMesh.material.needsUpdate = true;
     });
     
-    // Enable clipping planes in renderer
     if (state.renderer) {
         state.renderer.localClippingEnabled = true;
+        state.renderer.render(state.scene, state.camera);
     }
+}
+
+/**
+ * Update slice visibility based on slider values with volume capping - ENHANCED VERSION
+ * @param {Array} sliceRange - [minPercent, maxPercent]
+ */
+export function updateSliceVisibility(sliceRange) {
+    console.log('=== updateSliceVisibility CALLED ===');
+    console.log('sliceRange:', sliceRange);
+    const state = getGlobalState();
+    const [minPercent, maxPercent] = sliceRange;
+    
+    if (!state.sliceMeshes || !state.sliceMetadata) {
+        console.log('No slice meshes available for visibility control');
+        return;
+    }
+    
+    const sliceCount = state.sliceMetadata.sliceCount;
+    
+    // Convert percentages to slice indices
+    const minSlice = Math.floor(minPercent / 100 * sliceCount);
+    const maxSlice = Math.ceil(maxPercent / 100 * sliceCount) - 1;
+    
+    console.log(`Showing slices ${minSlice} to ${maxSlice} (${minPercent}% - ${maxPercent}%) with volume capping`);
+    
+    // Update visibility for all classes
+    Object.keys(state.sliceMeshes).forEach(classValue => {
+        if (state.sliceMeshes[classValue]) {
+            state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
+                if (mesh) {
+                    const shouldBeVisible = (sliceIndex >= minSlice && sliceIndex <= maxSlice);
+                    mesh.visible = shouldBeVisible;
+                }
+            });
+        }
+    });
+    
+    // Create or update capping meshes to close the volume
+    updateVolumeCapping(minSlice, maxSlice, sliceCount);
+    
+    // Update metadata
+    updateGlobalState({ 
+        sliceMetadata: {
+            ...state.sliceMetadata,
+            visibleSliceRange: [minSlice, maxSlice]
+        }
+    });
     
     // Force re-render
     if (state.renderer && state.scene && state.camera) {
         state.renderer.render(state.scene, state.camera);
     }
+}
+
+/**
+ * Create or update capping meshes to close the volume at slice boundaries - DEBUGGED VERSION
+ * @param {number} minSlice - First visible slice index
+ * @param {number} maxSlice - Last visible slice index  
+ * @param {number} sliceCount - Total slice count
+ */
+export function updateVolumeCapping(minSlice, maxSlice, sliceCount) {
+    const state = getGlobalState();
+    
+    console.log('=== CAPPING DEBUG ===');
+    console.log('minSlice:', minSlice, 'maxSlice:', maxSlice, 'sliceCount:', sliceCount);
+    console.log('state.sliceMeshes exists:', !!state.sliceMeshes);
+    console.log('state.segmentationData exists:', !!state.segmentationData);
+    console.log('state.meshGroup exists:', !!state.meshGroup);
+    
+    if (!state.sliceMeshes || !state.segmentationData) {
+        console.log('Missing required data for capping');
+        return;
+    }
+    
+    // Remove existing capping meshes
+    removeCappingMeshes();
+    
+    // Don't create caps if showing full range
+    if (minSlice === 0 && maxSlice === sliceCount - 1) {
+        console.log('Showing full range - no capping needed');
+        return;
+    }
+    
+    const [depth, height, width] = state.segmentationData.shape;
+    const sliceDirection = state.sliceMetadata.sliceDirection || 'z';
+    
+    console.log(`Creating volume caps at slice boundaries: ${minSlice} and ${maxSlice}`);
+    console.log(`Data shape: ${depth}x${height}x${width}, slice direction: ${sliceDirection}`);
+    
+    // Create capping meshes for each class
+    Object.keys(state.sliceMeshes).forEach(classValue => {
+        console.log(`Processing caps for class ${classValue}`);
+        
+        if (state.sliceMeshes[classValue] && state.sliceMeshes[classValue].length > 0) {
+            
+            // Get class color from existing mesh
+            const firstMesh = state.sliceMeshes[classValue].find(mesh => mesh && mesh.material);
+            if (!firstMesh) {
+                console.log(`No valid mesh found for class ${classValue}`);
+                return;
+            }
+            
+            const classColor = firstMesh.material.color;
+            const opacity = firstMesh.material.opacity;
+            
+            console.log(`Class ${classValue} color:`, classColor, 'opacity:', opacity);
+            
+            // Create front cap (at minSlice position) - simplified version
+            if (minSlice > 0) {
+                console.log(`Creating front cap for class ${classValue} at slice ${minSlice}`);
+                
+                const frontCap = createSimpleCap(
+                    classValue, minSlice, sliceCount, sliceDirection, 
+                    [depth, height, width], classColor, opacity
+                );
+                
+                if (frontCap && state.meshGroup) {
+                    state.meshGroup.add(frontCap);
+                    addCappingMesh(frontCap);
+                    console.log(`Added front cap for class ${classValue}`);
+                } else {
+                    console.log(`Failed to create/add front cap for class ${classValue}`);
+                }
+            }
+            
+            // Create back cap (at maxSlice position)
+            if (maxSlice < sliceCount - 1) {
+                console.log(`Creating back cap for class ${classValue} at slice ${maxSlice + 1}`);
+                
+                const backCap = createSimpleCap(
+                    classValue, maxSlice + 1, sliceCount, sliceDirection,
+                    [depth, height, width], classColor, opacity
+                );
+                
+                if (backCap && state.meshGroup) {
+                    state.meshGroup.add(backCap);
+                    addCappingMesh(backCap);
+                    console.log(`Added back cap for class ${classValue}`);
+                } else {
+                    console.log(`Failed to create/add back cap for class ${classValue}`);
+                }
+            }
+        }
+    });
+    
+    console.log(`Total capping meshes created: ${cappingMeshes.length}`);
+}
+
+/**
+ * Create a proper capping face - IMPROVED VERSION
+ */
+function createSimpleCap(classValue, sliceIndex, sliceCount, sliceDirection, shape, color, opacity) {
+    const [depth, height, width] = shape;
+    
+    try {
+        // Calculate the position of this slice
+        let slicePosition;
+        let planeWidth, planeHeight;
+        
+        switch(sliceDirection) {
+            case 'x':
+                slicePosition = (sliceIndex / sliceCount) * width;
+                planeWidth = height;
+                planeHeight = depth;
+                break;
+            case 'y':
+                slicePosition = (sliceIndex / sliceCount) * height;
+                planeWidth = width;
+                planeHeight = depth;
+                break;
+            case 'z':
+            default:
+                slicePosition = (sliceIndex / sliceCount) * depth;
+                planeWidth = width;
+                planeHeight = height;
+                break;
+        }
+        
+        // Create a properly sized plane geometry for the cap
+        const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+        
+        // Apply the same scaling and centering as the original meshes
+        const maxOriginalDim = Math.max(depth, height, width);
+        const scaleFactor = 8 / maxOriginalDim;
+        
+        // Scale the geometry vertices
+        const vertices = geometry.attributes.position.array;
+        for (let i = 0; i < vertices.length; i += 3) {
+            vertices[i] *= scaleFactor;     // X
+            vertices[i + 1] *= scaleFactor; // Y
+            vertices[i + 2] *= scaleFactor; // Z
+        }
+        geometry.attributes.position.needsUpdate = true;
+        
+        // Position the cap at the slice boundary
+        let x = 0, y = 0, z = 0;
+        switch(sliceDirection) {
+            case 'x':
+                x = (slicePosition - width/2) * scaleFactor;
+                break;
+            case 'y':
+                y = (slicePosition - height/2) * scaleFactor;  
+                break;
+            case 'z':
+            default:
+                z = (slicePosition - depth/2) * scaleFactor;
+                break;
+        }
+        
+        // Create material matching the class color (no more bright magenta!)
+        const material = new THREE.MeshPhongMaterial({
+            color: color,           // Use the actual class color
+            transparent: true,
+            opacity: opacity * 0.6, // Make caps slightly more transparent
+            side: THREE.DoubleSide
+        });
+        
+        const capMesh = new THREE.Mesh(geometry, material);
+        capMesh.position.set(x, y, z);
+        
+        // Rotate the plane to face the correct direction
+        switch(sliceDirection) {
+            case 'x':
+                capMesh.rotation.y = Math.PI / 2;
+                break;
+            case 'y':
+                capMesh.rotation.x = -Math.PI / 2;
+                break;
+            case 'z':
+            default:
+                // No rotation needed for Z
+                break;
+        }
+        
+        capMesh.userData = {
+            isCappingMesh: true,
+            classValue: classValue,
+            sliceIndex: sliceIndex
+        };
+        
+        console.log(`Created proper cap at position (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}) with class color`);
+        return capMesh;
+        
+    } catch (error) {
+        console.error('Error creating cap:', error);
+        return null;
+    }
+}
+
+/**
+ * Create a single capping face at a slice boundary - HELPER FUNCTION
+ */
+function createSliceCap(classValue, sliceIndex, sliceCount, sliceDirection, shape, color, opacity, side) {
+    const [depth, height, width] = shape;
+    
+    // Calculate the position of this slice
+    let slicePosition;
+    switch(sliceDirection) {
+        case 'x':
+            slicePosition = (sliceIndex / sliceCount) * width;
+            break;
+        case 'y':
+            slicePosition = (sliceIndex / sliceCount) * height;
+            break;
+        case 'z':
+        default:
+            slicePosition = (sliceIndex / sliceCount) * depth;
+            break;
+    }
+    
+    // Create a simple plane geometry for the cap
+    const geometry = new THREE.PlaneGeometry(
+        sliceDirection === 'x' ? height : width,
+        sliceDirection === 'y' ? depth : (sliceDirection === 'x' ? depth : height)
+    );
+    
+    // Apply the same scaling and centering as the original meshes
+    const maxOriginalDim = Math.max(depth, height, width);
+    const scaleFactor = 8 / maxOriginalDim; // Same as in mesh creation
+    
+    const vertices = geometry.attributes.position.array;
+    for (let i = 0; i < vertices.length; i += 3) {
+        vertices[i] *= scaleFactor;     // X
+        vertices[i + 1] *= scaleFactor; // Y
+        vertices[i + 2] *= scaleFactor; // Z
+    }
+    
+    // Position the cap at the slice boundary
+    let x = 0, y = 0, z = 0;
+    switch(sliceDirection) {
+        case 'x':
+            x = (slicePosition - width/2) * scaleFactor;
+            if (side === 'back') x += (width/sliceCount) * scaleFactor; // Adjust for back face
+            break;
+        case 'y':
+            y = (slicePosition - height/2) * scaleFactor;  
+            if (side === 'back') y += (height/sliceCount) * scaleFactor;
+            break;
+        case 'z':
+        default:
+            z = (slicePosition - depth/2) * scaleFactor;
+            if (side === 'back') z += (depth/sliceCount) * scaleFactor;
+            break;
+    }
+    
+    // Create material matching the class
+    const material = new THREE.MeshPhongMaterial({
+        color: color,
+        transparent: true,
+        opacity: opacity * 0.8, // Slightly more transparent for caps
+        side: THREE.DoubleSide
+    });
+    
+    const capMesh = new THREE.Mesh(geometry, material);
+    capMesh.position.set(x, y, z);
+    
+    // Rotate the plane to face the correct direction
+    switch(sliceDirection) {
+        case 'x':
+            capMesh.rotation.y = Math.PI / 2;
+            break;
+        case 'y':
+            capMesh.rotation.x = -Math.PI / 2;
+            break;
+        case 'z':
+        default:
+            // No rotation needed for Z
+            break;
+    }
+    
+    capMesh.userData = {
+        isCappingMesh: true,
+        classValue: classValue,
+        sliceIndex: sliceIndex,
+        side: side
+    };
+    
+    return capMesh;
+}
+
+// Global array to track capping meshes for cleanup
+let cappingMeshes = [];
+
+/**
+ * Track a capping mesh for cleanup
+ */
+function addCappingMesh(mesh) {
+    cappingMeshes.push(mesh);
+}
+
+/**
+ * Remove all existing capping meshes
+ */
+export function removeCappingMeshes() {
+    const state = getGlobalState();
+    
+    cappingMeshes.forEach(mesh => {
+        if (state.meshGroup && mesh.parent === state.meshGroup) {
+            state.meshGroup.remove(mesh);
+        }
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) mesh.material.dispose();
+    });
+    
+    cappingMeshes = [];
 }

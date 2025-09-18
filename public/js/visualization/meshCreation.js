@@ -220,3 +220,241 @@ export function createSeparateClassMeshes(data, scene) {
         visibleClasses
     };
 }
+
+/**
+ * Create slice-based meshes for each class - NEW SLICE SYSTEM
+ * @param {Object} data - The segmentation data
+ * @param {Object} scene - Three.js scene to add meshes to
+ * @param {number} sliceCount - Number of slices to create (default: 20)
+ * @param {string} sliceDirection - Direction to slice ('z', 'x', 'y')
+ * @returns {Object} - Object containing slice meshes and metadata
+ */
+export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceDirection = 'z') {
+    console.log('=== CREATING SLICE-BASED CLASS MESHES ===');
+    const startTime = performance.now();
+    
+    // Extract basic information
+    const voxelData = data.data;
+    const shape = data.shape;
+    const [depth, height, width] = shape;
+    
+    console.log(`Processing ${voxelData.length} voxels in ${depth}x${height}x${width} volume`);
+    console.log(`Creating ${sliceCount} slices in ${sliceDirection} direction`);
+    
+    // Set class information
+    const availableClasses = [...new Set(voxelData.map(v => v.value))].sort();
+    const visibleClasses = [...availableClasses];
+    console.log('Available classes:', availableClasses);
+    
+    // Convert sparse voxel data to dense 3D volume
+    const volume = new Uint8Array(depth * height * width);
+    voxelData.forEach(voxel => {
+        const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
+        volume[index] = voxel.value;
+    });
+    
+    // Class colors (same as original)
+    const classColors = {
+        1: [0.2, 0.9, 0.2], // Green
+        2: [0.9, 0.2, 0.2], // Red
+        3: [0.2, 0.2, 0.9], // Blue
+        4: [0.9, 0.9, 0.2], // Yellow
+        5: [0.9, 0.2, 0.9]  // Magenta
+    };
+    
+    // Calculate scaling (same as original)
+    const maxOriginalDim = Math.max(depth, height, width);
+    const targetMaxSize = 8;
+    const scaleFactor = targetMaxSize / maxOriginalDim;
+    
+    console.log(`Scale factor: ${scaleFactor.toFixed(4)}`);
+    
+    // Determine slice parameters based on direction
+    let sliceDimension, sliceSize;
+    switch(sliceDirection) {
+        case 'x': 
+            sliceDimension = width;
+            break;
+        case 'y': 
+            sliceDimension = height;
+            break;
+        case 'z':
+        default:
+            sliceDimension = depth;
+            break;
+    }
+    
+    sliceSize = Math.floor(sliceDimension / sliceCount);
+    console.log(`Each slice covers ${sliceSize} voxels in ${sliceDirection} direction`);
+    
+    // Create slice-based mesh structure: sliceMeshes[classValue][sliceIndex] = mesh
+    const sliceMeshes = {};
+    const meshGroup = new THREE.Group();
+    
+    // Create slices for each class
+    availableClasses.forEach(classValue => {
+        console.log(`Creating ${sliceCount} slices for class ${classValue}...`);
+        sliceMeshes[classValue] = [];
+        
+        // Create each slice for this class
+        for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
+            const sliceMesh = createSingleSlice(
+                volume, shape, classValue, sliceIndex, sliceCount, 
+                sliceDirection, scaleFactor, classColors[classValue] || [0.6, 0.6, 0.6]
+            );
+            
+            if (sliceMesh) {
+                sliceMesh.userData = {
+                    classValue: classValue,
+                    sliceIndex: sliceIndex,
+                    originalOpacity: 0.8
+                };
+                
+                sliceMeshes[classValue][sliceIndex] = sliceMesh;
+                meshGroup.add(sliceMesh);
+            }
+        }
+        
+        console.log(`Created ${sliceMeshes[classValue].length} slices for class ${classValue}`);
+    });
+    
+    // Add the group to the scene
+    scene.add(meshGroup);
+    
+    const endTime = performance.now();
+    console.log(`Slice-based mesh creation completed in ${(endTime - startTime).toFixed(2)}ms`);
+    console.log(`Created ${Object.keys(sliceMeshes).length} classes with ${sliceCount} slices each`);
+    
+    // Calculate and log bounds
+    const groupBox = new THREE.Box3().setFromObject(meshGroup);
+    const groupSize = groupBox.getSize(new THREE.Vector3());
+    const groupCenter = groupBox.getCenter(new THREE.Vector3());
+    
+    console.log(`Final group center: (${groupCenter.x.toFixed(3)}, ${groupCenter.y.toFixed(3)}, ${groupCenter.z.toFixed(3)})`);
+    console.log(`Final group size: (${groupSize.x.toFixed(3)}, ${groupSize.y.toFixed(3)}, ${groupSize.z.toFixed(3)})`);
+    
+    // Populate class filter dropdown
+    populateClassFilter(availableClasses);
+    
+    return {
+        meshGroup,
+        sliceMeshes,           // NEW: slice-based structure
+        availableClasses,
+        visibleClasses,
+        sliceMetadata: {       // NEW: metadata about slices
+            sliceCount,
+            sliceDirection,
+            sliceSize,
+            visibleSliceRange: [0, sliceCount - 1]
+        }
+    };
+}
+
+/**
+ * Create a single slice mesh for a specific class - HELPER FUNCTION
+ * @param {Uint8Array} volume - Dense volume data
+ * @param {Array} shape - [depth, height, width]
+ * @param {number} classValue - Class number
+ * @param {number} sliceIndex - Which slice (0 to sliceCount-1)
+ * @param {number} sliceCount - Total number of slices
+ * @param {string} sliceDirection - 'x', 'y', or 'z'
+ * @param {number} scaleFactor - Scaling factor for vertices
+ * @param {Array} color - RGB color array
+ * @returns {THREE.Mesh} - The slice mesh
+ */
+function createSingleSlice(volume, shape, classValue, sliceIndex, sliceCount, sliceDirection, scaleFactor, color) {
+    const [depth, height, width] = shape;
+    const classVertices = [];
+    const classNormals = [];
+    
+    // Calculate slice boundaries
+    let sliceStart, sliceEnd;
+    switch(sliceDirection) {
+        case 'x':
+            sliceStart = Math.floor((sliceIndex * width) / sliceCount);
+            sliceEnd = Math.floor(((sliceIndex + 1) * width) / sliceCount);
+            break;
+        case 'y':
+            sliceStart = Math.floor((sliceIndex * height) / sliceCount);
+            sliceEnd = Math.floor(((sliceIndex + 1) * height) / sliceCount);
+            break;
+        case 'z':
+        default:
+            sliceStart = Math.floor((sliceIndex * depth) / sliceCount);
+            sliceEnd = Math.floor(((sliceIndex + 1) * depth) / sliceCount);
+            break;
+    }
+    
+    // Extract surface vertices for this class and slice only
+    for (let z = 0; z < depth; z++) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                
+                // Check if this voxel is in our slice range
+                let inSlice = false;
+                switch(sliceDirection) {
+                    case 'x': inSlice = (x >= sliceStart && x < sliceEnd); break;
+                    case 'y': inSlice = (y >= sliceStart && y < sliceEnd); break;
+                    case 'z': inSlice = (z >= sliceStart && z < sliceEnd); break;
+                }
+                
+                if (!inSlice) continue;
+                
+                const currentValue = getVoxelValue(volume, x, y, z, width, height, depth);
+                if (currentValue !== classValue) continue;
+                
+                // Check each face of the voxel (same logic as original)
+                const faces = [
+                    { dx: 1, dy: 0, dz: 0, name: 'right' },
+                    { dx: -1, dy: 0, dz: 0, name: 'left' },
+                    { dx: 0, dy: 1, dz: 0, name: 'top' },
+                    { dx: 0, dy: -1, dz: 0, name: 'bottom' },
+                    { dx: 0, dy: 0, dz: 1, name: 'front' },
+                    { dx: 0, dy: 0, dz: -1, name: 'back' }
+                ];
+                
+                faces.forEach(face => {
+                    const neighborValue = getVoxelValue(volume, 
+                        x + face.dx, y + face.dy, z + face.dz, 
+                        width, height, depth);
+                    
+                    // If neighbor is different, this face is on the surface
+                    if (neighborValue !== classValue) {
+                        addQuadFace(classVertices, classNormals, x, y, z, face);
+                    }
+                });
+            }
+        }
+    }
+    
+    if (classVertices.length === 0) {
+        return null; // No vertices in this slice
+    }
+    
+    // Create geometry for this slice
+    const geometry = new THREE.BufferGeometry();
+    
+    // Convert to Float32Array 
+    const vertices = new Float32Array(classVertices);
+    const normals = new Float32Array(classNormals);
+    
+    // Center and scale geometry (same as original)
+    centerAndScaleGeometry(vertices, shape, scaleFactor);
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    geometry.computeBoundingBox();
+    
+    // Create material with class-specific color
+    const material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(color[0], color[1], color[2]),
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+    
+    // Create mesh for this slice
+    const sliceMesh = new THREE.Mesh(geometry, material);
+    
+    return sliceMesh;
+}
