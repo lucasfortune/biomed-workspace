@@ -2,7 +2,7 @@
 // This file handles all UI panel creation and user interaction events
 
 import { getClassColor, populateClassFilter } from './utils.js';
-import { applyRangeToSingleClass, updateSliceDirectionIndicator, setSliceDirection, applySliceRangeToMeshes } from './clipping.js';
+import { applyRangeToSingleClass, updateSliceDirectionIndicator, setSliceDirection, applySliceRangeToMeshes, removeCappingMeshesForClass } from './clipping.js';
 import { getGlobalState, updateGlobalState } from './main.js';
 
 /**
@@ -256,15 +256,34 @@ export function handleClassVisibilityChange(classValue, visible) {
         // NEW: Slice-based system
         console.log(`Updating slice visibility for class ${classValue}`);
         
-        // Get current visible slice range
-        const sliceRange = state.sliceMetadata ? state.sliceMetadata.visibleSliceRange : [0, 19];
-        
-        state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
-            if (mesh) {
-                const inSliceRange = (sliceIndex >= sliceRange[0] && sliceIndex <= sliceRange[1]);
-                mesh.visible = visible && inSliceRange;
+        if (visible) {
+            // When making visible, reapply the stored range
+            const storedRange = state.classSliceRanges && state.classSliceRanges[classValue];
+            if (storedRange) {
+                console.log(`Reapplying stored range for class ${classValue}:`, storedRange);
+                // Reapply the range that was set before
+                applyRangeToSingleClass(classValue, storedRange.min, storedRange.max);
+            } else {
+                // No stored range, apply current UI range
+                const rangeMin = document.getElementById(`dualRangeMin_${classValue}`);
+                const rangeMax = document.getElementById(`dualRangeMax_${classValue}`);
+                if (rangeMin && rangeMax) {
+                    const minVal = parseInt(rangeMin.value);
+                    const maxVal = parseInt(rangeMax.value);
+                    console.log(`Applying current UI range for class ${classValue}: ${minVal}%-${maxVal}%`);
+                    applyRangeToSingleClass(classValue, minVal, maxVal);
+                }
             }
-        });
+        } else {
+            // When hiding, just hide all slices and remove caps
+            state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
+                if (mesh) {
+                    mesh.visible = false;
+                }
+            });
+            // Remove caps for this class
+            removeCappingMeshesForClass(classValue);
+        }
     } else if (state.classMeshes && state.classMeshes[classValue]) {
         // Original system
         console.log(`Updating visibility for class ${classValue}`);

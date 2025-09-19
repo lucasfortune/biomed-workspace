@@ -7,13 +7,15 @@ import { loadSegmentationData, createSeparateClassMeshes } from './meshCreation.
 import { setupVisualizationControls } from './uiControls.js';
 import { setupEnhancedControls } from './interactions.js';
 import { createFallbackMesh, createErrorFallbackMesh } from './utils.js';
-import { removeCappingMeshes } from './clipping.js';
+import { removeAllCappingMeshes } from './clipping.js';
 
 // Global variables that need to be shared across modules
 export let scene, camera, renderer;
 export let meshGroup, segmentationMesh, classMeshes = {};
-export let sliceMeshes = {}; // NEW: slice-based mesh structure
-export let sliceMetadata = { sliceCount: 20, sliceDirection: 'z', visibleSliceRange: [0, 19] }; // NEW
+export let sliceMeshes = {};
+export let sliceMetadata = { sliceCount: 20, sliceDirection: 'z', visibleSliceRange: [0, 19] };
+export let classSliceRanges = {}; // NEW: Per-class slice ranges
+export let classBoundaryMeshes = {}; // NEW: Boundary meshes for each class
 export let availableClasses = [], visibleClasses = [];
 export let segmentationData = null;
 export let sliceDirection = 'z';
@@ -264,7 +266,7 @@ export function resetView() {
         });
         
         // Remove all capping meshes
-        removeCappingMeshes();
+        removeAllCappingMeshes();
         
         // Reset slice metadata
         if (sliceMetadata) {
@@ -336,6 +338,30 @@ export function getGlobalState() {
         sliceDirection,
         classControlStates
     };
+}
+
+/**
+ * Initialize per-class slice ranges
+ * @param {Array} availableClasses - Array of class numbers
+ */
+// In your initialize3DVisualization() or wherever you set up the classes
+export function initializeClassSliceRanges(availableClasses) {
+    const state = getGlobalState();
+    if (!state.classSliceRanges) {
+        state.classSliceRanges = {};
+    }
+    
+    availableClasses.forEach(classValue => {
+        // Initialize with current UI values or defaults
+        const rangeMin = document.getElementById(`dualRangeMin_${classValue}`);
+        const rangeMax = document.getElementById(`dualRangeMax_${classValue}`);
+        
+        const minVal = rangeMin ? parseInt(rangeMin.value) : 0;
+        const maxVal = rangeMax ? parseInt(rangeMax.value) : 100;
+        
+        state.classSliceRanges[classValue] = { min: minVal, max: maxVal };
+        console.log(`Initialized range for class ${classValue}: ${minVal}%-${maxVal}%`);
+    });
 }
 
 // Allow other modules to update global state

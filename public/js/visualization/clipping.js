@@ -2,6 +2,7 @@
 // This file handles all clipping plane calculations and slice filtering
 
 import { getGlobalState, updateGlobalState } from './main.js';
+import { centerAndScaleGeometry, addQuadFace, getVoxelValue } from './utils.js';
 
 /**
  * Apply range filtering to a single class mesh (FIXED: uses actual mesh coordinates)
@@ -152,6 +153,14 @@ export function applySliceRangeToSingleClass(classValue, minPercent, maxPercent)
         return;
     }
     
+    // Check if this class should be visible
+    const isClassVisible = state.visibleClasses.includes(parseInt(classValue)) || state.visibleClasses.includes(classValue.toString());
+    
+    if (!isClassVisible) {
+        console.log(`Class ${classValue} is not visible, skipping range application`);
+        return;
+    }
+    
     const sliceCount = state.sliceMetadata.sliceCount;
     
     // Convert percentages to slice indices
@@ -168,9 +177,14 @@ export function applySliceRangeToSingleClass(classValue, minPercent, maxPercent)
         }
     });
 
-    // ADD THESE TWO LINES:
-    console.log('About to call updateVolumeCapping from single class function...');
-    updateVolumeCapping(minSlice, maxSlice, sliceCount);
+    // Update the class range tracking
+    if (!state.classSliceRanges) {
+        state.classSliceRanges = {};
+    }
+    state.classSliceRanges[classValue] = { min: minPercent, max: maxPercent };
+
+    // Create accurate caps for just this class
+    updateAccurateCapping({ [classValue]: { min: minPercent, max: maxPercent } });
 
     // Force re-render
     if (state.renderer && state.scene && state.camera) {
@@ -374,7 +388,13 @@ export function updateSliceVisibility(sliceRange) {
                 if (mesh) {
                     const shouldBeVisible = (sliceIndex >= minSlice && sliceIndex <= maxSlice);
                     mesh.visible = shouldBeVisible;
-                }
+                    mesh.visible = shouldBeVisible && visible; // Add the visibility check
+            
+                    // Debug visibility changes
+                    if (wasVisible !== mesh.visible) {
+                        console.log(`Class ${classValue}, slice ${sliceIndex}: visibility ${wasVisible} -> ${mesh.visible}`);
+                    }
+                        }
             });
         }
     });
@@ -397,281 +417,143 @@ export function updateSliceVisibility(sliceRange) {
 }
 
 /**
- * Create or update capping meshes to close the volume at slice boundaries - DEBUGGED VERSION
- * @param {number} minSlice - First visible slice index
- * @param {number} maxSlice - Last visible slice index  
- * @param {number} sliceCount - Total slice count
+ * Create or update accurate cross-sectional capping meshes for each class
+ * @param {Object} classRanges - Object with class ranges: { classValue: {min, max}, ... }
  */
-export function updateVolumeCapping(minSlice, maxSlice, sliceCount) {
+export function updateAccurateCapping(classRanges) {
     const state = getGlobalState();
     
-    console.log('=== CAPPING DEBUG ===');
-    console.log('minSlice:', minSlice, 'maxSlice:', maxSlice, 'sliceCount:', sliceCount);
-    console.log('state.sliceMeshes exists:', !!state.sliceMeshes);
-    console.log('state.segmentationData exists:', !!state.segmentationData);
-    console.log('state.meshGroup exists:', !!state.meshGroup);
-    
     if (!state.sliceMeshes || !state.segmentationData) {
-        console.log('Missing required data for capping');
+        console.log('Missing required data for accurate capping');
         return;
     }
     
-    // Remove existing capping meshes
-    removeCappingMeshes();
-    
-    // Don't create caps if showing full range
-    if (minSlice === 0 && maxSlice === sliceCount - 1) {
-        console.log('Showing full range - no capping needed');
-        return;
-    }
-    
-    const [depth, height, width] = state.segmentationData.shape;
-    const sliceDirection = state.sliceMetadata.sliceDirection || 'z';
-    
-    console.log(`Creating volume caps at slice boundaries: ${minSlice} and ${maxSlice}`);
-    console.log(`Data shape: ${depth}x${height}x${width}, slice direction: ${sliceDirection}`);
-    
-    // Create capping meshes for each class
-    Object.keys(state.sliceMeshes).forEach(classValue => {
-        console.log(`Processing caps for class ${classValue}`);
-        
-        if (state.sliceMeshes[classValue] && state.sliceMeshes[classValue].length > 0) {
-            
-            // Get class color from existing mesh
-            const firstMesh = state.sliceMeshes[classValue].find(mesh => mesh && mesh.material);
-            if (!firstMesh) {
-                console.log(`No valid mesh found for class ${classValue}`);
-                return;
-            }
-            
-            const classColor = firstMesh.material.color;
-            const opacity = firstMesh.material.opacity;
-            
-            console.log(`Class ${classValue} color:`, classColor, 'opacity:', opacity);
-            
-            // Create front cap (at minSlice position) - simplified version
-            if (minSlice > 0) {
-                console.log(`Creating front cap for class ${classValue} at slice ${minSlice}`);
-                
-                const frontCap = createSimpleCap(
-                    classValue, minSlice, sliceCount, sliceDirection, 
-                    [depth, height, width], classColor, opacity
-                );
-                
-                if (frontCap && state.meshGroup) {
-                    state.meshGroup.add(frontCap);
-                    addCappingMesh(frontCap);
-                    console.log(`Added front cap for class ${classValue}`);
-                } else {
-                    console.log(`Failed to create/add front cap for class ${classValue}`);
-                }
-            }
-            
-            // Create back cap (at maxSlice position)
-            if (maxSlice < sliceCount - 1) {
-                console.log(`Creating back cap for class ${classValue} at slice ${maxSlice + 1}`);
-                
-                const backCap = createSimpleCap(
-                    classValue, maxSlice + 1, sliceCount, sliceDirection,
-                    [depth, height, width], classColor, opacity
-                );
-                
-                if (backCap && state.meshGroup) {
-                    state.meshGroup.add(backCap);
-                    addCappingMesh(backCap);
-                    console.log(`Added back cap for class ${classValue}`);
-                } else {
-                    console.log(`Failed to create/add back cap for class ${classValue}`);
-                }
-            }
-        }
+    Object.keys(classRanges).forEach(classValue => {
+        console.log(`Removing caps for class ${classValue}`);
+        removeCappingMeshesForClass(classValue);
     });
     
-    console.log(`Total capping meshes created: ${cappingMeshes.length}`);
+    const { shape } = state.segmentationData;
+    const sliceCount = state.sliceMetadata.sliceCount;
+    const sliceDirection = state.sliceMetadata.sliceDirection || 'z';
+    
+    // Create caps for each class individually
+    Object.keys(classRanges).forEach(classValue => {
+        const range = classRanges[classValue];
+        if (range.min === 0 && range.max === 100) {
+            return; // Full range, no caps needed
+        }
+        
+        const minSlice = Math.floor(range.min / 100 * sliceCount);
+        const maxSlice = Math.ceil(range.max / 100 * sliceCount) - 1;
+        
+        createAccurateCapsForClass(classValue, minSlice, maxSlice, sliceCount, sliceDirection, shape);
+    });
 }
 
 /**
- * Create a proper capping face - IMPROVED VERSION
+ * Create accurate cross-sectional caps for a specific class
+ * @param {number} classValue - Class number
+ * @param {number} minSlice - First visible slice
+ * @param {number} maxSlice - Last visible slice
+ * @param {number} sliceCount - Total slice count
+ * @param {string} sliceDirection - Slice direction
+ * @param {Array} shape - Data shape [depth, height, width]
  */
-function createSimpleCap(classValue, sliceIndex, sliceCount, sliceDirection, shape, color, opacity) {
-    const [depth, height, width] = shape;
+function createAccurateCapsForClass(classValue, minSlice, maxSlice, sliceCount, sliceDirection, shape) {
+    const state = getGlobalState();
     
-    try {
-        // Calculate the position of this slice
-        let slicePosition;
-        let planeWidth, planeHeight;
-        
-        switch(sliceDirection) {
-            case 'x':
-                slicePosition = (sliceIndex / sliceCount) * width;
-                planeWidth = height;
-                planeHeight = depth;
-                break;
-            case 'y':
-                slicePosition = (sliceIndex / sliceCount) * height;
-                planeWidth = width;
-                planeHeight = depth;
-                break;
-            case 'z':
-            default:
-                slicePosition = (sliceIndex / sliceCount) * depth;
-                planeWidth = width;
-                planeHeight = height;
-                break;
+    // Get the volume data for cross-section extraction
+    const volume = state.segmentationData.volume || extractVolumeFromSparseData(state.segmentationData);
+    
+    // Create front cap (at minSlice boundary)
+    if (minSlice > 0) {
+        const frontCapMesh = createCrossSectionalCap(
+            volume, shape, classValue, minSlice, sliceDirection, 'front'
+        );
+        if (frontCapMesh && state.meshGroup) {
+            state.meshGroup.add(frontCapMesh);
+            trackCappingMesh(classValue, frontCapMesh, 'front');
         }
-        
-        // Create a properly sized plane geometry for the cap
-        const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
-        
-        // Apply the same scaling and centering as the original meshes
-        const maxOriginalDim = Math.max(depth, height, width);
-        const scaleFactor = 8 / maxOriginalDim;
-        
-        // Scale the geometry vertices
-        const vertices = geometry.attributes.position.array;
-        for (let i = 0; i < vertices.length; i += 3) {
-            vertices[i] *= scaleFactor;     // X
-            vertices[i + 1] *= scaleFactor; // Y
-            vertices[i + 2] *= scaleFactor; // Z
+    }
+    
+    // Create back cap (at maxSlice boundary)
+    if (maxSlice < sliceCount - 1) {
+        const backCapMesh = createCrossSectionalCap(
+            volume, shape, classValue, maxSlice + 1, sliceDirection, 'back'
+        );
+        if (backCapMesh && state.meshGroup) {
+            state.meshGroup.add(backCapMesh);
+            trackCappingMesh(classValue, backCapMesh, 'back');
         }
-        geometry.attributes.position.needsUpdate = true;
-        
-        // Position the cap at the slice boundary
-        let x = 0, y = 0, z = 0;
-        switch(sliceDirection) {
-            case 'x':
-                x = (slicePosition - width/2) * scaleFactor;
-                break;
-            case 'y':
-                y = (slicePosition - height/2) * scaleFactor;  
-                break;
-            case 'z':
-            default:
-                z = (slicePosition - depth/2) * scaleFactor;
-                break;
-        }
-        
-        // Create material matching the class color (no more bright magenta!)
-        const material = new THREE.MeshPhongMaterial({
-            color: color,           // Use the actual class color
-            transparent: true,
-            opacity: opacity * 0.6, // Make caps slightly more transparent
-            side: THREE.DoubleSide
-        });
-        
-        const capMesh = new THREE.Mesh(geometry, material);
-        capMesh.position.set(x, y, z);
-        
-        // Rotate the plane to face the correct direction
-        switch(sliceDirection) {
-            case 'x':
-                capMesh.rotation.y = Math.PI / 2;
-                break;
-            case 'y':
-                capMesh.rotation.x = -Math.PI / 2;
-                break;
-            case 'z':
-            default:
-                // No rotation needed for Z
-                break;
-        }
-        
-        capMesh.userData = {
-            isCappingMesh: true,
-            classValue: classValue,
-            sliceIndex: sliceIndex
-        };
-        
-        console.log(`Created proper cap at position (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}) with class color`);
-        return capMesh;
-        
-    } catch (error) {
-        console.error('Error creating cap:', error);
-        return null;
     }
 }
 
 /**
- * Create a single capping face at a slice boundary - HELPER FUNCTION
+ * Create a true cross-sectional cap mesh by extracting the boundary
+ * @param {Uint8Array} volume - Dense volume data
+ * @param {Array} shape - [depth, height, width] 
+ * @param {number} classValue - Class number
+ * @param {number} sliceIndex - Slice index for the cap
+ * @param {string} sliceDirection - 'x', 'y', or 'z'
+ * @param {string} side - 'front' or 'back'
+ * @returns {THREE.Mesh} - The cross-sectional cap mesh
  */
-function createSliceCap(classValue, sliceIndex, sliceCount, sliceDirection, shape, color, opacity, side) {
+function createCrossSectionalCap(volume, shape, classValue, sliceIndex, sliceDirection, side) {
+    const state = getGlobalState();
     const [depth, height, width] = shape;
+    const capVertices = [];
+    const capNormals = [];
     
-    // Calculate the position of this slice
+    // Calculate the slice position
     let slicePosition;
     switch(sliceDirection) {
         case 'x':
-            slicePosition = (sliceIndex / sliceCount) * width;
+            slicePosition = Math.floor((sliceIndex * width) / state.sliceMetadata.sliceCount);
             break;
-        case 'y':
-            slicePosition = (sliceIndex / sliceCount) * height;
+        case 'y':  
+            slicePosition = Math.floor((sliceIndex * height) / state.sliceMetadata.sliceCount);
             break;
         case 'z':
         default:
-            slicePosition = (sliceIndex / sliceCount) * depth;
+            slicePosition = Math.floor((sliceIndex * depth) / state.sliceMetadata.sliceCount);
             break;
     }
     
-    // Create a simple plane geometry for the cap
-    const geometry = new THREE.PlaneGeometry(
-        sliceDirection === 'x' ? height : width,
-        sliceDirection === 'y' ? depth : (sliceDirection === 'x' ? depth : height)
-    );
+    // Extract boundary at this slice position
+    extractBoundaryFacesAtSlice(volume, shape, classValue, slicePosition, sliceDirection, side, capVertices, capNormals);
     
-    // Apply the same scaling and centering as the original meshes
+    if (capVertices.length === 0) {
+        return null; // No boundary found
+    }
+    
+    // Create geometry
+    const geometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array(capVertices);
+    const normals = new Float32Array(capNormals);
+    
+    // Apply same scaling as regular meshes  
     const maxOriginalDim = Math.max(depth, height, width);
-    const scaleFactor = 8 / maxOriginalDim; // Same as in mesh creation
+    const scaleFactor = 8 / maxOriginalDim;
+    centerAndScaleGeometry(vertices, shape, scaleFactor);
     
-    const vertices = geometry.attributes.position.array;
-    for (let i = 0; i < vertices.length; i += 3) {
-        vertices[i] *= scaleFactor;     // X
-        vertices[i + 1] *= scaleFactor; // Y
-        vertices[i + 2] *= scaleFactor; // Z
-    }
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
     
-    // Position the cap at the slice boundary
-    let x = 0, y = 0, z = 0;
-    switch(sliceDirection) {
-        case 'x':
-            x = (slicePosition - width/2) * scaleFactor;
-            if (side === 'back') x += (width/sliceCount) * scaleFactor; // Adjust for back face
-            break;
-        case 'y':
-            y = (slicePosition - height/2) * scaleFactor;  
-            if (side === 'back') y += (height/sliceCount) * scaleFactor;
-            break;
-        case 'z':
-        default:
-            z = (slicePosition - depth/2) * scaleFactor;
-            if (side === 'back') z += (depth/sliceCount) * scaleFactor;
-            break;
-    }
+    // Get class color from existing mesh
+    const existingMesh = state.sliceMeshes[classValue] && state.sliceMeshes[classValue][0];
+    const classColor = existingMesh ? existingMesh.material.color : new THREE.Color(0.5, 0.5, 0.5);
+    const opacity = existingMesh ? existingMesh.material.opacity : 0.8;
     
-    // Create material matching the class
+    // Create material
     const material = new THREE.MeshPhongMaterial({
-        color: color,
+        color: classColor.clone(),
         transparent: true,
-        opacity: opacity * 0.8, // Slightly more transparent for caps
+        opacity: opacity * 0.6, // Slightly more transparent
         side: THREE.DoubleSide
     });
     
     const capMesh = new THREE.Mesh(geometry, material);
-    capMesh.position.set(x, y, z);
-    
-    // Rotate the plane to face the correct direction
-    switch(sliceDirection) {
-        case 'x':
-            capMesh.rotation.y = Math.PI / 2;
-            break;
-        case 'y':
-            capMesh.rotation.x = -Math.PI / 2;
-            break;
-        case 'z':
-        default:
-            // No rotation needed for Z
-            break;
-    }
-    
     capMesh.userData = {
         isCappingMesh: true,
         classValue: classValue,
@@ -682,29 +564,138 @@ function createSliceCap(classValue, sliceIndex, sliceCount, sliceDirection, shap
     return capMesh;
 }
 
-// Global array to track capping meshes for cleanup
-let cappingMeshes = [];
+/**
+ * Extract boundary faces at a specific slice position
+ * @param {Uint8Array} volume - Volume data
+ * @param {Array} shape - [depth, height, width]
+ * @param {number} classValue - Class to extract
+ * @param {number} slicePosition - Position of the slice  
+ * @param {string} sliceDirection - 'x', 'y', or 'z'
+ * @param {string} side - 'front' or 'back'
+ * @param {Array} vertices - Array to add vertices to
+ * @param {Array} normals - Array to add normals to  
+ */
+function extractBoundaryFacesAtSlice(volume, shape, classValue, slicePosition, sliceDirection, side, vertices, normals) {
+    const targetClassValue = parseInt(classValue);
+    
+    const [depth, height, width] = shape;
+    
+    // Determine the face direction based on slice direction and side
+    let faceDirection;
+    switch(sliceDirection) {
+        case 'x':
+            faceDirection = side === 'front' ? 'left' : 'right';
+            break;
+        case 'y':
+            faceDirection = side === 'front' ? 'bottom' : 'top';
+            break;
+        case 'z':
+        default:
+            faceDirection = side === 'front' ? 'back' : 'front';
+            break;
+    }
+    
+    // Iterate through the 2D slice
+    switch(sliceDirection) {
+        case 'x':
+            // YZ plane at X = slicePosition
+            for (let z = 0; z < depth; z++) {
+                for (let y = 0; y < height; y++) {
+                    const currentValue = getVoxelValue(volume, slicePosition, y, z, width, height, depth);
+                    if (currentValue === targetClassValue) {
+                        // Add face for this voxel
+                        const faceObj = { name: faceDirection };
+                        addQuadFace(vertices, normals, slicePosition, y, z, faceObj);
+                    }
+                }
+            }
+            break;
+        case 'y':
+            // XZ plane at Y = slicePosition  
+            for (let z = 0; z < depth; z++) {
+                for (let x = 0; x < width; x++) {
+                    const currentValue = getVoxelValue(volume, x, slicePosition, z, width, height, depth);
+                    if (currentValue === targetClassValue) {
+                        const faceObj = { name: faceDirection };
+                        addQuadFace(vertices, normals, x, slicePosition, z, faceObj);
+                    }
+                }
+            }
+            break;
+        case 'z':
+        default:
+            // XY plane at Z = slicePosition
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const currentValue = getVoxelValue(volume, x, y, slicePosition, width, height, depth);
+                    if (currentValue === targetClassValue) {
+                        const faceObj = { name: faceDirection };
+                        addQuadFace(vertices, normals, x, y, slicePosition, faceObj);
+                    }
+                }
+            }
+            break;
+    }
+}
+
+
+// Replace the global cappingMeshes array with per-class tracking
+let classCappingMeshes = {}; // { classValue: { front: mesh, back: mesh } }
 
 /**
- * Track a capping mesh for cleanup
+ * Track a capping mesh for a specific class
  */
-function addCappingMesh(mesh) {
-    cappingMeshes.push(mesh);
+function trackCappingMesh(classValue, mesh, side) {
+    if (!classCappingMeshes[classValue]) {
+        classCappingMeshes[classValue] = {};
+    }
+    classCappingMeshes[classValue][side] = mesh;
 }
 
 /**
- * Remove all existing capping meshes
+ * Remove capping meshes for a specific class
  */
-export function removeCappingMeshes() {
+export function removeCappingMeshesForClass(classValue) {
     const state = getGlobalState();
     
-    cappingMeshes.forEach(mesh => {
-        if (state.meshGroup && mesh.parent === state.meshGroup) {
-            state.meshGroup.remove(mesh);
-        }
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) mesh.material.dispose();
+    if (classCappingMeshes[classValue]) {
+        Object.values(classCappingMeshes[classValue]).forEach(mesh => {
+            if (mesh && state.meshGroup && mesh.parent === state.meshGroup) {
+                state.meshGroup.remove(mesh);
+            }
+            if (mesh && mesh.geometry) mesh.geometry.dispose();
+            if (mesh && mesh.material) mesh.material.dispose();
+        });
+        classCappingMeshes[classValue] = {};
+    }
+}
+
+/**
+ * Remove all capping meshes
+ */
+export function removeAllCappingMeshes() {
+    Object.keys(classCappingMeshes).forEach(classValue => {
+        removeCappingMeshesForClass(classValue);
     });
+}
+
+/**
+ * Extract dense volume data from sparse segmentation data if needed
+ * @param {Object} segmentationData - The segmentation data
+ * @returns {Uint8Array} - Dense volume array
+ */
+function extractVolumeFromSparseData(segmentationData) {
+    const { data, shape } = segmentationData;
+    const [depth, height, width] = shape;
+    const volume = new Uint8Array(depth * height * width);
     
-    cappingMeshes = [];
+    // Convert sparse to dense if needed
+    if (data && Array.isArray(data)) {
+        data.forEach(voxel => {
+            const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
+            volume[index] = voxel.value;
+        });
+    }
+    
+    return volume;
 }

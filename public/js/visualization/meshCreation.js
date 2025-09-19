@@ -362,7 +362,7 @@ export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceD
  * @param {Array} color - RGB color array
  * @returns {THREE.Mesh} - The slice mesh
  */
-function createSingleSlice(volume, shape, classValue, sliceIndex, sliceCount, sliceDirection, scaleFactor, color) {
+function createSingleSlice(volume, shape, classValue, sliceIndex, sliceCount, sliceDirection, scaleFactor, color, generateBoundaryFaces = false) {
     const [depth, height, width] = shape;
     const classVertices = [];
     const classNormals = [];
@@ -419,7 +419,8 @@ function createSingleSlice(volume, shape, classValue, sliceIndex, sliceCount, sl
                         width, height, depth);
                     
                     // If neighbor is different, this face is on the surface
-                    if (neighborValue !== classValue) {
+                    if (neighborValue !== classValue || 
+                        (generateBoundaryFaces && isAtSliceBoundary(x, y, z, face, sliceStart, sliceEnd, sliceDirection))) {
                         addQuadFace(classVertices, classNormals, x, y, z, face);
                     }
                 });
@@ -457,4 +458,37 @@ function createSingleSlice(volume, shape, classValue, sliceIndex, sliceCount, sl
     const sliceMesh = new THREE.Mesh(geometry, material);
     
     return sliceMesh;
+}
+
+/**
+ * Check if a voxel face is at a slice boundary and should generate a cap surface
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate  
+ * @param {number} z - Z coordinate
+ * @param {Object} face - Face object with direction info
+ * @param {number} sliceStart - Start of current slice
+ * @param {number} sliceEnd - End of current slice
+ * @param {string} sliceDirection - 'x', 'y', or 'z'
+ * @returns {boolean} - True if this face is at a slice boundary
+ */
+function isAtSliceBoundary(x, y, z, face, sliceStart, sliceEnd, sliceDirection) {
+    switch(sliceDirection) {
+        case 'x':
+            // Check if we're at the left or right boundary of the slice
+            if (face.name === 'left' && x === sliceStart) return true;
+            if (face.name === 'right' && x === sliceEnd - 1) return true;
+            break;
+        case 'y':
+            // Check if we're at the bottom or top boundary of the slice  
+            if (face.name === 'bottom' && y === sliceStart) return true;
+            if (face.name === 'top' && y === sliceEnd - 1) return true;
+            break;
+        case 'z':
+        default:
+            // Check if we're at the back or front boundary of the slice
+            if (face.name === 'back' && z === sliceStart) return true;
+            if (face.name === 'front' && z === sliceEnd - 1) return true;
+            break;
+    }
+    return false;
 }
