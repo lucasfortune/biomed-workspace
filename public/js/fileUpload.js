@@ -120,6 +120,30 @@ async function validateTiffStacks() {
 
 function showValidationSuccess(validation) {
     const validationDiv = document.getElementById('validationResult');
+    
+    let previewHtml = '';
+    if (validation.preview) {
+        previewHtml = `
+            <div class="preview-section">
+                <h4>📸 Data Preview (First Slice)</h4>
+                <div class="preview-images">
+                    <div class="preview-item">
+                        <label>Raw Image</label>
+                        <img src="data:image/png;base64,${validation.preview.raw_preview}" 
+                             alt="Raw image preview" 
+                             style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                    </div>
+                    <div class="preview-item">
+                        <label>Annotation</label>
+                        <img src="data:image/png;base64,${validation.preview.annotation_preview}" 
+                             alt="Annotation preview"
+                             style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
     validationDiv.innerHTML = `
         <div class="validation-info">
             <h3>✅ Validation Successful</h3>
@@ -129,6 +153,7 @@ function showValidationSuccess(validation) {
             <p><strong>Raw Images Size:</strong> ${validation.info.raw_size_mb} MB</p>
             <p><strong>Annotations Size:</strong> ${validation.info.annotation_size_mb} MB</p>
             <p><strong>Annotation Classes:</strong> ${validation.info.annotation_stats.unique_values.join(', ')}</p>
+            ${previewHtml}
         </div>
     `;
 }

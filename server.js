@@ -191,6 +191,7 @@ app.post('/upload-data', upload.fields([
         
         // Validate TIFF stacks (same logic for both test data and uploads)
         const validationResult = await validateTiffStacks(rawFile.path, annotationFile.path);
+
         
         if (!validationResult.valid) {
             return res.status(400).json({

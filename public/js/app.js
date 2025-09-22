@@ -65,6 +65,7 @@ async function loadTestDataset() {
         });
         
         const trainingResult = await trainingResponse.json();
+
         
         if (!trainingResponse.ok) {
             throw new Error(trainingResult.error || 'Failed to load training data');
@@ -122,6 +123,29 @@ async function loadTestDataset() {
         
         // Update the validation result with success message
         if (validationResult) {
+            let previewHtml = '';
+            if (trainingResult.validation && trainingResult.validation.preview) {
+                previewHtml = `
+                    <div class="preview-section">
+                        <h4>Training Data Preview (First Slice)</h4>
+                        <div class="preview-images">
+                            <div class="preview-item">
+                                <label>Raw Image</label>
+                                <img src="data:image/png;base64,${trainingResult.validation.preview.raw_preview}" 
+                                    alt="Raw image preview"
+                                    style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                            </div>
+                            <div class="preview-item">
+                                <label>Annotation</label>
+                                <img src="data:image/png;base64,${trainingResult.validation.preview.annotation_preview}" 
+                                    alt="Annotation preview"
+                                    style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
             validationResult.innerHTML = `
                 <div class="test-data-loaded">
                     <h3>✓ Test Dataset Loaded Successfully!</h3>
@@ -131,6 +155,7 @@ async function loadTestDataset() {
                         <li>Inference Data: trypB_testData_inference.tif ${inferenceResult && inferenceResult.validation ? '(Validated ✓)' : ''}</li>
                     </ul>
                     <p><em>You can now proceed through the workflow using this sample data.</em></p>
+                    ${previewHtml}
                 </div>
             `;
         }

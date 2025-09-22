@@ -9,6 +9,9 @@ import json
 import tifffile
 import numpy as np
 from pathlib import Path
+import base64
+import io
+from PIL import Image
 
 def validate_tiff_stacks(raw_path, annotation_path):
     """
@@ -92,7 +95,10 @@ def validate_tiff_stacks(raw_path, annotation_path):
             }
         }
         
-        return {
+        # Generate preview images
+        preview_data = generate_training_preview(raw_path, annotation_path)
+
+        result = {
             "valid": True,
             "info": {
                 "shape": raw_stack.shape,
@@ -106,12 +112,70 @@ def validate_tiff_stacks(raw_path, annotation_path):
                 "annotation_stats": annotation_stats
             }
         }
+
+        # Add preview data if generation was successful
+        if preview_data:
+            result["preview"] = preview_data
+
+        return result
         
     except Exception as e:
         return {
             "valid": False,
             "error": f"Unexpected error during validation: {str(e)}"
         }
+    
+def create_downsampled_preview(image_slice, is_annotation=False, target_size=(256, 256)):
+    """Create downsampled preview with appropriate resampling method"""
+    # Normalize the image data for display
+    if is_annotation:
+        # For annotations, preserve exact values
+        display_image = image_slice.astype(np.uint8)
+        # Scale annotation values for better visibility (0=black, 1=gray, 2=white)
+        display_image = (display_image * 127).astype(np.uint8)
+        resample_method = Image.NEAREST
+    else:
+        # For raw images, normalize to 0-255 range
+        image_min, image_max = image_slice.min(), image_slice.max()
+        if image_max > image_min:
+            display_image = ((image_slice - image_min) / (image_max - image_min) * 255).astype(np.uint8)
+        else:
+            display_image = np.zeros_like(image_slice, dtype=np.uint8)
+        resample_method = Image.LANCZOS
+    
+    # Create PIL image and resize
+    pil_image = Image.fromarray(display_image)
+    downsampled = pil_image.resize(target_size, resample_method)
+    
+    # Convert to base64 PNG
+    buffer = io.BytesIO()
+    downsampled.save(buffer, format='PNG', optimize=True)
+    base64_string = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    return base64_string
+
+def generate_training_preview(raw_path, annotation_path):
+    """Generate preview images for training data"""
+    try:
+        # Read first slice from each stack
+        raw_stack = tifffile.imread(raw_path)
+        annotation_stack = tifffile.imread(annotation_path)
+        
+        raw_slice = raw_stack[0]  # First slice
+        annotation_slice = annotation_stack[0]  # First slice
+        
+        # Generate previews
+        raw_preview = create_downsampled_preview(raw_slice, is_annotation=False)
+        ann_preview = create_downsampled_preview(annotation_slice, is_annotation=True)
+        
+        return {
+            'raw_preview': raw_preview,
+            'annotation_preview': ann_preview
+        }
+        
+    except Exception as e:
+        print(f"Preview generation failed: {str(e)}", flush=True)
+        return None
 
 def main():
     if len(sys.argv) != 3:
