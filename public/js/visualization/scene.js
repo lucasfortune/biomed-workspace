@@ -10,7 +10,6 @@ export let scene, camera, renderer;
  * @returns {Object} - Returns the initialized scene components
  */
 export function initializeScene(container) {
-    console.log('Setting up Three.js scene with enhanced lighting...');
     
     // Initialize Three.js scene with better settings
     scene = new THREE.Scene();
@@ -42,8 +41,6 @@ export function initializeScene(container) {
     camera.position.set(3, 2, 5);
     camera.lookAt(0, 0, 0);
     
-    console.log('Three.js scene initialization complete');
-    
     return { scene, camera, renderer };
 }
 
@@ -51,7 +48,6 @@ export function initializeScene(container) {
  * Setup enhanced lighting system for better 3D visualization
  */
 function setupEnhancedLighting() {
-    console.log('Setting up enhanced lighting system...');
 
     // 1. BRIGHTER AMBIENT LIGHT - This provides the base illumination
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Increased from 0.4 to 0.6, pure white
@@ -93,8 +89,6 @@ function setupEnhancedLighting() {
         0.4        // Intensity
     );
     scene.add(hemisphereLight);
-
-    console.log('Enhanced lighting system setup complete');
 }
 
 /**
@@ -111,7 +105,6 @@ export function startRenderLoop() {
     }
     
     animate();
-    console.log('Render loop started');
 }
 
 /**
@@ -126,13 +119,8 @@ export function positionCameraForMesh(meshGroup) {
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     
-    console.log('Group bounding box:');
-    console.log('  Center:', center.x.toFixed(3), center.y.toFixed(3), center.z.toFixed(3));
-    console.log('  Size:', size.x.toFixed(3), size.y.toFixed(3), size.z.toFixed(3));
-    
     // Calculate optimal camera distance
     const maxDim = Math.max(size.x, size.y, size.z);
-    console.log('Max dimension for camera positioning:', maxDim.toFixed(3));
     
     // Position camera at a reasonable distance (for small scaled meshes)
     let distance;
@@ -149,8 +137,6 @@ export function positionCameraForMesh(meshGroup) {
     // Ensure minimum distance
     distance = Math.max(distance, 5);
     
-    console.log(`Calculated camera distance: ${distance.toFixed(3)}`);
-    
     // Position camera in a nice viewing angle
     const cameraX = distance * 0.7;  // 70% to the right
     const cameraY = distance * 0.5;  // 50% up
@@ -159,16 +145,10 @@ export function positionCameraForMesh(meshGroup) {
     camera.position.set(cameraX, cameraY, cameraZ);
     camera.lookAt(center);
     
-    console.log('Camera positioned at:', camera.position.x.toFixed(3), camera.position.y.toFixed(3), camera.position.z.toFixed(3));
-    console.log('Camera looking at:', center.x.toFixed(3), center.y.toFixed(3), center.z.toFixed(3));
-    console.log('Actual camera distance:', camera.position.distanceTo(center).toFixed(3));
-    
     // Adjust camera near/far planes for the mesh size
     camera.near = distance * 0.01;  // Very close
     camera.far = distance * 10;     // Far enough
     camera.updateProjectionMatrix();
-    
-    console.log(`Camera near/far planes: ${camera.near.toFixed(3)} / ${camera.far.toFixed(3)}`);
 }
 
 /**
@@ -183,6 +163,4 @@ export function handleResize() {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
-    
-    console.log('Scene resized to:', container.clientWidth, 'x', container.clientHeight);
 }

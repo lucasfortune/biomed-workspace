@@ -12,7 +12,6 @@ import { getGlobalState } from './main.js';
  * @param {Object} classControlStates - Current class control states
  */
 export function setupEnhancedControls(renderer, meshGroup, classControlStates) {
-    console.log('Setting up enhanced mesh-centered controls');
     
     const canvas = renderer.domElement;
     let isDragging = false;
@@ -78,7 +77,6 @@ export function setupEnhancedControls(renderer, meshGroup, classControlStates) {
     
     // Set initial cursor style
     canvas.style.cursor = 'grab';
-    console.log('Enhanced mesh-centered controls setup complete');
 }
 
 /**
@@ -250,8 +248,6 @@ export function setupTouchControls(canvas, meshGroup, classControlStates) {
             lastTouchDistance = 0;
         }
     });
-    
-    console.log('Touch controls setup complete');
 }
 
 /**
@@ -288,7 +284,6 @@ export function preventContextMenu(canvas) {
 export function setupDoubleClickReset(canvas, resetViewFunction) {
     canvas.addEventListener('dblclick', (e) => {
         e.preventDefault();
-        console.log('Double-click detected - resetting view');
         resetViewFunction();
     });
 }

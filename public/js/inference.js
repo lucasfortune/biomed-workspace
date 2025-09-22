@@ -9,7 +9,6 @@ async function runInference() {
         return;
     }
 
-    console.log('Starting inference with training ID:', currentTrainingId);
     showLoading('Preparing inference...', 'Uploading data and starting segmentation.');
 
     const formData = new FormData();
@@ -27,8 +26,6 @@ async function runInference() {
             throw new Error(uploadResult.error);
         }
 
-        console.log('Inference data uploaded successfully, now starting inference...');
-
         // Start inference
         const inferenceResponse = await fetch('/run-inference', {
             method: 'POST',
@@ -42,15 +39,12 @@ async function runInference() {
         });
 
         const inferenceResult = await inferenceResponse.json();
-        console.log('Inference response:', inferenceResult);
 
         if (inferenceResult.success) {
             currentInferenceId = inferenceResult.inference_id;
-            console.log('Inference starting with ID:', currentInferenceId);
             
             // Join inference room immediately for progress updates
             socket.emit('join-inference', currentInferenceId);
-            console.log('Joined inference room:', currentInferenceId);
             
             // Update UI to show progress tracking
             updateInferenceLoadingUI();
@@ -74,7 +68,6 @@ async function runInference() {
 }
 
 function updateInferenceProgress(data) {
-    console.log('Updating inference progress with:', data);
     
     const { current_slice, total_slices, progress_percent } = data;
     
@@ -84,13 +77,10 @@ function updateInferenceProgress(data) {
         return;
     }
     
-    console.log(`Progress update: ${current_slice}/${total_slices} (${progress_percent}%)`);
-    
     // Update slice counters
     const currentSliceEl = document.getElementById('currentSlice');
     if (currentSliceEl) {
         currentSliceEl.textContent = current_slice;
-        console.log('Updated current slice to:', current_slice);
     } else {
         console.warn('currentSlice element not found');
     }
@@ -98,7 +88,6 @@ function updateInferenceProgress(data) {
     const totalSlicesEl = document.getElementById('totalSlices');
     if (totalSlicesEl) {
         totalSlicesEl.textContent = total_slices;
-        console.log('Updated total slices to:', total_slices);
     } else {
         console.warn('totalSlices element not found');
     }
@@ -108,7 +97,6 @@ function updateInferenceProgress(data) {
     if (progressBarEl) {
         const safeProgress = Math.min(100, Math.max(0, progress_percent));
         progressBarEl.style.width = safeProgress + '%';
-        console.log('Updated progress bar to:', safeProgress + '%');
     } else {
         console.warn('inferenceProgressBar element not found');
     }
@@ -116,7 +104,6 @@ function updateInferenceProgress(data) {
     const progressPercentEl = document.getElementById('inferenceProgressPercent');
     if (progressPercentEl) {
         progressPercentEl.textContent = Math.round(progress_percent) + '%';
-        console.log('Updated progress text to:', Math.round(progress_percent) + '%');
     } else {
         console.warn('inferenceProgressPercent element not found');
     }
@@ -126,7 +113,6 @@ function updateInferenceProgress(data) {
         console.log('Some progress elements not found, checking loading overlay...');
         const loadingOverlay = document.getElementById('loadingOverlay');
         if (loadingOverlay && loadingOverlay.style.display !== 'none') {
-            console.log('Loading overlay is visible, recreating progress UI...');
             updateInferenceLoadingUI();
             // Retry updating with the new elements
             setTimeout(() => updateInferenceProgress(data), 100);
@@ -137,8 +123,6 @@ function updateInferenceProgress(data) {
 }
 
 function onInferenceComplete(data) {
-    console.log('=== INFERENCE COMPLETE DEBUG ===');
-    console.log('Raw inference data received:', data);
     
     hideLoading();
     
@@ -147,7 +131,6 @@ function onInferenceComplete(data) {
         
         // Store inference result for 3D visualization with detailed logging
         if (data.result) {
-            console.log('Storing inference result from data.result:', data.result);
             window.inferenceResult = data.result;
         } else {
             console.log('No data.result found, creating fallback result');
@@ -160,15 +143,10 @@ function onInferenceComplete(data) {
             };
         }
         
-        console.log('Final stored window.inferenceResult:', window.inferenceResult);
-        console.log('Visualization path will be:', window.inferenceResult.visualization_path);
-        
         showSuccess('Inference completed successfully! Your segmentation is ready.');
     } else {
-        console.log('Inference failed:', data.error || 'Unknown error');
         showError('Inference failed: ' + (data.error || 'Unknown error'));
     }
-    console.log('=== END INFERENCE DEBUG ===');
 }
 
 function showSuccess(message) {

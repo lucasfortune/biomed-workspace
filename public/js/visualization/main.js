@@ -26,8 +26,6 @@ export let classControlStates = {};
  * This is the entry point that coordinates all other modules
  */
 export async function initialize3DVisualization() {
-    console.log('=== ENHANCED 3D VISUALIZATION INIT ===');
-    
     const container = document.getElementById('threejsContainer');
     if (!container) {
         console.error('3D container not found!');
@@ -43,15 +41,9 @@ export async function initialize3DVisualization() {
         
         // Try to load segmentation data
         if (window.inferenceResult && window.inferenceResult.visualization_path) {
-            console.log('Loading segmentation data for surface mesh creation...');
-            console.log('Visualization path:', window.inferenceResult.visualization_path);
             
             // Load the segmentation data
             segmentationData = await loadSegmentationData(window.inferenceResult.visualization_path);
-            console.log('Segmentation data loaded successfully');
-            
-            // Create separate meshes for each class
-            console.log('Creating separate class meshes...');
             // Choose between original and slice-based system
             const useSliceBasedSystem = true; // Set to true to use new slice system
             let meshResult;
@@ -66,7 +58,6 @@ export async function initialize3DVisualization() {
             }
             
             if (meshResult && meshResult.meshGroup && meshResult.meshGroup.children.length > 0) {
-                console.log('Separate class meshes created successfully');
                 
                 // Update global variables from mesh creation result
                 meshGroup = meshResult.meshGroup;
@@ -85,9 +76,6 @@ export async function initialize3DVisualization() {
                     classMeshes = meshResult.classMeshes;
                     console.log('Using original mesh system');
                 }
-                
-                // Detailed debugging output
-                logMeshDebugInfo();
                 
                 // Position camera optimally for the mesh
                 positionCameraForMesh(meshGroup);
@@ -108,8 +96,6 @@ export async function initialize3DVisualization() {
         // Start render loop
         startRenderLoop();
         
-        console.log('=== 3D VISUALIZATION INITIALIZATION COMPLETE ===');
-        
     } catch (error) {
         console.error('3D visualization failed:', error);
         console.error('Error details:', error.message);
@@ -122,27 +108,6 @@ export async function initialize3DVisualization() {
         setupAllControls();
         startRenderLoop();
     }
-}
-
-/**
- * Log detailed mesh debug information
- */
-function logMeshDebugInfo() {
-    console.log('=== DETAILED MESH DEBUG ===');
-    console.log('Mesh group exists:', !!meshGroup);
-    console.log('Number of class meshes:', Object.keys(classMeshes).length);
-    console.log('Available classes:', availableClasses);
-    
-    // Debug each class mesh
-    Object.keys(classMeshes).forEach(classValue => {
-        const mesh = classMeshes[classValue];
-        console.log(`Class ${classValue}:`, {
-            vertices: mesh.geometry.attributes.position.count,
-            visible: mesh.visible,
-            material: mesh.material.type,
-            opacity: mesh.material.opacity
-        });
-    });
 }
 
 /**
@@ -188,7 +153,6 @@ function setupAllControls() {
  * Reset the entire visualization to default state
  */
 export function resetView() {
-    console.log('Resetting view to defaults');
     
     // Import the removeCappingMeshes function if not already imported
     // (Make sure this import is at the top of the file)
@@ -246,7 +210,6 @@ export function resetView() {
     
     // CRITICAL: Reset slice visibility to show ALL slices
     if (sliceMeshes && Object.keys(sliceMeshes).length > 0) {
-        console.log('Resetting slice visibility to show all slices');
         
         // Show all slices for all classes
         Object.keys(sliceMeshes).forEach(classValue => {
@@ -280,7 +243,6 @@ export function resetView() {
         
     } else if (classMeshes) {
         // Original mesh system fallback
-        console.log('Resetting original mesh system');
         Object.keys(classMeshes).forEach(classValue => {
             const classMesh = classMeshes[classValue];
             
@@ -317,8 +279,6 @@ export function resetView() {
     if (renderer && scene && camera) {
         renderer.render(scene, camera);
     }
-    
-    console.log('View reset complete - should show full model');
 }
 
 // Export global variables so other modules can access them
@@ -360,7 +320,6 @@ export function initializeClassSliceRanges(availableClasses) {
         const maxVal = rangeMax ? parseInt(rangeMax.value) : 100;
         
         state.classSliceRanges[classValue] = { min: minVal, max: maxVal };
-        console.log(`Initialized range for class ${classValue}: ${minVal}%-${maxVal}%`);
     });
 }
 

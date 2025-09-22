@@ -9,9 +9,7 @@ import { populateClassFilter, centerAndScaleGeometry, addQuadFace, getVoxelValue
  * @returns {Object} - The loaded segmentation data
  */
 export async function loadSegmentationData(visualizationPath) {
-    console.log('=== LOAD HIGH-RESOLUTION SEGMENTATION DATA ===');
-    console.log('Loading from path:', visualizationPath);
-    
+ 
     try {
         const response = await fetch(visualizationPath);
         
@@ -20,26 +18,6 @@ export async function loadSegmentationData(visualizationPath) {
         }
         
         const data = await response.json();
-        
-        // Enhanced logging for high-resolution data
-        console.log('High-resolution data loaded successfully:');
-        console.log('  Format version:', data.version || 'legacy');
-        console.log('  Final shape:', data.shape);
-        console.log('  Original shape:', data.original_shape);
-        console.log('  Downsample factor:', data.downsample_factor + 'x');
-        console.log('  Total voxels to render:', data.data.length.toLocaleString());
-        
-        if (data.statistics) {
-            console.log('  Data statistics:');
-            console.log('    Classes found:', data.statistics.classes);
-            console.log('    Class distribution:', data.statistics.class_counts);
-            console.log('    Data density:', (data.statistics.density * 100).toFixed(1) + '%');
-            console.log('    Original non-zero voxels:', data.statistics.original_non_zero_voxels.toLocaleString());
-        }
-        
-        // Estimate memory usage
-        const estimatedMemoryMB = (data.data.length * 24 * 4) / (1024 * 1024); // 24 vertices * 4 bytes per float
-        console.log('  Estimated GPU memory usage:', estimatedMemoryMB.toFixed(1) + ' MB');
         
         // Performance warning for very large datasets
         if (data.data.length > 500000) {
@@ -65,20 +43,16 @@ export async function loadSegmentationData(visualizationPath) {
  * @returns {Object} - Object containing meshes and related data
  */
 export function createSeparateClassMeshes(data, scene) {
-    console.log('=== CREATING SEPARATE CLASS MESHES WITH SCALING ===');
-    const startTime = performance.now();
     
     // Extract basic information
     const voxelData = data.data;
     const shape = data.shape;
     const [depth, height, width] = shape;
     
-    console.log(`Processing ${voxelData.length} voxels in ${depth}x${height}x${width} volume`);
     
     // Set class information
     const availableClasses = [...new Set(voxelData.map(v => v.value))].sort();
     const visibleClasses = [...availableClasses];
-    console.log('Available classes:', availableClasses);
     
     // Convert sparse voxel data to dense 3D volume
     const volume = new Uint8Array(depth * height * width);
@@ -105,12 +79,8 @@ export function createSeparateClassMeshes(data, scene) {
     const targetMaxSize = 8; // Target maximum dimension
     const scaleFactor = targetMaxSize / maxOriginalDim;
     
-    console.log(`Original dimensions: ${width}x${height}x${depth}`);
-    console.log(`Scale factor: ${scaleFactor.toFixed(4)} (target max size: ${targetMaxSize})`);
-    
     // Create separate mesh for each class
     availableClasses.forEach(classValue => {
-        console.log(`Creating mesh for class ${classValue}...`);
         
         const classVertices = [];
         const classNormals = [];
@@ -184,12 +154,6 @@ export function createSeparateClassMeshes(data, scene) {
             // Add to group
             meshGroup.add(classMesh);
             
-            console.log(`Class ${classValue}: ${vertices.length / 3} vertices created`);
-            
-            // Debug bounding box for this class
-            const bbox = geometry.boundingBox;
-            console.log(`  Class ${classValue} bounds: size(${(bbox.max.x - bbox.min.x).toFixed(2)}, ${(bbox.max.y - bbox.min.y).toFixed(2)}, ${(bbox.max.z - bbox.min.z).toFixed(2)})`);
-            
         } else {
             console.log(`Class ${classValue}: No vertices found`);
         }
@@ -197,18 +161,7 @@ export function createSeparateClassMeshes(data, scene) {
     
     // Add the group to the scene
     scene.add(meshGroup);
-    
-    const endTime = performance.now();
-    console.log(`Mesh creation completed in ${(endTime - startTime).toFixed(2)}ms`);
-    console.log(`Created ${Object.keys(classMeshes).length} separate class meshes`);
-    
-    // Calculate and log final group bounds
-    const groupBox = new THREE.Box3().setFromObject(meshGroup);
-    const groupSize = groupBox.getSize(new THREE.Vector3());
-    const groupCenter = groupBox.getCenter(new THREE.Vector3());
-    
-    console.log(`Final group center: (${groupCenter.x.toFixed(3)}, ${groupCenter.y.toFixed(3)}, ${groupCenter.z.toFixed(3)})`);
-    console.log(`Final group size: (${groupSize.x.toFixed(3)}, ${groupSize.y.toFixed(3)}, ${groupSize.z.toFixed(3)})`);
+
     
     // Populate class filter dropdown
     populateClassFilter(availableClasses);
@@ -230,21 +183,15 @@ export function createSeparateClassMeshes(data, scene) {
  * @returns {Object} - Object containing slice meshes and metadata
  */
 export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceDirection = 'z') {
-    console.log('=== CREATING SLICE-BASED CLASS MESHES ===');
-    const startTime = performance.now();
     
     // Extract basic information
     const voxelData = data.data;
     const shape = data.shape;
     const [depth, height, width] = shape;
     
-    console.log(`Processing ${voxelData.length} voxels in ${depth}x${height}x${width} volume`);
-    console.log(`Creating ${sliceCount} slices in ${sliceDirection} direction`);
-    
     // Set class information
     const availableClasses = [...new Set(voxelData.map(v => v.value))].sort();
     const visibleClasses = [...availableClasses];
-    console.log('Available classes:', availableClasses);
     
     // Convert sparse voxel data to dense 3D volume
     const volume = new Uint8Array(depth * height * width);
@@ -267,8 +214,6 @@ export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceD
     const targetMaxSize = 8;
     const scaleFactor = targetMaxSize / maxOriginalDim;
     
-    console.log(`Scale factor: ${scaleFactor.toFixed(4)}`);
-    
     // Determine slice parameters based on direction
     let sliceDimension, sliceSize;
     switch(sliceDirection) {
@@ -284,16 +229,12 @@ export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceD
             break;
     }
     
-    sliceSize = Math.floor(sliceDimension / sliceCount);
-    console.log(`Each slice covers ${sliceSize} voxels in ${sliceDirection} direction`);
-    
     // Create slice-based mesh structure: sliceMeshes[classValue][sliceIndex] = mesh
     const sliceMeshes = {};
     const meshGroup = new THREE.Group();
     
     // Create slices for each class
     availableClasses.forEach(classValue => {
-        console.log(`Creating ${sliceCount} slices for class ${classValue}...`);
         sliceMeshes[classValue] = [];
         
         // Create each slice for this class
@@ -315,24 +256,11 @@ export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceD
             }
         }
         
-        console.log(`Created ${sliceMeshes[classValue].length} slices for class ${classValue}`);
     });
     
     // Add the group to the scene
     scene.add(meshGroup);
-    
-    const endTime = performance.now();
-    console.log(`Slice-based mesh creation completed in ${(endTime - startTime).toFixed(2)}ms`);
-    console.log(`Created ${Object.keys(sliceMeshes).length} classes with ${sliceCount} slices each`);
-    
-    // Calculate and log bounds
-    const groupBox = new THREE.Box3().setFromObject(meshGroup);
-    const groupSize = groupBox.getSize(new THREE.Vector3());
-    const groupCenter = groupBox.getCenter(new THREE.Vector3());
-    
-    console.log(`Final group center: (${groupCenter.x.toFixed(3)}, ${groupCenter.y.toFixed(3)}, ${groupCenter.z.toFixed(3)})`);
-    console.log(`Final group size: (${groupSize.x.toFixed(3)}, ${groupSize.y.toFixed(3)}, ${groupSize.z.toFixed(3)})`);
-    
+
     // Populate class filter dropdown
     populateClassFilter(availableClasses);
     

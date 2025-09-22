@@ -40,7 +40,6 @@ async function startTraining() {
 
         if (result.success) {
             currentTrainingId = result.training_id;
-            console.log('Training started with ID:', currentTrainingId);
             
             // Initialize training UI
             document.getElementById('totalEpochs').textContent = config.num_epochs;
@@ -48,7 +47,6 @@ async function startTraining() {
             document.getElementById('trainingStatusText').textContent = 'Training started... Preparing data...';
             
             socket.emit('join-training', currentTrainingId);
-            console.log('Joined training room:', currentTrainingId);
             
             // Start polling as backup
             startTrainingPolling();
@@ -75,7 +73,6 @@ function validateConfiguration(config) {
 }
 
 function updateTrainingProgress(data) {
-    console.log('Updating training progress with:', data);
     
     const { epoch, total_epochs, metrics } = data;
     
@@ -115,15 +112,11 @@ function updateTrainingProgress(data) {
 }
 
 function onTrainingComplete(data) {
-    console.log('Training completed with data:', data);
     
     if (data.success) {
         document.getElementById('trainingStatusText').textContent = 'Training completed successfully!';
         document.getElementById('trainingNextBtn').disabled = false;
         document.getElementById('trainingBackBtn').disabled = false;
-        
-        // Make sure we have the training ID for inference
-        console.log('Training completed successfully. Training ID:', currentTrainingId);
         
     } else {
         document.getElementById('trainingStatusText').textContent = 'Training failed!';
@@ -148,8 +141,6 @@ function startTrainingPolling() {
         try {
             const response = await fetch(`/training-status/${currentTrainingId}`);
             const status = await response.json();
-            
-            console.log('Polling training status:', status);
             
             // Update UI if we have progress data
             if (status.current_epoch && status.total_epochs && status.metrics) {

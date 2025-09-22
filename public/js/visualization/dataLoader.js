@@ -40,9 +40,7 @@ export function validateSegmentationData(data) {
     
     const isValid = errors.length === 0;
     
-    if (isValid) {
-        console.log('Segmentation data validation passed');
-    } else {
+    if (!isValid) {
         console.error('Segmentation data validation failed:', errors);
     }
     
@@ -87,8 +85,6 @@ export function extractDataStatistics(data) {
         classCounts,
         dataSize: JSON.stringify(data).length // Rough estimate of memory usage
     };
-    
-    console.log('Data statistics:', stats);
     return stats;
 }
 
@@ -98,7 +94,6 @@ export function extractDataStatistics(data) {
  * @returns {Object} - Preprocessed data
  */
 export function preprocessSegmentationData(data) {
-    console.log('Preprocessing segmentation data...');
     
     // Validate input
     const validation = validateSegmentationData(data);
@@ -124,8 +119,6 @@ export function preprocessSegmentationData(data) {
         preprocessed: true,
         preprocessedAt: new Date().toISOString()
     };
-    
-    console.log('Segmentation data preprocessing complete');
     return preprocessedData;
 }
 
@@ -136,7 +129,6 @@ export function preprocessSegmentationData(data) {
  * @returns {Promise<Object>} - Promise resolving to the loaded data
  */
 export async function loadDataWithProgress(url, progressCallback = null) {
-    console.log('Loading data with progress tracking from:', url);
     
     try {
         const response = await fetch(url);
@@ -224,13 +216,11 @@ class DataCache {
         });
         this.currentSize += dataSize;
         
-        console.log(`Cached data for key: ${key} (${dataSize} bytes, total: ${this.currentSize} bytes)`);
     }
     
     get(key) {
         const entry = this.cache.get(key);
         if (entry) {
-            console.log(`Retrieved cached data for key: ${key}`);
             return entry.data;
         }
         return null;
@@ -241,14 +231,12 @@ class DataCache {
         if (entry) {
             this.cache.delete(key);
             this.currentSize -= entry.size;
-            console.log(`Deleted cached data for key: ${key}`);
         }
     }
     
     clear() {
         this.cache.clear();
         this.currentSize = 0;
-        console.log('Cleared data cache');
     }
     
     estimateSize(data) {
@@ -270,12 +258,10 @@ export async function loadDataWithCache(url, useCache = true) {
     if (useCache) {
         const cachedData = dataCache.get(url);
         if (cachedData) {
-            console.log('Using cached data for:', url);
             return cachedData;
         }
     }
     
-    console.log('Loading fresh data from:', url);
     const response = await fetch(url);
     
     if (!response.ok) {

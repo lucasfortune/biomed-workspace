@@ -6,7 +6,7 @@ function initializeSocketConnection() {
     });
     
     socket.on('training-progress', function(data) {
-        console.log('Received training progress:', data);
+        //console.log('Received training progress:', data);
         updateTrainingProgress(data);
     });
     
@@ -20,7 +20,7 @@ function initializeSocketConnection() {
     });
     
     socket.on('inference-progress', function(data) {
-        console.log('Received inference progress:', data);
+        //console.log('Received inference progress:', data);
         updateInferenceProgress(data);
     });
     

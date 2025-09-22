@@ -46,8 +46,6 @@ export function populateClassFilter(availableClasses) {
         option.textContent = `Class ${classValue}`;
         classFilter.appendChild(option);
     });
-    
-    console.log('Class filter populated with', availableClasses.length, 'classes');
 }
 
 /**
@@ -75,8 +73,6 @@ export function createFallbackMesh(scene) {
     const classMeshes = { 1: placeholderMesh };
     const meshGroup = new THREE.Group();
     meshGroup.add(placeholderMesh);
-    
-    console.log('Placeholder mesh created');
     
     return {
         availableClasses,
@@ -113,8 +109,6 @@ export function createErrorFallbackMesh(scene) {
     const meshGroup = new THREE.Group();
     meshGroup.add(errorMesh);
     
-    console.log('Error fallback mesh created');
-    
     return {
         availableClasses,
         visibleClasses,
@@ -133,8 +127,6 @@ export function createErrorFallbackMesh(scene) {
 export function centerAndScaleGeometry(vertices, shape, scaleFactor) {
     const [depth, height, width] = shape;
     
-    console.log(`Centering and scaling geometry with factor ${scaleFactor.toFixed(4)}`);
-    
     // Calculate center offset (before scaling)
     const centerX = width / 2;
     const centerY = height / 2;
@@ -147,8 +139,6 @@ export function centerAndScaleGeometry(vertices, shape, scaleFactor) {
         vertices[i + 1] = (vertices[i + 1] - centerY) * scaleFactor; // Y
         vertices[i + 2] = (vertices[i + 2] - centerZ) * scaleFactor; // Z
     }
-    
-    console.log(`Geometry centered at origin and scaled by ${scaleFactor.toFixed(4)}`);
 }
 
 /**

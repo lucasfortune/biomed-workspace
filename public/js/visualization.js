@@ -16,5 +16,3 @@ window.getVisualizationState = getGlobalState;
 // Import debug functions if needed for console testing
 import * as debugModule from './visualization/debug.js';
 window.debugVisualization = debugModule;
-
-console.log('Visualization modules loaded successfully');

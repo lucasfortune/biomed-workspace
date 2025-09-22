@@ -239,7 +239,6 @@ export function createDualRangeSlider(classValue) {
  * @param {boolean} visible - Whether the class should be visible
  */
 export function handleClassVisibilityChange(classValue, visible) {
-    console.log(`Toggling class ${classValue} visibility: ${visible}`);
     
     const state = getGlobalState();
     
@@ -253,14 +252,11 @@ export function handleClassVisibilityChange(classValue, visible) {
     
     // Handle both slice-based and original mesh systems
     if (state.sliceMeshes && state.sliceMeshes[classValue]) {
-        // NEW: Slice-based system
-        console.log(`Updating slice visibility for class ${classValue}`);
         
         if (visible) {
             // When making visible, reapply the stored range
             const storedRange = state.classSliceRanges && state.classSliceRanges[classValue];
             if (storedRange) {
-                console.log(`Reapplying stored range for class ${classValue}:`, storedRange);
                 // Reapply the range that was set before
                 applyRangeToSingleClass(classValue, storedRange.min, storedRange.max);
             } else {
@@ -270,7 +266,6 @@ export function handleClassVisibilityChange(classValue, visible) {
                 if (rangeMin && rangeMax) {
                     const minVal = parseInt(rangeMin.value);
                     const maxVal = parseInt(rangeMax.value);
-                    console.log(`Applying current UI range for class ${classValue}: ${minVal}%-${maxVal}%`);
                     applyRangeToSingleClass(classValue, minVal, maxVal);
                 }
             }
@@ -286,7 +281,6 @@ export function handleClassVisibilityChange(classValue, visible) {
         }
     } else if (state.classMeshes && state.classMeshes[classValue]) {
         // Original system
-        console.log(`Updating visibility for class ${classValue}`);
         state.classMeshes[classValue].visible = visible;
     }
     
@@ -303,7 +297,6 @@ export function handleClassVisibilityChange(classValue, visible) {
  */
 export function handleClassOpacityChange(classValue, opacityPercent) {
     const opacity = opacityPercent / 100;
-    console.log(`Class ${classValue} opacity changed to: ${opacity}`);
     
     const state = getGlobalState();
     
@@ -315,7 +308,6 @@ export function handleClassOpacityChange(classValue, opacityPercent) {
     // Handle both slice-based and original mesh systems
     if (state.sliceMeshes && state.sliceMeshes[classValue]) {
         // NEW: Slice-based system - apply opacity to all slices of this class
-        console.log(`Updating opacity for all slices of class ${classValue}`);
         
         state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
             if (mesh && mesh.material) {
@@ -326,7 +318,6 @@ export function handleClassOpacityChange(classValue, opacityPercent) {
         });
     } else if (state.classMeshes && state.classMeshes[classValue]) {
         // Original system
-        console.log(`Updating opacity for class ${classValue} mesh`);
         const classMesh = state.classMeshes[classValue];
         if (classMesh.material) {
             classMesh.material.opacity = opacity;
@@ -370,8 +361,6 @@ export function handleClassRangeChange(classValue) {
     // Update display
     rangeValue.textContent = `${minVal}% - ${maxVal}%`;
     
-    console.log(`Class ${classValue} range changed to: ${minVal}% - ${maxVal}%`);
-    
     // Apply range filtering to this specific class
     applyRangeToSingleClass(classValue, minVal, maxVal);
 }
@@ -388,8 +377,6 @@ export function handleOpacityChange(e) {
         opacityValue.textContent = e.target.value + '%';
     }
     
-    console.log('Opacity changed to:', opacity);
-    
     const state = getGlobalState();
     
     // Apply opacity to all visible class meshes
@@ -403,8 +390,6 @@ export function handleOpacityChange(e) {
                 classMesh.userData.originalOpacity = opacity;
             }
         });
-        
-        console.log('Applied opacity to all visible class meshes');
         
         // Force re-render
         if (state.renderer && state.scene && state.camera) {
@@ -420,7 +405,6 @@ export function handleOpacityChange(e) {
  * @param {Event} e - The change event
  */
 export function handleClassFilterChange(e) {
-    console.log('Class filter changed to:', e.target.value);
     
     const state = getGlobalState();
     
@@ -444,9 +428,6 @@ export function handleClassFilterChange(e) {
     // Update global state
     updateGlobalState({ visibleClasses: state.visibleClasses });
     
-    console.log('Visible classes updated to:', state.visibleClasses);
-    console.log('Mesh visibility updated');
-    
     // Force re-render
     if (state.renderer && state.scene && state.camera) {
         state.renderer.render(state.scene, state.camera);
@@ -460,14 +441,12 @@ export function handleClassFilterChange(e) {
 export function handleSliceDirectionChange(e) {
     const newDirection = e.target.value;
     setSliceDirection(newDirection);
-    console.log(`Slice direction changed via UI to: ${newDirection}`);
 }
 
 /**
  * Handle slice range slider changes (legacy compatibility)
  */
 export function handleSliceRangeChange() {
-    console.log('=== handleSliceRangeChange CALLED ===');
     
     const sliceRangeMin = document.getElementById('sliceRangeMin');
     const sliceRangeMax = document.getElementById('sliceRangeMax');
@@ -481,8 +460,6 @@ export function handleSliceRangeChange() {
     const minVal = parseInt(sliceRangeMin.value);
     const maxVal = parseInt(sliceRangeMax.value);
     
-    console.log('Slice range change:', minVal, 'to', maxVal);
-    
     let currentSliceRange;
     if (minVal > maxVal) {
         sliceRangeMin.value = maxVal;
@@ -492,8 +469,6 @@ export function handleSliceRangeChange() {
     }
     
     sliceRangeValue.textContent = `${currentSliceRange[0]}% - ${currentSliceRange[1]}%`;
-    console.log('About to call applySliceRangeToMeshes with:', currentSliceRange);
-    
     // Apply slice-based filtering to meshes with current direction
     applySliceRangeToMeshes(currentSliceRange);
 }
@@ -529,6 +504,4 @@ export function resetSliceRange() {
     if (state.renderer) {
         state.renderer.localClippingEnabled = false;
     }
-    
-    console.log('Slice range reset to full view');
 }

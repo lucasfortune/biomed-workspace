@@ -15,7 +15,7 @@ export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
     
     // Check if we're using the new slice-based system
     if (state.sliceMeshes && state.sliceMeshes[classValue]) {
-        console.log(`Applying slice range to class ${classValue}: ${minPercent}% - ${maxPercent}%`);
+        //console.log(`Applying slice range to class ${classValue}: ${minPercent}% - ${maxPercent}%`);
         applySliceRangeToSingleClass(classValue, minPercent, maxPercent);
         return;
     }
@@ -31,7 +31,7 @@ export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
     // SAFETY FIX: Initialize clippingPlanes if it doesn't exist
     if (classMesh.material && !classMesh.material.clippingPlanes) {
         classMesh.material.clippingPlanes = [];
-        console.log(`Initialized clippingPlanes array for class ${classValue}`);
+        //console.log(`Initialized clippingPlanes array for class ${classValue}`);
     }
     
     // CRITICAL FIX: Calculate bounds directly from geometry vertices, not setFromObject()
@@ -63,11 +63,11 @@ export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
         center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 }
     };
     
-    console.log(`Class ${classValue} - Using ACTUAL vertex bounds:`, {
-        bounds: `X: ${minX.toFixed(3)} to ${maxX.toFixed(3)}, Y: ${minY.toFixed(3)} to ${maxY.toFixed(3)}, Z: ${minZ.toFixed(3)} to ${maxZ.toFixed(3)}`,
-        size: `(${actualBounds.size.x.toFixed(3)}, ${actualBounds.size.y.toFixed(3)}, ${actualBounds.size.z.toFixed(3)})`,
-        center: `(${actualBounds.center.x.toFixed(3)}, ${actualBounds.center.y.toFixed(3)}, ${actualBounds.center.z.toFixed(3)})`
-    });
+    //console.log(`Class ${classValue} - Using ACTUAL vertex bounds:`, {
+    //    bounds: `X: ${minX.toFixed(3)} to ${maxX.toFixed(3)}, Y: ${minY.toFixed(3)} to ${maxY.toFixed(3)}, Z: ${minZ.toFixed(3)} to ${maxZ.toFixed(3)}`,
+    //    size: `(${actualBounds.size.x.toFixed(3)}, ${actualBounds.size.y.toFixed(3)}, ${actualBounds.size.z.toFixed(3)})`,
+    //    center: `(${actualBounds.center.x.toFixed(3)}, ${actualBounds.center.y.toFixed(3)}, ${actualBounds.center.z.toFixed(3)})`
+    //});
     
     // Get the current slice direction
     const currentDir = state.sliceDirection || 'z';
@@ -94,8 +94,8 @@ export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
             break;
     }
     
-    console.log(`Applying range ${minPercent}%-${maxPercent}% to class ${classValue} in ${currentDir} direction`);
-    console.log(`Coordinate range: ${minCoord.toFixed(3)} to ${maxCoord.toFixed(3)}`);
+    //console.log(`Applying range ${minPercent}%-${maxPercent}% to class ${classValue} in ${currentDir} direction`);
+    //console.log(`Coordinate range: ${minCoord.toFixed(3)} to ${maxCoord.toFixed(3)}`);
     
     // Create clipping planes
     let clippingPlanes = [];
@@ -136,7 +136,7 @@ export function applyRangeToSingleClass(classValue, minPercent, maxPercent) {
         state.renderer.render(state.scene, state.camera);
     }
     
-    console.log(`Applied ${clippingPlanes.length} clipping planes to class ${classValue}`);
+    //console.log(`Applied ${clippingPlanes.length} clipping planes to class ${classValue}`);
 }
 
 /**
@@ -156,18 +156,13 @@ export function applySliceRangeToSingleClass(classValue, minPercent, maxPercent)
     // Check if this class should be visible
     const isClassVisible = state.visibleClasses.includes(parseInt(classValue)) || state.visibleClasses.includes(classValue.toString());
     
-    if (!isClassVisible) {
-        console.log(`Class ${classValue} is not visible, skipping range application`);
-        return;
-    }
-    
     const sliceCount = state.sliceMetadata.sliceCount;
     
     // Convert percentages to slice indices
     const minSlice = Math.floor(minPercent / 100 * sliceCount);
     const maxSlice = Math.ceil(maxPercent / 100 * sliceCount) - 1;
     
-    console.log(`Class ${classValue} - showing slices ${minSlice} to ${maxSlice} (${minPercent}% - ${maxPercent}%)`);
+    //console.log(`Class ${classValue} - showing slices ${minSlice} to ${maxSlice} (${minPercent}% - ${maxPercent}%)`);
     
     // Update visibility for this class only
     state.sliceMeshes[classValue].forEach((mesh, sliceIndex) => {
@@ -259,33 +254,8 @@ export function setSliceDirection(direction) {
  * @param {Array} currentSliceRange - Array with [min, max] percentages
  */
 export function applySliceRangeToMeshes(currentSliceRange = [0, 100]) {
-    console.log('=== applySliceRangeToMeshes CALLED ===');
-    console.log('currentSliceRange:', currentSliceRange);
     
     const state = getGlobalState();
-    console.log('=== STATE DEBUG ===');
-    console.log('state exists:', !!state);
-    console.log('state.sliceMeshes exists:', !!state.sliceMeshes);
-    
-    if (state.sliceMeshes) {
-        console.log('sliceMeshes keys:', Object.keys(state.sliceMeshes));
-        console.log('sliceMeshes length:', Object.keys(state.sliceMeshes).length);
-        
-        // Debug the actual content of sliceMeshes
-        Object.keys(state.sliceMeshes).forEach(classValue => {
-            console.log(`Class ${classValue} has ${state.sliceMeshes[classValue].length} slices`);
-        });
-    }
-    
-    // Check if we're using the new slice-based system
-    if (state.sliceMeshes && Object.keys(state.sliceMeshes).length > 0) {
-        console.log('=== TAKING SLICE PATH ===');
-        updateSliceVisibility(currentSliceRange);
-        return;
-    } else {
-        console.log('=== TAKING FALLBACK PATH ===');
-        console.log('Reason: sliceMeshes is', !state.sliceMeshes ? 'null/undefined' : 'empty');
-    }
     
     // Original clipping logic for backward compatibility
     const [depth, height, width] = state.segmentationData.shape;
@@ -363,8 +333,7 @@ export function applySliceRangeToMeshes(currentSliceRange = [0, 100]) {
  * @param {Array} sliceRange - [minPercent, maxPercent]
  */
 export function updateSliceVisibility(sliceRange) {
-    console.log('=== updateSliceVisibility CALLED ===');
-    console.log('sliceRange:', sliceRange);
+
     const state = getGlobalState();
     const [minPercent, maxPercent] = sliceRange;
     
@@ -379,8 +348,6 @@ export function updateSliceVisibility(sliceRange) {
     const minSlice = Math.floor(minPercent / 100 * sliceCount);
     const maxSlice = Math.ceil(maxPercent / 100 * sliceCount) - 1;
     
-    console.log(`Showing slices ${minSlice} to ${maxSlice} (${minPercent}% - ${maxPercent}%) with volume capping`);
-    
     // Update visibility for all classes
     Object.keys(state.sliceMeshes).forEach(classValue => {
         if (state.sliceMeshes[classValue]) {
@@ -388,12 +355,7 @@ export function updateSliceVisibility(sliceRange) {
                 if (mesh) {
                     const shouldBeVisible = (sliceIndex >= minSlice && sliceIndex <= maxSlice);
                     mesh.visible = shouldBeVisible;
-                    mesh.visible = shouldBeVisible && visible; // Add the visibility check
-            
-                    // Debug visibility changes
-                    if (wasVisible !== mesh.visible) {
-                        console.log(`Class ${classValue}, slice ${sliceIndex}: visibility ${wasVisible} -> ${mesh.visible}`);
-                    }
+                    mesh.visible = shouldBeVisible && visible;
                         }
             });
         }
@@ -429,7 +391,6 @@ export function updateAccurateCapping(classRanges) {
     }
     
     Object.keys(classRanges).forEach(classValue => {
-        console.log(`Removing caps for class ${classValue}`);
         removeCappingMeshesForClass(classValue);
     });
     
