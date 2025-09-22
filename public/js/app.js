@@ -127,19 +127,19 @@ async function loadTestDataset() {
             if (trainingResult.validation && trainingResult.validation.preview) {
                 previewHtml = `
                     <div class="preview-section">
-                        <h4>Training Data Preview (First Slice)</h4>
+                        <h4>📸 Training Data Preview (First Slice)</h4>
                         <div class="preview-images">
                             <div class="preview-item">
                                 <label>Raw Image</label>
                                 <img src="data:image/png;base64,${trainingResult.validation.preview.raw_preview}" 
                                     alt="Raw image preview"
-                                    style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                                    style="max-width: 180px; max-height: 180px; border: 1px solid #ddd;">
                             </div>
                             <div class="preview-item">
                                 <label>Annotation</label>
                                 <img src="data:image/png;base64,${trainingResult.validation.preview.annotation_preview}" 
                                     alt="Annotation preview"
-                                    style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                                    style="max-width: 180px; max-height: 180px; border: 1px solid #ddd;">
                             </div>
                         </div>
                     </div>
@@ -148,14 +148,18 @@ async function loadTestDataset() {
             
             validationResult.innerHTML = `
                 <div class="test-data-loaded">
-                    <h3>✓ Test Dataset Loaded Successfully!</h3>
-                    <ul>
-                        <li>Training Images: trypB_testData_training.tif ${trainingResult.validation ? '(Validated ✓)' : ''}</li>
-                        <li>Annotations: trypB_testData_annotations.tif ${trainingResult.validation ? '(Validated ✓)' : ''}</li>
-                        <li>Inference Data: trypB_testData_inference.tif ${inferenceResult && inferenceResult.validation ? '(Validated ✓)' : ''}</li>
-                    </ul>
-                    <p><em>You can now proceed through the workflow using this sample data.</em></p>
-                    ${previewHtml}
+                    <div class="success-with-preview">
+                        <div class="success-message-content">
+                            <h3>✓ Test Dataset Loaded Successfully!</h3>
+                            <ul>
+                                <li>Training Images: trypB_testData_training.tif ${trainingResult.validation ? '(Validated ✓)' : ''}</li>
+                                <li>Annotations: trypB_testData_annotations.tif ${trainingResult.validation ? '(Validated ✓)' : ''}</li>
+                                <li>Inference Data: trypB_testData_inference.tif ${inferenceResult && inferenceResult.validation ? '(Validated ✓)' : ''}</li>
+                            </ul>
+                            <p><em>You can now proceed through the workflow using this sample data.</em></p>
+                        </div>
+                        ${previewHtml ? `<div class="preview-container">${previewHtml}</div>` : ''}
+                    </div>
                 </div>
             `;
         }
@@ -171,8 +175,8 @@ async function loadTestDataset() {
         updateUploadSectionForTestData('annotationsUploadSection', '✓ Annotations Loaded', 'trypB_testData_annotations.tif');
         
         // Only update inference section if it loaded successfully
-        if (inferenceResult && inferenceResult.success) {
-            updateUploadSectionForTestData('inferenceUploadSection', '✓ Test Images Loaded', 'trypB_testData_inference.tif');
+        if (inferenceResult && inferenceResult.validation) {
+            updateInferenceUploadSectionForTestData(inferenceResult.validation);
         }
         
         console.log('Test dataset loaded successfully');
@@ -226,6 +230,49 @@ function updateUploadSectionForTestData(sectionId, message, filename) {
             </div>
         `;
         section.appendChild(messageEl);
+    }
+}
+
+function updateInferenceUploadSectionForTestData(validation) {
+    const section = document.getElementById('inferenceUploadSection');
+    if (section) {
+        // Update visual styling
+        section.style.borderColor = '#4CAF50';
+        section.style.backgroundColor = '#f0f8f0';
+        
+        // Remove any existing content
+        const uploadText = section.querySelector('.upload-text');
+        
+        let previewHtml = '';
+        if (validation.preview) {
+            previewHtml = `
+                <div class="preview-container">
+                    <div class="preview-section">
+                        <h4>📸 Inference Data Preview (First Slice)</h4>
+                        <div class="preview-images single">
+                            <div class="preview-item centered">
+                                <label>Test Inference Data</label>
+                                <img src="data:image/png;base64,${validation.preview.inference_preview}" 
+                                     alt="Test inference data preview"
+                                     style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        uploadText.innerHTML = `
+            <div class="success-with-preview">
+                <div class="success-message-content">
+                    <h3>✅ Test Inference Data Loaded</h3>
+                    <p><strong>Stack Shape:</strong> ${validation.info.shape.join(' × ')}</p>
+                    <p><strong>Number of Slices:</strong> ${validation.info.num_slices}</p>
+                    <p><strong>File:</strong> trypB_testData_inference.tif</p>
+                </div>
+                ${previewHtml}
+            </div>
+        `;
     }
 }
 

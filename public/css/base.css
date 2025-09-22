@@ -154,3 +154,59 @@ body {
         max-width: 200px;
     }
 }
+
+/* Success message with preview layout */
+.success-with-preview {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.success-message-content {
+    flex: 1;
+    min-width: 0; /* Allows flex item to shrink below its content size */
+}
+
+.preview-container {
+    flex: 0 0 auto;
+    min-width: 280px; /* Ensure preview has enough space */
+}
+
+.preview-section {
+    margin-top: 0; /* Remove top margin since it's now side-by-side */
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+/* Mobile responsive - stack vertically */
+@media (max-width: 768px) {
+    .success-with-preview {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .preview-container {
+        min-width: 0;
+        width: 100%;
+    }
+    
+    .preview-section {
+        margin-top: 15px; /* Add back top margin for mobile stacking */
+    }
+}
+
+/* Ensure preview images work well in the new layout */
+.preview-images {
+    display: flex;
+    gap: 15px; /* Reduced gap for tighter layout */
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.preview-item {
+    text-align: center;
+    flex: 1;
+    max-width: 200px; /* Slightly smaller for side layout */
+}

@@ -64,10 +64,9 @@ async function handleFileUpload(file, type) {
         if (uploadedFiles.rawImages && uploadedFiles.annotations) {
             await validateTiffStacks();
         }
-    } else if (type === 'inferenceData') {
-        document.getElementById('runInferenceBtn').disabled = false;
-        updateUploadStatus(type, file.name);
-    }
+        } else if (type === 'inferenceData') {
+            await validateInferenceData(file);
+        }
 }
 
 function updateUploadStatus(type, filename) {
@@ -118,26 +117,56 @@ async function validateTiffStacks() {
     }
 }
 
+async function validateInferenceData(file) {
+    showLoading('Validating inference data...', 'Please wait while we check the file.');
+    
+    const formData = new FormData();
+    formData.append('inference_data', file);
+
+    try {
+        const response = await fetch('/upload-inference', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        hideLoading();
+
+        if (result.success) {
+            showInferenceValidationSuccess(result.validation);
+            document.getElementById('runInferenceBtn').disabled = false;
+        } else {
+            const errorMessage = result.details || result.error || 'Unknown validation error';
+            showError('Inference validation failed: ' + errorMessage);
+        }
+    } catch (error) {
+        hideLoading();
+        showError('Error during inference validation: ' + error.message);
+    }
+}
+
 function showValidationSuccess(validation) {
     const validationDiv = document.getElementById('validationResult');
     
     let previewHtml = '';
     if (validation.preview) {
         previewHtml = `
-            <div class="preview-section">
-                <h4>📸 Data Preview (First Slice)</h4>
-                <div class="preview-images">
-                    <div class="preview-item">
-                        <label>Raw Image</label>
-                        <img src="data:image/png;base64,${validation.preview.raw_preview}" 
-                             alt="Raw image preview" 
-                             style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
-                    </div>
-                    <div class="preview-item">
-                        <label>Annotation</label>
-                        <img src="data:image/png;base64,${validation.preview.annotation_preview}" 
-                             alt="Annotation preview"
-                             style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+            <div class="preview-container">
+                <div class="preview-section">
+                    <h4>📸 Data Preview (First Slice)</h4>
+                    <div class="preview-images">
+                        <div class="preview-item">
+                            <label>Raw Image</label>
+                            <img src="data:image/png;base64,${validation.preview.raw_preview}" 
+                                 alt="Raw image preview" 
+                                 style="max-width: 180px; max-height: 180px; border: 1px solid #ddd;">
+                        </div>
+                        <div class="preview-item">
+                            <label>Annotation</label>
+                            <img src="data:image/png;base64,${validation.preview.annotation_preview}" 
+                                 alt="Annotation preview"
+                                 style="max-width: 180px; max-height: 180px; border: 1px solid #ddd;">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -146,14 +175,18 @@ function showValidationSuccess(validation) {
     
     validationDiv.innerHTML = `
         <div class="validation-info">
-            <h3>✅ Validation Successful</h3>
-            <p><strong>Stack Shape:</strong> ${validation.info.shape.join(' × ')}</p>
-            <p><strong>Number of Slices:</strong> ${validation.info.num_slices}</p>
-            <p><strong>Slice Dimensions:</strong> ${validation.info.slice_dimensions.join(' × ')}</p>
-            <p><strong>Raw Images Size:</strong> ${validation.info.raw_size_mb} MB</p>
-            <p><strong>Annotations Size:</strong> ${validation.info.annotation_size_mb} MB</p>
-            <p><strong>Annotation Classes:</strong> ${validation.info.annotation_stats.unique_values.join(', ')}</p>
-            ${previewHtml}
+            <div class="success-with-preview">
+                <div class="success-message-content">
+                    <h3>✅ Validation Successful</h3>
+                    <p><strong>Stack Shape:</strong> ${validation.info.shape.join(' × ')}</p>
+                    <p><strong>Number of Slices:</strong> ${validation.info.num_slices}</p>
+                    <p><strong>Slice Dimensions:</strong> ${validation.info.slice_dimensions.join(' × ')}</p>
+                    <p><strong>Raw Images Size:</strong> ${validation.info.raw_size_mb} MB</p>
+                    <p><strong>Annotations Size:</strong> ${validation.info.annotation_size_mb} MB</p>
+                    <p><strong>Annotation Classes:</strong> ${validation.info.annotation_stats.unique_values.join(', ')}</p>
+                </div>
+                ${previewHtml}
+            </div>
         </div>
     `;
 }
@@ -166,4 +199,43 @@ function showValidationError(error) {
             <p>${error}</p>
         </div>
     `;
+}
+function showInferenceValidationSuccess(validation) {
+    const section = document.getElementById('inferenceUploadSection');
+    const uploadText = section.querySelector('.upload-text');
+    
+    let previewHtml = '';
+    if (validation.preview) {
+        previewHtml = `
+            <div class="preview-container">
+                <div class="preview-section">
+                    <h4>📸 Inference Data Preview (First Slice)</h4>
+                    <div class="preview-images single">
+                        <div class="preview-item centered">
+                            <label>Inference Data</label>
+                            <img src="data:image/png;base64,${validation.preview.inference_preview}" 
+                                 alt="Inference data preview"
+                                 style="max-width: 200px; max-height: 200px; border: 1px solid #ddd;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    uploadText.innerHTML = `
+        <div class="success-with-preview">
+            <div class="success-message-content">
+                <h3>✅ Inference Data Uploaded</h3>
+                <p><strong>Stack Shape:</strong> ${validation.info.shape.join(' × ')}</p>
+                <p><strong>Number of Slices:</strong> ${validation.info.num_slices}</p>
+                <p><strong>File Size:</strong> ${validation.info.file_size_mb} MB</p>
+                <p><strong>Data Type:</strong> ${validation.info.dtype}</p>
+            </div>
+            ${previewHtml}
+        </div>
+    `;
+    
+    section.style.borderColor = '#4CAF50';
+    section.style.backgroundColor = '#e8f5e8';
 }

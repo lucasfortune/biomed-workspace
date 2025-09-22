@@ -9,6 +9,9 @@ import json
 import tifffile
 import numpy as np
 from pathlib import Path
+import base64
+import io
+from PIL import Image
 
 def validate_inference_tiff(file_path):
     """
@@ -109,7 +112,10 @@ def validate_inference_tiff(file_path):
         # Estimate memory usage for processing
         estimated_memory_mb = (tiff_data.nbytes * 4) / (1024 * 1024)  # Rough estimate for processing
         
-        return {
+        # Generate preview image
+        preview_data = generate_inference_preview(file_path)
+
+        result = {
             "valid": True,
             "info": {
                 "shape": list(tiff_data.shape),
@@ -122,6 +128,12 @@ def validate_inference_tiff(file_path):
                 "warnings": generate_warnings(tiff_data, file_size_mb, estimated_memory_mb)
             }
         }
+
+        # Add preview data if generation was successful
+        if preview_data:
+            result["preview"] = preview_data
+
+        return result
         
     except Exception as e:
         return {
@@ -155,6 +167,55 @@ def generate_warnings(tiff_data, file_size_mb, estimated_memory_mb):
             warnings.append("Image appears to use only a small portion of the available bit depth")
     
     return warnings
+
+def create_inference_preview(image_slice, target_size=(256, 256)):
+    """Create downsampled preview for inference data"""
+    try:
+        # Normalize the image data for display (same logic as training raw images)
+        image_min, image_max = image_slice.min(), image_slice.max()
+        if image_max > image_min:
+            display_image = ((image_slice - image_min) / (image_max - image_min) * 255).astype(np.uint8)
+        else:
+            display_image = np.zeros_like(image_slice, dtype=np.uint8)
+        
+        # Create PIL image and resize
+        pil_image = Image.fromarray(display_image)
+        downsampled = pil_image.resize(target_size, Image.LANCZOS)
+        
+        # Convert to base64 PNG
+        buffer = io.BytesIO()
+        downsampled.save(buffer, format='PNG', optimize=True)
+        base64_string = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return base64_string
+        
+    except Exception as e:
+        print(f"Inference preview generation failed: {str(e)}", flush=True)
+        return None
+
+def generate_inference_preview(file_path):
+    """Generate preview image for inference data"""
+    try:
+        # Read first slice from the stack
+        tiff_data = tifffile.imread(file_path)
+        
+        # Handle both 2D and 3D data
+        if len(tiff_data.shape) == 2:
+            first_slice = tiff_data
+        else:
+            first_slice = tiff_data[0]  # First slice
+        
+        # Generate preview
+        preview = create_inference_preview(first_slice)
+        
+        if preview:
+            return {'inference_preview': preview}
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Inference preview generation failed: {str(e)}", flush=True)
+        return None
 
 def main():
     if len(sys.argv) != 2:
