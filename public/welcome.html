@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biomedical Image Segmentation Visualizer</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/welcome.css">
+</head>
+<body>
+    <div class="welcome-container">
+        <header class="welcome-header">
+            <h1>Biomedical Image Segmentation Visualizer</h1>
+            <p class="subtitle">A complete web-based machine learning pipeline for biomedical image analysis</p>
+        </header>
+
+        <main class="welcome-content">
+            <section class="app-description">
+                <h2>What this application does</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>1. Data Upload</h3>
+                        <p>Upload TIFF image stacks and annotations for training</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>2. U-Net Training</h3>
+                        <p>Train custom neural networks with real-time progress tracking</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>3. Model Training</h3>
+                        <p>Configure parameters and monitor training metrics</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>4. Inference</h3>
+                        <p>Run segmentation on new data using your trained models</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>5. 3D Visualization</h3>
+                        <p>Interactive Three.js visualization of segmentation results</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="action-section">
+                <h2>Choose how to get started</h2>
+                <div class="action-buttons">
+                    <button class="btn primary large" onclick="startWithTestData()">
+                        Use Test Dataset
+                        <span class="btn-description">Try the app with sample data</span>
+                    </button>
+                    <button class="btn secondary large" onclick="startWithCustomData()">
+                        Upload Your Own Data
+                        <span class="btn-description">Use your own TIFF images</span>
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/welcome.js"></script>
+</body>
+</html>

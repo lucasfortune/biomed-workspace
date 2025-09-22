@@ -26,6 +26,31 @@ app.use(session({
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve welcome page as the default route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'welcome.html'));
+});
+
+// Serve the main app at /app route  
+app.get('/app', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Serve test data files
+app.get('/test_data/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, 'test_data', filename);
+  
+  // Check if file exists
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).send('Test file not found');
+  }
+});
+
+// Keep the existing static middleware
 app.use(express.static('public'));
 
 // Configure multer for file uploads
@@ -79,48 +104,126 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Step 1: Upload and validate TIFF stacks
+// Step 1: Upload and validate TIFF stacks (MODIFIED to support test data)
 app.post('/upload-data', upload.fields([
-  { name: 'raw_images', maxCount: 1 },
-  { name: 'annotations', maxCount: 1 }
+    { name: 'raw_images', maxCount: 1 },
+    { name: 'annotations', maxCount: 1 }
 ]), async (req, res) => {
-  try {
-    if (!req.files.raw_images || !req.files.annotations) {
-      return res.status(400).json({ 
-        error: 'Both raw images and annotations are required' 
-      });
+    try {
+        let rawFile, annotationFile;
+        
+        // Check if this is a test data request
+        if (req.body.isTestData === 'true') {
+            console.log('Processing test data request...');
+            
+            const sessionId = req.session.id;
+            const uploadDir = path.join('uploads', sessionId);
+            
+            // Create session directory if it doesn't exist
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            
+            // Define test file paths
+            const testFiles = {
+                raw_images: 'trypB_testData_training.tif',
+                annotations: 'trypB_testData_annotations.tif'
+            };
+            
+            // Copy test files and create mock file objects
+            const rawSourcePath = path.join('test_data', testFiles.raw_images);
+            const annotationSourcePath = path.join('test_data', testFiles.annotations);
+            
+            // Check if test files exist
+            if (!fs.existsSync(rawSourcePath)) {
+                return res.status(400).json({
+                    error: 'Test training images not found',
+                    details: `Expected file: test_data/${testFiles.raw_images}`
+                });
+            }
+            
+            if (!fs.existsSync(annotationSourcePath)) {
+                return res.status(400).json({
+                    error: 'Test annotation images not found', 
+                    details: `Expected file: test_data/${testFiles.annotations}`
+                });
+            }
+            
+            // Copy files to session directory
+            const rawDestPath = path.join(uploadDir, testFiles.raw_images);
+            const annotationDestPath = path.join(uploadDir, testFiles.annotations);
+            
+            fs.copyFileSync(rawSourcePath, rawDestPath);
+            fs.copyFileSync(annotationSourcePath, annotationDestPath);
+            
+            // Create mock file objects that match the expected structure
+            rawFile = {
+                path: rawDestPath,
+                filename: testFiles.raw_images,
+                originalname: testFiles.raw_images,
+                size: fs.statSync(rawDestPath).size,
+                mimetype: 'image/tiff'
+            };
+            
+            annotationFile = {
+                path: annotationDestPath,
+                filename: testFiles.annotations,
+                originalname: testFiles.annotations,
+                size: fs.statSync(annotationDestPath).size,
+                mimetype: 'image/tiff'
+            };
+            
+            console.log('Test files copied successfully');
+            
+        } else {
+            // Handle regular uploaded files
+            if (!req.files.raw_images || !req.files.annotations) {
+                return res.status(400).json({
+                    error: 'Both raw images and annotations are required'
+                });
+            }
+            
+            rawFile = req.files.raw_images[0];
+            annotationFile = req.files.annotations[0];
+        }
+        
+        console.log('Validating TIFF stacks...');
+        
+        // Validate TIFF stacks (same logic for both test data and uploads)
+        const validationResult = await validateTiffStacks(rawFile.path, annotationFile.path);
+        
+        if (!validationResult.valid) {
+            return res.status(400).json({
+                error: 'TIFF validation failed',
+                details: validationResult.error
+            });
+        }
+        
+        // Store file paths in session (same logic for both test data and uploads)
+        req.session.uploadedFiles = {
+            raw_images: rawFile.path,
+            annotations: annotationFile.path,
+            validation: validationResult
+        };
+        
+        console.log('Files processed and validated successfully');
+        
+        res.json({
+            success: true,
+            message: req.body.isTestData === 'true' 
+                ? 'Test dataset loaded and validated successfully'
+                : 'Files uploaded and validated successfully',
+            validation: validationResult,
+            isTestData: req.body.isTestData === 'true'
+        });
+        
+    } catch (error) {
+        console.error('Upload/Test data error:', error);
+        res.status(500).json({ 
+            error: error.message,
+            isTestData: req.body.isTestData === 'true'
+        });
     }
-
-    const rawFile = req.files.raw_images[0];
-    const annotationFile = req.files.annotations[0];
-    
-    // Validate TIFF stacks
-    const validationResult = await validateTiffStacks(rawFile.path, annotationFile.path);
-    
-    if (!validationResult.valid) {
-      return res.status(400).json({ 
-        error: 'TIFF validation failed',
-        details: validationResult.error 
-      });
-    }
-
-    // Store file paths in session
-    req.session.uploadedFiles = {
-      raw_images: rawFile.path,
-      annotations: annotationFile.path,
-      validation: validationResult
-    };
-
-    res.json({
-      success: true,
-      message: 'Files uploaded and validated successfully',
-      validation: validationResult
-    });
-
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
 // Step 2: Configure training parameters
@@ -218,34 +321,90 @@ app.get('/training-status/:trainingId', (req, res) => {
   res.json(training);
 });
 
-// Step 4: Upload data for inference
+// Step 4: Upload data for inference (MODIFIED to support test data)
 app.post('/upload-inference', upload.single('inference_data'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided for inference' });
+    try {
+        let inferenceFile;
+        
+        // Check if this is a test data request
+        if (req.body.isTestData === 'true') {
+            console.log('Processing test inference data request...');
+            
+            const sessionId = req.session.id;
+            const uploadDir = path.join('uploads', sessionId);
+            
+            // Create session directory if it doesn't exist
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            
+            // Define test inference file
+            const testInferenceFile = 'trypB_testData_inference.tif';
+            const sourceInferencePath = path.join('test_data', testInferenceFile);
+            
+            // Check if test inference file exists
+            if (!fs.existsSync(sourceInferencePath)) {
+                return res.status(400).json({
+                    error: 'Test inference images not found',
+                    details: `Expected file: test_data/${testInferenceFile}`
+                });
+            }
+            
+            // Copy file to session directory
+            const destInferencePath = path.join(uploadDir, testInferenceFile);
+            fs.copyFileSync(sourceInferencePath, destInferencePath);
+            
+            // Create mock file object
+            inferenceFile = {
+                path: destInferencePath,
+                filename: testInferenceFile,
+                originalname: testInferenceFile,
+                size: fs.statSync(destInferencePath).size,
+                mimetype: 'image/tiff'
+            };
+            
+            console.log('Test inference file copied successfully');
+            
+        } else {
+            // Handle regular uploaded file
+            if (!req.file) {
+                return res.status(400).json({ error: 'No file provided for inference' });
+            }
+            
+            inferenceFile = req.file;
+        }
+        
+        console.log('Validating inference TIFF...');
+        
+        // Validate TIFF file (same logic for both test data and uploads)
+        const validationResult = await validateInferenceTiff(inferenceFile.path);
+        
+        if (!validationResult.valid) {
+            return res.status(400).json({
+                error: 'TIFF validation failed',
+                details: validationResult.error
+            });
+        }
+        
+        console.log('Inference file processed and validated successfully');
+        
+        res.json({
+            success: true,
+            message: req.body.isTestData === 'true'
+                ? 'Test inference data loaded successfully'
+                : 'Inference data uploaded successfully',
+            file_path: inferenceFile.path,
+            validation: validationResult,
+            isTestData: req.body.isTestData === 'true'
+        });
+        
+    } catch (error) {
+        console.error('Inference upload/test data error:', error);
+        res.status(500).json({ 
+            error: error.message,
+            isTestData: req.body.isTestData === 'true'
+        });
     }
-
-    // Validate TIFF file
-    const validationResult = await validateInferenceTiff(req.file.path);
-    
-    if (!validationResult.valid) {
-      return res.status(400).json({ 
-        error: 'TIFF validation failed',
-        details: validationResult.error 
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Inference data uploaded successfully',
-      file_path: req.file.path,
-      validation: validationResult
-    });
-
-  } catch (error) {
-    console.error('Inference upload error:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
 // Run inference

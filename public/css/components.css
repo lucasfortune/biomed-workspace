@@ -366,3 +366,43 @@
 .dual-range-input:focus::-moz-range-thumb {
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.3);
 }
+
+/* Test data styling */
+.test-data-loaded {
+    background: #e8f5e8;
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 15px 0;
+}
+
+.test-data-loaded h3 {
+    color: #2e7d32;
+    margin-bottom: 15px;
+}
+
+.test-data-loaded ul {
+    color: #2e7d32;
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.test-data-loaded em {
+    color: #666;
+    font-size: 0.9em;
+}
+
+.test-data-message {
+    animation: fadeInUp 0.5s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

@@ -11,19 +11,41 @@ async function runInference() {
 
     showLoading('Preparing inference...', 'Uploading data and starting segmentation.');
 
-    const formData = new FormData();
-    formData.append('inference_data', uploadedFiles.inferenceData);
-
     try {
-        // Upload inference data
-        const uploadResponse = await fetch('/upload-inference', {
-            method: 'POST',
-            body: formData
-        });
+        let uploadResult;
+        
+        // Check if we're using test data
+        if (uploadedFiles.inferenceData.isTestData) {
+            console.log('Using test data for inference');
+            
+            // For test data, send a special request to handle server-side file copying
+            const testDataForm = new FormData();
+            testDataForm.append('isTestData', 'true');
+            
+            const uploadResponse = await fetch('/upload-inference', {
+                method: 'POST',
+                body: testDataForm
+            });
+            
+            uploadResult = await uploadResponse.json();
+            if (!uploadResult.success) {
+                throw new Error(uploadResult.error);
+            }
+            
+        } else {
+            // Handle regular uploaded files
+            const formData = new FormData();
+            formData.append('inference_data', uploadedFiles.inferenceData);
 
-        const uploadResult = await uploadResponse.json();
-        if (!uploadResult.success) {
-            throw new Error(uploadResult.error);
+            const uploadResponse = await fetch('/upload-inference', {
+                method: 'POST',
+                body: formData
+            });
+
+            uploadResult = await uploadResponse.json();
+            if (!uploadResult.success) {
+                throw new Error(uploadResult.error);
+            }
         }
 
         // Start inference
