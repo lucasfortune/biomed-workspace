@@ -25,6 +25,7 @@ body {
     color: white;
     padding: 30px;
     text-align: center;
+    position: relative;
 }
 
 .header h1 {
@@ -46,4 +47,47 @@ body {
     border-radius: 4px;
     transition: width 0.3s ease;
     width: 0%;
+}
+
+
+/* Research Group Logo - Main App */
+.app-logo-container {
+    position: absolute;
+    right: 20px;
+    top: 70px;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 8px;
+    transition: all 0.3s ease;
+}
+
+.app-logo-container:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-50%) scale(1.05);
+}
+
+.app-research-logo {
+    height: 70px; /* Adjust this to your preferred size */
+    width: auto;
+    display: block;
+}
+
+/* Responsive adjustments for main app logo */
+@media (max-width: 768px) {
+    .app-logo-container {
+        right: 15px;
+        padding: 6px;
+    }
+    
+    .app-research-logo {
+        height: 30px;
+    }
+    
+    /* On mobile, might need to adjust step-nav padding to make room */
+    .step-nav {
+        padding: 15px 60px 15px 20px;
+    }
 }

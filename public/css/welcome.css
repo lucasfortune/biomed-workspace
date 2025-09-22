@@ -143,3 +143,41 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Research Group Logo - Welcome Page */
+.logo-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 8px;
+    transition: all 0.3s ease;
+}
+
+.logo-container:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.research-logo {
+    height: 80px; /* Adjust this to your preferred size */
+    width: auto;
+    display: block;
+}
+
+/* Responsive adjustments for welcome page logo */
+@media (max-width: 768px) {
+    .logo-container {
+        top: 15px;
+        right: 15px;
+        padding: 8px;
+    }
+    
+    .research-logo {
+        height: 45px;
+    }
+}
