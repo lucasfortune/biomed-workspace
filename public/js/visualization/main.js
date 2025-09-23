@@ -9,6 +9,10 @@ import { setupEnhancedControls } from './interactions.js';
 import { createFallbackMesh, createErrorFallbackMesh } from './utils.js';
 import { removeAllCappingMeshes } from './clipping.js';
 
+// NEW: Access utils functions from parent directory
+const showLoading = window.showLoading || (() => console.log('showLoading not available'));
+const hideLoading = window.hideLoading || (() => console.log('hideLoading not available'));
+
 // Global variables that need to be shared across modules
 export let scene, camera, renderer;
 export let meshGroup, segmentationMesh, classMeshes = {};
@@ -32,8 +36,12 @@ export async function initialize3DVisualization() {
         return;
     }
     
+    // NEW: Show loading screen for 3D visualization
+    showLoading('Loading 3D Visualization...', 'Processing segmentation data and creating 3D meshes. This may take a moment for large datasets.');
+    
     try {
         // Initialize Three.js scene
+        console.log('Initializing Three.js scene...');
         const sceneComponents = initializeScene(container);
         scene = sceneComponents.scene;
         camera = sceneComponents.camera;
@@ -41,9 +49,13 @@ export async function initialize3DVisualization() {
         
         // Try to load segmentation data
         if (window.inferenceResult && window.inferenceResult.visualization_path) {
+            console.log('Loading segmentation data from:', window.inferenceResult.visualization_path);
             
-            // Load the segmentation data
+            // Load the segmentation data - this can take time for large files
             segmentationData = await loadSegmentationData(window.inferenceResult.visualization_path);
+            
+            console.log('Creating 3D meshes from segmentation data...');
+            
             // Choose between original and slice-based system
             const useSliceBasedSystem = true; // Set to true to use new slice system
             let meshResult;
@@ -90,11 +102,18 @@ export async function initialize3DVisualization() {
             createFallbackMeshes();
         }
         
+        console.log('Setting up visualization controls and interactions...');
+        
         // Setup all controls and interactions
         setupAllControls();
         
         // Start render loop
         startRenderLoop();
+        
+        console.log('3D visualization initialization completed successfully');
+        
+        // NEW: Hide loading screen on successful completion
+        hideLoading();
         
     } catch (error) {
         console.error('3D visualization failed:', error);
@@ -107,6 +126,19 @@ export async function initialize3DVisualization() {
         // Still setup basic controls so the interface works
         setupAllControls();
         startRenderLoop();
+        
+        // NEW: Hide loading screen on error
+        hideLoading();
+        
+        // Optional: Show error message to user
+        const errorDiv = document.getElementById('errorMessage');
+        if (errorDiv) {
+            errorDiv.textContent = '3D visualization failed to load completely. Using fallback display.';
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
     }
 }
 
