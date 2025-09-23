@@ -193,6 +193,12 @@ function onInferenceComplete(data) {
             };
         }
         
+       // NEW: Store inference ID for downloads
+        if (currentInferenceId) {
+            window.inferenceResult.inference_id = currentInferenceId;
+            console.log('Stored inference ID for downloads:', currentInferenceId);
+        }
+        
         showSuccess('Inference completed successfully! Your segmentation is ready.');
     } else {
         showError('Inference failed: ' + (data.error || 'Unknown error'));
@@ -239,7 +245,15 @@ function updateInferenceLoadingUI() {
 }
 
 function downloadResults() {
-    if (window.inferenceResult) {
-        window.open(window.inferenceResult.result_path, '_blank');
+    if (window.inferenceResult && currentInferenceId) {
+        // Use the inference ID to download properly formatted results
+        console.log('Downloading results for inference ID:', currentInferenceId);
+        window.open(`/download-inference-results/${currentInferenceId}`, '_blank');
+    } else if (window.inferenceResult && window.inferenceResult.output_path) {
+        // Fallback: try to extract inference ID from path or use direct path
+        console.log('Fallback: Using result path directly');
+        window.open(window.inferenceResult.output_path, '_blank');
+    } else {
+        showError('No inference results available for download. Please run segmentation first.');
     }
 }

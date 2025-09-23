@@ -736,6 +736,142 @@ Generated: ${new Date().toISOString()}
   });
 });
 
+// Download inference results as zip
+app.get('/download-inference-results/:inferenceId', (req, res) => {
+  const inferenceId = req.params.inferenceId;
+  const inference = inferenceSessions.get(inferenceId);
+  
+  if (!inference || inference.status !== 'completed') {
+    return res.status(404).json({ 
+      error: 'Inference results not found or inference not completed',
+      available_sessions: Array.from(inferenceSessions.keys())
+    });
+  }
+
+  // Get the result paths from the inference session
+  const result = inference.result;
+  if (!result) {
+    return res.status(404).json({ error: 'Inference result data not found' });
+  }
+
+  const outputPath = result.output_path;
+  const metadataPath = result.metadata_path;
+  const visualizationPath = result.visualization_path;
+  
+  console.log('Download request for inference:', inferenceId);
+  console.log('Output path:', outputPath);
+  console.log('Metadata path:', metadataPath);
+  console.log('Visualization path:', visualizationPath);
+  
+  // Check if main result file exists
+  if (!fs.existsSync(outputPath)) {
+    return res.status(404).json({ 
+      error: 'Segmentation result file not found',
+      path: outputPath
+    });
+  }
+  
+  // Create zip file
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  
+  // Set response headers
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substr(0, 19);
+  res.attachment(`segmentation_results_${timestamp}.zip`);
+  
+  // Handle archive errors
+  archive.on('error', (err) => {
+    console.error('Archive error:', err);
+    res.status(500).json({ error: 'Failed to create archive: ' + err.message });
+  });
+  
+  // Pipe archive to response
+  archive.pipe(res);
+  
+  // Add segmentation results TIFF file
+  archive.file(outputPath, { name: path.basename(outputPath) });
+  console.log('Added to archive:', path.basename(outputPath));
+  
+  // Add metadata file if it exists
+  if (metadataPath && fs.existsSync(metadataPath)) {
+    archive.file(metadataPath, { name: path.basename(metadataPath) });
+    console.log('Added to archive:', path.basename(metadataPath));
+  } else {
+    console.log('Metadata file not found:', metadataPath);
+  }
+  
+  // Add visualization data if it exists
+  if (visualizationPath && fs.existsSync(visualizationPath)) {
+    archive.file(visualizationPath, { name: path.basename(visualizationPath) });
+    console.log('Added to archive:', path.basename(visualizationPath));
+  } else {
+    console.log('Visualization file not found:', visualizationPath);
+  }
+  
+  // Add a readme file with information about the results
+  const readmeContent = `# Segmentation Results
+
+This archive contains the results from your biomedical image segmentation:
+
+## Files Included
+
+### Main Results
+- **${path.basename(outputPath)}**: The segmented TIFF image stack
+  - Contains the segmentation mask with different classes labeled as integers
+  - Can be opened with ImageJ, Fiji, or any TIFF-compatible software
+
+### Metadata  
+- **${metadataPath ? path.basename(metadataPath) : 'metadata file (if available)'}**: Segmentation metadata and metrics
+  - Contains class distribution statistics
+  - Model configuration used for segmentation
+  - Input file information
+
+### 3D Visualization Data
+- **${visualizationPath ? path.basename(visualizationPath) : 'visualization file (if available)'}**: 3D visualization data
+  - JSON format containing sparse 3D data for web visualization
+  - Can be used to recreate the 3D view in the application
+
+## Usage
+
+### Loading in ImageJ/Fiji
+1. Open ImageJ or Fiji
+2. File → Open → Select the .tif file
+3. The segmentation will appear as a grayscale stack where:
+   - 0 = Background
+   - 1 = Foreground/Objects
+   - 2+ = Additional classes (if present)
+
+### Python Analysis
+\`\`\`python
+import tifffile
+import json
+
+# Load segmentation results
+segmented_data = tifffile.imread('${path.basename(outputPath)}')
+print(f"Segmentation shape: {segmented_data.shape}")
+
+# Load metadata (if available)
+with open('${metadataPath ? path.basename(metadataPath) : 'metadata.json'}', 'r') as f:
+    metadata = json.load(f)
+    
+print("Class distribution:", metadata['metrics']['class_distribution'])
+\`\`\`
+
+## Inference Details
+- **Generated**: ${new Date().toISOString()}
+- **Inference ID**: ${inferenceId}
+- **Model Type**: ${inference.usingImportedModel ? 'Imported Model' : 'Custom Trained Model'}
+
+For questions about these results, please refer to the application documentation.
+`;
+
+  archive.append(readmeContent, { name: 'README.md' });
+  
+  // Finalize the archive
+  archive.finalize();
+  
+  console.log('Archive finalized for inference:', inferenceId);
+});
+
 // Serve static files
 app.use('/uploads', express.static('uploads'));
 app.use('/results', express.static('results'));
