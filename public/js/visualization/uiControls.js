@@ -298,6 +298,12 @@ export function handleClassVisibilityChange(classValue, visible) {
 export function handleClassOpacityChange(classValue, opacityPercent) {
     const opacity = opacityPercent / 100;
     
+    // NEW: Update the UI display value
+    const opacityDisplay = document.getElementById(`classOpacityValue_${classValue}`);
+    if (opacityDisplay) {
+        opacityDisplay.textContent = opacityPercent + '%';
+    }
+    
     const state = getGlobalState();
     
     // Update state
