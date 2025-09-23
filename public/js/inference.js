@@ -4,8 +4,10 @@ async function runInference() {
         return;
     }
     
-    if (!currentTrainingId) {
-        showError('No training session found. Please complete training first.');
+    // NEW: Check if we're using imported model OR have training session
+    const usingImportedModel = window.importedModelInfo;
+    if (!currentTrainingId && !usingImportedModel) {
+        showError('No training session found and no imported model. Please complete training or import a model first.');
         return;
     }
 
@@ -48,22 +50,41 @@ async function runInference() {
             }
         }
 
-        // Start inference
-        const inferenceResponse = await fetch('/run-inference', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+        // NEW: Build inference request based on model type
+        let inferenceRequestBody;
+        
+        if (usingImportedModel) {
+            console.log('Running inference with imported model');
+            // For imported model, send minimal request - server will handle model path
+            inferenceRequestBody = {
+                data_path: uploadResult.file_path,
+                output_path: `results/imported_model_${Date.now()}/inference_result.tif`,
+                // Don't send training_id for imported models
+            };
+        } else {
+            console.log('Running inference with trained model');
+            // For trained model, use original logic
+            inferenceRequestBody = {
                 model_path: `models/${currentTrainingId}/best_model.pth`,
                 data_path: uploadResult.file_path,
                 output_path: `results/${currentTrainingId}/inference_result.tif`,
                 training_id: currentTrainingId
-            })
+            };
+        }
+
+        // Start inference
+        const inferenceResponse = await fetch('/run-inference', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(inferenceRequestBody)
         });
 
         const inferenceResult = await inferenceResponse.json();
 
         if (inferenceResult.success) {
             currentInferenceId = inferenceResult.inference_id;
+            
+            console.log('Inference started successfully:', inferenceResult.model_info);
             
             // Join inference room immediately for progress updates
             socket.emit('join-inference', currentInferenceId);
@@ -80,12 +101,12 @@ async function runInference() {
         } else {
             hideLoading();
             showError('Failed to start inference: ' + (inferenceResult.error || 'Unknown error') + 
-                     (inferenceResult.details ? '\n' + inferenceResult.details : ''));
+                     (inferenceResult.details ? ('\n' + inferenceResult.details) : ''));
         }
+
     } catch (error) {
         hideLoading();
         showError('Error during inference: ' + error.message);
-        console.error('Inference error:', error);
     }
 }
 
@@ -156,12 +177,19 @@ function onInferenceComplete(data) {
             window.inferenceResult = data.result;
         } else {
             console.log('No data.result found, creating fallback result');
+            
+            // NEW: Handle both training and imported model cases
+            const usingImportedModel = window.importedModelInfo;
+            const resultPath = usingImportedModel 
+                ? `results/imported_model_${Date.now()}/inference_result.tif`
+                : `results/${currentTrainingId}/inference_result.tif`;
+                
             // Create a basic result if not provided
             window.inferenceResult = {
                 success: true,
-                output_path: `results/${currentTrainingId}/inference_result.tif`,
-                metadata_path: `results/${currentTrainingId}/inference_result_metadata.json`,
-                visualization_path: `results/${currentTrainingId}/visualization_data.json`
+                output_path: resultPath,
+                metadata_path: resultPath.replace('.tif', '_metadata.json'),
+                visualization_path: resultPath.replace('.tif', '_visualization.json').replace('inference_result', 'visualization_data')
             };
         }
         

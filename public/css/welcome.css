@@ -181,3 +181,51 @@
         height: 45px;
     }
 }
+
+/* Import Model Section */
+.import-section {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.import-section h3 {
+    color: #ffffff;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.import-section p {
+    text-align: center;
+    opacity: 0.9;
+    margin-bottom: 30px;
+}
+
+.import-uploads {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.import-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+#importValidationResult {
+    margin: 20px 0;
+    text-align: center;
+}
+
+/* Responsive design for import section */
+@media (max-width: 768px) {
+    .import-uploads {
+        grid-template-columns: 1fr;
+    }
+}

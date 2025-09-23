@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Biomedical Image Segmentation Visualizer</title>
     <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/welcome.css">
-</head>
+    <link rel="stylesheet" href="css/modals.css">
 <body>
     <div class="logo-container">
         <a href="https://www.uni-wuerzburg.de/forschung/physics-of-parasitism/" target="_blank" rel="noopener noreferrer">
@@ -57,11 +58,65 @@
                         Upload Your Own Data
                         <span class="btn-description">Use your own TIFF images</span>
                     </button>
+                    <button class="btn secondary large" onclick="toggleImportModel()">
+                        Import Pre-trained Model
+                        <span class="btn-description">Skip training with your own model</span>
+                    </button>
+                </div>
+
+                <!-- NEW: Import Model Section (initially hidden) -->
+                <div id="importModelSection" class="import-section" style="display: none;">
+                    <h3>Import Pre-trained Model</h3>
+                    <p>Upload a previously trained model and its configuration to skip the training step.</p>
+                    
+                    <div class="import-uploads">
+                        <div class="upload-section" id="modelUploadSection">
+                            <div class="upload-text">
+                                <h3>Model File (.pth)</h3>
+                                <p>Drag and drop your best_model.pth file here</p>
+                            </div>
+                            <input type="file" id="modelInput" class="file-input" accept=".pth">
+                            <button class="btn" onclick="document.getElementById('modelInput').click()">
+                                Choose Model File
+                            </button>
+                        </div>
+
+                        <div class="upload-section" id="configUploadSection">
+                            <div class="upload-text">
+                                <h3>Config File (.json)</h3>
+                                <p>Drag and drop your training_config.json file here</p>
+                            </div>
+                            <input type="file" id="configInput" class="file-input" accept=".json">
+                            <button class="btn" onclick="document.getElementById('configInput').click()">
+                                Choose Config File
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="importValidationResult"></div>
+
+                    <div class="import-actions">
+                        <button class="btn" id="proceedWithImportBtn" onclick="proceedWithImportedModel()" disabled>
+                            Proceed to Inference
+                        </button>
+                        <button class="btn secondary" onclick="toggleImportModel()">
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             </section>
         </main>
     </div>
+<!-- Loading Overlay (ADDED) -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3 id="loadingText">Processing...</h3>
+            <p id="loadingDescription">Please wait while we process your request.</p>
+        </div>
+    </div>
 
+    <script src="js/utils.js"></script>
     <script src="js/welcome.js"></script>
 </body>
 </html>

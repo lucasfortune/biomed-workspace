@@ -2,6 +2,12 @@
 function setStep(stepNumber) {
     if (stepNumber < 1 || stepNumber > 5) return;
     
+    // NEW: Handle import mode navigation
+    if (window.importedModelInfo && stepNumber < 4) {
+        // In import mode, don't allow going back to steps 1-3
+        stepNumber = 4;
+    }
+    
     // Hide current step
     document.querySelector(`.step-content.active`)?.classList.remove('active');
     document.querySelector(`.step.active`)?.classList.remove('active');

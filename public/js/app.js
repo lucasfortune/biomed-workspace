@@ -28,12 +28,16 @@ let sliceDirection = 'z'; // 'x', 'y', or 'z'
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
-    // NEW CODE: Check if user came from welcome page
+    // Check if user came from welcome page
     const userChoice = sessionStorage.getItem('userChoice');
     if (userChoice === 'testData') {
         // Load test data automatically
         loadTestDataset();
-        sessionStorage.removeItem('userChoice'); // Clear the flag
+        sessionStorage.removeItem('userChoice');
+    } else if (userChoice === 'importedModel') {
+        // Handle imported model mode
+        handleImportedModelMode();
+        sessionStorage.removeItem('userChoice');
     }
     initializeSocketConnection();
     initializeFileUpload();
@@ -192,6 +196,60 @@ async function loadTestDataset() {
             `;
         }
     }
+}
+
+// NEW FUNCTION: Handle imported model mode
+async function handleImportedModelMode() {
+    console.log('Handling imported model mode...');
+    
+    try {
+        // Verify the imported model is still valid
+        const response = await fetch('/verify-imported-model');
+        const result = await response.json();
+        
+        if (result.success) {
+            // Set up UI for imported model mode
+            setupImportedModelUI(result.modelInfo);
+            
+            // Jump directly to step 4 (inference)
+            setStep(4);
+            
+            // Store model info globally
+            window.importedModelInfo = result.modelInfo;
+            
+        } else {
+            // Imported model validation failed, show error
+            showError('Imported model validation failed: ' + result.error);
+        }
+        
+    } catch (error) {
+        console.error('Error handling imported model mode:', error);
+        showError('Error loading imported model: ' + error.message);
+    }
+}
+
+function setupImportedModelUI(modelInfo) {
+    // Update step 4 UI to show imported model info
+    const modelInfoSection = document.querySelector('#step4 .model-info');
+    if (modelInfoSection) {
+        modelInfoSection.innerHTML = `
+            <h3>🤖 Imported Model Ready</h3>
+            <div class="imported-model-details">
+                <p><strong>Model:</strong> ${modelInfo.model_size}</p>
+                <p><strong>Architecture:</strong> ${modelInfo.config.features} features, ${modelInfo.config.num_layers} layers</p>
+                <p><strong>Patch Size:</strong> ${modelInfo.config.patch_size}px</p>
+                <p><em>You can now run inference using this pre-trained model.</em></p>
+            </div>
+        `;
+    }
+    
+    // Mark steps 1-3 as completed in the progress bar
+    ['1', '2', '3'].forEach(step => {
+        const stepElement = document.querySelector(`[data-step="${step}"]`);
+        if (stepElement) {
+            stepElement.classList.add('completed');
+        }
+    });
 }
 
 // Updated helper function

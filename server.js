@@ -86,6 +86,23 @@ const upload = multer({
     fileSize: 200 * 1024 * 1024 // 200MB limit for TIFF stacks
   }
 });
+// NEW: Separate multer configuration for importing pre-trained models
+const uploadImport = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    // Accept .pth (PyTorch model) and .json (config) files
+    const fileName = file.originalname.toLowerCase();
+    if (fileName.endsWith('.pth') || fileName.endsWith('.json')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .pth (model) and .json (config) files are allowed for import!'), false);
+    }
+  },
+  limits: {
+    fileSize: 2 * 1024 * 1024 * 1024, // 2GB limit for model files (they can be quite large)
+    files: 2 // Maximum 2 files (model + config)
+  }
+});
 
 // Store active training sessions and inference sessions
 const trainingSessions = new Map();
@@ -408,6 +425,112 @@ app.post('/upload-inference', upload.single('inference_data'), async (req, res) 
     }
 });
 
+// Import pre-trained model endpoint
+app.post('/import-pretrained-model', uploadImport.fields([
+  { name: 'model_file', maxCount: 1 },
+  { name: 'config_file', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    if (!req.files || !req.files.model_file || !req.files.config_file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Both model file (.pth) and config file (.json) are required.' 
+      });
+    }
+
+    const modelFile = req.files.model_file[0];
+    const configFile = req.files.config_file[0];
+
+    // Validate file extensions
+    if (!modelFile.originalname.toLowerCase().endsWith('.pth')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Model file must be a .pth file.' 
+      });
+    }
+
+    if (!configFile.originalname.toLowerCase().endsWith('.json')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Config file must be a .json file.' 
+      });
+    }
+
+    console.log('Validating imported model and config...');
+    
+    // Validate the imported files
+    const validationResult = await validateImportedModel(modelFile.path, configFile.path);
+    
+    if (validationResult.success) {
+      // Store imported model info in session
+      req.session.importedModel = {
+        modelPath: modelFile.path,
+        configPath: configFile.path,
+        validated: true,
+        validation: validationResult
+      };
+      
+      res.json({
+        success: true,
+        message: 'Model and config validated successfully',
+        validation: {
+          model_info: `Valid PyTorch model (${validationResult.model_size})`,
+          config_info: `Valid configuration with ${validationResult.config.features} features, ${validationResult.config.num_layers} layers`
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: validationResult.error
+      });
+    }
+
+  } catch (error) {
+    console.error('Import model error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error during model import: ' + error.message 
+    });
+  }
+});
+
+// Verify imported model is still valid
+app.get('/verify-imported-model', (req, res) => {
+  try {
+    const importedModel = req.session.importedModel;
+    
+    if (!importedModel || !importedModel.validated) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid imported model found in session'
+      });
+    }
+    
+    // Check if files still exist
+    if (!fs.existsSync(importedModel.modelPath) || !fs.existsSync(importedModel.configPath)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Imported model files no longer exist'
+      });
+    }
+    
+    res.json({
+      success: true,
+      modelInfo: {
+        model_size: importedModel.validation.model_size,
+        config: importedModel.validation.config
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error verifying imported model:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error during model verification'
+    });
+  }
+});
+
 // Run inference
 app.post('/run-inference', async (req, res) => {
   try {
@@ -415,10 +538,50 @@ app.post('/run-inference', async (req, res) => {
     
     console.log('Inference request received:', { model_path, data_path, output_path, training_id });
     
-    // Check if training session exists and model file exists
-    if (training_id && trainingSessions.has(training_id)) {
+    let actualModelPath;
+    let modelConfig;
+    let inferenceId;
+
+    // Check if using imported model first
+    if (req.session.importedModel && req.session.importedModel.validated) {
+      console.log('Using imported model for inference');
+      
+      // Use imported model
+      actualModelPath = req.session.importedModel.modelPath;
+      
+      // Load config from imported config file
+      try {
+        const configData = fs.readFileSync(req.session.importedModel.configPath, 'utf8');
+        modelConfig = JSON.parse(configData);
+        console.log('Loaded imported model config:', modelConfig);
+      } catch (error) {
+        return res.status(400).json({ 
+          error: 'Failed to load imported model config: ' + error.message 
+        });
+      }
+
+      // Verify imported model file still exists
+      if (!fs.existsSync(actualModelPath)) {
+        return res.status(400).json({ 
+          error: 'Imported model file not found: ' + actualModelPath 
+        });
+      }
+
+      console.log('Imported model validated. Model at:', actualModelPath);
+
+    } else {
+      // Original logic: Check if training session exists and model file exists
+      if (!training_id || !trainingSessions.has(training_id)) {
+        return res.status(400).json({ 
+          error: 'No imported model found and training session not found or invalid training_id provided',
+          training_id: training_id,
+          available_sessions: Array.from(trainingSessions.keys())
+        });
+      }
+
       const training = trainingSessions.get(training_id);
-      const actualModelPath = path.join(training.params.output_dir, 'best_model.pth');
+      actualModelPath = path.join(training.params.output_dir, 'best_model.pth');
+      modelConfig = training.params.config;
       
       console.log('Training session found. Checking model at:', actualModelPath);
       
@@ -437,42 +600,41 @@ app.post('/run-inference', async (req, res) => {
           details: `Expected: ${actualModelPath}`
         });
       }
-      
-      // Generate inference ID
-      const inferenceId = uuid.v4();
-      
-      // Store inference session
-      inferenceSessions.set(inferenceId, {
-        status: 'starting',
-        startTime: new Date(),
-        progress: 0,
-        currentSlice: 0,
-        totalSlices: 0
-      });
-      
-      console.log('Generated inference ID:', inferenceId);
-      
-      // Send response immediately with inference ID so frontend can join room
-      res.json({
-        success: true,
-        inference_id: inferenceId,
-        status: 'starting',
-        message: 'Inference request accepted. Join the WebSocket room for progress updates.'
-      });
-      
-      // Start inference after a short delay to allow frontend to join room
-      setTimeout(() => {
-        console.log('Starting inference with corrected paths');
-        startInferenceProcess(actualModelPath, data_path, output_path, inferenceId, io);
-      }, 1000); // 1 second delay
-      
-    } else {
-      return res.status(400).json({ 
-        error: 'Training session not found or invalid training_id provided',
-        training_id: training_id,
-        available_sessions: Array.from(trainingSessions.keys())
-      });
+
+      console.log('Training model validated. Model at:', actualModelPath);
     }
+    
+    // Generate inference ID
+    inferenceId = uuid.v4();
+    
+    // Store inference session
+    inferenceSessions.set(inferenceId, {
+      status: 'starting',
+      startTime: new Date(),
+      progress: 0,
+      currentSlice: 0,
+      totalSlices: 0,
+      usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated)
+    });
+    
+    console.log('Generated inference ID:', inferenceId);
+    
+    // Send response immediately with inference ID so frontend can join room
+    res.json({
+      success: true,
+      inference_id: inferenceId,
+      status: 'starting',
+      message: 'Inference request accepted. Join the WebSocket room for progress updates.',
+      model_info: req.session.importedModel ? 'Using imported model' : 'Using trained model'
+    });
+    
+    // Start inference after a short delay to allow frontend to join room
+    setTimeout(() => {
+      console.log('Starting inference with model path:', actualModelPath);
+      console.log('Data path:', data_path);
+      console.log('Output path:', output_path);
+      startInferenceProcess(actualModelPath, data_path, output_path, inferenceId, io);
+    }, 1000); // 1 second delay
 
   } catch (error) {
     console.error('Inference error:', error);
@@ -634,6 +796,40 @@ async function validateTiffStacks(rawPath, annotationPath) {
         resolve({ 
           valid: false, 
           error: error || 'Invalid validation output - failed to parse JSON response'
+        });
+      }
+    });
+  });
+}
+
+// Helper function to validate imported model
+async function validateImportedModel(modelPath, configPath) {
+  return new Promise((resolve) => {
+    const pythonScript = spawn('python', [
+      'python/validate_imported_model.py',
+      modelPath,
+      configPath
+    ]);
+
+    let output = '';
+    let error = '';
+
+    pythonScript.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonScript.stderr.on('data', (data) => {
+      error += data.toString();
+    });
+
+    pythonScript.on('close', (code) => {
+      try {
+        const result = JSON.parse(output);
+        resolve(result);
+      } catch (e) {
+        resolve({
+          success: false,
+          error: 'Failed to parse validation results: ' + (error || e.message)
         });
       }
     });
