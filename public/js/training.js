@@ -203,3 +203,5 @@ function downloadModel() {
         window.open(`/download-model/${currentTrainingId}`, '_blank');
     }
 }
+
+window.downloadModel = downloadModel;

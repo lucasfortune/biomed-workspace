@@ -38,7 +38,7 @@ export function initializeScene(container) {
     setupEnhancedLighting();
     
     // Initial camera position
-    camera.position.set(3, 2, 5);
+    camera.position.set(2, 1.5, 3);
     camera.lookAt(0, 0, 0);
     
     return { scene, camera, renderer };
@@ -127,15 +127,15 @@ export function positionCameraForMesh(meshGroup) {
     if (maxDim < 2) {
         distance = 8;  // Close for very small meshes
     } else if (maxDim < 5) {
-        distance = maxDim * 2.5;  // Medium distance for small meshes
+        distance = maxDim * 1.5;  // Medium distance for small meshes
     } else if (maxDim < 10) {
-        distance = maxDim * 2;    // Standard distance for medium meshes
+        distance = maxDim * 1.2;    // Standard distance for medium meshes
     } else {
-        distance = maxDim * 1.5;  // Closer for large meshes
+        distance = maxDim * 1.0;  // Closer for large meshes
     }
     
     // Ensure minimum distance
-    distance = Math.max(distance, 5);
+    distance = Math.max(distance, 3);
     
     // Position camera in a nice viewing angle
     const cameraX = distance * 0.7;  // 70% to the right

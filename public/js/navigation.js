@@ -102,53 +102,159 @@ function previousStep() {
 }
 
 function resetWorkflow() {
-    // Reset all states
+    // Show warning modal instead of immediately resetting
+    showResetWarning();
+}
+
+function showResetWarning() {
+    // Populate download actions based on available data
+    populateDownloadActions();
+    
+    // Show the warning overlay
+    const warningOverlay = document.getElementById('resetWarningOverlay');
+    warningOverlay.style.display = 'flex';
+}
+
+function populateDownloadActions() {
+    const downloadActionsDiv = document.getElementById('downloadActions');
+    let downloadButtons = [];
+    
+    // Check if trained model is available for download
+    if (currentTrainingId && stepStates[3].trainingCompleted) {
+        downloadButtons.push(`
+            <button class="btn secondary" onclick="downloadModel(); trackDownload('model');">
+                📦 Download Trained Model
+            </button>
+        `);
+    }
+    
+    // Check if inference results are available for download  
+    if (currentInferenceId && stepStates[4].completed) {
+        downloadButtons.push(`
+            <button class="btn secondary" onclick="downloadResults(); trackDownload('results');">
+                📊 Download Segmentation Results
+            </button>
+        `);
+    }
+    
+    if (downloadButtons.length > 0) {
+        downloadActionsDiv.innerHTML = `
+            <p><strong>Available Downloads:</strong></p>
+            ${downloadButtons.join('')}
+            <hr style="margin: 15px 0; border: 1px solid #eee;">
+        `;
+    } else {
+        downloadActionsDiv.innerHTML = `
+            <p style="color: #666; font-style: italic;">No files available for download.</p>
+            <hr style="margin: 15px 0; border: 1px solid #eee;">
+        `;
+    }
+}
+
+function trackDownload(type) {
+    // Optional: Track which downloads were used
+    console.log(`User downloaded ${type} before reset`);
+}
+
+function cancelReset() {
+    // Hide the warning overlay
+    const warningOverlay = document.getElementById('resetWarningOverlay');
+    warningOverlay.style.display = 'none';
+}
+
+async function proceedWithReset() {
+    // Hide warning modal
+    const warningOverlay = document.getElementById('resetWarningOverlay');
+    warningOverlay.style.display = 'none';
+    
+    // Show loading for reset process
+    showLoading('Resetting Session...', 'Clearing all data and starting fresh. This may take a moment.');
+    
+    try {
+        // Call server to reset session and delete files
+        const response = await fetch('/reset-session', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Complete frontend state reset
+            performCompleteStateReset();
+            
+            // Redirect to welcome page
+            window.location.href = '/';
+        } else {
+            hideLoading();
+            showError('Failed to reset session: ' + (result.error || 'Unknown error'));
+        }
+        
+    } catch (error) {
+        hideLoading();
+        console.error('Error resetting session:', error);
+        showError('Error resetting session: ' + error.message);
+        
+        // Still redirect to welcome page even if server call fails
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 2000);
+    }
+}
+
+function performCompleteStateReset() {
+    // Reset all global state variables
     currentStep = 1;
     currentTrainingId = null;
     currentInferenceId = null;
     uploadedFiles = { rawImages: null, annotations: null, inferenceData: null };
     
-    // NEW: Reset step and process states
-    resetStepStates();
-
-    // Reset training UI elements
-    const trainingAction = document.getElementById('trainingAction');
-    const startTrainingBtn = document.getElementById('startTrainingBtn');
-    if (trainingAction) trainingAction.style.display = 'block';
-    if (startTrainingBtn) startTrainingBtn.disabled = false;
-
-    // Reset UI
-    setStep(1);
-    document.getElementById('step1Next').disabled = true;
-    document.getElementById('validationResult').innerHTML = '';
+    // Reset window-level variables
+    window.inferenceResult = null;
+    window.importedModelInfo = null;
     
-    // Reset upload sections
+    // Reset step and process states
+    resetStepStates();
+    
+    // Clear session storage
+    sessionStorage.removeItem('userChoice');
+    
+    // Clear upload sections
     const uploadSections = ['rawUploadSection', 'annotationsUploadSection', 'inferenceUploadSection'];
     uploadSections.forEach(id => {
         const section = document.getElementById(id);
         if (section) {
             section.style.borderColor = '#ddd';
             section.style.backgroundColor = 'transparent';
+            // Clear file input
+            const fileInput = section.querySelector('input[type="file"]');
+            if (fileInput) fileInput.value = '';
         }
     });
     
-    // Clear and reinitialize charts to prevent sizing issues
-    if (lossChart) {
+    // Clear validation results
+    const validationResult = document.getElementById('validationResult');
+    if (validationResult) validationResult.innerHTML = '';
+    
+    // Clear and destroy charts
+    if (typeof lossChart !== 'undefined' && lossChart) {
         lossChart.destroy();
         lossChart = null;
     }
-    if (diceChart) {
+    if (typeof diceChart !== 'undefined' && diceChart) {
         diceChart.destroy();
         diceChart = null;
     }
     
-    // Reinitialize charts
-    setTimeout(() => {
-        initializeCharts();
-    }, 100);
+    // Disconnect WebSocket
+    if (window.socket) {
+        window.socket.disconnect();
+    }
     
-    // NEW: Update navigation buttons
-    updateNavigationButtons();
+    // Reset 3D visualization if initialized
+    if (window.resetView && typeof window.resetView === 'function') {
+        window.resetView();
+    }
 }
 
 // NEW: State management functions

@@ -609,6 +609,7 @@ app.post('/run-inference', async (req, res) => {
     
     // Store inference session
     inferenceSessions.set(inferenceId, {
+      sessionId: req.session.id,
       status: 'starting',
       startTime: new Date(),
       progress: 0,
@@ -876,6 +877,173 @@ For questions about these results, please refer to the application documentation
 app.use('/uploads', express.static('uploads'));
 app.use('/results', express.static('results'));
 app.use('/models', express.static('models'));
+
+// Reset session and delete all associated files
+app.post('/reset-session', async (req, res) => {
+  try {
+    const sessionId = req.session.id;
+    console.log('Resetting session:', sessionId);
+    
+    // Clean up session-specific files and directories
+    const sessionDir = path.join('uploads', sessionId);
+    const modelDir = path.join('models', sessionId);
+    const outputDir = path.join('outputs', sessionId);
+    
+    // Function to safely delete directory
+    const deleteDirectory = (dirPath) => {
+      if (fs.existsSync(dirPath)) {
+        try {
+          fs.rmSync(dirPath, { recursive: true, force: true });
+          console.log('Deleted directory:', dirPath);
+          return true;
+        } catch (error) {
+          console.error('Error deleting directory:', dirPath, error);
+          return false;
+        }
+      }
+      return true;
+    };
+    
+    // Delete basic session directories
+    deleteDirectory(sessionDir);
+    deleteDirectory(modelDir);
+    deleteDirectory(outputDir);
+    
+    // NEW: Clean up inference results directories
+    // Get all training sessions for this session and delete their results
+    const trainingIdsToCleanup = [];
+    for (const [trainingId, training] of trainingSessions.entries()) {
+      if (training.sessionId === sessionId) {
+        trainingIdsToCleanup.push(trainingId);
+        
+        // Delete results directory for this training
+        const trainingResultsDir = path.join('results', trainingId);
+        deleteDirectory(trainingResultsDir);
+        
+        console.log('Cleaned up training results for:', trainingId);
+      }
+    }
+    
+    // NEW: Clean up inference results directories
+    const inferenceIdsToCleanup = [];
+    for (const [inferenceId, inference] of inferenceSessions.entries()) {
+      if (inference.sessionId === sessionId) {
+        inferenceIdsToCleanup.push(inferenceId);
+        
+        // Extract the results directory from the inference result if it exists
+        if (inference.result && inference.result.output_path) {
+          const resultPath = inference.result.output_path;
+          const resultDir = path.dirname(resultPath);
+          deleteDirectory(resultDir);
+          console.log('Cleaned up inference results from:', resultDir);
+        }
+      }
+    }
+    
+    // NEW: Clean up any remaining imported model results directories
+    // Scan the results directory for any directories that might belong to this session
+    const resultsBaseDir = 'results';
+    if (fs.existsSync(resultsBaseDir)) {
+      try {
+        const resultsDirs = fs.readdirSync(resultsBaseDir);
+        
+        for (const dir of resultsDirs) {
+          const fullDirPath = path.join(resultsBaseDir, dir);
+          
+          // Check if it's a directory and matches patterns we expect
+          if (fs.statSync(fullDirPath).isDirectory()) {
+            
+            // Check if it's an imported model directory from this session
+            if (dir.startsWith('imported_model_')) {
+              // We can't easily tie this back to a session, but we can clean up
+              // any that don't have corresponding active inference sessions
+              let hasActiveInference = false;
+              
+              for (const [inferenceId, inference] of inferenceSessions.entries()) {
+                if (inference.result && 
+                    inference.result.output_path && 
+                    inference.result.output_path.includes(dir)) {
+                  // Don't delete if it belongs to a different active session
+                  if (inference.sessionId !== sessionId) {
+                    hasActiveInference = true;
+                    break;
+                  }
+                }
+              }
+              
+              // If this imported model results directory belongs to our session, delete it
+              if (!hasActiveInference) {
+                // Check if any inference in our session used this directory
+                let belongsToOurSession = false;
+                for (const inferenceId of inferenceIdsToCleanup) {
+                  const inference = inferenceSessions.get(inferenceId);
+                  if (inference && inference.result && 
+                      inference.result.output_path && 
+                      inference.result.output_path.includes(dir)) {
+                    belongsToOurSession = true;
+                    break;
+                  }
+                }
+                
+                if (belongsToOurSession) {
+                  deleteDirectory(fullDirPath);
+                  console.log('Cleaned up imported model results:', dir);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error scanning results directory:', error);
+      }
+    }
+    
+    // Clean up training sessions for this session
+    for (const trainingId of trainingIdsToCleanup) {
+      trainingSessions.delete(trainingId);
+      console.log('Removed training session:', trainingId);
+    }
+    
+    // Clean up inference sessions for this session
+    for (const inferenceId of inferenceIdsToCleanup) {
+      inferenceSessions.delete(inferenceId);
+      console.log('Removed inference session:', inferenceId);
+    }
+    
+    console.log(`Session cleanup summary:
+      - Training sessions removed: ${trainingIdsToCleanup.length}
+      - Inference sessions removed: ${inferenceIdsToCleanup.length}
+      - Directories cleaned: uploads/${sessionId}, models/${sessionId}, outputs/${sessionId}, and all associated results`);
+    
+    // Destroy the session
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Error destroying session:', err);
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Failed to destroy session' 
+        });
+      }
+      
+      console.log('Session reset completed successfully');
+      res.json({ 
+        success: true, 
+        message: 'Session reset successfully',
+        cleanupSummary: {
+          trainingSessions: trainingIdsToCleanup.length,
+          inferenceSessions: inferenceIdsToCleanup.length
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error in reset-session:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error during session reset' 
+    });
+  }
+});
 
 // WebSocket connection for real-time updates
 io.on('connection', (socket) => {
@@ -1315,11 +1483,6 @@ function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, io)
         inference.result = result;
       }
       
-      // Send completion with full result
-      io.to(`inference-${inferenceId}`).emit('inference-complete', { 
-        success: true, 
-        result: result 
-      });
     })
     .catch((error) => {
       console.error('Inference failed:', error);
@@ -1332,11 +1495,6 @@ function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, io)
         inference.error = error.message;
       }
       
-      // Send failure notification
-      io.to(`inference-${inferenceId}`).emit('inference-complete', { 
-        success: false, 
-        error: error.message 
-      });
     });
 }
 

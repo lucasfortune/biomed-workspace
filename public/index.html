@@ -290,6 +290,38 @@
         </div>
     </div>
 
+    <!-- Warning Modal for Reset Workflow -->
+    <div class="warning-overlay" id="resetWarningOverlay">
+        <div class="warning-content">
+            <div class="warning-header">
+                <h3>⚠️ Start New Analysis</h3>
+            </div>
+            <div class="warning-body">
+                <p><strong>Warning:</strong> Starting a new analysis will permanently delete all your current data including:</p>
+                <ul>
+                    <li>Trained model files</li>
+                    <li>Segmentation results</li>
+                    <li>Uploaded data files</li>
+                    <li>All session data</li>
+                </ul>
+                <p>Would you like to download your results before proceeding?</p>
+            </div>
+            <div class="warning-actions">
+                <div class="download-actions" id="downloadActions">
+                    <!-- Download buttons will be dynamically populated -->
+                </div>
+                <div class="final-actions">
+                    <button class="btn primary" id="proceedResetBtn" onclick="proceedWithReset()">
+                        Yes, Start New Analysis
+                    </button>
+                    <button class="btn secondary" id="cancelResetBtn" onclick="cancelReset()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Error Messages -->
     <div class="error-message" id="errorMessage"></div>
 

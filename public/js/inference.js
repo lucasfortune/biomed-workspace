@@ -274,3 +274,5 @@ function downloadResults() {
         showError('No inference results available for download. Please run segmentation first.');
     }
 }
+
+window.downloadResults = downloadResults;
