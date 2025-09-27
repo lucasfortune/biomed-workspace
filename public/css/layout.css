@@ -22,6 +22,20 @@
     color: #28a745;
 }
 
+.step.disabled {
+    color: #ccc !important;
+    cursor: not-allowed;
+}
+
+.step.disabled .step-number {
+    background: #ccc !important;
+}
+
+.navigation-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .step-number {
     background: #dee2e6;
     color: white;

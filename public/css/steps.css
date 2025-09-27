@@ -3,6 +3,16 @@
     text-align: center;
 }
 
+.training-action {
+    margin-bottom: 30px;
+}
+
+.btn-large {
+    padding: 15px 30px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
 .training-status {
     background: #e3f2fd;
     padding: 30px;

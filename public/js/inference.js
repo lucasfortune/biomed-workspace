@@ -83,6 +83,10 @@ async function runInference() {
 
         if (inferenceResult.success) {
             currentInferenceId = inferenceResult.inference_id;
+
+            // NEW: Mark inference as in progress
+            processStates.inferenceInProgress = true;
+            updateNavigationButtons();
             
             console.log('Inference started successfully:', inferenceResult.model_info);
             
@@ -170,6 +174,14 @@ function onInferenceComplete(data) {
     hideLoading();
     
     if (data.success) {
+        // NEW: Mark step 4 as completed and enable step 5
+        stepStates[4].completed = true;
+        stepStates[5].canNavigate = true;
+        markStepCompleted(4);
+        
+        // Update process states
+        processStates.inferenceInProgress = false;
+        
         document.getElementById('inferenceNextBtn').disabled = false;
         
         // Store inference result for 3D visualization with detailed logging
@@ -178,7 +190,7 @@ function onInferenceComplete(data) {
         } else {
             console.log('No data.result found, creating fallback result');
             
-            // NEW: Handle both training and imported model cases
+            // Handle both training and imported model cases
             const usingImportedModel = window.importedModelInfo;
             const resultPath = usingImportedModel 
                 ? `results/imported_model_${Date.now()}/inference_result.tif`
@@ -193,15 +205,20 @@ function onInferenceComplete(data) {
             };
         }
         
-       // NEW: Store inference ID for downloads
+        // Store inference ID for downloads
         if (currentInferenceId) {
             window.inferenceResult.inference_id = currentInferenceId;
             console.log('Stored inference ID for downloads:', currentInferenceId);
         }
         
         showSuccess('Inference completed successfully! Your segmentation is ready.');
+        
+        // Update navigation buttons
+        updateNavigationButtons();
+        
     } else {
         showError('Inference failed: ' + (data.error || 'Unknown error'));
+        processStates.inferenceInProgress = false;
     }
 }
 

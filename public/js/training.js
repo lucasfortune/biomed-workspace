@@ -41,6 +41,20 @@ async function startTraining() {
         if (result.success) {
             currentTrainingId = result.training_id;
             
+            // Mark training as started
+            stepStates[3].trainingStarted = true;
+            processStates.trainingInProgress = true;
+            
+            // Hide the start training action and show progress
+            const trainingAction = document.getElementById('trainingAction');
+            const startTrainingBtn = document.getElementById('startTrainingBtn');
+            if (trainingAction) {
+                trainingAction.style.display = 'none';
+            }
+            if (startTrainingBtn) {
+                startTrainingBtn.disabled = true;
+            }
+            
             // Initialize training UI
             document.getElementById('totalEpochs').textContent = config.num_epochs;
             document.getElementById('currentEpoch').textContent = '0';
@@ -51,8 +65,10 @@ async function startTraining() {
             // Start polling as backup
             startTrainingPolling();
             
-            nextStep();
+            // Update navigation buttons
             document.getElementById('trainingBackBtn').disabled = true;
+            updateNavigationButtons();
+            
         } else {
             showError('Failed to start training: ' + result.error);
         }
@@ -115,12 +131,31 @@ function onTrainingComplete(data) {
     
     if (data.success) {
         document.getElementById('trainingStatusText').textContent = 'Training completed successfully!';
+        
+        // NEW: Mark step 3 as completed and enable step 4
+        stepStates[3].completed = true;
+        stepStates[3].trainingCompleted = true;
+        stepStates[4].canNavigate = true;
+        markStepCompleted(3);
+        
+        // Update process states
+        processStates.trainingInProgress = false;
+        
+        // Enable navigation buttons
         document.getElementById('trainingNextBtn').disabled = false;
         document.getElementById('trainingBackBtn').disabled = false;
+        
+        // Update navigation buttons
+        updateNavigationButtons();
         
     } else {
         document.getElementById('trainingStatusText').textContent = 'Training failed!';
         showError('Training failed. Please check your configuration and try again.');
+        
+        // Reset training states on failure
+        stepStates[3].trainingStarted = false;
+        processStates.trainingInProgress = false;
+        document.getElementById('trainingBackBtn').disabled = false;
     }
     
     // Stop polling

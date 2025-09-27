@@ -145,7 +145,7 @@
 
                 <div class="navigation-buttons">
                     <button class="btn secondary" onclick="previousStep()">Previous</button>
-                    <button class="btn" onclick="startTraining()">Start Training</button>
+                    <button class="btn" onclick="nextStep()">Next: Start Training</button>
                 </div>
             </div>
 
@@ -153,6 +153,17 @@
             <div class="step-content" id="step3">
                 <h2>Step 3: Training Progress</h2>
                 
+                <!-- Start Training Action (only show if training hasn't started) -->
+                <div class="training-action" id="trainingAction">
+                    <div style="text-align: center; margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px;">
+                        <h3>Ready to Train Your Model</h3>
+                        <p>Your configuration has been saved. Click the button below to start training your U-Net model.</p>
+                        <button class="btn btn-large" onclick="startTraining()" id="startTrainingBtn">
+                            Start Training
+                        </button>
+                    </div>
+                </div>
+
                 <div class="training-status">
                     <h3 id="trainingStatusText">Initializing training...</h3>
                     <div class="training-progress">

@@ -172,6 +172,8 @@ async function loadTestDataset() {
         const step1NextBtn = document.getElementById('step1Next');
         if (step1NextBtn) {
             step1NextBtn.disabled = false;
+            markStepCompleted(1);
+            updateNavigationButtons();
         }
         
         // Update upload sections visually

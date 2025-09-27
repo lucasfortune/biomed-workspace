@@ -106,6 +106,8 @@ async function validateTiffStacks() {
         if (result.success) {
             showValidationSuccess(result.validation);
             document.getElementById('step1Next').disabled = false;
+            markStepCompleted(1);
+            updateNavigationButtons();
         } else {
             // Use result.details for the actual error message from Python validation
             const errorMessage = result.details || result.error || 'Unknown validation error';

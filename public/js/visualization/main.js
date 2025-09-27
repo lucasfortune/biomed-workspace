@@ -35,6 +35,32 @@ export async function initialize3DVisualization() {
         console.error('3D container not found!');
         return;
     }
+
+    // NEW: Check if already initialized to prevent retriggering
+    if (processStates && processStates.visualizationInitialized) {
+        console.log('3D visualization already initialized, skipping...');
+        return;
+    }
+
+    // NEW: Check if we have inference results
+    if (!window.inferenceResult || !window.inferenceResult.visualization_path) {
+        console.log('No inference results available for 3D visualization');
+        hideLoading();
+        
+        // Show user-friendly message
+        const container = document.getElementById('threejsContainer');
+        if (container) {
+            container.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666;">
+                    <div>
+                        <h3>No 3D Data Available</h3>
+                        <p>Please complete inference first to generate 3D visualization data.</p>
+                    </div>
+                </div>
+            `;
+        }
+        return;
+    }
     
     // NEW: Show loading screen for 3D visualization
     showLoading('Loading 3D Visualization...', 'Processing segmentation data and creating 3D meshes. This may take a moment for large datasets.');
