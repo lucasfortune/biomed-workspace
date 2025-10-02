@@ -59,12 +59,45 @@ def validate_tiff_stacks(raw_path, annotation_path):
                 "error": f"Expected 3D stack, got {len(raw_stack.shape)}D"
             }
         
-        # Validate data types
-        if raw_stack.dtype not in [np.uint8, np.uint16, np.float32, np.float64]:
+        # Validate and convert data types
+        supported_types = [np.uint8, np.uint16, np.int16, np.int32, np.float32, np.float64]
+        
+        if raw_stack.dtype not in supported_types:
             return {
                 "valid": False,
-                "error": f"Unsupported raw image data type: {raw_stack.dtype}"
+                "error": f"Unsupported raw image data type: {raw_stack.dtype}. Supported types: uint8, uint16, int16, int32, float32, float64"
             }
+        
+        # Convert signed integer types to float32 for consistent processing
+        # This handles int16 and int32 which some microscopy software uses
+        conversion_applied = False
+        original_dtype = str(raw_stack.dtype)
+        
+        if raw_stack.dtype in [np.int16, np.int32]:
+            # Normalize to [0, 1] range based on actual data range
+            # This preserves the full dynamic range of the data
+            data_min = raw_stack.min()
+            data_max = raw_stack.max()
+            
+            if data_max > data_min:
+                raw_stack = ((raw_stack.astype(np.float32) - data_min) / (data_max - data_min))
+            else:
+                raw_stack = np.zeros_like(raw_stack, dtype=np.float32)
+            
+            # Scale to uint16 range for consistency with training pipeline
+            raw_stack = (raw_stack * 65535).astype(np.uint16)
+            
+            # Save the converted file back
+            try:
+                tifffile.imwrite(raw_path, raw_stack)
+                conversion_applied = True
+                print(f"[Bit Depth Conversion] Conversion successful! Original range: [{data_min}, {data_max}]", file=sys.stderr, flush=True)
+                print(f"[Bit Depth Conversion] Converted from {original_dtype} to uint16", file=sys.stderr, flush=True)
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "error": f"Failed to convert signed integer format: {str(e)}"
+                }
         
         # Check annotation values and convert if necessary
         unique_values = np.unique(annotation_stack)
@@ -140,13 +173,15 @@ def validate_tiff_stacks(raw_path, annotation_path):
                 "num_slices": raw_stack.shape[0],
                 "slice_dimensions": raw_stack.shape[1:],
                 "raw_dtype": str(raw_stack.dtype),
+                "raw_dtype_original": original_dtype if conversion_applied else str(raw_stack.dtype),
                 "annotation_dtype": str(annotation_stack.dtype),
                 "raw_size_mb": round(raw_size_mb, 2),
                 "annotation_size_mb": round(annotation_size_mb, 2),
                 "raw_stats": raw_stats,
                 "annotation_stats": annotation_stats,
                 "conversion_performed": conversion_performed,
-                "value_mapping": value_mapping if value_mapping else None
+                "value_mapping": value_mapping if value_mapping else None,
+                "bit_depth_conversion_applied": conversion_applied
             }
         }
 

@@ -50,12 +50,46 @@ def validate_inference_tiff(file_path):
             tiff_data = np.expand_dims(tiff_data, axis=0)
             print("Converted 2D image to 3D stack with 1 slice", flush=True)
         
-        # Validate data type
-        if tiff_data.dtype not in [np.uint8, np.uint16, np.float32, np.float64]:
+        # Validate and convert data types
+        supported_types = [np.uint8, np.uint16, np.int16, np.int32, np.float32, np.float64]
+        
+        if tiff_data.dtype not in supported_types:
             return {
                 "valid": False,
-                "error": f"Unsupported data type: {tiff_data.dtype}. Supported types: uint8, uint16, float32, float64"
+                "error": f"Unsupported data type: {tiff_data.dtype}. Supported types: uint8, uint16, int16, int32, float32, float64"
             }
+        
+        # Convert signed integer types to float32 for consistent processing
+        conversion_applied = False
+        original_dtype = str(tiff_data.dtype)
+        
+        if tiff_data.dtype in [np.int16, np.int32]:
+            print(f"[Bit Depth Conversion] Detected signed integer type: {tiff_data.dtype}", file=sys.stderr, flush=True)
+            print(f"[Bit Depth Conversion] Converting to float32 for inference...", file=sys.stderr, flush=True)
+            
+            # Normalize to [0, 1] range based on actual data range
+            data_min = tiff_data.min()
+            data_max = tiff_data.max()
+            
+            if data_max > data_min:
+                tiff_data = ((tiff_data.astype(np.float32) - data_min) / (data_max - data_min))
+            else:
+                tiff_data = np.zeros_like(tiff_data, dtype=np.float32)
+            
+            # Scale to uint16 range for consistency
+            tiff_data = (tiff_data * 65535).astype(np.uint16)
+            
+            # Save the converted file back
+            try:
+                tifffile.imwrite(file_path, tiff_data)
+                conversion_applied = True
+                print(f"[Bit Depth Conversion] Conversion successful! Original range: [{data_min}, {data_max}]", file=sys.stderr, flush=True)
+                print(f"[Bit Depth Conversion] Converted from {original_dtype} to uint16", file=sys.stderr, flush=True)
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "error": f"Failed to convert signed integer format: {str(e)}"
+                }
         
         # Check for reasonable dimensions
         if any(dim > 4096 for dim in tiff_data.shape):
@@ -122,9 +156,11 @@ def validate_inference_tiff(file_path):
                 "num_slices": tiff_data.shape[0] if len(tiff_data.shape) == 3 else 1,
                 "slice_dimensions": list(tiff_data.shape[1:]) if len(tiff_data.shape) == 3 else list(tiff_data.shape),
                 "dtype": str(tiff_data.dtype),
+                "dtype_original": original_dtype if conversion_applied else str(tiff_data.dtype),
                 "file_size_mb": round(file_size_mb, 2),
                 "estimated_memory_mb": round(estimated_memory_mb, 2),
                 "data_stats": data_stats,
+                "bit_depth_conversion_applied": conversion_applied,
                 "warnings": generate_warnings(tiff_data, file_size_mb, estimated_memory_mb)
             }
         }
