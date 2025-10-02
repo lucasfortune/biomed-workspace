@@ -21,12 +21,19 @@ A web-based machine learning pipeline for biomedical image segmentation using U-
 
 ### Setup
 
-1. **Install Node.js dependencies**
+1. **Clone the Repository**
+
+```bash
+git clone https://github.com/lucasfortune/viz_app.git
+cd viz_app
+```
+
+2. **Install Node.js dependencies**
 ```bash
 npm install
 ```
 
-2. **Install Python dependencies**
+3. **Install Python dependencies**
 ```bash
 # Optional: Create virtual environment
 python -m venv venv
@@ -36,17 +43,17 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. **Create required directories**
+4. **Create required directories**
 ```bash
 mkdir uploads models outputs results
 ```
 
-4. **Start the application**
+5. **Start the application**
 ```bash
 npm start
 ```
 
-5. **Access the application**
+6. **Access the application**
 ```
 http://localhost:3000
 ```
@@ -77,7 +84,6 @@ http://localhost:3000
 ### Step 5: 3D Visualization
 - Interactive 3D view with mouse controls (rotate, zoom, pan)
 - Per-class opacity and visibility controls
-- Multi-axis slicing (X, Y, Z directions)
 - Export screenshots or data
 
 ## Troubleshooting
