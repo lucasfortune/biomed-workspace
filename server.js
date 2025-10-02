@@ -1081,10 +1081,20 @@ async function validateTiffStacks(rawPath, annotationPath) {
 
     pythonScript.stdout.on('data', (data) => {
       output += data.toString();
+      // Log Python output to console for debugging (includes conversion messages)
+      const message = data.toString().trim();
+      if (message) {
+        console.log('[Python Validation]:', message);
+      }
     });
 
     pythonScript.stderr.on('data', (data) => {
       error += data.toString();
+      // Log errors to console
+      const message = data.toString().trim();
+      if (message) {
+        console.error('[Python Validation Error]:', message);
+      }
     });
 
     pythonScript.on('close', (code) => {

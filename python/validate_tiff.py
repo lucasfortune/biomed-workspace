@@ -12,6 +12,7 @@ from pathlib import Path
 import base64
 import io
 from PIL import Image
+from convert_annotations import convert_annotation_values, validate_annotation_classes
 
 def validate_tiff_stacks(raw_path, annotation_path):
     """
@@ -65,15 +66,49 @@ def validate_tiff_stacks(raw_path, annotation_path):
                 "error": f"Unsupported raw image data type: {raw_stack.dtype}"
             }
         
-        # Check annotation values (should be 0, 1, 2 for 3-class segmentation)
+        # Check annotation values and convert if necessary
         unique_values = np.unique(annotation_stack)
         expected_values = {0, 1, 2}
         
-        if not set(unique_values).issubset(expected_values):
+        # First, validate that the number of classes is reasonable
+        is_valid_count, count_error = validate_annotation_classes(unique_values, max_classes=10)
+        if not is_valid_count:
             return {
                 "valid": False,
-                "error": f"Invalid annotation values. Expected 0,1,2, got: {unique_values}"
+                "error": count_error
             }
+        
+        # Check if values need conversion
+        value_mapping = None
+        conversion_performed = False
+        
+        if not set(unique_values).issubset(expected_values):
+            # Values are not 0,1,2 - need to convert them
+            print(f"[Annotation Conversion] Original values detected: {unique_values.tolist()}", file=sys.stderr, flush=True)
+            print(f"[Annotation Conversion] Converting to sequential 0,1,2,...", file=sys.stderr, flush=True)
+            
+            # Convert the annotation stack
+            annotation_stack, value_mapping = convert_annotation_values(annotation_stack)
+            
+            # Save the converted annotations back to the original file
+            # This overwrites the uploaded file with the converted version
+            try:
+                tifffile.imwrite(annotation_path, annotation_stack)
+                conversion_performed = True
+                print(f"[Annotation Conversion] Conversion successful!", file=sys.stderr, flush=True)
+                print(f"[Annotation Conversion] Mapping applied: {value_mapping}", file=sys.stderr, flush=True)
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "error": f"Failed to save converted annotations: {str(e)}"
+                }
+            
+            # Update unique_values for statistics calculation
+            unique_values = np.unique(annotation_stack)
+        else:
+            # Values are already 0,1,2 - no conversion needed
+            print("[Annotation Conversion] Values are already in expected format (0,1,2)", file=sys.stderr, flush=True)
+            conversion_performed = False
         
         # Calculate file sizes
         raw_size_mb = Path(raw_path).stat().st_size / (1024 * 1024)
@@ -109,7 +144,9 @@ def validate_tiff_stacks(raw_path, annotation_path):
                 "raw_size_mb": round(raw_size_mb, 2),
                 "annotation_size_mb": round(annotation_size_mb, 2),
                 "raw_stats": raw_stats,
-                "annotation_stats": annotation_stats
+                "annotation_stats": annotation_stats,
+                "conversion_performed": conversion_performed,
+                "value_mapping": value_mapping if value_mapping else None
             }
         }
 
