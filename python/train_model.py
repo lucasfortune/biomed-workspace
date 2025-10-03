@@ -25,7 +25,7 @@ from datetime import datetime
 # Import your classes (assuming they're in separate files or copied here)
 class Imagedataset(Dataset):
     def __init__(self, image_dir, mask_dir, transform=None, patch_size=None, 
-                 patches_per_image=None, augment=False, augment_prob=0.5):
+                 patches_per_image=None, augment=False, augment_prob=0.5, num_classes=3):
         """
         Args:
             image_dir (str): Directory with all the images
@@ -35,6 +35,7 @@ class Imagedataset(Dataset):
             patches_per_image (int, optional): Number of patches per image
             augment (bool): Whether to apply augmentations
             augment_prob (float): Probability of applying each augmentation
+            num_classes (int): Number of segmentation classes
         """
         self.image_dir = image_dir
         self.mask_dir = mask_dir
@@ -43,6 +44,7 @@ class Imagedataset(Dataset):
         self.patches_per_image = patches_per_image
         self.augment = augment
         self.augment_prob = augment_prob
+        self.num_classes = num_classes
         self.images = [f for f in os.listdir(image_dir) if f.endswith('.tif')]
         
         # Validate patch parameters
@@ -133,7 +135,7 @@ class Imagedataset(Dataset):
             
             # Convert mask to one-hot encoding
             mask_tensor = torch.from_numpy(mask_array).long()
-            mask_onehot = torch.nn.functional.one_hot(mask_tensor, num_classes=3)
+            mask_onehot = torch.nn.functional.one_hot(mask_tensor, num_classes=self.num_classes)
             mask_onehot = mask_onehot.permute(2, 0, 1).float()
             
             return image_tensor, mask_onehot
@@ -246,14 +248,15 @@ class UNet(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-def calculate_dice_score(pred, target):
+def calculate_dice_score(pred, target, num_classes=3):
     """Calculate Dice score for segmentation quality."""
     pred = torch.softmax(pred, dim=1)
     pred = pred.argmax(dim=1)
     target = target.argmax(dim=1)
     
     dice_scores = []
-    for class_idx in range(1, 3):  # Skip background class
+    # Skip background class (0), calculate for foreground classes only
+    for class_idx in range(1, num_classes):
         pred_class = (pred == class_idx)
         target_class = (target == class_idx)
         
@@ -263,7 +266,7 @@ def calculate_dice_score(pred, target):
         dice = (2. * intersection + 1e-6) / (union + 1e-6)
         dice_scores.append(dice.item())
     
-    return np.mean(dice_scores)
+    return np.mean(dice_scores) if dice_scores else 0.0
 
 def send_progress(epoch, total_epochs, train_loss, train_dice, val_loss, val_dice, training_id):
     """Send progress update to Node.js via stdout"""
@@ -365,7 +368,7 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
             
             # Calculate metrics
             train_loss += loss.item()
-            train_dice += calculate_dice_score(outputs, masks)
+            train_dice += calculate_dice_score(outputs, masks, config.get('num_classes', 3))
         
         # Calculate epoch metrics
         epoch_train_loss = train_loss / len(train_loader)
@@ -385,7 +388,7 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
                 loss = criterion(outputs, masks.argmax(dim=1))
                 
                 val_loss += loss.item()
-                val_dice += calculate_dice_score(outputs, masks)
+                val_dice += calculate_dice_score(outputs, masks, config.get('num_classes', 3))
         
         epoch_val_loss = val_loss / len(val_loader)
         epoch_val_dice = val_dice / len(val_loader)
@@ -409,7 +412,7 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
                     'features': config['features'],  # Use from config
                     'num_layers': config['num_layers'],  # Use from config  
                     'in_channels': 1,
-                    'num_classes': 3
+                    'num_classes': config.get('num_classes', 3)  # CHANGED: Use dynamic num_classes
                 },
                 'training_config': config,  # Store the full training config
                 'pytorch_version': torch.__version__
@@ -433,7 +436,7 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
             loss = criterion(outputs, masks.argmax(dim=1))
             
             test_loss += loss.item()
-            test_dice += calculate_dice_score(outputs, masks)
+            test_dice += calculate_dice_score(outputs, masks, config.get('num_classes', 3))
     
     final_test_loss = test_loss / len(test_loader)
     final_test_dice = test_dice / len(test_loader)
@@ -487,13 +490,17 @@ def main():
         
         # Create datasets
         print("Creating datasets...", flush=True)
+        num_classes = config.get('num_classes', 3)
+        print(f"Using {num_classes} classes for segmentation", flush=True)
+        
         train_dataset = Imagedataset(
             image_dir=data_dirs['train_imgs_dir'],
             mask_dir=data_dirs['train_masks_dir'],
             transform=True,
             patch_size=config['patch_size'],
             patches_per_image=config['patches_per_image'],
-            augment=config.get('augment', False)
+            augment=config.get('augment', False),
+            num_classes=num_classes
         )
 
         val_dataset = Imagedataset(
@@ -501,8 +508,9 @@ def main():
             mask_dir=data_dirs['val_masks_dir'],
             transform=True,
             patch_size=config['patch_size'],
-            patches_per_image=max(1, config.get('patches_per_image', 10) // 2),  # Use half the patches for faster validation
-            augment=False
+            patches_per_image=max(1, config.get('patches_per_image', 10) // 2),
+            augment=False,
+            num_classes=num_classes
         )
 
         test_dataset = Imagedataset(
@@ -510,8 +518,9 @@ def main():
             mask_dir=data_dirs['test_masks_dir'],
             transform=True,
             patch_size=config['patch_size'],
-            patches_per_image=max(1, config.get('patches_per_image', 10) // 3),  # Use fewer patches for testing
-            augment=False
+            patches_per_image=max(1, config.get('patches_per_image', 10) // 3),
+            augment=False,
+            num_classes=num_classes
         )
 
         # Create data loaders
@@ -525,7 +534,7 @@ def main():
             features=config['features'],
             num_layers=config['num_layers'],
             in_channels=1,
-            num_classes=3
+            num_classes=num_classes
         ).to(device)
 
         # Define loss function and optimizer

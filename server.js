@@ -284,6 +284,17 @@ app.post('/start-training', (req, res) => {
 
     const sessionId = req.session.id;
     const trainingId = uuid.v4();
+
+    // Add num_classes from validation to config
+    const config = req.session.trainingConfig;
+    if (req.session.uploadedFiles.validation && req.session.uploadedFiles.validation.num_classes) {
+      config.num_classes = req.session.uploadedFiles.validation.num_classes;
+      console.log(`Using ${config.num_classes} classes detected from annotations`);
+    } else {
+      // Fallback to 3 if not detected (shouldn't happen with new validation)
+      config.num_classes = 3;
+      console.log('Warning: num_classes not detected, defaulting to 3');
+    }
     
     // Prepare training parameters
     const trainingParams = {

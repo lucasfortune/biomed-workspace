@@ -4,7 +4,7 @@ A web-based machine learning pipeline for biomedical image segmentation using U-
 
 ![Node.js](https://img.shields.io/badge/Node.js-v18+-blue) ![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Three.js](https://img.shields.io/badge/Three.js-r128-orange)
 
-![Segmentation Result](https://github.com/lucasfortune/viz_app/blob/main/src/imgs/segmentation_result_example.png)
+![Segmentation Result](https://github.com/lucasfortune/viz_app/blob/main/src/imgs/platelet_rotate.gif)
 
 ## Features
 

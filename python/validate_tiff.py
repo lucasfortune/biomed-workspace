@@ -155,8 +155,12 @@ def validate_tiff_stacks(raw_path, annotation_path):
             "std": float(raw_stack.std())
         }
         
+        # Detect number of classes from annotations
+        num_classes = len(unique_values)
+        
         annotation_stats = {
             "unique_values": unique_values.tolist(),
+            "num_classes": num_classes,
             "class_counts": {
                 int(val): int(np.sum(annotation_stack == val)) 
                 for val in unique_values
@@ -168,6 +172,7 @@ def validate_tiff_stacks(raw_path, annotation_path):
 
         result = {
             "valid": True,
+            "num_classes": num_classes,
             "info": {
                 "shape": raw_stack.shape,
                 "num_slices": raw_stack.shape[0],
