@@ -2,9 +2,9 @@
 
 A web-based machine learning pipeline for biomedical image segmentation using U-Net neural networks with interactive 3D visualization.
 
-![Node.js](https://img.shields.io/badge/Node.js-v18+-blue) ![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Three.js](https://img.shields.io/badge/Three.js-r128-orange)
-
 ![Segmentation Result](https://github.com/lucasfortune/viz_app/blob/main/src/imgs/platelet_rotate.gif)
+
+![Node.js](https://img.shields.io/badge/Node.js-v18+-blue) ![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Three.js](https://img.shields.io/badge/Three.js-r128-orange)
 
 ## Features
 

@@ -406,3 +406,19 @@
         transform: translateY(0);
     }
 }
+
+/* Original Data Control Panel - Special styling to distinguish from classes */
+.original-data-panel {
+    background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+    border: 2px solid #999;
+    margin-bottom: 15px;
+}
+
+.original-data-panel:hover {
+    border-color: #666;
+}
+
+.original-data-panel .class-label {
+    color: #555 !important;
+    font-style: italic;
+}

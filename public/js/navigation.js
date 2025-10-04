@@ -75,6 +75,8 @@ function setStep(stepNumber) {
     // Update progress bar and navigation buttons
     updateProgressBar();
     updateNavigationButtons();
+
+    window.scrollTo(0, 0);
 }
 
 function nextStep() {

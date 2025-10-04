@@ -37,6 +37,184 @@ export async function loadSegmentationData(visualizationPath) {
 }
 
 /**
+ * Load and create textured planes for original data overlay
+ * @param {string} inferenceId - The inference ID
+ * @param {Object} segmentationData - The segmentation data for spatial reference
+ * @returns {Object} - Object containing planes and metadata
+ */
+export async function loadAndCreateOriginalDataPlanes(inferenceId, segmentationData) {
+    try {
+        console.log('Loading downsampled original data for overlay...');
+        
+        // Fetch the downsampled TIFF from server
+        const response = await fetch(`/results/${inferenceId}/original-data-web`);
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                console.warn('Original data overlay not available for this inference');
+                return null;
+            }
+            throw new Error(`Failed to load original data: ${response.status}`);
+        }
+        
+        // Get the TIFF data as array buffer
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // Parse TIFF using tiff.js library (we'll need to add this)
+        // For now, we'll use a simpler approach with a library loaded via CDN
+        const tiffData = await parseTiffData(arrayBuffer);
+        
+        console.log(`Original data loaded: ${tiffData.slices.length} slices, ${tiffData.width}x${tiffData.height}`);
+        
+        // Create textured planes for each slice
+        const planes = createTexturedPlanes(tiffData, segmentationData);
+        
+        return {
+            planes: planes,
+            planeGroup: planes.group,
+            metadata: {
+                numSlices: tiffData.slices.length,
+                width: tiffData.width,
+                height: tiffData.height
+            }
+        };
+        
+    } catch (error) {
+        console.error('Failed to load original data overlay:', error);
+        return null;
+    }
+}
+
+/**
+ * Parse TIFF data from array buffer
+ * Uses a lightweight TIFF parser
+ */
+async function parseTiffData(arrayBuffer) {
+    // We'll use tiff.js library which we need to load
+    // For multi-page TIFF support
+    const Tiff = window.Tiff || window.UTIF;
+    
+    if (!Tiff) {
+        throw new Error('TIFF parser library not loaded');
+    }
+    
+    // Decode TIFF
+    const ifds = Tiff.decode(arrayBuffer);
+    const slices = [];
+    
+    for (let i = 0; i < ifds.length; i++) {
+        Tiff.decodeImage(arrayBuffer, ifds[i]);
+        const rgba = Tiff.toRGBA8(ifds[i]);
+        
+        slices.push({
+            data: new Uint8Array(rgba),
+            width: ifds[i].width,
+            height: ifds[i].height
+        });
+    }
+    
+    return {
+        slices: slices,
+        width: ifds[0].width,
+        height: ifds[0].height
+    };
+}
+
+/**
+ * Create textured planes from TIFF slice data
+ */
+function createTexturedPlanes(tiffData, segmentationData) {
+    const group = new THREE.Group();
+    const planes = [];
+    
+    // Get segmentation dimensions (in voxel space)
+    const [segDepth, segHeight, segWidth] = segmentationData.shape;
+    
+    console.log(`Segmentation voxel dimensions: ${segWidth} x ${segHeight} x ${segDepth}`);
+    console.log(`Original data texture dimensions: ${tiffData.width} x ${tiffData.height} x ${tiffData.slices.length}`);
+    
+    // CRITICAL: Use EXACT SAME scaling as segmentation meshes
+    const maxOriginalDim = Math.max(segDepth, segHeight, segWidth);
+    const targetMaxSize = 8; // Same as segmentation
+    const scaleFactor = targetMaxSize / maxOriginalDim;
+    
+    console.log(`Scale factor: ${scaleFactor.toFixed(6)} (same as segmentation)`);
+    
+    // Calculate scaled dimensions (after applying scaleFactor)
+    const scaledWidth = segWidth * scaleFactor;
+    const scaledHeight = segHeight * scaleFactor;
+    const scaledDepth = segDepth * scaleFactor;
+    
+    console.log(`Scaled dimensions: ${scaledWidth.toFixed(3)} x ${scaledHeight.toFixed(3)} x ${scaledDepth.toFixed(3)}`);
+    
+    // Calculate Z spacing in SCALED space
+    const zSpacing = scaledDepth / (tiffData.slices.length - 1);
+    
+    console.log(`Z spacing between planes: ${zSpacing.toFixed(4)}`);
+    
+    // Create a plane for each slice
+    tiffData.slices.forEach((slice, index) => {
+        // Create texture from slice data
+        const texture = new THREE.DataTexture(
+            slice.data,
+            slice.width,
+            slice.height,
+            THREE.RGBAFormat,
+            THREE.UnsignedByteType
+        );
+        texture.needsUpdate = true;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        
+        // Create plane geometry with SCALED dimensions
+        // This matches the scaled segmentation mesh size
+        const geometry = new THREE.PlaneGeometry(scaledWidth, scaledHeight);
+        
+        // Create material with texture
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        
+        // Create mesh
+        const plane = new THREE.Mesh(geometry, material);
+        
+        // Position in SCALED Z space
+        // Centered from -scaledDepth/2 to +scaledDepth/2
+        let zPosition = (index * zSpacing) - (scaledDepth / 2);
+
+        // ANTI-Z-FIGHTING: Offset first and last planes slightly inward
+        const epsilon = 0.01; // Small offset to prevent z-fighting with segmentation caps
+        if (index === 0) {
+            zPosition += epsilon; // Move first plane slightly inward (positive Z)
+        } else if (index === tiffData.slices.length - 1) {
+            zPosition -= epsilon; // Move last plane slightly inward (negative Z)
+        }
+
+        plane.position.set(0, 0, zPosition);
+        
+        // Store metadata
+        plane.userData.sliceIndex = index;
+        plane.userData.isOriginalDataPlane = true;
+        
+        planes.push(plane);
+        group.add(plane);
+    });
+    
+    console.log(`Created ${planes.length} textured planes`);
+    console.log(`Plane size: ${scaledWidth.toFixed(3)} x ${scaledHeight.toFixed(3)}`);
+    console.log(`Planes span from Z=${(-scaledDepth/2).toFixed(3)} to Z=${(scaledDepth/2).toFixed(3)}`);
+    
+    return {
+        planes: planes,
+        group: group
+    };
+}
+
+/**
  * Create separate 3D meshes for each class in the segmentation data
  * @param {Object} data - The segmentation data
  * @param {Object} scene - Three.js scene to add meshes to

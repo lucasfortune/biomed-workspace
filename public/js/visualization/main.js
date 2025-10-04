@@ -3,7 +3,7 @@
 
 // Import functions from other modules
 import { initializeScene, startRenderLoop, positionCameraForMesh } from './scene.js';
-import { loadSegmentationData, createSeparateClassMeshes } from './meshCreation.js';
+import { loadSegmentationData, createSeparateClassMeshes, loadAndCreateOriginalDataPlanes } from './meshCreation.js';
 import { setupVisualizationControls } from './uiControls.js';
 import { setupEnhancedControls } from './interactions.js';
 import { createFallbackMesh, createErrorFallbackMesh } from './utils.js';
@@ -17,9 +17,11 @@ const hideLoading = window.hideLoading || (() => console.log('hideLoading not av
 export let scene, camera, renderer;
 export let meshGroup, segmentationMesh, classMeshes = {};
 export let sliceMeshes = {};
+export let originalDataPlanes = [];
+export let originalDataPlaneGroup = null;
 export let sliceMetadata = { sliceCount: 20, sliceDirection: 'z', visibleSliceRange: [0, 19] };
-export let classSliceRanges = {}; // NEW: Per-class slice ranges
-export let classBoundaryMeshes = {}; // NEW: Boundary meshes for each class
+export let classSliceRanges = {}; 
+export let classBoundaryMeshes = {};
 export let availableClasses = [], visibleClasses = [];
 export let segmentationData = null;
 export let sliceDirection = 'z';
@@ -117,6 +119,38 @@ export async function initialize3DVisualization() {
                 
                 // Position camera optimally for the mesh
                 positionCameraForMesh(meshGroup);
+
+                // Load and create original data overlay planes
+                try {
+                    // Get inference ID from stored result
+                    const inferenceId = window.inferenceResult?.inference_id;
+                    
+                    if (inferenceId) {
+                        console.log('Loading original data overlay...');
+                        const originalDataResult = await loadAndCreateOriginalDataPlanes(inferenceId, segmentationData);
+                        
+                        if (originalDataResult) {
+                            // Store globally
+                            originalDataPlanes = originalDataResult.planes;
+                            originalDataPlaneGroup = originalDataResult.planeGroup;
+                            
+                            // Add to the same meshGroup so it moves with segmentation
+                            meshGroup.add(originalDataPlaneGroup);
+                            
+                            // Start hidden (user can toggle on)
+                            originalDataPlaneGroup.visible = false;
+                            
+                            console.log('Original data overlay loaded successfully');
+                        } else {
+                            console.log('Original data overlay not available for this inference');
+                        }
+                    } else {
+                        console.log('No inference ID available, skipping original data overlay');
+                    }
+                } catch (error) {
+                    console.warn('Could not load original data overlay:', error);
+                    console.log('Visualization will continue without original data overlay');
+                }
                 
             } else {
                 console.warn('No meshes were created from segmentation data');
@@ -327,6 +361,37 @@ export function resetView() {
         meshGroup.rotation.set(0, 0, 0);
     }
     
+    const originalDataCheckbox = document.getElementById('originalDataCheckbox');
+    const originalDataOpacity = document.getElementById('originalDataOpacity');
+    const originalDataOpacityValue = document.getElementById('originalDataOpacityValue');
+
+    if (originalDataCheckbox) {
+        originalDataCheckbox.checked = false;  // Default: hidden
+    }
+
+    if (originalDataOpacity) {
+        originalDataOpacity.value = 30;  // Default: 30% opacity
+    }
+
+    if (originalDataOpacityValue) {
+        originalDataOpacityValue.textContent = '30%';
+    }
+
+    // Hide original data overlay
+    if (originalDataPlaneGroup) {
+        originalDataPlaneGroup.visible = false;
+    }
+
+    // Reset opacity to 30%
+    if (originalDataPlaneGroup && originalDataPlaneGroup.children) {
+        originalDataPlaneGroup.children.forEach(plane => {
+            if (plane.material) {
+                plane.material.opacity = 0.3;
+                plane.material.needsUpdate = true;
+            }
+        });
+    }
+
     // Reset camera position
     if (camera) {
         camera.position.set(8, 6, 8);
@@ -348,13 +413,15 @@ export function getGlobalState() {
         meshGroup,
         segmentationMesh,
         classMeshes,
-        sliceMeshes,           // ADD THIS
-        sliceMetadata,         // ADD THIS  
+        sliceMeshes,
+        sliceMetadata, 
         availableClasses,
         visibleClasses,
         segmentationData,
         sliceDirection,
-        classControlStates
+        classControlStates,
+        originalDataPlanes,
+        originalDataPlaneGroup
     };
 }
 
@@ -396,4 +463,6 @@ export function updateGlobalState(updates) {
     if (updates.segmentationData !== undefined) segmentationData = updates.segmentationData;
     if (updates.sliceDirection !== undefined) sliceDirection = updates.sliceDirection;
     if (updates.classControlStates !== undefined) classControlStates = updates.classControlStates;
+    if (updates.originalDataPlanes !== undefined) originalDataPlanes = updates.originalDataPlanes;
+    if (updates.originalDataPlaneGroup !== undefined) originalDataPlaneGroup = updates.originalDataPlaneGroup;
 }

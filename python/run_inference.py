@@ -300,6 +300,52 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
     }
     
     metadata_path = output_path.replace('.tif', '_metadata.json')
+
+    # Create downsampled version of original data for web visualization
+    try:
+        print("Creating downsampled original data for web visualization...", flush=True)
+        
+        # Define output path for downsampled original data
+        downsampled_path = output_path.replace('.tif', '_original_web.tif')
+        
+        # Call the downsampling script
+        import subprocess
+        downsample_process = subprocess.run(
+            [
+                'python',
+                'python/downsample_for_web.py',
+                str(input_path),
+                downsampled_path,
+                '0.25',  # 25% of original size
+                '5'      # Every 5th slice
+            ],
+            capture_output=True,
+            text=True
+        )
+        
+        # Check if downsampling was successful
+        if downsample_process.returncode == 0:
+            # Parse the downsampling result from stdout
+            for line in downsample_process.stdout.split('\n'):
+                if line.startswith('DOWNSAMPLE_RESULT:'):
+                    import json
+                    downsample_info = json.loads(line[18:])
+                    if downsample_info['success']:
+                        metadata['original_data_web'] = {
+                            'path': downsampled_path,
+                            'info': downsample_info
+                        }
+                        print(f"Original data downsampled successfully: {downsampled_path}", flush=True)
+                    break
+        else:
+            print(f"Warning: Downsampling failed, original data overlay will not be available", flush=True)
+            print(f"Error: {downsample_process.stderr}", flush=True)
+            
+    except Exception as e:
+        print(f"Warning: Could not create downsampled original data: {e}", flush=True)
+        print("3D visualization will work but without original data overlay", flush=True)
+
+
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
     

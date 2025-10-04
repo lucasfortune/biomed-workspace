@@ -25,12 +25,12 @@ export function setupVisualizationControls(availableClasses, classMeshes, classC
 
 /**
  * Generate individual control panels for each class
- * This replaces the old shared control system
+ * NOW ALSO creates the original data control panel
  * @param {Array} availableClasses - Array of available class numbers
  * @param {Object} classControlStates - Object to store control states
  */
 export function generateClassControlPanels(availableClasses, classControlStates) {
-    console.log('Generating individual control panels for classes:', availableClasses);
+    console.log('Generating control panels for original data and classes:', availableClasses);
     
     const container = document.getElementById('classControlPanels');
     if (!container) {
@@ -40,6 +40,10 @@ export function generateClassControlPanels(availableClasses, classControlStates)
     
     // Clear existing panels
     container.innerHTML = '';
+    
+    // NEW CODE: Create original data control panel FIRST (appears at top)
+    const originalDataPanel = createOriginalDataControlPanel();
+    container.appendChild(originalDataPanel);
     
     // Initialize control states for each class
     availableClasses.forEach(classValue => {
@@ -57,7 +61,111 @@ export function generateClassControlPanels(availableClasses, classControlStates)
         container.appendChild(panel);
     });
     
-    console.log('Class control panels generated successfully');
+    console.log('Control panels generated successfully');
+}
+
+/**
+ * NEW FUNCTION: Create control panel for original data overlay
+ * @returns {HTMLElement} - The created panel element
+ */
+export function createOriginalDataControlPanel() {
+    // Create main panel div
+    const panel = document.createElement('div');
+    panel.className = 'class-control-panel original-data-panel';
+    panel.id = 'originalDataPanel';
+    
+    // Create checkbox section
+    const checkboxSection = document.createElement('div');
+    checkboxSection.className = 'class-checkbox-section';
+    checkboxSection.innerHTML = `
+        <input type="checkbox" 
+               class="class-checkbox" 
+               id="originalDataCheckbox">
+        <div class="class-label" style="color: #888;">
+            Original Data
+        </div>
+    `;
+    
+    // Create opacity section
+    const opacitySection = document.createElement('div');
+    opacitySection.className = 'class-opacity-section';
+    opacitySection.innerHTML = `
+        <label class="class-opacity-label">Opacity:</label>
+        <input type="range" 
+               class="slider class-opacity-slider" 
+               id="originalDataOpacity"
+               min="5" 
+               max="100" 
+               value="30">
+        <span class="class-opacity-value" id="originalDataOpacityValue">30%</span>
+    `;
+    
+    // Assemble the panel (no range slider for original data)
+    panel.appendChild(checkboxSection);
+    panel.appendChild(opacitySection);
+    
+    // Add event listeners
+    setupOriginalDataListeners();
+    
+    return panel;
+}
+
+/**
+ * NEW FUNCTION: Set up event listeners for original data control
+ */
+export function setupOriginalDataListeners() {
+    setTimeout(() => {
+        // Checkbox listener
+        const checkbox = document.getElementById('originalDataCheckbox');
+        if (checkbox) {
+            checkbox.addEventListener('change', (e) => {
+                handleOriginalDataVisibilityChange(e.target.checked);
+            });
+        }
+        
+        // Opacity slider listener
+        const opacitySlider = document.getElementById('originalDataOpacity');
+        const opacityValue = document.getElementById('originalDataOpacityValue');
+        if (opacitySlider && opacityValue) {
+            opacitySlider.addEventListener('input', (e) => {
+                const value = e.target.value;
+                opacityValue.textContent = `${value}%`;
+                handleOriginalDataOpacityChange(value);
+            });
+        }
+        
+        console.log('Original data control listeners set up');
+    }, 10);
+}
+
+/**
+ * NEW FUNCTION: Handle original data visibility change
+ */
+function handleOriginalDataVisibilityChange(visible) {
+    const state = getGlobalState();
+    
+    if (state.originalDataPlaneGroup) {
+        state.originalDataPlaneGroup.visible = visible;
+        console.log(`Original data ${visible ? 'shown' : 'hidden'}`);
+    }
+}
+
+/**
+ * Handle original data opacity change
+ */
+function handleOriginalDataOpacityChange(value) {
+    const state = getGlobalState();
+    const opacity = parseInt(value) / 100;
+    
+    // Access the plane group and iterate through its children
+    if (state.originalDataPlaneGroup && state.originalDataPlaneGroup.children) {
+        state.originalDataPlaneGroup.children.forEach(plane => {
+            if (plane.material) {
+                plane.material.opacity = opacity;
+                plane.material.needsUpdate = true;
+            }
+        });
+    }
 }
 
 /**

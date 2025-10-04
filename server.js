@@ -887,6 +887,54 @@ For questions about these results, please refer to the application documentation
 // Serve static files
 app.use('/uploads', express.static('uploads'));
 app.use('/results', express.static('results'));
+
+// Serve downsampled original data for visualization
+app.get('/results/:inferenceId/original-data-web', (req, res) => {
+  const inferenceId = req.params.inferenceId;
+  
+  // Look up the inference session
+  const inference = inferenceSessions.get(inferenceId);
+  
+  if (!inference || !inference.result) {
+    return res.status(404).json({ 
+      error: 'Inference session not found or incomplete',
+      inferenceId: inferenceId 
+    });
+  }
+  
+  // Get the metadata path
+  const metadataPath = inference.result.metadata_path;
+  
+  if (!fs.existsSync(metadataPath)) {
+    return res.status(404).json({ error: 'Metadata file not found' });
+  }
+  
+  try {
+    // Read metadata to get downsampled original data path
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    
+    if (!metadata.original_data_web || !metadata.original_data_web.path) {
+      return res.status(404).json({ 
+        error: 'Downsampled original data not available for this inference',
+        message: 'Original data overlay was not generated during inference'
+      });
+    }
+    
+    const downsampledPath = metadata.original_data_web.path;
+    
+    if (!fs.existsSync(downsampledPath)) {
+      return res.status(404).json({ error: 'Downsampled original data file not found' });
+    }
+    
+    // Send the downsampled TIFF file
+    res.sendFile(path.resolve(downsampledPath));
+    
+  } catch (error) {
+    console.error('Error serving downsampled original data:', error);
+    res.status(500).json({ error: 'Failed to serve original data' });
+  }
+});
+
 app.use('/models', express.static('models'));
 
 // Reset session and delete all associated files
