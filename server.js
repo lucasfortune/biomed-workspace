@@ -9,6 +9,8 @@ const socketIo = require('socket.io');
 const session = require('express-session');
 const uuid = require('uuid');
 const archiver = require('archiver');
+const bcrypt = require('bcrypt');
+const activityLogger = require('./activityLogger');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,13 +34,13 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'welcome.html'));
 });
 
-// Serve the main app at /app route  
-app.get('/app', (req, res) => {
+// Serve the main app at /app route (authentication required)
+app.get('/app', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Serve test data files
-app.get('/test_data/:filename', (req, res) => {
+app.get('/test_data/:filename', requireAuth, (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'test_data', filename);
   
@@ -116,9 +118,582 @@ dirs.forEach(dir => {
   }
 });
 
+// ============================================
+// USER MANAGEMENT FUNCTIONS
+// ============================================
+
+const usersFilePath = path.join(__dirname, 'users.json');
+
+/**
+ * Load users from file
+ */
+function loadUsers() {
+  if (!fs.existsSync(usersFilePath)) {
+    return { users: [] };
+  }
+  try {
+    const data = fs.readFileSync(usersFilePath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error loading users:', error);
+    return { users: [] };
+  }
+}
+
+/**
+ * Save users to file
+ */
+function saveUsers(usersData) {
+  try {
+    fs.writeFileSync(usersFilePath, JSON.stringify(usersData, null, 2));
+  } catch (error) {
+    console.error('Error saving users:', error);
+  }
+}
+
+/**
+ * Find user by username
+ */
+function findUserByUsername(username) {
+  const usersData = loadUsers();
+  return usersData.users.find(u => u.username === username);
+}
+
+/**
+ * Generate unique user ID
+ */
+function generateUserId() {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+}
+
+// ============================================
+// AUTHENTICATION MIDDLEWARE
+// ============================================
+
+/**
+ * Basic authentication - allows both pending and approved users
+ */
+function requireAuth(req, res, next) {
+  if (req.session && req.session.user) {
+    // User is logged in (pending or approved)
+    next();
+  } else {
+    // Not logged in - save intended destination and redirect to login
+    req.session.returnTo = req.originalUrl;
+    res.redirect('/login');
+  }
+}
+
+/**
+ * Full access authentication - requires approved status
+ */
+function requireApproved(req, res, next) {
+  if (req.session && req.session.user) {
+    if (req.session.user.status === 'active') {
+      // Approved user - allow access
+      next();
+    } else {
+      // Pending or rejected user - deny access
+      res.status(403).json({ 
+        error: 'This feature requires account approval',
+        status: req.session.user.status,
+        message: 'Your account is pending approval. You can use test data while waiting for approval.'
+      });
+    }
+  } else {
+    // Not logged in - redirect to login
+    req.session.returnTo = req.originalUrl;
+    res.redirect('/login');
+  }
+}
+
+/**
+ * Admin authentication - requires admin privileges
+ */
+function requireAdmin(req, res, next) {
+  if (req.session && req.session.user) {
+    if (req.session.user.isAdmin) {
+      // Admin user - allow access
+      next();
+    } else {
+      // Not an admin
+      res.status(403).json({ 
+        error: 'Admin privileges required',
+        message: 'You do not have permission to access this resource.'
+      });
+    }
+  } else {
+    // Not logged in - redirect to login
+    req.session.returnTo = req.originalUrl;
+    res.redirect('/login');
+  }
+}
+
+// ============================================
+// AUTHENTICATION ROUTES
+// ============================================
+
+// Serve login page
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Serve register page
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+// Serve admin dashboard (requires admin)
+app.get('/admin', requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Handle login
+app.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      activityLogger.logLogin(username || 'unknown', false);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Username and password are required' 
+      });
+    }
+    
+    // Find user
+    const user = findUserByUsername(username);
+    
+    if (!user) {
+      activityLogger.logLogin(username, false);
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid username or password' 
+      });
+    }
+    
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    
+    if (!passwordMatch) {
+      activityLogger.logLogin(username, false);
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid username or password' 
+      });
+    }
+    
+    // Check if user is rejected
+    if (user.status === 'rejected') {
+      activityLogger.logLogin(username, false);
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Your account registration was not approved. Please contact the administrator.' 
+      });
+    }
+    
+    // Login successful - store user in session (without password hash)
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      email: user.email,
+      institution: user.institution,
+      status: user.status,
+      isAdmin: user.isAdmin || false
+    };
+    
+    activityLogger.logLogin(username, true);
+    
+    // Determine redirect
+    const redirectUrl = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    
+    res.json({ 
+      success: true, 
+      user: req.session.user,
+      redirect: redirectUrl,
+      message: user.status === 'pending' 
+        ? 'Login successful! Your account is pending approval - you can use test data while waiting.'
+        : 'Login successful!'
+    });
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'An error occurred during login' 
+    });
+  }
+});
+
+// Handle registration
+app.post('/register', async (req, res) => {
+  try {
+    const { username, password, fullName, email, institution } = req.body;
+    
+    // Validate required fields
+    if (!username || !password || !fullName || !email || !institution) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'All fields are required' 
+      });
+    }
+    
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Username must be 3-20 characters, alphanumeric and underscore only' 
+      });
+    }
+    
+    // Validate password length
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Password must be at least 8 characters long' 
+      });
+    }
+    
+    // Check if username already exists
+    const usersData = loadUsers();
+    if (usersData.users.find(u => u.username === username)) {
+      return res.status(409).json({ 
+        success: false, 
+        error: 'Username already exists' 
+      });
+    }
+    
+    // Check if email already exists
+    if (usersData.users.find(u => u.email === email)) {
+      return res.status(409).json({ 
+        success: false, 
+        error: 'Email already registered' 
+      });
+    }
+    
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    // Create new user
+    const newUser = {
+      id: generateUserId(),
+      username,
+      passwordHash,
+      fullName,
+      email,
+      institution,
+      status: 'pending',
+      isAdmin: false,
+      createdAt: new Date().toISOString(),
+      approvedAt: null,
+      approvedBy: null
+    };
+    
+    // Save user
+    usersData.users.push(newUser);
+    saveUsers(usersData);
+    
+    // Log registration
+    activityLogger.logRegistration(username, institution);
+    
+    console.log(`New user registered: ${username} (${institution}) - Status: pending`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Registration successful! Your account is pending approval. You can log in and use test data while waiting for approval.',
+      username: username
+    });
+    
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'An error occurred during registration' 
+    });
+  }
+});
+
+// Handle logout
+app.post('/logout', (req, res) => {
+  const username = req.session.user ? req.session.user.username : 'unknown';
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).json({ success: false, error: 'Logout failed' });
+    }
+    activityLogger.logActivity(username, 'logout', {});
+    res.json({ success: true, message: 'Logged out successfully' });
+  });
+});
+
+// Check authentication status
+app.get('/check-auth', (req, res) => {
+  if (req.session && req.session.user) {
+    res.json({ 
+      authenticated: true, 
+      user: req.session.user 
+    });
+  } else {
+    res.json({ 
+      authenticated: false 
+    });
+  }
+});
+
+// ============================================
+// ADMIN API ENDPOINTS
+// ============================================
+
+/**
+ * Get all users (admin only)
+ */
+app.get('/admin/users', requireAdmin, (req, res) => {
+  try {
+    const filter = req.query.filter || 'all';
+    const usersData = loadUsers();
+    
+    let filteredUsers = usersData.users;
+    
+    if (filter !== 'all') {
+      filteredUsers = usersData.users.filter(u => u.status === filter);
+    }
+    
+    // Remove password hashes from response
+    const safeUsers = filteredUsers.map(u => {
+      const { passwordHash, ...safeUser } = u;
+      return safeUser;
+    });
+    
+    res.json({ users: safeUsers });
+  } catch (error) {
+    console.error('Error loading users:', error);
+    res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
+/**
+ * Get pending users (admin only)
+ */
+app.get('/admin/pending-users', requireAdmin, (req, res) => {
+  try {
+    const usersData = loadUsers();
+    const pendingUsers = usersData.users.filter(u => u.status === 'pending');
+    
+    // Remove password hashes
+    const safeUsers = pendingUsers.map(u => {
+      const { passwordHash, ...safeUser } = u;
+      return safeUser;
+    });
+    
+    res.json({ users: safeUsers });
+  } catch (error) {
+    console.error('Error loading pending users:', error);
+    res.status(500).json({ error: 'Failed to load pending users' });
+  }
+});
+
+/**
+ * Approve a user (admin only)
+ */
+app.post('/admin/approve-user', requireAdmin, (req, res) => {
+  try {
+    const { username } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    
+    const usersData = loadUsers();
+    const user = usersData.users.find(u => u.username === username);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.status === 'active') {
+      return res.status(400).json({ error: 'User is already approved' });
+    }
+    
+    // Approve user
+    user.status = 'active';
+    user.approvedAt = new Date().toISOString();
+    user.approvedBy = req.session.user.username;
+    
+    saveUsers(usersData);
+    
+    // Log the approval
+    activityLogger.logActivity(req.session.user.username, 'user_approved', {
+      approvedUser: username
+    });
+    
+    console.log(`User ${username} approved by ${req.session.user.username}`);
+    
+    res.json({ 
+      success: true, 
+      message: `User ${username} has been approved`,
+      user: { username, status: 'active' }
+    });
+    
+  } catch (error) {
+    console.error('Error approving user:', error);
+    res.status(500).json({ error: 'Failed to approve user' });
+  }
+});
+
+/**
+ * Reject a user (admin only)
+ */
+app.post('/admin/reject-user', requireAdmin, (req, res) => {
+  try {
+    const { username } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    
+    const usersData = loadUsers();
+    const user = usersData.users.find(u => u.username === username);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Reject user
+    user.status = 'rejected';
+    user.rejectedAt = new Date().toISOString();
+    user.rejectedBy = req.session.user.username;
+    
+    saveUsers(usersData);
+    
+    // Log the rejection
+    activityLogger.logActivity(req.session.user.username, 'user_rejected', {
+      rejectedUser: username
+    });
+    
+    console.log(`User ${username} rejected by ${req.session.user.username}`);
+    
+    res.json({ 
+      success: true, 
+      message: `User ${username} has been rejected`,
+      user: { username, status: 'rejected' }
+    });
+    
+  } catch (error) {
+    console.error('Error rejecting user:', error);
+    res.status(500).json({ error: 'Failed to reject user' });
+  }
+});
+
+/**
+ * Get activity logs (admin only)
+ */
+app.get('/admin/activity-logs', requireAdmin, (req, res) => {
+  try {
+    const userFilter = req.query.user || 'all';
+    const typeFilter = req.query.type || 'all';
+    const limit = parseInt(req.query.limit) || 50;
+    
+    const logsPath = path.join(__dirname, 'logs', 'activity.log');
+    
+    if (!fs.existsSync(logsPath)) {
+      return res.json({ logs: [], users: [] });
+    }
+    
+    // Read log file
+    const logContent = fs.readFileSync(logsPath, 'utf8');
+    const logLines = logContent.trim().split('\n').filter(line => line);
+    
+    // Parse logs
+    let logs = logLines.map(line => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        return null;
+      }
+    }).filter(log => log !== null);
+    
+    // Apply filters
+    if (userFilter !== 'all') {
+      logs = logs.filter(log => log.username === userFilter);
+    }
+    
+    if (typeFilter !== 'all') {
+      logs = logs.filter(log => log.action === typeFilter);
+    }
+    
+    // Sort by timestamp (newest first)
+    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // Limit results
+    logs = logs.slice(0, limit);
+    
+    // Get unique usernames for filter dropdown
+    const allLogs = logLines.map(line => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        return null;
+      }
+    }).filter(log => log !== null);
+    
+    const uniqueUsers = [...new Set(allLogs.map(log => log.username))].sort();
+    
+    res.json({ logs, users: uniqueUsers });
+    
+  } catch (error) {
+    console.error('Error loading activity logs:', error);
+    res.status(500).json({ error: 'Failed to load activity logs' });
+  }
+});
+
+/**
+ * Get active sessions (admin only)
+ */
+app.get('/admin/active-sessions', requireAdmin, (req, res) => {
+  try {
+    console.log('=== ACTIVE SESSIONS DEBUG ===');
+    console.log('Total training sessions:', trainingSessions.size);
+    console.log('Total inference sessions:', inferenceSessions.size);
+    
+    // Get ALL training sessions (not just active)
+    const allTraining = [];
+    trainingSessions.forEach((session, trainingId) => {
+      console.log(`Training ${trainingId.substring(0, 8)}: status=${session.status}`);
+      allTraining.push({
+        trainingId,
+        ...session
+      });
+    });
+    
+    // Get ALL inference sessions (not just active)
+    const allInference = [];
+    inferenceSessions.forEach((session, inferenceId) => {
+      console.log(`Inference ${inferenceId.substring(0, 8)}: status=${session.status}`);
+      allInference.push({
+        inferenceId,
+        ...session
+      });
+    });
+    
+    console.log('========================');
+    
+    res.json({
+      training: allTraining,
+      inference: allInference
+    });
+    
+  } catch (error) {
+    console.error('Error loading active sessions:', error);
+    res.status(500).json({ error: 'Failed to load active sessions' });
+  }
+});
+
 // Routes
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'welcome.html'));
 });
 
 // Step 1: Upload and validate TIFF stacks (MODIFIED to support test data)
@@ -129,6 +704,18 @@ app.post('/upload-data', upload.fields([
     try {
         let rawFile, annotationFile;
         
+        // NEW: Check if using test data or custom upload
+        const isTestData = req.body.isTestData === 'true';
+        
+        // If NOT test data, require approved status
+        if (!isTestData && req.session.user.status !== 'active') {
+            return res.status(403).json({
+                error: 'Custom data upload requires account approval',
+                status: req.session.user.status,
+                message: 'You can use test data while waiting for approval'
+            });
+        }
+
         // Check if this is a test data request
         if (req.body.isTestData === 'true') {
             console.log('Processing test data request...');
@@ -221,8 +808,17 @@ app.post('/upload-data', upload.fields([
         req.session.uploadedFiles = {
             raw_images: rawFile.path,
             annotations: annotationFile.path,
-            validation: validationResult
+            validation: validationResult,
+            isTestData: req.body.isTestData === 'true'
         };
+
+        // NEW: Log the upload
+        activityLogger.logFileUpload(
+            req.session.user.username,
+            req.body.isTestData === 'true' ? 'test_data' : 'custom_data',
+            rawFile.filename,
+            rawFile.size
+        );
         
         console.log('Files processed and validated successfully');
         
@@ -274,17 +870,30 @@ app.post('/configure-training', (req, res) => {
 });
 
 // Step 3: Start training
-app.post('/start-training', (req, res) => {
+app.post('/start-training', requireAuth, (req, res) => {
   try {
     if (!req.session.uploadedFiles || !req.session.trainingConfig) {
       return res.status(400).json({ 
         error: 'Missing uploaded files or configuration' 
       });
     }
-
+    
+    // NEW: Check if using test data FIRST (before doing anything else)
+    const isUsingTestData = req.session.uploadedFiles && req.session.uploadedFiles.isTestData;
+    
+    // NEW: If NOT using test data, require approval (check BEFORE starting training)
+    if (!isUsingTestData && req.session.user.status !== 'active') {
+      return res.status(403).json({
+        error: 'Training with custom data requires account approval',
+        status: req.session.user.status,
+        message: 'You can train models with test data while waiting for approval'
+      });
+    }
+    
+    // Approval check passed, continue with training setup
     const sessionId = req.session.id;
     const trainingId = uuid.v4();
-
+    
     // Add num_classes from validation to config
     const config = req.session.trainingConfig;
     if (req.session.uploadedFiles.validation && req.session.uploadedFiles.validation.num_classes) {
@@ -305,33 +914,43 @@ app.post('/start-training', (req, res) => {
       config: req.session.trainingConfig,
       output_dir: path.join('models', sessionId, trainingId)
     };
-
+    
     // Create output directory
     if (!fs.existsSync(trainingParams.output_dir)) {
       fs.mkdirSync(trainingParams.output_dir, { recursive: true });
     }
-
-    // Start training process
-    startTrainingProcess(trainingParams, io);
-
-    // Store training session
+    
+    // Store training session (BEFORE starting training process)
     trainingSessions.set(trainingId, {
       sessionId: sessionId,
+      username: req.session.user.username,
+      fullName: req.session.user.fullName,
       status: 'starting',
       startTime: new Date(),
       current_epoch: 0,
       total_epochs: req.session.trainingConfig.num_epochs,
-      params: trainingParams
+      params: trainingParams,
+      isTestData: isUsingTestData
     });
-
+    
+    // Log training start
+    activityLogger.logTrainingStart(
+      req.session.user.username,
+      trainingId,
+      req.session.trainingConfig
+    );
+    
     req.session.currentTraining = trainingId;
-
+    
+    // NOW start training process (after all checks and setup)
+    startTrainingProcess(trainingParams, io);
+    
     res.json({
       success: true,
       training_id: trainingId,
       message: 'Training started successfully'
     });
-
+    
   } catch (error) {
     console.error('Training start error:', error);
     res.status(500).json({ error: error.message });
@@ -339,7 +958,7 @@ app.post('/start-training', (req, res) => {
 });
 
 // Get training status
-app.get('/training-status/:trainingId', (req, res) => {
+app.get('/training-status/:trainingId', requireAuth, (req, res) => {
   const trainingId = req.params.trainingId;
   const training = trainingSessions.get(trainingId);
   
@@ -351,9 +970,21 @@ app.get('/training-status/:trainingId', (req, res) => {
 });
 
 // Step 4: Upload data for inference (MODIFIED to support test data)
-app.post('/upload-inference', upload.single('inference_data'), async (req, res) => {
+app.post('/upload-inference', requireAuth, upload.single('inference_data'), async (req, res) => {
     try {
         let inferenceFile;
+        
+        // NEW: Check if using test data or custom upload
+        const isTestData = req.body.isTestData === 'true';
+        
+        // If NOT test data, require approved status
+        if (!isTestData && req.session.user.status !== 'active') {
+            return res.status(403).json({
+                error: 'Custom inference data upload requires account approval',
+                status: req.session.user.status,
+                message: 'You can use test data while waiting for approval'
+            });
+        }
         
         // Check if this is a test data request
         if (req.body.isTestData === 'true') {
@@ -436,8 +1067,8 @@ app.post('/upload-inference', upload.single('inference_data'), async (req, res) 
     }
 });
 
-// Import pre-trained model endpoint
-app.post('/import-pretrained-model', uploadImport.fields([
+// Import pre-trained model endpoint (requires approval)
+app.post('/import-pretrained-model', requireApproved, uploadImport.fields([
   { name: 'model_file', maxCount: 1 },
   { name: 'config_file', maxCount: 1 }
 ]), async (req, res) => {
@@ -621,6 +1252,8 @@ app.post('/run-inference', async (req, res) => {
     // Store inference session
     inferenceSessions.set(inferenceId, {
       sessionId: req.session.id,
+      username: req.session.user.username,  // NEW
+      fullName: req.session.user.fullName,  // NEW
       status: 'starting',
       startTime: new Date(),
       progress: 0,
@@ -628,6 +1261,13 @@ app.post('/run-inference', async (req, res) => {
       totalSlices: 0,
       usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated)
     });
+    
+    // NEW: Log inference start
+    activityLogger.logInferenceStart(
+      req.session.user.username,
+      inferenceId,
+      !!(req.session.importedModel && req.session.importedModel.validated)
+    );
     
     console.log('Generated inference ID:', inferenceId);
     
@@ -655,7 +1295,7 @@ app.post('/run-inference', async (req, res) => {
 });
 
 // Download model and config as zip
-app.get('/download-model/:trainingId', (req, res) => {
+app.get('/download-model/:trainingId', requireAuth, (req, res) => {
   const trainingId = req.params.trainingId;
   const training = trainingSessions.get(trainingId);
   
@@ -749,7 +1389,7 @@ Generated: ${new Date().toISOString()}
 });
 
 // Download inference results as zip
-app.get('/download-inference-results/:inferenceId', (req, res) => {
+app.get('/download-inference-results/:inferenceId', requireAuth, (req, res) => {
   const inferenceId = req.params.inferenceId;
   const inference = inferenceSessions.get(inferenceId);
   
@@ -889,7 +1529,7 @@ app.use('/uploads', express.static('uploads'));
 app.use('/results', express.static('results'));
 
 // Serve downsampled original data for visualization
-app.get('/results/:inferenceId/original-data-web', (req, res) => {
+app.get('/results/:inferenceId/original-data-web', requireAuth, (req, res) => {
   const inferenceId = req.params.inferenceId;
   
   // Look up the inference session
@@ -938,7 +1578,7 @@ app.get('/results/:inferenceId/original-data-web', (req, res) => {
 app.use('/models', express.static('models'));
 
 // Reset session and delete all associated files
-app.post('/reset-session', async (req, res) => {
+app.post('/reset-session', requireAuth, async (req, res) => {
   try {
     const sessionId = req.session.id;
     console.log('Resetting session:', sessionId);
@@ -1568,7 +2208,7 @@ function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, io)
 }
 
 // Get inference status
-app.get('/inference-status/:inferenceId', (req, res) => {
+app.get('/inference-status/:inferenceId', requireAuth, (req, res) => {
   const inferenceId = req.params.inferenceId;
   const inference = inferenceSessions.get(inferenceId);
   

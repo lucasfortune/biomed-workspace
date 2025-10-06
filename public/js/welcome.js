@@ -8,11 +8,25 @@ function startWithTestData() {
     window.location.href = '/app';
 }
 
-function startWithCustomData() {
-    // Store user choice in sessionStorage for the main app to read
-    sessionStorage.setItem('userChoice', 'customData');
+async function startWithCustomData() {
+    // Check if user is pending
+    try {
+        const response = await fetch('/check-auth');
+        const data = await response.json();
+        
+        if (data.authenticated && data.user.status === 'pending') {
+            // User is pending - show message and redirect to test data instead
+            if (confirm('Custom data upload requires account approval.\n\nWould you like to try the test data instead? It includes the full workflow: training, inference, and visualization.')) {
+                startWithTestData();
+            }
+            return;
+        }
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+    }
     
-    // Redirect to main application
+    // Normal flow for approved users
+    sessionStorage.setItem('userChoice', 'customData');
     window.location.href = '/app';
 }
 
@@ -22,7 +36,22 @@ let importedFiles = {
     config: null
 };
 
-function toggleImportModel() {
+async function toggleImportModel() {
+    // NEW: Check if user is pending first
+    try {
+        const response = await fetch('/check-auth');
+        const data = await response.json();
+        
+        if (data.authenticated && data.user.status === 'pending') {
+            // User is pending - show message
+            alert('Model import requires account approval.\n\nYou can use test data to explore the full system while waiting for approval.');
+            return;
+        }
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+    }
+    
+    // Original code continues
     const section = document.getElementById('importModelSection');
     const isVisible = section.style.display !== 'none';
     
@@ -201,14 +230,28 @@ function resetImportSection() {
 }
 
 function proceedWithImportedModel() {
-    // Store import choice in sessionStorage
-    sessionStorage.setItem('userChoice', 'importedModel');
-    
-    // Redirect to main application
-    window.location.href = '/app';
+    // Check if user is pending
+    fetch('/check-auth')
+        .then(res => res.json())
+        .then(data => {
+            if (data.authenticated && data.user.status === 'pending') {
+                alert('Model import requires account approval. You can use test data while waiting for approval.');
+                return;
+            }
+            
+            // Store import choice in sessionStorage
+            sessionStorage.setItem('userChoice', 'importedModel');
+            
+            // Redirect to main application
+            window.location.href = '/app';
+        })
+        .catch(error => {
+            console.error('Error checking auth:', error);
+            window.location.href = '/app';
+        });
 }
 
-// Optional: Add some welcome page animations or interactions
+// Check authentication status and update UI
 document.addEventListener('DOMContentLoaded', function() {
     // Add fade-in animation to feature cards
     const cards = document.querySelectorAll('.feature-card');
@@ -222,4 +265,85 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.transform = 'translateY(0)';
         }, 100 * index);
     });
+    
+    // NEW: Check authentication status
+    checkAuthStatus();
 });
+
+/**
+ * Check if user is logged in and update UI
+ */
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/check-auth');
+        const data = await response.json();
+        
+        const userInfoBar = document.getElementById('userInfoBar');
+        const loginButtonContainer = document.getElementById('loginButtonContainer');
+        
+        if (data.authenticated) {
+            // User is logged in - show user info bar, hide login button
+            const isPending = data.user.status === 'pending';
+            const statusBadge = isPending 
+                ? '<span class="user-status-badge pending">Pending Approval</span>' 
+                : '<span class="user-status-badge active">Approved</span>';
+            
+            // Add admin dashboard link if user is admin
+            const adminLink = data.user.isAdmin 
+                ? '<a href="/admin" class="admin-dashboard-link">Admin Dashboard</a>' 
+                : '';
+            
+            userInfoBar.innerHTML = `
+                <div class="user-details">
+                    <span class="user-name">${data.user.fullName}</span>
+                    <span class="user-institution">${data.user.institution}</span>
+                    ${statusBadge}
+                </div>
+                <div class="user-actions">
+                    ${adminLink}
+                    <a href="/app" class="app-link">Go to App</a>
+                    <button class="logout-button" onclick="handleLogout()">Logout</button>
+                </div>
+            `;
+            
+            // Show user info bar, hide login button
+            userInfoBar.classList.add('visible');
+            loginButtonContainer.classList.remove('visible');
+            document.body.classList.add('has-user-bar');
+            
+        } else {
+            // User is not logged in - show login button, hide user info bar
+            loginButtonContainer.innerHTML = `
+                <a href="/login" class="login-btn">Login</a>
+            `;
+            
+            // Show login button, hide user info bar
+            loginButtonContainer.classList.add('visible');
+            userInfoBar.classList.remove('visible');
+            document.body.classList.remove('has-user-bar');
+        }
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+        // On error, show login button as fallback
+        const loginButtonContainer = document.getElementById('loginButtonContainer');
+        loginButtonContainer.innerHTML = `
+            <a href="/login" class="login-btn">Login</a>
+        `;
+        loginButtonContainer.classList.add('visible');
+    }
+}
+
+
+/**
+ * Handle logout
+ */
+async function handleLogout() {
+    try {
+        const response = await fetch('/logout', { method: 'POST' });
+        if (response.ok) {
+            window.location.reload();
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+}

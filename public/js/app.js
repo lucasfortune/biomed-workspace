@@ -26,24 +26,68 @@ let meshGroup = null; // Group to contain all class meshes
 
 let sliceDirection = 'z'; // 'x', 'y', or 'z'
 
+// Global variable to store user info
+let currentUser = null;
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if user came from welcome page
-    const userChoice = sessionStorage.getItem('userChoice');
-    if (userChoice === 'testData') {
-        // Load test data automatically
-        loadTestDataset();
-        sessionStorage.removeItem('userChoice');
-    } else if (userChoice === 'importedModel') {
-        // Handle imported model mode
-        handleImportedModelMode();
-        sessionStorage.removeItem('userChoice');
-    }
-    initializeSocketConnection();
-    initializeFileUpload();
-    initializeCharts();
-    updateProgressBar();
+    // IMPORTANT: Check user status FIRST before doing anything else
+    checkUserStatusAndInitialize();
 });
+
+/**
+ * Check user authentication status and initialize app accordingly
+ */
+async function checkUserStatusAndInitialize() {
+    try {
+        const response = await fetch('/check-auth');
+        const data = await response.json();
+        
+        if (!data.authenticated) {
+            // Not logged in - redirect to login
+            window.location.href = '/login';
+            return;
+        }
+        
+        // Store user info globally
+        currentUser = data.user;
+        
+        // Show pending user notification if applicable
+        if (currentUser.status === 'pending') {
+            showPendingUserNotification();
+            disableUploadFeatures();
+        } else if (currentUser.status === 'active') {
+            // Check if user was previously pending and just got approved
+            checkForApprovalNotification();
+        }
+        
+        // Update user info bar (NEW)
+        updateUserInfoBar();
+        
+        // Continue with normal initialization
+        // Check if user came from welcome page
+        const userChoice = sessionStorage.getItem('userChoice');
+        if (userChoice === 'testData') {
+            // Load test data automatically
+            loadTestDataset();
+            sessionStorage.removeItem('userChoice');
+        } else if (userChoice === 'importedModel') {
+            // Handle imported model mode
+            handleImportedModelMode();
+            sessionStorage.removeItem('userChoice');
+        }
+        
+        initializeSocketConnection();
+        initializeFileUpload();
+        initializeCharts();
+        updateProgressBar();
+        
+    } catch (error) {
+        console.error('Error checking authentication:', error);
+        // If error checking auth, redirect to login
+        window.location.href = '/login';
+    }
+}
 
 // Load test dataset function
 // Load test dataset function (UPDATED to work with your exact routes)
@@ -339,4 +383,155 @@ function updateInferenceUploadSectionForTestData(validation) {
 function updateProgressBar() {
     const progress = ((currentStep - 1) / 4) * 100;
     document.getElementById('overallProgress').style.width = progress + '%';
+}
+
+/**
+ * Show notification banner for pending users
+ */
+function showPendingUserNotification() {
+    const banner = document.createElement('div');
+    banner.id = 'pendingUserBanner';
+    banner.className = 'pending-user-banner';
+    banner.innerHTML = `
+        <div class="banner-content">
+            <span class="banner-icon">⏳</span>
+            <div class="banner-text">
+                <strong>Account Pending Approval</strong>
+                <p>You can explore the full application with test data while waiting for approval. 
+                   Custom data upload will be available once your account is approved by an administrator.</p>
+            </div>
+        </div>
+    `;
+    
+    // Insert at the top of the container
+    const container = document.querySelector('.container');
+    if (container) {
+        container.insertBefore(banner, container.firstChild);
+    }
+}
+
+/**
+ * Update user info bar in the header
+ */
+function updateUserInfoBar() {
+    if (!currentUser) return;
+    
+    const userInfoBar = document.getElementById('userInfoBar');
+    if (!userInfoBar) return;
+    
+    const statusBadge = currentUser.status === 'active' 
+        ? '<span class="user-status-badge active">✅ Approved</span>'
+        : '<span class="user-status-badge pending">⏳ Pending Approval</span>';
+    
+    // Add admin link if user is admin
+    const adminLink = currentUser.isAdmin 
+        ? '<a href="/admin" class="admin-dashboard-link">🔐 Admin Dashboard</a>' 
+        : '';
+    
+    userInfoBar.innerHTML = `
+        <div class="user-details">
+            <span class="user-name">${currentUser.fullName}</span>
+            <span class="user-institution">${currentUser.institution}</span>
+            ${statusBadge}
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            ${adminLink}
+            <button class="logout-button" onclick="handleLogout()">Logout</button>
+        </div>
+    `;
+}
+
+/**
+ * Handle logout from main app
+ */
+async function handleLogout() {
+    try {
+        const response = await fetch('/logout', { method: 'POST' });
+        if (response.ok) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+        alert('Error logging out. Please try again.');
+    }
+}
+
+/**
+ * Disable upload features for pending users
+ */
+function disableUploadFeatures() {
+    // Disable the file input sections for custom uploads
+    const rawUploadSection = document.getElementById('rawUploadSection');
+    const annotationsUploadSection = document.getElementById('annotationsUploadSection');
+    const inferenceUploadSection = document.getElementById('inferenceUploadSection');
+    
+    // Add disabled styling and message to upload sections
+    [rawUploadSection, annotationsUploadSection, inferenceUploadSection].forEach(section => {
+        if (section) {
+            section.style.opacity = '0.6';
+            section.style.cursor = 'not-allowed';
+            section.style.pointerEvents = 'none';
+            
+            // Add notice
+            const notice = document.createElement('div');
+            notice.className = 'approval-notice';
+            notice.innerHTML = '🔒 Custom file upload requires account approval. Use <strong>test data</strong> to try the system!';
+            section.appendChild(notice);
+        }
+    });
+    
+    // Disable model import button
+    const importModelBtn = document.querySelector('[onclick="toggleImportModel()"]');
+    if (importModelBtn) {
+        importModelBtn.disabled = true;
+        importModelBtn.style.opacity = '0.6';
+        importModelBtn.title = 'Model import requires account approval';
+    }
+}
+
+/**
+ * Check if user was just approved and show notification
+ */
+function checkForApprovalNotification() {
+    // Check if we should show approval notification
+    const lastStatus = sessionStorage.getItem('lastUserStatus');
+    
+    if (lastStatus === 'pending' && currentUser.status === 'active') {
+        // User was just approved!
+        showApprovalNotification();
+        sessionStorage.removeItem('lastUserStatus');
+    }
+    
+    // Store current status for next time
+    sessionStorage.setItem('lastUserStatus', currentUser.status);
+}
+
+/**
+ * Show notification that account was approved
+ */
+function showApprovalNotification() {
+    const banner = document.createElement('div');
+    banner.className = 'approval-notification';
+    banner.innerHTML = `
+        <div class="banner-content">
+            <span class="banner-icon">🎉</span>
+            <div class="banner-text">
+                <strong>Account Approved!</strong>
+                <p>Your account has been approved. You now have full access to upload custom data and train models.</p>
+            </div>
+            <button class="banner-close" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+    `;
+    
+    const container = document.querySelector('.container');
+    if (container) {
+        container.insertBefore(banner, container.firstChild);
+    }
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+        if (banner.parentElement) {
+            banner.remove();
+        }
+    }, 10000);
 }

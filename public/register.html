@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Biomedical Image Segmentation</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+    <div class="logo-container">
+        <a href="/">
+            <img src="imgs/pop_logo.svg" alt="Research Group Logo" class="research-logo">
+        </a>
+    </div>
+    
+    <div class="auth-container">
+        <div class="auth-box auth-box-wide">
+            <h1>Register</h1>
+            <p class="subtitle">Create an account to access the biomedical image segmentation platform</p>
+            
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <div id="successMessage" class="success-message" style="display: none;"></div>
+            
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="username">Username *</label>
+                        <input type="text" id="username" name="username" required 
+                               pattern="[a-zA-Z0-9_]{3,20}" 
+                               title="3-20 characters, alphanumeric and underscore only"
+                               autocomplete="username">
+                        <small>3-20 characters, alphanumeric and underscore only</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" name="email" required autocomplete="email">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password">Password *</label>
+                        <input type="password" id="password" name="password" required 
+                               minlength="8"
+                               autocomplete="new-password">
+                        <small>Minimum 8 characters</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password *</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" required
+                               minlength="8"
+                               autocomplete="new-password">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fullName">Full Name *</label>
+                        <input type="text" id="fullName" name="fullName" required autocomplete="name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="institution">Institution *</label>
+                        <input type="text" id="institution" name="institution" required autocomplete="organization">
+                        <small>Your university, research institute, or organization</small>
+                    </div>
+                </div>
+                
+                <div class="info-box">
+                    <h4>📝 Account Approval Process</h4>
+                    <p>Your account will be pending approval after registration. While waiting:</p>
+                    <ul>
+                        <li>✅ You can log in and explore the application</li>
+                        <li>✅ You can use test data to try all features</li>
+                        <li>✅ You can train models and run inference on test data</li>
+                        <li>⏳ Custom data upload requires approval</li>
+                    </ul>
+                    <p>You'll be notified once your account is approved for full access.</p>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-full">Register</button>
+            </form>
+            
+            <div class="auth-links">
+                <p>Already have an account? <a href="/login">Login here</a></p>
+                <p><a href="/">Back to home</a></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3 id="loadingText">Creating account...</h3>
+            <p id="loadingDescription">Please wait while we process your registration.</p>
+        </div>
+    </div>
+    
+    <script src="js/utils.js"></script>
+    <script src="js/register.js"></script>
+</body>
+</html>

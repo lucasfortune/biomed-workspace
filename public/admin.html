@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Biomedical Image Segmentation</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="admin-container">
+        <header class="admin-header">
+            <div class="header-content">
+                <h1>🔐 Admin Dashboard</h1>
+                <div class="header-actions">
+                    <span id="adminUserInfo" class="admin-user-info"></span>
+                    <a href="/app" class="btn btn-secondary">Back to App</a>
+                    <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="admin-nav">
+            <button class="nav-tab active" data-tab="users" onclick="switchTab('users')">
+                👥 Users
+            </button>
+            <button class="nav-tab" data-tab="pending" onclick="switchTab('pending')">
+                ⏳ Pending Approvals <span id="pendingCount" class="badge">0</span>
+            </button>
+            <button class="nav-tab" data-tab="activity" onclick="switchTab('activity')">
+                📊 Activity Logs
+            </button>
+            <button class="nav-tab" data-tab="sessions" onclick="switchTab('sessions')">
+                🔄 Active Sessions
+            </button>
+        </nav>
+
+        <main class="admin-content">
+            <!-- Users Tab -->
+            <div id="usersTab" class="tab-content active">
+                <div class="content-header">
+                    <h2>All Users</h2>
+                    <div class="filter-controls">
+                        <select id="userFilter" onchange="loadUsers()">
+                            <option value="all">All Users</option>
+                            <option value="active">Active Only</option>
+                            <option value="pending">Pending Only</option>
+                            <option value="rejected">Rejected Only</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="usersContent" class="data-content">
+                    <div class="loading-spinner">Loading users...</div>
+                </div>
+            </div>
+
+            <!-- Pending Approvals Tab -->
+            <div id="pendingTab" class="tab-content">
+                <div class="content-header">
+                    <h2>Pending User Approvals</h2>
+                    <p class="subtitle">Review and approve user registrations</p>
+                </div>
+                <div id="pendingContent" class="data-content">
+                    <div class="loading-spinner">Loading pending users...</div>
+                </div>
+            </div>
+
+            <!-- Activity Logs Tab -->
+            <div id="activityTab" class="tab-content">
+                <div class="content-header">
+                    <h2>Activity Logs</h2>
+                    <div class="filter-controls">
+                        <select id="activityUserFilter" onchange="loadActivityLogs()">
+                            <option value="all">All Users</option>
+                        </select>
+                        <select id="activityTypeFilter" onchange="loadActivityLogs()">
+                            <option value="all">All Actions</option>
+                            <option value="login_success">Logins</option>
+                            <option value="training_start">Training</option>
+                            <option value="inference_start">Inference</option>
+                            <option value="file_upload">Uploads</option>
+                        </select>
+                        <input type="number" id="activityLimit" value="50" min="10" max="500" step="10" onchange="loadActivityLogs()" placeholder="Limit">
+                    </div>
+                </div>
+                <div id="activityContent" class="data-content">
+                    <div class="loading-spinner">Loading activity logs...</div>
+                </div>
+            </div>
+
+            <!-- Active Sessions Tab -->
+            <div id="sessionsTab" class="tab-content">
+                <div class="content-header">
+                    <h2>Active Training & Inference Sessions</h2>
+                    <button class="btn btn-primary" onclick="loadActiveSessions()">🔄 Refresh</button>
+                </div>
+                <div id="sessionsContent" class="data-content">
+                    <div class="loading-spinner">Loading sessions...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3 id="confirmTitle">Confirm Action</h3>
+            <p id="confirmMessage"></p>
+            <div class="modal-actions">
+                <button class="btn btn-danger" id="confirmBtn">Confirm</button>
+                <button class="btn btn-secondary" id="cancelBtn" onclick="closeConfirmModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/utils.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

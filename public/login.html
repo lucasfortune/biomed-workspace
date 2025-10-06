@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Biomedical Image Segmentation</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+    <div class="logo-container">
+        <a href="/">
+            <img src="imgs/pop_logo.svg" alt="Research Group Logo" class="research-logo">
+        </a>
+    </div>
+    
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1>Login</h1>
+            <p class="subtitle">Sign in to access the biomedical image segmentation platform</p>
+            
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autocomplete="username">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-full">Login</button>
+            </form>
+            
+            <div class="auth-links">
+                <p>Don't have an account? <a href="/register">Register here</a></p>
+                <p><a href="/">Back to home</a></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3 id="loadingText">Logging in...</h3>
+            <p id="loadingDescription">Please wait while we verify your credentials.</p>
+        </div>
+    </div>
+    
+    <script src="js/utils.js"></script>
+    <script src="js/login.js"></script>
+</body>
+</html>

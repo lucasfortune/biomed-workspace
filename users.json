@@ -1,0 +1,58 @@
+{
+  "users": [
+    {
+      "id": "17597434194587u4o09d8k",
+      "username": "admin",
+      "passwordHash": "$2b$10$KmrVGpgsn7Py42igT2YsCumwQICvusHDbTSg1RWLR6oWokvGK.O7.",
+      "fullName": "Administrator",
+      "email": "admin@your-university.edu",
+      "institution": "Your University",
+      "status": "active",
+      "isAdmin": true,
+      "createdAt": "2025-10-06T09:36:59.458Z",
+      "approvedAt": "2025-10-06T09:36:59.458Z",
+      "approvedBy": "system"
+    },
+    {
+      "id": "17597547051110bxzsne5m",
+      "username": "testpending",
+      "passwordHash": "$2b$10$AGiw5dtswGyxubbjYHwUP.pQls7K36/JfhEVIIEaIuNNpZHgUHKgK",
+      "fullName": "test pending user",
+      "email": "testemail@test.com",
+      "institution": "hodfga",
+      "status": "active",
+      "isAdmin": false,
+      "createdAt": "2025-10-06T12:45:05.111Z",
+      "approvedAt": "2025-10-06T12:45:34.500Z",
+      "approvedBy": "admin"
+    },
+    {
+      "id": "1759755114126kh7ijwmk6",
+      "username": "test2",
+      "passwordHash": "$2b$10$Wvd/H9ikEY2yWVKNWdYxWe8O5DWD0cFzbrJu.EPuLyHe8lSQ.J4Je",
+      "fullName": "test2 test2",
+      "email": "testemail2@test.com",
+      "institution": "test2 test2",
+      "status": "active",
+      "isAdmin": false,
+      "createdAt": "2025-10-06T12:51:54.126Z",
+      "approvedAt": "2025-10-06T14:03:29.771Z",
+      "approvedBy": "admin"
+    },
+    {
+      "id": "1759759456223bglc2h9qp",
+      "username": "test3",
+      "passwordHash": "$2b$10$tQOU1FYL8g8hWYnaWuj3/OuThgaCkmSE3YJ.Tm4at/eYKCRw.dqfu",
+      "fullName": "test3",
+      "email": "testteste@test.com",
+      "institution": "test3 test3",
+      "status": "rejected",
+      "isAdmin": false,
+      "createdAt": "2025-10-06T14:04:16.223Z",
+      "approvedAt": null,
+      "approvedBy": null,
+      "rejectedAt": "2025-10-06T14:06:18.081Z",
+      "rejectedBy": "admin"
+    }
+  ]
+}

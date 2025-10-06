@@ -422,3 +422,124 @@
     color: #555 !important;
     font-style: italic;
 }
+
+/* Pending User Notification Banner */
+.pending-user-banner {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%);
+    border: 2px solid #ff9800;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 15px rgba(255, 152, 0, 0.2);
+    animation: slideDown 0.5s ease;
+}
+
+.pending-user-banner .banner-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.pending-user-banner .banner-icon {
+    font-size: 2em;
+    flex-shrink: 0;
+}
+
+.pending-user-banner .banner-text strong {
+    color: #f57c00;
+    font-size: 1.1em;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.pending-user-banner .banner-text p {
+    color: #663c00;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Approval Notification Banner */
+.approval-notification {
+    background: linear-gradient(135deg, #d4edda 0%, #b7e4c7 100%);
+    border: 2px solid #28a745;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.2);
+    animation: slideDown 0.5s ease;
+}
+
+.approval-notification .banner-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    position: relative;
+}
+
+.approval-notification .banner-icon {
+    font-size: 2em;
+    flex-shrink: 0;
+}
+
+.approval-notification .banner-text strong {
+    color: #155724;
+    font-size: 1.1em;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.approval-notification .banner-text p {
+    color: #155724;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.approval-notification .banner-close {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-size: 1.5em;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s ease;
+}
+
+.approval-notification .banner-close:hover {
+    background: #218838;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Approval Notice on Upload Sections */
+.approval-notice {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+    padding: 12px;
+    border-radius: 8px;
+    margin-top: 15px;
+    font-size: 0.9em;
+    text-align: center;
+}
+
+.approval-notice strong {
+    color: #f57c00;
+}

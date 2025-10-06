@@ -229,3 +229,171 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* User Info Bar - Welcome Page (FIXED) */
+.user-info-bar-welcome {
+    background: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+    padding: 12px 40px;
+    display: none; /* Hidden by default */
+    justify-content: space-between;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 1001;
+    box-sizing: border-box;
+}
+
+.user-info-bar-welcome.visible {
+    display: flex;
+}
+
+.user-info-bar-welcome .user-details {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.user-info-bar-welcome .user-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 1em;
+}
+
+.user-info-bar-welcome .user-institution {
+    color: #666;
+    font-size: 0.9em;
+}
+
+.user-info-bar-welcome .user-status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.user-info-bar-welcome .user-status-badge.active {
+    background: #d4edda;
+    color: #155724;
+}
+
+.user-info-bar-welcome .user-status-badge.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.user-info-bar-welcome .user-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.user-info-bar-welcome .admin-dashboard-link {
+    background: #667eea;
+    color: white;
+    padding: 8px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: background 0.3s ease;
+    display: inline-block;
+}
+
+.user-info-bar-welcome .admin-dashboard-link:hover {
+    background: #764ba2;
+    transform: translateY(-1px);
+}
+
+.user-info-bar-welcome .app-link {
+    background: #28a745;
+    color: white;
+    padding: 8px 20px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: background 0.3s ease;
+    display: inline-block;
+}
+
+.user-info-bar-welcome .app-link:hover {
+    background: #218838;
+    transform: translateY(-1px);
+}
+
+.user-info-bar-welcome .logout-button {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: background 0.3s ease;
+}
+
+.user-info-bar-welcome .logout-button:hover {
+    background: #c82333;
+}
+
+/* Add top padding to body when user info bar is visible */
+body.has-user-bar {
+    padding-top: 60px;
+}
+
+/* Remove the old login-bar styles if they exist */
+.login-bar {
+    display: none;
+}
+
+/* Login Button Container - Welcome Page */
+.login-button-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1001;
+    display: none; /* Hidden by default */
+}
+
+.login-button-container.visible {
+    display: block;
+}
+
+.login-button-container .login-btn {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+}
+
+.login-button-container .login-btn:hover {
+    background: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+}
+
+/* Responsive adjustments for login button */
+@media (max-width: 768px) {
+    .login-button-container {
+        top: 15px;
+        right: 15px;
+    }
+    
+    .login-button-container .login-btn {
+        padding: 10px 20px;
+        font-size: 0.9em;
+    }
+}
