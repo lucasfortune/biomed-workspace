@@ -654,10 +654,6 @@ app.get('/admin/activity-logs', requireAdmin, (req, res) => {
  */
 app.get('/admin/active-sessions', requireAdmin, (req, res) => {
   try {
-    console.log('=== ACTIVE SESSIONS DEBUG ===');
-    console.log('Total training sessions:', trainingSessions.size);
-    console.log('Total inference sessions:', inferenceSessions.size);
-    
     // Get ALL training sessions (not just active)
     const allTraining = [];
     trainingSessions.forEach((session, trainingId) => {
@@ -671,14 +667,12 @@ app.get('/admin/active-sessions', requireAdmin, (req, res) => {
     // Get ALL inference sessions (not just active)
     const allInference = [];
     inferenceSessions.forEach((session, inferenceId) => {
-      console.log(`Inference ${inferenceId.substring(0, 8)}: status=${session.status}`);
       allInference.push({
         inferenceId,
         ...session
       });
     });
     
-    console.log('========================');
     
     res.json({
       training: allTraining,

@@ -301,7 +301,6 @@ async function checkAuthStatus() {
                 </div>
                 <div class="user-actions">
                     ${adminLink}
-                    <a href="/app" class="app-link">Go to App</a>
                     <button class="logout-button" onclick="handleLogout()">Logout</button>
                 </div>
             `;
