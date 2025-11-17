@@ -1,0 +1,334 @@
+/**
+ * Workspace Application - Main entry point
+ * Initializes state management, module loading, and UI
+ */
+class Workspace {
+  constructor() {
+    this.state = null;
+    this.moduleLoader = null;
+    this.api = null;
+    this.socket = null;
+    this.initialized = false;
+
+    console.log('[Workspace] Initializing...');
+  }
+
+  /**
+   * Initialize the workspace application
+   */
+  async init() {
+    try {
+      // Initialize core systems
+      this.state = new StateManager();
+      this.moduleLoader = new ModuleLoader(this.state);
+      this.api = new WorkspaceAPI();
+
+      // Set up module container
+      const moduleView = document.getElementById('module-view');
+      this.moduleLoader.setContainer(moduleView);
+
+      // Register all modules
+      this.moduleLoader.registerAll(moduleRegistry);
+
+      // Check authentication
+      await this.checkAuth();
+
+      // Initialize workspace
+      await this.initializeWorkspace();
+
+      // Set up UI
+      this.setupUI();
+      this.setupEventListeners();
+
+      // Subscribe to state changes
+      this.setupStateSubscriptions();
+
+      // Render module cards
+      this.renderModuleCards();
+
+      this.initialized = true;
+      console.log('[Workspace] Initialization complete');
+
+    } catch (error) {
+      console.error('[Workspace] Initialization error:', error);
+      this.showError('Failed to initialize workspace: ' + error.message);
+    }
+  }
+
+  /**
+   * Check authentication status
+   */
+  async checkAuth() {
+    try {
+      const response = await this.api.checkAuth();
+
+      if (response.authenticated) {
+        this.state.update('user', {
+          username: response.user.username,
+          fullName: response.user.fullName,
+          status: response.user.status,
+          isAdmin: response.user.isAdmin
+        });
+
+        console.log('[Workspace] User authenticated:', response.user.username);
+      } else {
+        // Redirect to login
+        window.location.href = '/login';
+      }
+    } catch (error) {
+      console.error('[Workspace] Auth check error:', error);
+      window.location.href = '/login';
+    }
+  }
+
+  /**
+   * Initialize workspace for current session
+   */
+  async initializeWorkspace() {
+    try {
+      const response = await this.api.getWorkspaceStatus();
+
+      if (response.success) {
+        const { workspace } = response;
+
+        this.state.update('workspace', {
+          sessionId: workspace.sessionId,
+          initialized: true,
+          files: workspace.fileTree || [],
+          stats: null,
+          activeModule: null
+        });
+
+        console.log('[Workspace] Workspace initialized');
+
+        // Load stats
+        await this.loadWorkspaceStats();
+      }
+    } catch (error) {
+      console.error('[Workspace] Workspace initialization error:', error);
+
+      // Try to create workspace
+      try {
+        const initResponse = await this.api.initializeWorkspace();
+        if (initResponse.success) {
+          console.log('[Workspace] New workspace created');
+          await this.initializeWorkspace(); // Retry
+        }
+      } catch (initError) {
+        console.error('[Workspace] Failed to create workspace:', initError);
+      }
+    }
+  }
+
+  /**
+   * Load workspace statistics
+   */
+  async loadWorkspaceStats() {
+    try {
+      const response = await this.api.getWorkspaceStats();
+
+      if (response.success) {
+        this.state.update('workspace.stats', response.stats);
+      }
+    } catch (error) {
+      console.error('[Workspace] Error loading stats:', error);
+    }
+  }
+
+  /**
+   * Set up UI components
+   */
+  setupUI() {
+    // Update user info display
+    const userName = document.getElementById('user-name');
+    const userStatus = document.getElementById('user-status');
+
+    if (userName) {
+      userName.textContent = this.state.get('user.fullName') || this.state.get('user.username');
+    }
+
+    if (userStatus) {
+      const status = this.state.get('user.status');
+      userStatus.textContent = status === 'active' ? '✓ Approved' : '⏳ Pending';
+    }
+  }
+
+  /**
+   * Set up event listeners
+   */
+  setupEventListeners() {
+    // Sidebar toggle
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('sidebar');
+
+    if (sidebarToggle && sidebar) {
+      sidebarToggle.addEventListener('click', () => {
+        const isCollapsed = !sidebar.classList.contains('collapsed');
+        sidebar.classList.toggle('collapsed');
+        this.state.update('ui.sidebarCollapsed', isCollapsed);
+      });
+    }
+
+    // Global return to hub function
+    window.backToHub = () => this.returnToHub();
+  }
+
+  /**
+   * Set up state subscriptions
+   */
+  setupStateSubscriptions() {
+    // Subscribe to workspace stats changes
+    this.state.subscribe('workspace.stats', (stats) => {
+      if (stats) {
+        const fileCountEl = document.getElementById('file-count');
+        const workspaceSizeEl = document.getElementById('workspace-size');
+
+        if (fileCountEl) {
+          fileCountEl.textContent = stats.fileCount || 0;
+        }
+
+        if (workspaceSizeEl) {
+          workspaceSizeEl.textContent = stats.totalSizeMB || '0 MB';
+        }
+      }
+    });
+
+    // Subscribe to loading state
+    this.state.subscribe('ui.loading', (isLoading) => {
+      const overlay = document.getElementById('loading-overlay');
+      if (overlay) {
+        overlay.style.display = isLoading ? 'flex' : 'none';
+      }
+    });
+
+    // Subscribe to notifications
+    this.state.subscribe('ui.notifications', (notifications) => {
+      this.renderNotifications(notifications);
+    });
+  }
+
+  /**
+   * Render module cards in the welcome view
+   */
+  renderModuleCards() {
+    const grid = document.getElementById('modules-grid');
+    if (!grid) return;
+
+    const modules = this.moduleLoader.getAllModules();
+
+    grid.innerHTML = modules.map(module => `
+      <div class="module-card ${module.status === 'coming_soon' ? 'coming-soon' : ''}"
+           style="--card-color: ${module.color}"
+           data-module-id="${module.id}">
+        <div class="module-icon">${module.icon}</div>
+        <h3>${module.name}</h3>
+        <p>${module.description}</p>
+        <div class="module-io">
+          <div class="inputs">Inputs: ${module.inputs.join(', ')}</div>
+          <div class="outputs">Outputs: ${module.outputs.join(', ')}</div>
+        </div>
+        ${module.status === 'coming_soon'
+          ? '<div class="status-badge">Coming Soon</div>'
+          : `<button class="btn-launch" onclick="workspace.loadModule('${module.id}')">
+               Launch Module
+             </button>`
+        }
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Load and activate a module
+   * @param {string} moduleId - Module ID to load
+   */
+  async loadModule(moduleId) {
+    try {
+      console.log(`[Workspace] Loading module: ${moduleId}`);
+
+      // Check if user is approved for modules requiring upload
+      const user = this.state.get('user');
+      if (user.status !== 'active' && moduleId !== 'segmentation') {
+        this.state.notify('warning', 'Your account is pending approval. You can use test data with segmentation module.');
+        return;
+      }
+
+      await this.moduleLoader.load(moduleId);
+
+      // Hide welcome view, show module view
+      const welcomeView = document.getElementById('welcome-view');
+      const moduleView = document.getElementById('module-view');
+
+      if (welcomeView && moduleView) {
+        welcomeView.classList.remove('active');
+        moduleView.classList.add('active');
+      }
+
+    } catch (error) {
+      console.error('[Workspace] Error loading module:', error);
+      this.state.notify('error', `Failed to load module: ${error.message}`);
+    }
+  }
+
+  /**
+   * Return to hub/welcome view
+   */
+  async returnToHub() {
+    try {
+      await this.moduleLoader.returnToHub();
+      console.log('[Workspace] Returned to hub');
+    } catch (error) {
+      console.error('[Workspace] Error returning to hub:', error);
+    }
+  }
+
+  /**
+   * Refresh workspace data
+   */
+  async refreshWorkspace() {
+    this.state.update('ui.loading', true);
+    try {
+      await this.loadWorkspaceStats();
+      this.state.notify('success', 'Workspace refreshed');
+    } catch (error) {
+      console.error('[Workspace] Refresh error:', error);
+      this.state.notify('error', 'Failed to refresh workspace');
+    } finally {
+      this.state.update('ui.loading', false);
+    }
+  }
+
+  /**
+   * Render notifications
+   * @param {Array} notifications - Array of notification objects
+   */
+  renderNotifications(notifications) {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+
+    container.innerHTML = notifications.map(notif => `
+      <div class="notification ${notif.type}">
+        ${notif.message}
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Show error message
+   * @param {string} message - Error message
+   */
+  showError(message) {
+    alert('Error: ' + message);
+  }
+}
+
+// Initialize workspace when DOM is ready
+const workspace = new Workspace();
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => workspace.init());
+} else {
+  workspace.init();
+}
+
+// Make workspace globally available
+window.workspace = workspace;

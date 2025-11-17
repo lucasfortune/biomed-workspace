@@ -1,0 +1,21 @@
+{
+  "sessionId": "CuvCWRf1XjW9e1Rq435gzTPJen58AAA2",
+  "createdAt": "2025-11-17T14:53:11.801Z",
+  "lastAccessed": "2025-11-17T15:09:10.238Z",
+  "version": "1.0.0",
+  "files": [],
+  "modules": {
+    "segmentation": {
+      "runs": []
+    },
+    "denoising": {
+      "runs": []
+    },
+    "annotation": {
+      "runs": []
+    },
+    "mesh": {
+      "runs": []
+    }
+  }
+}

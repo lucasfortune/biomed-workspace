@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Biomedical Image Processing Workspace</title>
+
+  <!-- Workspace CSS -->
+  <link rel="stylesheet" href="/workspace/css/workspace.css">
+
+  <!-- External Libraries (CDN) -->
+  <script src="https://unpkg.com/mitt@3.0.0/dist/mitt.umd.js"></script>
+  <script src="https://unpkg.com/split.js@1.6.5/dist/split.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/split.js@1.6.5/dist/split.min.css">
+</head>
+<body>
+  <div id="workspace-container">
+    <!-- Collapsible Sidebar -->
+    <aside id="sidebar" class="sidebar collapsed">
+      <div class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">
+        <span class="toggle-icon">☰</span>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- User Info Section -->
+        <div class="sidebar-section user-info">
+          <div class="user-avatar">👤</div>
+          <div class="user-details">
+            <div class="user-name" id="user-name">Loading...</div>
+            <div class="user-status" id="user-status"></div>
+          </div>
+        </div>
+
+        <!-- Workspace Stats -->
+        <div class="sidebar-section workspace-stats">
+          <h3>Workspace</h3>
+          <div class="stat-item">
+            <span class="stat-label">Files:</span>
+            <span class="stat-value" id="file-count">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Size:</span>
+            <span class="stat-value" id="workspace-size">0 MB</span>
+          </div>
+        </div>
+
+        <!-- File Browser (placeholder for Phase 3) -->
+        <div class="sidebar-section file-browser">
+          <h3>Files</h3>
+          <div id="file-tree-container">
+            <p class="empty-state">File browser coming in Phase 3</p>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="sidebar-section quick-actions">
+          <button class="btn-action" onclick="workspace.returnToHub()">
+            🏠 Back to Hub
+          </button>
+          <button class="btn-action" onclick="workspace.refreshWorkspace()">
+            🔄 Refresh
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main id="main-content">
+      <!-- Welcome/Hub View -->
+      <div id="welcome-view" class="view active">
+        <div class="welcome-container">
+          <header class="welcome-header">
+            <h1>🔬 Biomedical Image Processing Workspace</h1>
+            <p class="subtitle">Select a processing module to begin</p>
+          </header>
+
+          <!-- Module Cards Grid -->
+          <div id="modules-grid" class="modules-grid">
+            <!-- Modules will be dynamically rendered here -->
+          </div>
+
+          <!-- Resources Section -->
+          <footer class="welcome-footer">
+            <div class="resources">
+              <h4>Resources</h4>
+              <a href="https://github.com/lucasfortune/viz_app" class="resource-link" target="_blank">
+                💻 GitHub Repository
+              </a>
+              <a href="/classic" class="resource-link">
+                🔙 Classic Version
+              </a>
+            </div>
+
+            <div class="workspace-info">
+              <small>Workspace Version 1.0.0 | Phase 1</small>
+            </div>
+          </footer>
+        </div>
+      </div>
+
+      <!-- Module View -->
+      <div id="module-view" class="view">
+        <!-- Active module content will be rendered here -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Notification Container -->
+  <div id="notification-container" class="notification-container"></div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div class="loading-spinner"></div>
+    <p class="loading-text">Loading...</p>
+  </div>
+
+  <!-- Core JavaScript Modules -->
+  <script src="/workspace/js/core/StateManager.js"></script>
+  <script src="/workspace/js/core/ModuleLoader.js"></script>
+  <script src="/workspace/js/core/WorkspaceAPI.js"></script>
+  <script src="/workspace/js/modules/registry.js"></script>
+  <script src="/workspace/js/workspace.js"></script>
+</body>
+</html>

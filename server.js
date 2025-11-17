@@ -7,22 +7,36 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 const uuid = require('uuid');
 const archiver = require('archiver');
 const bcrypt = require('bcrypt');
 const activityLogger = require('./activityLogger');
+const WorkspaceManager = require('./WorkspaceManager');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 
-// Session configuration
+// Initialize WorkspaceManager
+const workspaceManager = new WorkspaceManager();
+
+// Session configuration with file-based storage for persistence
 app.use(session({
-  secret: 'segmentation-app-secret',
+  store: new FileStore({
+    path: './sessions',
+    ttl: 86400 * 7, // 7 days
+    retries: 0,
+    secret: process.env.SESSION_SECRET || 'segmentation-app-secret'
+  }),
+  secret: process.env.SESSION_SECRET || 'segmentation-app-secret',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: false } // Set to true in production with HTTPS
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    maxAge: 86400000 * 7 // 7 days
+  }
 }));
 
 // Middleware
@@ -118,9 +132,43 @@ dirs.forEach(dir => {
   }
 });
 
-// ============================================
+// ==============================================================================
+// AUTHENTICATION MIDDLEWARE
+// ==============================================================================
+
+/**
+ * Basic authentication - allows pending & approved users
+ */
+function requireAuth(req, res, next) {
+  if (req.session && req.session.user) {
+    return next();
+  }
+  res.status(401).json({ error: 'Authentication required', authenticated: false });
+}
+
+/**
+ * Requires approved status - full access
+ */
+function requireApproved(req, res, next) {
+  if (req.session && req.session.user && req.session.user.status === 'active') {
+    return next();
+  }
+  res.status(403).json({ error: 'Account approval required' });
+}
+
+/**
+ * Admin-only access
+ */
+function requireAdmin(req, res, next) {
+  if (req.session && req.session.user && req.session.user.isAdmin) {
+    return next();
+  }
+  res.status(403).json({ error: 'Admin access required' });
+}
+
+// ==============================================================================
 // USER MANAGEMENT FUNCTIONS
-// ============================================
+// ==============================================================================
 
 const usersFilePath = path.join(__dirname, 'users.json');
 
@@ -131,24 +179,22 @@ function loadUsers() {
   if (!fs.existsSync(usersFilePath)) {
     return { users: [] };
   }
-  try {
-    const data = fs.readFileSync(usersFilePath, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error loading users:', error);
-    return { users: [] };
-  }
+  const data = fs.readFileSync(usersFilePath, 'utf8');
+  return JSON.parse(data);
 }
 
 /**
  * Save users to file
  */
 function saveUsers(usersData) {
-  try {
-    fs.writeFileSync(usersFilePath, JSON.stringify(usersData, null, 2));
-  } catch (error) {
-    console.error('Error saving users:', error);
-  }
+  fs.writeFileSync(usersFilePath, JSON.stringify(usersData, null, 2));
+}
+
+/**
+ * Generate unique user ID
+ */
+function generateUserId() {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
 /**
@@ -159,79 +205,9 @@ function findUserByUsername(username) {
   return usersData.users.find(u => u.username === username);
 }
 
-/**
- * Generate unique user ID
- */
-function generateUserId() {
-  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
-}
-
-// ============================================
-// AUTHENTICATION MIDDLEWARE
-// ============================================
-
-/**
- * Basic authentication - allows both pending and approved users
- */
-function requireAuth(req, res, next) {
-  if (req.session && req.session.user) {
-    // User is logged in (pending or approved)
-    next();
-  } else {
-    // Not logged in - save intended destination and redirect to login
-    req.session.returnTo = req.originalUrl;
-    res.redirect('/login');
-  }
-}
-
-/**
- * Full access authentication - requires approved status
- */
-function requireApproved(req, res, next) {
-  if (req.session && req.session.user) {
-    if (req.session.user.status === 'active') {
-      // Approved user - allow access
-      next();
-    } else {
-      // Pending or rejected user - deny access
-      res.status(403).json({ 
-        error: 'This feature requires account approval',
-        status: req.session.user.status,
-        message: 'Your account is pending approval. You can use test data while waiting for approval.'
-      });
-    }
-  } else {
-    // Not logged in - redirect to login
-    req.session.returnTo = req.originalUrl;
-    res.redirect('/login');
-  }
-}
-
-/**
- * Admin authentication - requires admin privileges
- */
-function requireAdmin(req, res, next) {
-  if (req.session && req.session.user) {
-    if (req.session.user.isAdmin) {
-      // Admin user - allow access
-      next();
-    } else {
-      // Not an admin
-      res.status(403).json({ 
-        error: 'Admin privileges required',
-        message: 'You do not have permission to access this resource.'
-      });
-    }
-  } else {
-    // Not logged in - redirect to login
-    req.session.returnTo = req.originalUrl;
-    res.redirect('/login');
-  }
-}
-
-// ============================================
+// ==============================================================================
 // AUTHENTICATION ROUTES
-// ============================================
+// ==============================================================================
 
 // Serve login page
 app.get('/login', (req, res) => {
@@ -243,141 +219,56 @@ app.get('/register', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
-// Serve admin dashboard (requires admin)
+// Serve admin page
 app.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// Handle login
-app.post('/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    
-    if (!username || !password) {
-      activityLogger.logLogin(username || 'unknown', false);
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username and password are required' 
-      });
-    }
-    
-    // Find user
-    const user = findUserByUsername(username);
-    
-    if (!user) {
-      activityLogger.logLogin(username, false);
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Invalid username or password' 
-      });
-    }
-    
-    // Verify password
-    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-    
-    if (!passwordMatch) {
-      activityLogger.logLogin(username, false);
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Invalid username or password' 
-      });
-    }
-    
-    // Check if user is rejected
-    if (user.status === 'rejected') {
-      activityLogger.logLogin(username, false);
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Your account registration was not approved. Please contact the administrator.' 
-      });
-    }
-    
-    // Login successful - store user in session (without password hash)
-    req.session.user = {
-      id: user.id,
-      username: user.username,
-      fullName: user.fullName,
-      email: user.email,
-      institution: user.institution,
-      status: user.status,
-      isAdmin: user.isAdmin || false
-    };
-    
-    activityLogger.logLogin(username, true);
-    
-    // Determine redirect
-    const redirectUrl = req.session.returnTo || '/';
-    delete req.session.returnTo;
-    
-    res.json({ 
-      success: true, 
-      user: req.session.user,
-      redirect: redirectUrl,
-      message: user.status === 'pending' 
-        ? 'Login successful! Your account is pending approval - you can use test data while waiting.'
-        : 'Login successful!'
+// Check authentication status
+app.get('/check-auth', (req, res) => {
+  if (req.session && req.session.user) {
+    res.json({
+      authenticated: true,
+      user: {
+        username: req.session.user.username,
+        fullName: req.session.user.fullName,
+        email: req.session.user.email,
+        institution: req.session.user.institution,
+        status: req.session.user.status,
+        isAdmin: req.session.user.isAdmin
+      }
     });
-    
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'An error occurred during login' 
-    });
+  } else {
+    res.json({ authenticated: false });
   }
 });
 
-// Handle registration
+// Register new user
 app.post('/register', async (req, res) => {
   try {
     const { username, password, fullName, email, institution } = req.body;
-    
-    // Validate required fields
+
+    // Validation
     if (!username || !password || !fullName || !email || !institution) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'All fields are required' 
+      return res.status(400).json({
+        success: false,
+        error: 'All fields are required'
       });
     }
-    
-    // Validate username format
-    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
-    if (!usernameRegex.test(username)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Username must be 3-20 characters, alphanumeric and underscore only' 
-      });
-    }
-    
-    // Validate password length
-    if (password.length < 8) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Password must be at least 8 characters long' 
-      });
-    }
-    
+
     // Check if username already exists
-    const usersData = loadUsers();
-    if (usersData.users.find(u => u.username === username)) {
-      return res.status(409).json({ 
-        success: false, 
-        error: 'Username already exists' 
+    const existingUser = findUserByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username already exists'
       });
     }
-    
-    // Check if email already exists
-    if (usersData.users.find(u => u.email === email)) {
-      return res.status(409).json({ 
-        success: false, 
-        error: 'Email already registered' 
-      });
-    }
-    
+
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
-    
-    // Create new user
+
+    // Create new user (pending status by default)
     const newUser = {
       id: generateUserId(),
       username,
@@ -387,307 +278,257 @@ app.post('/register', async (req, res) => {
       institution,
       status: 'pending',
       isAdmin: false,
-      createdAt: new Date().toISOString(),
-      approvedAt: null,
-      approvedBy: null
+      createdAt: new Date().toISOString()
     };
-    
+
     // Save user
+    const usersData = loadUsers();
     usersData.users.push(newUser);
     saveUsers(usersData);
-    
+
     // Log registration
     activityLogger.logRegistration(username, institution);
-    
-    console.log(`New user registered: ${username} (${institution}) - Status: pending`);
-    
-    res.json({ 
-      success: true, 
-      message: 'Registration successful! Your account is pending approval. You can log in and use test data while waiting for approval.',
-      username: username
+
+    console.log(`New user registered: ${username} (pending approval)`);
+
+    res.json({
+      success: true,
+      message: 'Registration successful! Your account is pending approval.',
+      user: {
+        username: newUser.username,
+        fullName: newUser.fullName,
+        status: newUser.status
+      }
     });
-    
+
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'An error occurred during registration' 
+    res.status(500).json({
+      success: false,
+      error: 'Registration failed. Please try again.'
     });
   }
 });
 
-// Handle logout
+// Login
+app.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // Validation
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required'
+      });
+    }
+
+    // Find user
+    const user = findUserByUsername(username);
+    if (!user) {
+      activityLogger.logLogin(username, false);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password'
+      });
+    }
+
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordMatch) {
+      activityLogger.logLogin(username, false);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password'
+      });
+    }
+
+    // Check if user is rejected
+    if (user.status === 'rejected') {
+      return res.status(403).json({
+        success: false,
+        error: 'Your account has been rejected. Please contact the administrator.'
+      });
+    }
+
+    // Create session
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      email: user.email,
+      institution: user.institution,
+      status: user.status,
+      isAdmin: user.isAdmin
+    };
+
+    // Log successful login
+    activityLogger.logLogin(username, true);
+
+    console.log(`User logged in: ${username} (status: ${user.status})`);
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        username: user.username,
+        fullName: user.fullName,
+        status: user.status,
+        isAdmin: user.isAdmin
+      },
+      redirect: '/'
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Login failed. Please try again.'
+    });
+  }
+});
+
+// Logout
 app.post('/logout', (req, res) => {
-  const username = req.session.user ? req.session.user.username : 'unknown';
+  const username = req.session?.user?.username || 'unknown';
   req.session.destroy((err) => {
     if (err) {
       console.error('Logout error:', err);
-      return res.status(500).json({ success: false, error: 'Logout failed' });
+      return res.status(500).json({
+        success: false,
+        error: 'Logout failed'
+      });
     }
-    activityLogger.logActivity(username, 'logout', {});
-    res.json({ success: true, message: 'Logged out successfully' });
+
+    console.log(`User logged out: ${username}`);
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
   });
 });
 
-// Check authentication status
-app.get('/check-auth', (req, res) => {
-  if (req.session && req.session.user) {
-    res.json({ 
-      authenticated: true, 
-      user: req.session.user 
-    });
-  } else {
-    res.json({ 
-      authenticated: false 
-    });
-  }
-});
-
-// ============================================
-// ADMIN API ENDPOINTS
-// ============================================
+// ==============================================================================
+// WORKSPACE API ROUTES
+// ==============================================================================
 
 /**
- * Get all users (admin only)
+ * Initialize workspace for current session
  */
-app.get('/admin/users', requireAdmin, (req, res) => {
+app.post('/api/workspace/init', requireAuth, (req, res) => {
   try {
-    const filter = req.query.filter || 'all';
-    const usersData = loadUsers();
-    
-    let filteredUsers = usersData.users;
-    
-    if (filter !== 'all') {
-      filteredUsers = usersData.users.filter(u => u.status === filter);
-    }
-    
-    // Remove password hashes from response
-    const safeUsers = filteredUsers.map(u => {
-      const { passwordHash, ...safeUser } = u;
-      return safeUser;
-    });
-    
-    res.json({ users: safeUsers });
-  } catch (error) {
-    console.error('Error loading users:', error);
-    res.status(500).json({ error: 'Failed to load users' });
-  }
-});
+    const sessionId = req.session.id;
+    const workspaceInfo = workspaceManager.initializeWorkspace(sessionId);
 
-/**
- * Get pending users (admin only)
- */
-app.get('/admin/pending-users', requireAdmin, (req, res) => {
-  try {
-    const usersData = loadUsers();
-    const pendingUsers = usersData.users.filter(u => u.status === 'pending');
-    
-    // Remove password hashes
-    const safeUsers = pendingUsers.map(u => {
-      const { passwordHash, ...safeUser } = u;
-      return safeUser;
-    });
-    
-    res.json({ users: safeUsers });
-  } catch (error) {
-    console.error('Error loading pending users:', error);
-    res.status(500).json({ error: 'Failed to load pending users' });
-  }
-});
+    activityLogger.logActivity(
+      req.session.user.username,
+      'workspace_initialized',
+      { sessionId }
+    );
 
-/**
- * Approve a user (admin only)
- */
-app.post('/admin/approve-user', requireAdmin, (req, res) => {
-  try {
-    const { username } = req.body;
-    
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
-    }
-    
-    const usersData = loadUsers();
-    const user = usersData.users.find(u => u.username === username);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    if (user.status === 'active') {
-      return res.status(400).json({ error: 'User is already approved' });
-    }
-    
-    // Approve user
-    user.status = 'active';
-    user.approvedAt = new Date().toISOString();
-    user.approvedBy = req.session.user.username;
-    
-    saveUsers(usersData);
-    
-    // Log the approval
-    activityLogger.logActivity(req.session.user.username, 'user_approved', {
-      approvedUser: username
-    });
-    
-    console.log(`User ${username} approved by ${req.session.user.username}`);
-    
-    res.json({ 
-      success: true, 
-      message: `User ${username} has been approved`,
-      user: { username, status: 'active' }
-    });
-    
-  } catch (error) {
-    console.error('Error approving user:', error);
-    res.status(500).json({ error: 'Failed to approve user' });
-  }
-});
-
-/**
- * Reject a user (admin only)
- */
-app.post('/admin/reject-user', requireAdmin, (req, res) => {
-  try {
-    const { username } = req.body;
-    
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
-    }
-    
-    const usersData = loadUsers();
-    const user = usersData.users.find(u => u.username === username);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Reject user
-    user.status = 'rejected';
-    user.rejectedAt = new Date().toISOString();
-    user.rejectedBy = req.session.user.username;
-    
-    saveUsers(usersData);
-    
-    // Log the rejection
-    activityLogger.logActivity(req.session.user.username, 'user_rejected', {
-      rejectedUser: username
-    });
-    
-    console.log(`User ${username} rejected by ${req.session.user.username}`);
-    
-    res.json({ 
-      success: true, 
-      message: `User ${username} has been rejected`,
-      user: { username, status: 'rejected' }
-    });
-    
-  } catch (error) {
-    console.error('Error rejecting user:', error);
-    res.status(500).json({ error: 'Failed to reject user' });
-  }
-});
-
-/**
- * Get activity logs (admin only)
- */
-app.get('/admin/activity-logs', requireAdmin, (req, res) => {
-  try {
-    const userFilter = req.query.user || 'all';
-    const typeFilter = req.query.type || 'all';
-    const limit = parseInt(req.query.limit) || 50;
-    
-    const logsPath = path.join(__dirname, 'logs', 'activity.log');
-    
-    if (!fs.existsSync(logsPath)) {
-      return res.json({ logs: [], users: [] });
-    }
-    
-    // Read log file
-    const logContent = fs.readFileSync(logsPath, 'utf8');
-    const logLines = logContent.trim().split('\n').filter(line => line);
-    
-    // Parse logs
-    let logs = logLines.map(line => {
-      try {
-        return JSON.parse(line);
-      } catch (e) {
-        return null;
-      }
-    }).filter(log => log !== null);
-    
-    // Apply filters
-    if (userFilter !== 'all') {
-      logs = logs.filter(log => log.username === userFilter);
-    }
-    
-    if (typeFilter !== 'all') {
-      logs = logs.filter(log => log.action === typeFilter);
-    }
-    
-    // Sort by timestamp (newest first)
-    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    // Limit results
-    logs = logs.slice(0, limit);
-    
-    // Get unique usernames for filter dropdown
-    const allLogs = logLines.map(line => {
-      try {
-        return JSON.parse(line);
-      } catch (e) {
-        return null;
-      }
-    }).filter(log => log !== null);
-    
-    const uniqueUsers = [...new Set(allLogs.map(log => log.username))].sort();
-    
-    res.json({ logs, users: uniqueUsers });
-    
-  } catch (error) {
-    console.error('Error loading activity logs:', error);
-    res.status(500).json({ error: 'Failed to load activity logs' });
-  }
-});
-
-/**
- * Get active sessions (admin only)
- */
-app.get('/admin/active-sessions', requireAdmin, (req, res) => {
-  try {
-    // Get ALL training sessions (not just active)
-    const allTraining = [];
-    trainingSessions.forEach((session, trainingId) => {
-      console.log(`Training ${trainingId.substring(0, 8)}: status=${session.status}`);
-      allTraining.push({
-        trainingId,
-        ...session
-      });
-    });
-    
-    // Get ALL inference sessions (not just active)
-    const allInference = [];
-    inferenceSessions.forEach((session, inferenceId) => {
-      allInference.push({
-        inferenceId,
-        ...session
-      });
-    });
-    
-    
     res.json({
-      training: allTraining,
-      inference: allInference
+      success: true,
+      workspace: workspaceInfo
     });
-    
   } catch (error) {
-    console.error('Error loading active sessions:', error);
-    res.status(500).json({ error: 'Failed to load active sessions' });
+    console.error('Error initializing workspace:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
-// Routes
+/**
+ * Get workspace status and file tree
+ */
+app.get('/api/workspace/status', requireAuth, (req, res) => {
+  try {
+    const sessionId = req.session.id;
+    const workspaceInfo = workspaceManager.getWorkspaceInfo(sessionId);
+
+    res.json({
+      success: true,
+      workspace: workspaceInfo
+    });
+  } catch (error) {
+    // If workspace doesn't exist, initialize it
+    if (error.message.includes('not found')) {
+      const workspaceInfo = workspaceManager.initializeWorkspace(req.session.id);
+      return res.json({
+        success: true,
+        workspace: workspaceInfo,
+        initialized: true
+      });
+    }
+
+    console.error('Error getting workspace status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get workspace file tree
+ */
+app.get('/api/workspace/files', requireAuth, (req, res) => {
+  try {
+    const sessionId = req.session.id;
+    const workspaceInfo = workspaceManager.getWorkspaceInfo(sessionId);
+
+    res.json({
+      success: true,
+      files: workspaceInfo.fileTree
+    });
+  } catch (error) {
+    console.error('Error getting workspace files:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get workspace statistics
+ */
+app.get('/api/workspace/stats', requireAuth, (req, res) => {
+  try {
+    const sessionId = req.session.id;
+    const stats = workspaceManager.getWorkspaceStats(sessionId);
+
+    res.json({
+      success: true,
+      stats: stats
+    });
+  } catch (error) {
+    console.error('Error getting workspace stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ==============================================================================
+// MAIN ROUTES
+// ==============================================================================
+
+// Serve welcome page as default
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'welcome.html'));
+});
+
+// Serve classic app
+app.get('/classic', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'classic', 'index.html'));
+});
+
+// Serve workspace app
+app.get('/workspace', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'workspace', 'index.html'));
 });
 
 // Step 1: Upload and validate TIFF stacks (MODIFIED to support test data)
