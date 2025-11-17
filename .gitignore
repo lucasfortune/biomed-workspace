@@ -260,3 +260,11 @@ dist
 
 # Session data (if stored locally)
 sessions/
+
+# User data
+users.json
+
+# claude
+CLAUDE.md
+VISION.md
+ACTIONPLAN.md
