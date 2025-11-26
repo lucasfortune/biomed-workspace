@@ -1,0 +1,404 @@
+/**
+ * FileSelector Component
+ * Modern dropdown-based file selector with upload capability
+ */
+class FileSelector {
+  constructor(type, title, icon, moduleInstance) {
+    this.type = type; // 'raw_images', 'annotations', 'inference_data'
+    this.title = title; // Display title
+    this.icon = icon; // Emoji icon
+    this.module = moduleInstance;
+    this.selectedFile = null;
+    this.availableFiles = [];
+    this.containerId = `file-selector-${type}`;
+  }
+
+  /**
+   * Render the file selector HTML
+   */
+  render() {
+    return `
+      <div class="file-selector-card" id="${this.containerId}">
+        <div class="file-selector-header">
+          <h3>${this.icon} ${this.title}</h3>
+        </div>
+
+        <div class="file-selector-body">
+          <!-- Dropdown Selection -->
+          <div class="file-select-group">
+            <label for="${this.type}Select">Select file:</label>
+            <select id="${this.type}Select" class="file-dropdown">
+              <option value="">-- Select a file --</option>
+            </select>
+          </div>
+
+          <!-- Upload New File -->
+          <div class="file-upload-group">
+            <label>Or upload new:</label>
+            <button class="btn-upload" id="${this.type}UploadBtn">
+              <span class="btn-icon">+</span>
+              Add ${this.title}
+            </button>
+            <input type="file" id="${this.type}Input" class="file-input-hidden" accept=".tif,.tiff">
+          </div>
+
+          <!-- File Preview/Info -->
+          <div class="file-preview" id="${this.type}Preview" style="display: none;">
+            <!-- Preview info will be populated here -->
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Initialize the component after rendering
+   */
+  async init() {
+    await this.loadAvailableFiles();
+    this.setupEventListeners();
+  }
+
+  /**
+   * Load available files from workspace
+   */
+  async loadAvailableFiles() {
+    try {
+      const response = await fetch('/api/workspace/files');
+      const data = await response.json();
+
+      if (data.success) {
+        // Filter files by type
+        this.availableFiles = this.filterFilesByType(data.files);
+        this.populateDropdown();
+      }
+    } catch (error) {
+      console.error(`[FileSelector] Error loading files for ${this.type}:`, error);
+      // Still populate with test data option
+      this.populateDropdown();
+    }
+  }
+
+  /**
+   * Filter files by type
+   */
+  filterFilesByType(files) {
+    if (!files || !Array.isArray(files)) {
+      return [];
+    }
+
+    // Filter based on type and file extension
+    return files.filter(file => {
+      const isTiff = file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff');
+
+      if (this.type === 'raw_images') {
+        return isTiff && file.category === 'raw_images';
+      } else if (this.type === 'annotations') {
+        return isTiff && file.category === 'annotations';
+      } else if (this.type === 'inference_data') {
+        return isTiff && file.category === 'inference_data';
+      }
+
+      return false;
+    });
+  }
+
+  /**
+   * Populate dropdown with available files
+   */
+  populateDropdown() {
+    const dropdown = document.getElementById(`${this.type}Select`);
+
+    if (!dropdown) {
+      console.error(`[FileSelector] Dropdown not found for ${this.type}`);
+      return;
+    }
+
+    // Clear existing options (except the first placeholder)
+    dropdown.innerHTML = '<option value="">-- Select a file --</option>';
+
+    // Add test data option
+    this.addTestDataOption(dropdown);
+
+    // Add workspace files
+    if (this.availableFiles.length > 0) {
+      const workspaceGroup = document.createElement('optgroup');
+      workspaceGroup.label = 'Workspace Files';
+
+      this.availableFiles.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.path;
+        option.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+        option.dataset.fileInfo = JSON.stringify(file);
+        workspaceGroup.appendChild(option);
+      });
+
+      dropdown.appendChild(workspaceGroup);
+    }
+
+    // Add help text if no files
+    if (this.availableFiles.length === 0) {
+      const helpOption = document.createElement('option');
+      helpOption.value = '';
+      helpOption.textContent = '📤 No files available - upload one above';
+      helpOption.disabled = true;
+      dropdown.appendChild(helpOption);
+    }
+  }
+
+  /**
+   * Add test data option to dropdown
+   */
+  addTestDataOption(dropdown) {
+    const testDataGroup = document.createElement('optgroup');
+    testDataGroup.label = 'Test Data';
+
+    if (this.type === 'raw_images') {
+      const option = document.createElement('option');
+      option.value = 'test_data';
+      option.textContent = 'Test Dataset - Training Images';
+      option.dataset.testData = 'true';
+      testDataGroup.appendChild(option);
+    } else if (this.type === 'annotations') {
+      const option = document.createElement('option');
+      option.value = 'test_data';
+      option.textContent = 'Test Dataset - Annotations';
+      option.dataset.testData = 'true';
+      testDataGroup.appendChild(option);
+    } else if (this.type === 'inference_data') {
+      const option = document.createElement('option');
+      option.value = 'test_data';
+      option.textContent = 'Test Dataset - Inference Images';
+      option.dataset.testData = 'true';
+      testDataGroup.appendChild(option);
+    }
+
+    dropdown.appendChild(testDataGroup);
+  }
+
+  /**
+   * Set up event listeners
+   */
+  setupEventListeners() {
+    // Dropdown change
+    const dropdown = document.getElementById(`${this.type}Select`);
+    if (dropdown) {
+      dropdown.addEventListener('change', (e) => this.handleDropdownChange(e));
+    }
+
+    // Upload button
+    const uploadBtn = document.getElementById(`${this.type}UploadBtn`);
+    const fileInput = document.getElementById(`${this.type}Input`);
+
+    if (uploadBtn && fileInput) {
+      uploadBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    }
+  }
+
+  /**
+   * Handle dropdown selection change
+   */
+  async handleDropdownChange(event) {
+    const dropdown = event.target;
+    const selectedOption = dropdown.options[dropdown.selectedIndex];
+
+    if (!selectedOption.value) {
+      this.hidePreview();
+      this.selectedFile = null;
+      return;
+    }
+
+    // Check if test data
+    if (selectedOption.dataset.testData) {
+      this.selectedFile = {
+        path: 'test_data',
+        isTestData: true,
+        name: selectedOption.textContent
+      };
+      this.showPreview({
+        name: selectedOption.textContent,
+        info: 'Built-in test dataset for demonstration'
+      });
+    } else {
+      // Regular file
+      const fileInfo = JSON.parse(selectedOption.dataset.fileInfo || '{}');
+      this.selectedFile = fileInfo;
+      await this.loadFilePreview(fileInfo);
+    }
+
+    // Notify module that file was selected
+    if (this.module && typeof this.module.onFileSelected === 'function') {
+      this.module.onFileSelected(this.type, this.selectedFile);
+    }
+  }
+
+  /**
+   * Handle file upload
+   */
+  async handleFileUpload(event) {
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.tif') && !file.name.toLowerCase().endsWith('.tiff')) {
+      alert('Please select a TIFF file (.tif or .tiff)');
+      return;
+    }
+
+    try {
+      // Show uploading state
+      this.showUploading();
+
+      // Upload file to workspace
+      const uploadedFile = await this.uploadFileToWorkspace(file);
+
+      // Notify module that file was uploaded (for validation)
+      if (this.module && typeof this.module.onFileUploaded === 'function') {
+        await this.module.onFileUploaded(this.type, file, uploadedFile);
+      }
+
+      // Add to available files
+      this.availableFiles.push(uploadedFile);
+
+      // Refresh dropdown
+      this.populateDropdown();
+
+      // Auto-select the newly uploaded file
+      const dropdown = document.getElementById(`${this.type}Select`);
+      if (dropdown) {
+        dropdown.value = uploadedFile.path;
+        // Don't trigger change event here - onFileUploaded already handled validation
+      }
+
+      // Hide uploading state
+      this.hideUploading();
+
+    } catch (error) {
+      console.error(`[FileSelector] Upload error:`, error);
+      this.module.state.notify('error', `Upload failed: ${error.message}`);
+      this.hideUploading();
+    }
+  }
+
+  /**
+   * Upload file to workspace
+   */
+  async uploadFileToWorkspace(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('category', this.type); // Auto-categorize
+
+    const response = await fetch('/api/workspace/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Upload failed');
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Load and display file preview
+   */
+  async loadFilePreview(fileInfo) {
+    this.showPreview({
+      name: fileInfo.name,
+      size: this.formatFileSize(fileInfo.size),
+      uploadDate: fileInfo.uploadDate ? new Date(fileInfo.uploadDate).toLocaleDateString() : 'Unknown',
+      info: fileInfo.metadata || 'TIFF image stack'
+    });
+  }
+
+  /**
+   * Show file preview
+   */
+  showPreview(data) {
+    const preview = document.getElementById(`${this.type}Preview`);
+    if (!preview) return;
+
+    preview.innerHTML = `
+      <div class="preview-item">
+        <strong>📄 ${data.name}</strong>
+      </div>
+      ${data.size ? `<div class="preview-item">Size: ${data.size}</div>` : ''}
+      ${data.uploadDate ? `<div class="preview-item">Uploaded: ${data.uploadDate}</div>` : ''}
+      ${data.info ? `<div class="preview-item">ℹ️ ${data.info}</div>` : ''}
+    `;
+
+    preview.style.display = 'block';
+  }
+
+  /**
+   * Hide file preview
+   */
+  hidePreview() {
+    const preview = document.getElementById(`${this.type}Preview`);
+    if (preview) {
+      preview.style.display = 'none';
+    }
+  }
+
+  /**
+   * Show uploading state
+   */
+  showUploading() {
+    const preview = document.getElementById(`${this.type}Preview`);
+    if (preview) {
+      preview.innerHTML = `
+        <div class="preview-item uploading">
+          <span class="spinner-small"></span>
+          Uploading file...
+        </div>
+      `;
+      preview.style.display = 'block';
+    }
+  }
+
+  /**
+   * Hide uploading state
+   */
+  hideUploading() {
+    this.hidePreview();
+  }
+
+  /**
+   * Format file size
+   */
+  formatFileSize(bytes) {
+    if (!bytes) return 'Unknown';
+
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  }
+
+  /**
+   * Get selected file
+   */
+  getSelectedFile() {
+    return this.selectedFile;
+  }
+
+  /**
+   * Clear selection
+   */
+  clearSelection() {
+    const dropdown = document.getElementById(`${this.type}Select`);
+    if (dropdown) {
+      dropdown.value = '';
+    }
+    this.selectedFile = null;
+    this.hidePreview();
+  }
+}
+
+// Make available globally
+if (typeof window !== 'undefined') {
+  window.FileSelector = FileSelector;
+}

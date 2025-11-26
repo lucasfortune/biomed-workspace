@@ -19,6 +19,9 @@ const server = http.createServer(app);
 const io = socketIo(server);
 const PORT = process.env.PORT || 3000;
 
+// Python interpreter configuration - use venv Python to ensure all dependencies are available
+const PYTHON_PATH = path.join(__dirname, 'venv', 'bin', 'python');
+
 // Initialize WorkspaceManager
 const workspaceManager = new WorkspaceManager();
 
@@ -480,10 +483,55 @@ app.get('/api/workspace/files', requireAuth, (req, res) => {
 
     res.json({
       success: true,
-      files: workspaceInfo.fileTree
+      files: workspaceInfo.fileTree || []
     });
   } catch (error) {
     console.error('Error getting workspace files:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Upload file to workspace
+ */
+app.post('/api/workspace/upload', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    const sessionId = req.session.id;
+    const category = req.body.category || 'uploads'; // raw_images, annotations, inference_data
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+    }
+
+    // File info
+    const fileInfo = {
+      name: req.file.originalname,
+      path: req.file.path,
+      size: req.file.size,
+      category: category,
+      uploadDate: new Date().toISOString()
+    };
+
+    activityLogger.logActivity(req.session.user.username, 'file_upload', {
+      filename: req.file.originalname,
+      category: category,
+      size: req.file.size
+    });
+
+    res.json({
+      success: true,
+      file: fileInfo,
+      message: 'File uploaded successfully'
+    });
+
+  } catch (error) {
+    console.error('Error uploading file to workspace:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1083,7 +1131,25 @@ app.post('/run-inference', async (req, res) => {
     
     // Generate inference ID
     inferenceId = uuid.v4();
-    
+
+    // Generate output path if not provided
+    let actualOutputPath = output_path;
+    if (!actualOutputPath) {
+      // Determine base directory based on whether using imported model or trained model
+      if (req.session.importedModel && req.session.importedModel.validated) {
+        // For imported models, use a timestamp-based directory
+        const timestamp = Date.now();
+        actualOutputPath = path.join('results', `imported_model_${timestamp}`);
+      } else if (training_id) {
+        // For trained models, use the training ID
+        actualOutputPath = path.join('results', training_id);
+      } else {
+        // Fallback
+        actualOutputPath = path.join('results', `inference_${inferenceId}`);
+      }
+      console.log('Generated output path:', actualOutputPath);
+    }
+
     // Store inference session
     inferenceSessions.set(inferenceId, {
       sessionId: req.session.id,
@@ -1096,16 +1162,16 @@ app.post('/run-inference', async (req, res) => {
       totalSlices: 0,
       usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated)
     });
-    
+
     // NEW: Log inference start
     activityLogger.logInferenceStart(
       req.session.user.username,
       inferenceId,
       !!(req.session.importedModel && req.session.importedModel.validated)
     );
-    
+
     console.log('Generated inference ID:', inferenceId);
-    
+
     // Send response immediately with inference ID so frontend can join room
     res.json({
       success: true,
@@ -1114,13 +1180,13 @@ app.post('/run-inference', async (req, res) => {
       message: 'Inference request accepted. Join the WebSocket room for progress updates.',
       model_info: req.session.importedModel ? 'Using imported model' : 'Using trained model'
     });
-    
+
     // Start inference after a short delay to allow frontend to join room
     setTimeout(() => {
       console.log('Starting inference with model path:', actualModelPath);
       console.log('Data path:', data_path);
-      console.log('Output path:', output_path);
-      startInferenceProcess(actualModelPath, data_path, output_path, inferenceId, io);
+      console.log('Output path:', actualOutputPath);
+      startInferenceProcess(actualModelPath, data_path, actualOutputPath, inferenceId, io);
     }, 1000); // 1 second delay
 
   } catch (error) {
@@ -1604,7 +1670,7 @@ io.on('connection', (socket) => {
 // Helper functions
 async function validateTiffStacks(rawPath, annotationPath) {
   return new Promise((resolve) => {
-    const pythonScript = spawn('python', [
+    const pythonScript = spawn(PYTHON_PATH, [
       'python/validate_tiff.py',
       rawPath,
       annotationPath
@@ -1653,7 +1719,7 @@ async function validateTiffStacks(rawPath, annotationPath) {
 // Helper function to validate imported model
 async function validateImportedModel(modelPath, configPath) {
   return new Promise((resolve) => {
-    const pythonScript = spawn('python', [
+    const pythonScript = spawn(PYTHON_PATH, [
       'python/validate_imported_model.py',
       modelPath,
       configPath
@@ -1712,7 +1778,7 @@ function validateTrainingConfig(config) {
 }
 
 function startTrainingProcess(params, io) {
-  const pythonScript = spawn('python', [
+  const pythonScript = spawn(PYTHON_PATH, [
     'python/train_model.py',
     '--config', JSON.stringify(params.config),
     '--raw_images', params.raw_images,
@@ -1784,7 +1850,7 @@ function startTrainingProcess(params, io) {
 
 async function validateInferenceTiff(filePath) {
   return new Promise((resolve) => {
-    const pythonScript = spawn('python', [
+    const pythonScript = spawn(PYTHON_PATH, [
       'python/validate_inference_tiff.py',
       filePath
     ]);
@@ -1821,7 +1887,7 @@ async function validateInferenceTiff(filePath) {
 
 async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferenceId, io) {
   return new Promise((resolve, reject) => {
-    const pythonScript = spawn('python', [
+    const pythonScript = spawn(PYTHON_PATH, [
       'python/run_inference.py',
       '--model', modelPath,
       '--input', dataPath,

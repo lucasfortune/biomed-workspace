@@ -38,6 +38,8 @@ body {
   background-color: var(--dark-bg);
   color: var(--text-primary);
   overflow: hidden;
+  margin: 0;
+  padding: 0;
 }
 
 /* ============================================================================
@@ -48,6 +50,8 @@ body {
   display: flex;
   height: 100vh;
   width: 100vw;
+  margin: 0;
+  padding: 0;
 }
 
 /* ============================================================================
@@ -206,12 +210,16 @@ body {
   flex: 1;
   overflow-y: auto;
   background-color: var(--dark-bg);
+  margin: 0;
+  padding: 0;
 }
 
 .view {
   display: none;
   width: 100%;
   height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .view.active {
@@ -398,10 +406,14 @@ body {
    ============================================================================ */
 
 #module-view {
-  padding: 24px;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.module-header {
+/* Generic module header - only applies to modules without their own styling */
+#module-view:not(:has(.segmentation-module)) .module-header {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -410,7 +422,7 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
-.btn-back {
+#module-view:not(:has(.segmentation-module)) .btn-back {
   padding: 8px 16px;
   background-color: var(--sidebar-bg);
   color: var(--text-primary);
@@ -421,13 +433,13 @@ body {
   transition: all 0.2s;
 }
 
-.btn-back:hover {
+#module-view:not(:has(.segmentation-module)) .btn-back:hover {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
   color: var(--text-on-primary);
 }
 
-.module-header h2 {
+#module-view:not(:has(.segmentation-module)) .module-header h2 {
   font-size: 24px;
   color: var(--text-on-primary);
 }

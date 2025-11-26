@@ -6,11 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a **biomedical image segmentation web application** that provides a complete ML pipeline for training U-Net models and running inference on TIFF image stacks, with real-time 3D visualization using Three.js.
 
+**The application now exists in TWO versions:**
+1. **Classic Version** (`/public/classic/`) - Original linear workflow (stable, fully functional)
+2. **Workspace Version** (`/public/workspace/`) - New modular IDE-like interface (in development, Phase 1 complete)
+
 **Tech Stack:**
 - Backend: Node.js/Express with Socket.IO for real-time updates
 - Frontend: Vanilla JavaScript with Three.js for 3D visualization
 - ML Pipeline: Python with PyTorch for U-Net training and inference
 - Authentication: Session-based with bcrypt, supports admin approval workflow
+- State Management: mitt (event emitter) for workspace version
+- UI Libraries: Split.js for resizable panels
 
 ## Development Commands
 
@@ -61,6 +67,237 @@ node manageUsers.js reset-password <username> <newPassword>
 ```
 
 ## Architecture
+
+### Application Structure (Dual Version)
+
+The application has been restructured to support **two parallel interfaces**:
+
+```
+/viz_app/
+├── /public/
+│   ├── /classic/              # ORIGINAL APP (stable, complete)
+│   │   ├── index.html         # Classic segmentation pipeline
+│   │   ├── /js/               # app.js, training.js, inference.js, etc.
+│   │   └── /css/              # Classic styling
+│   │
+│   ├── /workspace/            # NEW MODULAR APP (Phase 1 complete)
+│   │   ├── index.html         # Workspace interface
+│   │   ├── /js/
+│   │   │   ├── /core/         # Core functionality
+│   │   │   │   ├── StateManager.js      # Centralized state with events
+│   │   │   │   ├── ModuleLoader.js      # Dynamic module loading
+│   │   │   │   └── WorkspaceAPI.js      # Backend API client
+│   │   │   ├── /modules/      # Processing modules
+│   │   │   │   ├── registry.js          # Module definitions
+│   │   │   │   └── segmentation/        # Segmentation module
+│   │   │   │       └── SegmentationModule.js
+│   │   │   └── workspace.js   # Main app controller
+│   │   └── /css/
+│   │       └── workspace.css  # Workspace styling
+│   │
+│   ├── welcome.html           # Landing page (links to both versions)
+│   ├── login.html
+│   ├── register.html
+│   └── admin.html
+│
+├── server.js                  # Express server (serves both versions)
+├── /python/                   # ML scripts (shared by both versions)
+└── package.json               # Dependencies include mitt, split.js
+```
+
+**Important Routes:**
+- `/` → `welcome.html` (version selection)
+- `/classic` → Classic segmentation app (requireAuth)
+- `/workspace` → New workspace interface (requireAuth)
+- `/api/workspace/*` → Workspace-specific API endpoints
+
+### Workspace Architecture (Phase 1)
+
+The new workspace version uses a **modular architecture** with the following core components:
+
+#### 1. State Management (`StateManager.js`)
+
+Centralized state management with event-based subscriptions using mitt.
+
+**Key Methods:**
+- `update(path, value)` - Update nested state properties (e.g., `'workspace.files'`)
+- `get(path)` - Retrieve state values
+- `subscribe(path, callback)` - Watch for changes to state paths
+- `notify(type, message, duration)` - Add notifications to UI
+
+**State Structure:**
+```javascript
+{
+  workspace: {
+    sessionId: null,
+    initialized: false,
+    files: [],
+    stats: null,
+    activeModule: null
+  },
+  modules: {
+    segmentation: { active: false, currentTask: null, history: [] },
+    denoising: { active: false, currentTask: null, history: [] },
+    // ... other modules
+  },
+  ui: {
+    sidebarCollapsed: true,
+    currentView: 'welcome',
+    loading: false,
+    notifications: []
+  },
+  user: {
+    username: null,
+    fullName: null,
+    status: null,
+    isAdmin: false
+  }
+}
+```
+
+**Usage Pattern:**
+```javascript
+// Update state
+stateManager.update('workspace.files', newFiles);
+
+// Subscribe to changes
+stateManager.subscribe('workspace.files', (files) => {
+  console.log('Files changed:', files);
+});
+
+// Show notification
+stateManager.notify('success', 'Operation completed', 5000);
+```
+
+#### 2. Module System (`ModuleLoader.js`)
+
+Dynamic module registration and lifecycle management.
+
+**Key Methods:**
+- `register(moduleConfig)` - Register a module
+- `load(moduleId)` - Load and activate a module
+- `deactivate()` - Deactivate current module
+- `returnToHub()` - Return to welcome view
+
+**Module Lifecycle:**
+1. Register module with `moduleRegistry` (in `modules/registry.js`)
+2. User clicks "Launch Module" in welcome view
+3. `ModuleLoader.load(moduleId)` dynamically imports module class
+4. Module's `activate()` method renders UI in `#module-view`
+5. User clicks "Back to Hub"
+6. Module's `deactivate()` method cleans up
+
+**Creating a New Module:**
+```javascript
+// In /workspace/js/modules/yourmodule/YourModule.js
+class YourModule {
+  constructor(stateManager) {
+    this.state = stateManager;
+    this.container = null;
+  }
+
+  async activate() {
+    this.container = document.getElementById('module-view');
+    this.render();
+  }
+
+  render() {
+    this.container.innerHTML = `
+      <div class="module-header">
+        <button class="btn-back" onclick="workspace.returnToHub()">← Back</button>
+        <h2>Your Module</h2>
+      </div>
+      <div class="module-content">
+        <!-- Your UI here -->
+      </div>
+    `;
+  }
+
+  async deactivate() {
+    if (this.container) {
+      this.container.innerHTML = '';
+    }
+  }
+
+  cleanup() {
+    // Optional: release resources
+  }
+}
+
+export default YourModule;
+```
+
+**Register Module** (in `modules/registry.js`):
+```javascript
+{
+  id: 'yourmodule',
+  name: 'Your Module Name',
+  description: 'What it does',
+  icon: '🎯',
+  path: '/workspace/js/modules/yourmodule/YourModule.js',
+  inputs: ['input_type'],
+  outputs: ['output_type'],
+  color: '#4A90E2',
+  status: 'available' // or 'coming_soon'
+}
+```
+
+#### 3. API Client (`WorkspaceAPI.js`)
+
+Unified API client for all backend endpoints.
+
+**Categories:**
+- Workspace Management: `initializeWorkspace()`, `getWorkspaceStatus()`, `getWorkspaceFiles()`, `getWorkspaceStats()`
+- File Management: `uploadFile()`, `downloadFile()`, `deleteFile()`
+- Authentication: `checkAuth()`, `logout()`
+- Segmentation: `uploadTrainingData()`, `startTraining()`, `runInference()`
+- Session: `resetSession()`
+
+**Usage:**
+```javascript
+const api = new WorkspaceAPI();
+const response = await api.getWorkspaceStatus();
+```
+
+#### 4. Main Controller (`workspace.js`)
+
+Main application controller that initializes all systems.
+
+**Initialization Flow:**
+1. Create `StateManager`, `ModuleLoader`, `WorkspaceAPI` instances
+2. Check authentication → redirect to `/login` if not authenticated
+3. Initialize workspace (create/load session workspace)
+4. Set up UI event listeners
+5. Register all modules from `moduleRegistry`
+6. Render module cards in welcome view
+
+**Global Access:**
+```javascript
+// workspace instance is globally available
+window.workspace.loadModule('segmentation');
+window.workspace.returnToHub();
+window.workspace.refreshWorkspace();
+```
+
+### Workspace Backend API
+
+Four new endpoints were added to `server.js` for workspace functionality:
+
+**POST `/api/workspace/init`** (requireAuth)
+- Creates workspace directories for current session
+- Returns success status
+
+**GET `/api/workspace/status`** (requireAuth)
+- Returns workspace information for current session
+- Includes sessionId, file tree, initialization status
+
+**GET `/api/workspace/files`** (requireAuth)
+- Returns file tree structure for workspace file browser
+- Currently returns empty structure (Phase 3 will implement)
+
+**GET `/api/workspace/stats`** (requireAuth)
+- Returns workspace statistics (file count, total size)
+- Used to update sidebar stats display
 
 ### Session-Based Workflow
 
@@ -271,3 +508,152 @@ The validation script may auto-convert 16-bit annotations to 8-bit. This is tran
 
 ### Admin Dashboard Real-Time Data
 The admin dashboard (`/admin/active-sessions`) returns ALL sessions, not just active ones. Filter by status in the frontend if needed.
+
+## Development Workflow (Dual Version App)
+
+### When Working on Classic Version
+
+**Files to Edit:**
+- `/public/classic/*` - All classic app files
+- `/server.js` - Existing routes (non-workspace)
+- `/python/*` - ML scripts (shared by both)
+
+**Testing:**
+- Navigate to `http://localhost:3000/classic`
+- All existing functionality should work unchanged
+
+### When Working on Workspace Version
+
+**Files to Edit:**
+- `/public/workspace/*` - Workspace-specific files
+- `/public/workspace/js/core/*` - Core systems (StateManager, ModuleLoader, etc.)
+- `/public/workspace/js/modules/*` - Module implementations
+- `/server.js` - Add new workspace API routes under `/api/workspace/*`
+
+**Testing:**
+- Navigate to `http://localhost:3000/workspace`
+- Use browser console to inspect state: `workspace.state.logState()`
+- Check module loading: `workspace.moduleLoader.getAllModules()`
+
+### Adding a New Module (Phase 2+)
+
+1. **Create Module Directory:**
+   ```bash
+   mkdir -p public/workspace/js/modules/yourmodule
+   ```
+
+2. **Create Module Class:**
+   ```javascript
+   // public/workspace/js/modules/yourmodule/YourModule.js
+   class YourModule {
+     constructor(stateManager) {
+       this.state = stateManager;
+     }
+
+     async activate() {
+       // Render UI
+     }
+
+     async deactivate() {
+       // Cleanup
+     }
+   }
+
+   export default YourModule;
+   ```
+
+3. **Register in Registry:**
+   Edit `/public/workspace/js/modules/registry.js` to add module configuration
+
+4. **Add Backend Endpoints (if needed):**
+   Add routes in `server.js` under appropriate namespace
+
+5. **Test Module:**
+   - Restart server
+   - Navigate to `/workspace`
+   - Click "Launch Module" on your module card
+
+### Module Integration Patterns
+
+**Pattern 1: Wrap Existing Code**
+- Best for Phase 2 segmentation module
+- Keep existing code in separate functions
+- Module's `activate()` calls existing initialization
+- Example: Load classic app.js functionality into module view
+
+**Pattern 2: Fresh Implementation**
+- Best for new modules (denoising, annotation, mesh)
+- Build UI from scratch in module's `render()`
+- Use `WorkspaceAPI` for backend communication
+- Store module state in centralized `StateManager`
+
+**Pattern 3: Hybrid Approach**
+- Reuse existing Python scripts
+- Build new UI in workspace module
+- Maintain backward compatibility with classic version
+
+### Current Status & Next Steps
+
+**✅ Phase 1 Complete (Foundation):**
+- Dual version structure working
+- State management system functional
+- Module system operational
+- Welcome hub rendering modules
+- Backend API endpoints created
+
+**🚧 Phase 2 Next (Module System & Welcome Hub):**
+- Convert existing segmentation workflow into module
+- Fully integrate classic segmentation pipeline into workspace
+- Module switching and navigation
+- File browser placeholder functional
+
+**📋 Key Phase 2 Tasks:**
+1. Wrap classic segmentation code in `SegmentationModule.js`
+2. Enable Socket.IO connections in module context
+3. Maintain session state when switching modules
+4. Test full segmentation workflow in workspace
+
+### Important Considerations
+
+**Session Management:**
+- Classic version: Uses existing session pattern (works as before)
+- Workspace version: Shares same session, adds workspace initialization
+- Session ID is consistent across both versions
+
+**File Paths:**
+- Classic uploads: `uploads/<sessionId>/`
+- Workspace uploads: Same path structure (shared)
+- Models and results: Same path structure (shared)
+
+**State Sharing:**
+- No state is shared between classic and workspace versions
+- Each maintains its own UI state
+- Backend session data is shared (user, uploaded files, training configs)
+
+**Backward Compatibility:**
+- Classic version MUST remain fully functional
+- Don't break existing endpoints
+- New workspace endpoints use `/api/workspace/*` namespace
+- Python scripts shared by both (don't break existing interfaces)
+
+### Debugging Tips
+
+**Workspace State:**
+```javascript
+// In browser console
+workspace.state.logState()  // View entire state
+workspace.moduleLoader.getAllModules()  // List registered modules
+workspace.state.get('workspace')  // View workspace state
+```
+
+**Module Loading Issues:**
+- Check browser console for import errors
+- Verify module path in registry matches file location
+- Ensure module exports `default` class
+- Check module has `activate()` and `deactivate()` methods
+
+**API Errors:**
+- Check Network tab in DevTools
+- Verify authentication (should redirect to /login if not authenticated)
+- Check server logs for backend errors
+- Verify endpoint exists in server.js

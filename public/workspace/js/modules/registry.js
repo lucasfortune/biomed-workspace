@@ -5,13 +5,13 @@ const moduleRegistry = [
   {
     id: 'segmentation',
     name: 'U-Net Segmentation',
-    description: 'Train and run deep learning segmentation models on biomedical images with real-time progress monitoring',
+    description: 'Complete ML pipeline: Data Upload → Training → Inference → 3D Visualization',
     icon: '🧩',
     path: '/workspace/js/modules/segmentation/SegmentationModule.js',
     inputs: ['image_stack', 'annotations'],
-    outputs: ['segmented_stack', 'trained_model'],
+    outputs: ['segmented_stack', 'trained_model', 'visualization'],
     color: '#4A90E2',
-    status: 'available'
+    status: 'available'  // ✅ Phase 2 Complete - Full integration
   },
   {
     id: 'denoising',
