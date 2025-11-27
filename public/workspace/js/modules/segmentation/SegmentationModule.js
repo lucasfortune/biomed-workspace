@@ -157,27 +157,12 @@ class SegmentationModule {
     }
 
     // Load modern CSS
+    // Load segmentation module CSS (self-contained, no classic CSS dependencies)
     const link = document.createElement('link');
     link.id = 'segmentation-module-css';
     link.rel = 'stylesheet';
     link.href = '/workspace/js/modules/segmentation/css/segmentation-modern.css';
     document.head.appendChild(link);
-
-    // Also load base styles needed (for modals, visualization controls, etc.)
-    const baseStyles = [
-      '/classic/css/base.css',
-      '/classic/css/modals.css',
-      '/classic/css/components.css'  // For visualization control panel styles
-    ];
-
-    for (const styleHref of baseStyles) {
-      if (!document.querySelector(`link[href="${styleHref}"]`)) {
-        const baseLink = document.createElement('link');
-        baseLink.rel = 'stylesheet';
-        baseLink.href = styleHref;
-        document.head.appendChild(baseLink);
-      }
-    }
   }
 
   /**
@@ -506,6 +491,7 @@ class SegmentationModule {
   async loadHelperScripts() {
     // Regular scripts (non-module)
     const regularScripts = [
+      '/workspace/js/modules/segmentation/SegmentationAPI.js',
       '/workspace/js/modules/segmentation/components/FileSelector.js',
       '/workspace/js/modules/segmentation/utils.js',
       '/workspace/js/modules/segmentation/navigation.js',
@@ -1015,11 +1001,8 @@ class SegmentationModule {
       }
     });
 
-    // Make charts globally accessible for updateCharts() in charts.js
-    window.lossChart = this.lossChart;
-    window.diceChart = this.diceChart;
-
-    console.log('[SegmentationModule] Charts initialized and made globally accessible');
+    // Charts are accessible via window.segmentationModule.lossChart and .diceChart
+    console.log('[SegmentationModule] Charts initialized');
   }
 
   /**

@@ -45,20 +45,27 @@ export async function loadSegmentationData(visualizationPath) {
 export async function loadAndCreateOriginalDataPlanes(inferenceId, segmentationData) {
     try {
         console.log('Loading downsampled original data for overlay...');
-        
+
         // Fetch the downsampled TIFF from server
-        const response = await fetch(`/results/${inferenceId}/original-data-web`);
-        
+        const fetchUrl = `/results/${inferenceId}/original-data-web`;
+        console.log('[OriginalData] Fetching from:', fetchUrl);
+
+        const response = await fetch(fetchUrl);
+
+        console.log('[OriginalData] Fetch response status:', response.status, response.statusText);
+
         if (!response.ok) {
             if (response.status === 404) {
-                console.warn('Original data overlay not available for this inference');
+                console.warn('[OriginalData] Data not available (404) - expected for imported models or missing data');
                 return null;
             }
+            console.error('[OriginalData] Fetch failed:', response.status, response.statusText);
             throw new Error(`Failed to load original data: ${response.status}`);
         }
-        
+
         // Get the TIFF data as array buffer
         const arrayBuffer = await response.arrayBuffer();
+        console.log('[OriginalData] ArrayBuffer size:', arrayBuffer.byteLength, 'bytes');
         
         // Parse TIFF using tiff.js library (we'll need to add this)
         // For now, we'll use a simpler approach with a library loaded via CDN
@@ -80,7 +87,9 @@ export async function loadAndCreateOriginalDataPlanes(inferenceId, segmentationD
         };
         
     } catch (error) {
-        console.error('Failed to load original data overlay:', error);
+        console.error('[OriginalData] Failed to load original data overlay:', error);
+        console.error('[OriginalData] Error message:', error.message);
+        console.error('[OriginalData] Error stack:', error.stack);
         return null;
     }
 }
@@ -93,21 +102,32 @@ async function parseTiffData(arrayBuffer) {
     // We'll use tiff.js library which we need to load
     // For multi-page TIFF support
     const Tiff = window.Tiff || window.UTIF;
-    
+
+    console.log('[OriginalData] Checking TIFF parser - window.UTIF:', !!window.UTIF, 'window.Tiff:', !!window.Tiff);
+
     if (!Tiff) {
+        console.error('[OriginalData] TIFF parser library not loaded!');
+        console.error('[OriginalData] window.UTIF:', window.UTIF);
+        console.error('[OriginalData] window.Tiff:', window.Tiff);
         throw new Error('TIFF parser library not loaded');
     }
-    
+
+    console.log('[OriginalData] UTIF available, decoding TIFF...');
+
     // Decode TIFF
     const ifds = Tiff.decode(arrayBuffer);
+    console.log('[OriginalData] Decoded', ifds.length, 'image(s) from TIFF');
     const slices = [];
     
     for (let i = 0; i < ifds.length; i++) {
         Tiff.decodeImage(arrayBuffer, ifds[i]);
         const rgba = Tiff.toRGBA8(ifds[i]);
-        
+
+        // Log slice data for validation
+        console.log(`[OriginalData] Slice ${i}: ${rgba.length} RGBA values, ${rgba.byteLength} bytes, type: ${rgba.constructor.name}`);
+
         slices.push({
-            data: new Uint8Array(rgba),
+            data: rgba,  // ✅ Use typed array directly (was: new Uint8Array(rgba) which created empty array)
             width: ifds[i].width,
             height: ifds[i].height
         });

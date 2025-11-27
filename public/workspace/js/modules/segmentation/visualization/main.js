@@ -138,6 +138,23 @@ export async function initialize3DVisualization() {
                         // Update loading message for original data loading phase
                         updateLoadingMessage('Loading Original Data Overlay...', 'Loading original image data for comparison...');
 
+                        // Ensure UTIF.js is available for TIFF parsing
+                        if (!window.UTIF) {
+                            console.warn('[OriginalData] UTIF.js not loaded yet, waiting 500ms...');
+                            // Give it a moment to load
+                            await new Promise(resolve => setTimeout(resolve, 500));
+
+                            if (!window.UTIF) {
+                                console.error('[OriginalData] UTIF.js failed to load, original data overlay unavailable');
+                                console.log('Visualization will continue without original data overlay');
+                                return; // Skip overlay loading
+                            } else {
+                                console.log('[OriginalData] UTIF.js loaded successfully after wait');
+                            }
+                        } else {
+                            console.log('[OriginalData] UTIF.js available, proceeding with overlay load');
+                        }
+
                         const originalDataResult = await loadAndCreateOriginalDataPlanes(inferenceId, segmentationData);
                         
                         if (originalDataResult) {

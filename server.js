@@ -1139,13 +1139,13 @@ app.post('/run-inference', async (req, res) => {
       if (req.session.importedModel && req.session.importedModel.validated) {
         // For imported models, use a timestamp-based directory
         const timestamp = Date.now();
-        actualOutputPath = path.join('results', `imported_model_${timestamp}`);
+        actualOutputPath = path.join('results', `imported_model_${timestamp}`, 'inference_result.tif');
       } else if (training_id) {
         // For trained models, use the training ID
-        actualOutputPath = path.join('results', training_id);
+        actualOutputPath = path.join('results', training_id, 'inference_result.tif');
       } else {
         // Fallback
-        actualOutputPath = path.join('results', `inference_${inferenceId}`);
+        actualOutputPath = path.join('results', `inference_${inferenceId}`, 'inference_result.tif');
       }
       console.log('Generated output path:', actualOutputPath);
     }

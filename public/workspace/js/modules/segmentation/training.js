@@ -1,5 +1,5 @@
-// Global variables for training state
-let currentTrainingId = null;
+// Training state is managed by the module instance (window.segmentationModule)
+// Access via: window.segmentationModule.currentTrainingId
 let trainingPollInterval = null;
 
 async function startTraining() {
@@ -43,7 +43,10 @@ async function startTraining() {
         hideLoading();
 
         if (result.success) {
-            currentTrainingId = result.training_id;
+            // Store in module instance
+            if (window.segmentationModule) {
+                window.segmentationModule.currentTrainingId = result.training_id;
+            }
 
             // Mark training as started
             stepStates[3].trainingStarted = true;
@@ -65,7 +68,10 @@ async function startTraining() {
             document.getElementById('currentEpoch').textContent = '0';
             document.getElementById('trainingStatusText').textContent = 'Training started... Preparing data...';
 
-            socket.emit('join-training', currentTrainingId);
+            // Join training room via module socket
+            if (window.segmentationModule && window.segmentationModule.socket) {
+                window.segmentationModule.socket.emit('join-training', window.segmentationModule.currentTrainingId);
+            }
             
             // Start polling as backup
             startTrainingPolling();
@@ -137,11 +143,7 @@ function onTrainingComplete(data) {
     if (data.success) {
         document.getElementById('trainingStatusText').textContent = 'Training completed successfully!';
 
-        // Sync training ID with SegmentationModule
-        if (window.segmentationModule && currentTrainingId) {
-            window.segmentationModule.currentTrainingId = currentTrainingId;
-            console.log('[Training] Synced training ID to module:', currentTrainingId);
-        }
+        // Training ID is already stored in window.segmentationModule.currentTrainingId
 
         // NEW: Mark step 3 as completed and enable step 4
         stepStates[3].completed = true;
@@ -182,10 +184,11 @@ function startTrainingPolling() {
     }
     
     trainingPollInterval = setInterval(async () => {
-        if (!currentTrainingId) return;
-        
+        const trainingId = window.segmentationModule?.currentTrainingId;
+        if (!trainingId) return;
+
         try {
-            const response = await fetch(`/training-status/${currentTrainingId}`);
+            const response = await fetch(`/training-status/${trainingId}`);
             const status = await response.json();
             
             // Update UI if we have progress data
@@ -210,8 +213,9 @@ function startTrainingPolling() {
 }
 
 function downloadModel() {
-    if (currentTrainingId) {
-        window.open(`/download-model/${currentTrainingId}`, '_blank');
+    const trainingId = window.segmentationModule?.currentTrainingId;
+    if (trainingId) {
+        window.open(`/download-model/${trainingId}`, '_blank');
     }
 }
 

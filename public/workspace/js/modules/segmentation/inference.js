@@ -1,15 +1,18 @@
-// Global variables for inference state
-let currentInferenceId = null;
+// Inference state is managed by the module instance (window.segmentationModule)
+// Access via: window.segmentationModule.currentInferenceId
 
 async function runInference() {
+    // Get uploaded files from module
+    const uploadedFiles = window.segmentationModule?.uploadedFiles || {};
     if (!uploadedFiles.inferenceData) {
         showError('Please upload inference data first.');
         return;
     }
-    
-    // NEW: Check if we're using imported model OR have training session
+
+    // Check if we're using imported model OR have training session
     const usingImportedModel = window.importedModelInfo;
-    if (!currentTrainingId && !usingImportedModel) {
+    const trainingId = window.segmentationModule?.currentTrainingId;
+    if (!trainingId && !usingImportedModel) {
         showError('No training session found and no imported model. Please complete training or import a model first.');
         return;
     }
@@ -66,12 +69,12 @@ async function runInference() {
             };
         } else {
             console.log('Running inference with trained model');
-            // For trained model, use original logic
+            // For trained model, use training ID from module
             inferenceRequestBody = {
-                model_path: `models/${currentTrainingId}/best_model.pth`,
+                model_path: `models/${trainingId}/best_model.pth`,
                 data_path: uploadResult.file_path,
-                output_path: `results/${currentTrainingId}/inference_result.tif`,
-                training_id: currentTrainingId
+                output_path: `results/${trainingId}/inference_result.tif`,
+                training_id: trainingId
             };
         }
 
@@ -85,12 +88,10 @@ async function runInference() {
         const inferenceResult = await inferenceResponse.json();
 
         if (inferenceResult.success) {
-            currentInferenceId = inferenceResult.inference_id;
-
-            // Sync inference ID with SegmentationModule
+            // Store inference ID in module instance
             if (window.segmentationModule) {
-                window.segmentationModule.currentInferenceId = currentInferenceId;
-                console.log('[Inference] Synced inference ID to module:', currentInferenceId);
+                window.segmentationModule.currentInferenceId = inferenceResult.inference_id;
+                console.log('[Inference] Stored inference ID in module:', inferenceResult.inference_id);
             }
 
             // NEW: Mark inference as in progress
@@ -100,7 +101,10 @@ async function runInference() {
             console.log('Inference started successfully:', inferenceResult.model_info);
             
             // Join inference room immediately for progress updates
-            socket.emit('join-inference', currentInferenceId);
+            // Join inference room via module socket
+            if (window.segmentationModule && window.segmentationModule.socket) {
+                window.segmentationModule.socket.emit('join-inference', window.segmentationModule.currentInferenceId);
+            }
 
             // Show progress container
             const progressContainer = document.getElementById('inferenceProgressContainer');
@@ -224,9 +228,10 @@ function onInferenceComplete(data) {
 
             // Handle both training and imported model cases
             const usingImportedModel = window.importedModelInfo;
+            const trainingId = window.segmentationModule?.currentTrainingId;
             const resultPath = usingImportedModel
                 ? `/results/imported_model_${Date.now()}/inference_result.tif`
-                : `/results/${currentTrainingId}/inference_result.tif`;
+                : `/results/${trainingId}/inference_result.tif`;
 
             // Create a basic result if not provided
             window.inferenceResult = {
@@ -237,8 +242,8 @@ function onInferenceComplete(data) {
             };
         }
         
-        // Store inference ID for downloads (check both global and module instance)
-        const inferenceId = currentInferenceId || (window.segmentationModule ? window.segmentationModule.currentInferenceId : null);
+        // Store inference ID for downloads from module instance
+        const inferenceId = window.segmentationModule?.currentInferenceId;
         if (inferenceId) {
             window.inferenceResult.inference_id = inferenceId;
             console.log('Stored inference ID for downloads:', inferenceId);
@@ -297,10 +302,11 @@ function updateInferenceLoadingUI() {
 }
 
 function downloadResults() {
-    if (window.inferenceResult && currentInferenceId) {
+    const inferenceId = window.segmentationModule?.currentInferenceId;
+    if (window.inferenceResult && inferenceId) {
         // Use the inference ID to download properly formatted results
-        console.log('Downloading results for inference ID:', currentInferenceId);
-        window.open(`/download-inference-results/${currentInferenceId}`, '_blank');
+        console.log('Downloading results for inference ID:', inferenceId);
+        window.open(`/download-inference-results/${inferenceId}`, '_blank');
     } else if (window.inferenceResult && window.inferenceResult.output_path) {
         // Fallback: try to extract inference ID from path or use direct path
         console.log('Fallback: Using result path directly');

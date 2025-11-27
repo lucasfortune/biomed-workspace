@@ -240,13 +240,16 @@ function performCompleteStateReset() {
     if (validationResult) validationResult.innerHTML = '';
     
     // Clear and destroy charts
-    if (typeof lossChart !== 'undefined' && lossChart) {
-        lossChart.destroy();
-        lossChart = null;
-    }
-    if (typeof diceChart !== 'undefined' && diceChart) {
-        diceChart.destroy();
-        diceChart = null;
+    // Destroy charts from module instance
+    if (window.segmentationModule) {
+        if (window.segmentationModule.lossChart) {
+            window.segmentationModule.lossChart.destroy();
+            window.segmentationModule.lossChart = null;
+        }
+        if (window.segmentationModule.diceChart) {
+            window.segmentationModule.diceChart.destroy();
+            window.segmentationModule.diceChart = null;
+        }
     }
     
     // Disconnect WebSocket
