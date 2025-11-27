@@ -18,6 +18,42 @@ This is a **biomedical image segmentation web application** that provides a comp
 - State Management: mitt (event emitter) for workspace version
 - UI Libraries: Split.js for resizable panels
 
+---
+
+## 📚 Documentation System
+
+**Complete documentation is now organized in `/docs/`**
+
+### Quick Links for AI Assistants
+
+| Need | Documentation |
+|------|---------------|
+| 🗺️ **Navigation** | [Documentation Index](docs/INDEX.md) - Start here |
+| 🏗️ **Architecture** | [Architecture Overview](docs/architecture/OVERVIEW.md) |
+| 📋 **API Reference** | [API Endpoints](docs/reference/API_ENDPOINTS.md) |
+| 📝 **Recent Changes** | [Session Logs](docs/sessions/INDEX.md) |
+| 🚀 **Roadmap** | [Vision & Roadmap](docs/vision/ROADMAP.md) |
+| 🐛 **Troubleshooting** | [Common Issues](docs/guides/TROUBLESHOOTING.md) |
+| 🔧 **Module Creation** | [Module Guide](docs/guides/MODULE_CREATION.md) |
+
+### For New Claude Code Instances
+
+**First-time context gathering (recommended reading order):**
+1. [Documentation Index](docs/INDEX.md) - 5 min overview
+2. [Session Logs Index](docs/sessions/INDEX.md) - Recent work (check latest 2-3 sessions)
+3. [Architecture Overview](docs/architecture/OVERVIEW.md) - System design
+4. [Known Issues](docs/vision/ROADMAP.md#phase-3-file-browser--workspace-management) - Current limitations
+
+**This file (CLAUDE.md) provides:**
+- Quick reference for common patterns
+- Development commands
+- Critical architectural details
+- Links to detailed documentation
+
+**For comprehensive information:** See `/docs/` directory structure
+
+---
+
 ## Development Commands
 
 ### Starting the Application
