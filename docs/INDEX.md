@@ -9,12 +9,15 @@ Welcome to the Biomedical Image Processing Workspace documentation! This index w
 | I want to... | Go to | Status |
 |--------------|-------|--------|
 | **Get started quickly** | [Getting Started](guides/GETTING_STARTED.md) | ✅ |
+| **Understand system architecture** | [Architecture Overview](architecture/OVERVIEW.md) | ✅ |
 | **Look up an API endpoint** | [API Endpoints](reference/API_ENDPOINTS.md) | ✅ |
-| **Understand state management** | [State Management](reference/STATE_MANAGEMENT.md) | ✅ |
-| **Understand module system** | [Module System](reference/MODULE_SYSTEM.md) | ✅ |
+| **Understand state management** | [State Architecture](architecture/STATE_ARCHITECTURE.md) | ✅ |
+| **Understand module system** | [Module Architecture](architecture/MODULE_ARCHITECTURE.md) | ✅ |
+| **Understand authentication** | [Authentication](architecture/AUTHENTICATION.md) | ✅ |
 | **Understand Socket.IO** | [Socket Protocol](reference/SOCKET_PROTOCOL.md) | ✅ |
 | **Work with Python scripts** | [Python Integration](reference/PYTHON_INTEGRATION.md) | ✅ |
 | **Find files in codebase** | [File Structure](reference/FILE_STRUCTURE.md) | ✅ |
+| **Understand key decisions** | [ADRs](decisions/) | ✅ |
 | **Find recent changes** | [Session Logs](sessions/INDEX.md) | ✅ |
 | **Troubleshoot an issue** | [Troubleshooting Guide](guides/TROUBLESHOOTING.md) | ✅ |
 
@@ -24,23 +27,25 @@ Welcome to the Biomedical Image Processing Workspace documentation! This index w
 
 ### Quick Context Map
 New to this project? Start here:
-1. **System Overview**: Read [CLAUDE.md](../CLAUDE.md) in project root - 10 min read
+1. **System Overview**: Read [Architecture Overview](architecture/OVERVIEW.md) - Comprehensive system design
 2. **Recent Work**: [Session Logs Index](sessions/INDEX.md) - Review latest sessions
 3. **API Reference**: [API Endpoints](reference/API_ENDPOINTS.md) - All 29 HTTP endpoints
-4. **State System**: [State Management](reference/STATE_MANAGEMENT.md) - StateManager API
-5. **Module System**: [Module System](reference/MODULE_SYSTEM.md) - ModuleLoader API
-6. **Known Issues**: [Troubleshooting](guides/TROUBLESHOOTING.md) - File upload category mismatch (Phase 3)
+4. **State System**: [State Architecture](architecture/STATE_ARCHITECTURE.md) - Complete state management
+5. **Module System**: [Module Architecture](architecture/MODULE_ARCHITECTURE.md) - Module system design
+6. **Key Decisions**: [ADRs](decisions/) - Why we made key architectural choices
+7. **Known Issues**: [Troubleshooting](guides/TROUBLESHOOTING.md) - File upload category mismatch (Phase 3)
 
 ### Common AI Tasks
 | Task | Resources |
 |------|-----------|
 | **Fix a bug** | [Troubleshooting](guides/TROUBLESHOOTING.md), [Session Logs](sessions/INDEX.md) |
-| **Add API endpoint** | [API Endpoints](reference/API_ENDPOINTS.md), [CLAUDE.md](../CLAUDE.md) |
-| **Work with state** | [State Management](reference/STATE_MANAGEMENT.md) |
-| **Create/modify module** | [Module System](reference/MODULE_SYSTEM.md), [CLAUDE.md](../CLAUDE.md) |
+| **Add API endpoint** | [API Endpoints](reference/API_ENDPOINTS.md), [Architecture Overview](architecture/OVERVIEW.md) |
+| **Work with state** | [State Architecture](architecture/STATE_ARCHITECTURE.md), [State Reference](reference/STATE_MANAGEMENT.md) |
+| **Create/modify module** | [Module Architecture](architecture/MODULE_ARCHITECTURE.md), [Module Reference](reference/MODULE_SYSTEM.md) |
 | **Debug Socket.IO** | [Socket Protocol](reference/SOCKET_PROTOCOL.md) |
 | **Work with Python** | [Python Integration](reference/PYTHON_INTEGRATION.md) |
 | **Find a file** | [File Structure](reference/FILE_STRUCTURE.md) |
+| **Understand a decision** | [ADRs](decisions/) |
 | **Continue previous work** | [Session Logs Index](sessions/INDEX.md) (reverse chronological) |
 
 ### Search Tips
@@ -78,17 +83,15 @@ Complete technical reference documentation - **All complete!** ✅
 | [File Structure](reference/FILE_STRUCTURE.md) | Codebase organization | ✅ 858 lines |
 
 ### 🏗️ Architecture (Understanding)
-System design and architectural decisions.
+System design and architectural decisions - **All complete!** ✅
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| Overview | High-level system architecture | 📅 Phase 3 |
-| Dual Version Design | Classic vs Workspace explanation | 📅 Phase 3 |
-| State Architecture | State management patterns | 📅 Phase 3 |
-| Module Architecture | Module system design | 📅 Phase 3 |
-| Authentication | Auth system & permissions | 📅 Phase 3 |
-
-**Note:** Architecture details are currently in [CLAUDE.md](../CLAUDE.md) and will be extracted to dedicated docs in Phase 3.
+| [Overview](architecture/OVERVIEW.md) | High-level system architecture | ✅ ~920 lines |
+| [Dual Version Design](architecture/DUAL_VERSION_DESIGN.md) | Classic vs Workspace explanation | ✅ ~740 lines |
+| [State Architecture](architecture/STATE_ARCHITECTURE.md) | State management patterns | ✅ ~870 lines |
+| [Module Architecture](architecture/MODULE_ARCHITECTURE.md) | Module system design | ✅ ~850 lines |
+| [Authentication](architecture/AUTHENTICATION.md) | Auth system & permissions | ✅ ~870 lines |
 
 ### 📝 Sessions (Historical)
 Development session logs with detailed change records.
@@ -105,16 +108,14 @@ Development session logs with detailed change records.
 - Earlier: Phase 1 foundation, Module system
 
 ### 🎯 Decisions (ADRs)
-Architecture Decision Records documenting key technical choices.
+Architecture Decision Records documenting key technical choices - **All complete!** ✅
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| ADR-001 | Vanilla JS Over Framework | 📅 Phase 3 |
-| ADR-002 | Dual Version Approach | 📅 Phase 3 |
-| ADR-003 | Session-Based Isolation | 📅 Phase 3 |
-| ADR-004 | Module System Design | 📅 Phase 3 |
-
-**Note:** ADRs will be created in Phase 3 to document key architectural decisions.
+| [ADR-001](decisions/001_vanilla_js_over_framework.md) | Vanilla JS Over Framework | ✅ Accepted |
+| [ADR-002](decisions/002_dual_version_approach.md) | Dual Version Approach | ✅ Accepted |
+| [ADR-003](decisions/003_session_based_isolation.md) | Session-Based Isolation | ✅ Accepted |
+| [ADR-004](decisions/004_module_system_design.md) | Module System Design | ✅ Accepted |
 
 ### 🚀 Vision (Strategy)
 Product roadmap and long-term planning.
@@ -212,17 +213,17 @@ Documentation templates for consistency.
 
 | Metric | Value |
 |--------|-------|
-| **Total documentation files** | **15** |
-| **Total documentation lines** | **~7,200 lines** |
+| **Total documentation files** | **24** |
+| **Total documentation lines** | **~12,100 lines** |
 | Guides | 2 ✅ (3 planned) |
 | Reference docs | 6 ✅ (5,894 lines) |
-| Architecture docs | 0 (5 planned for Phase 3) |
+| Architecture docs | 5 ✅ (~4,250 lines) |
 | Session logs | 5 ✅ |
-| ADRs | 0 (4 planned for Phase 3) |
-| Vision docs | 0 (3 planned for Phase 3) |
+| ADRs | 4 ✅ (~1,960 lines) |
+| Vision docs | 0 (3 planned for Day 4) |
 | Templates | 4 ✅ |
 
-**Day 2 Achievement:** Created 6 comprehensive reference docs totaling 5,894 lines!
+**Day 3 Achievement:** Created 5 architecture docs and 4 ADRs totaling ~6,210 lines!
 
 ---
 
@@ -237,7 +238,7 @@ Documentation templates for consistency.
 ---
 
 **Last Updated:** 2025-11-27
-**Documentation Version:** 1.0
+**Documentation Version:** 1.1 (Day 3 Complete)
 **Project Phase:** Phase 2 Complete
 
 ---
