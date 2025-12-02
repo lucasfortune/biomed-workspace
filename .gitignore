@@ -181,6 +181,7 @@ uploads/
 models/
 results/
 outputs/
+workspaces/
 
 # Temporary files
 tmp/
