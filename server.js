@@ -502,6 +502,16 @@ app.post('/api/workspace/upload', requireAuth, upload.single('file'), async (req
     const sessionId = req.session.id;
     const category = req.body.category || 'uploads'; // raw_images, annotations, inference_data
 
+    // Check approval status - only active users can upload custom files
+    if (req.session.user.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        error: 'Custom file upload requires account approval',
+        status: req.session.user.status,
+        message: 'Your account is pending approval. You can use test data while waiting.'
+      });
+    }
+
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -1614,26 +1624,27 @@ app.post('/reset-session', requireAuth, async (req, res) => {
       - Training sessions removed: ${trainingIdsToCleanup.length}
       - Inference sessions removed: ${inferenceIdsToCleanup.length}
       - Directories cleaned: uploads/${sessionId}, models/${sessionId}, outputs/${sessionId}, and all associated results`);
-    
-    // Destroy the session
-    req.session.destroy((err) => {
-      if (err) {
-        console.error('Error destroying session:', err);
-        return res.status(500).json({ 
-          success: false, 
-          error: 'Failed to destroy session' 
-        });
+
+    // Clear session data but keep user authenticated
+    const user = req.session.user; // Preserve user info
+
+    // Reset session data
+    req.session.uploadedFiles = undefined;
+    req.session.trainingConfig = undefined;
+    req.session.currentTraining = undefined;
+    req.session.importedModel = undefined;
+
+    // Restore user info
+    req.session.user = user;
+
+    console.log('Session reset completed successfully');
+    res.json({
+      success: true,
+      message: 'Session reset successfully',
+      cleanupSummary: {
+        trainingSessions: trainingIdsToCleanup.length,
+        inferenceSessions: inferenceIdsToCleanup.length
       }
-      
-      console.log('Session reset completed successfully');
-      res.json({ 
-        success: true, 
-        message: 'Session reset successfully',
-        cleanupSummary: {
-          trainingSessions: trainingIdsToCleanup.length,
-          inferenceSessions: inferenceIdsToCleanup.length
-        }
-      });
     });
     
   } catch (error) {

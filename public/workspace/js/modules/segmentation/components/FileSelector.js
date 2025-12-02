@@ -255,8 +255,9 @@ class FileSelector {
       const uploadedFile = await this.uploadFileToWorkspace(file);
 
       // Notify module that file was uploaded (for validation)
+      let validationTriggered = false;
       if (this.module && typeof this.module.onFileUploaded === 'function') {
-        await this.module.onFileUploaded(this.type, file, uploadedFile);
+        validationTriggered = await this.module.onFileUploaded(this.type, file, uploadedFile);
       }
 
       // Add to available files
@@ -272,13 +273,29 @@ class FileSelector {
         // Don't trigger change event here - onFileUploaded already handled validation
       }
 
-      // Hide uploading state
-      this.hideUploading();
+      // Hide uploading state ONLY if validation was NOT triggered
+      // If validation was triggered, the module will update the UI (including preview)
+      if (!validationTriggered) {
+        this.hideUploading();
+      }
 
     } catch (error) {
       console.error(`[FileSelector] Upload error:`, error);
-      this.module.state.notify('error', `Upload failed: ${error.message}`);
+
+      // Parse error for user-friendly message
+      let errorMessage = error.message;
+      if (errorMessage.includes('403') || errorMessage.includes('approval')) {
+        errorMessage = 'Account approval required. You can use test data while waiting.';
+      }
+
+      this.module.state.notify('error', `Upload failed: ${errorMessage}`);
       this.hideUploading();
+
+      // Reset file input to allow re-selection
+      const fileInput = document.getElementById(`${this.type}Input`);
+      if (fileInput) {
+        fileInput.value = '';
+      }
     }
   }
 
@@ -300,7 +317,10 @@ class FileSelector {
       throw new Error(error.error || 'Upload failed');
     }
 
-    return await response.json();
+    const result = await response.json();
+    // Backend returns { success: true, file: {...}, message: '...' }
+    // Extract and return just the file info
+    return result.file;
   }
 
   /**
@@ -383,6 +403,37 @@ class FileSelector {
    */
   getSelectedFile() {
     return this.selectedFile;
+  }
+
+  /**
+   * Set selected file (for restoring state)
+   */
+  setSelectedFile(fileInfo) {
+    if (!fileInfo) {
+      this.clearSelection();
+      return;
+    }
+
+    this.selectedFile = fileInfo;
+
+    // Update dropdown if it's test data
+    if (fileInfo.isTestData) {
+      const dropdown = document.getElementById(`${this.type}Select`);
+      if (dropdown) {
+        dropdown.value = 'test_data';
+      }
+
+      this.showPreview({
+        name: fileInfo.name || 'Test Dataset',
+        info: 'Built-in test dataset for demonstration'
+      });
+    } else {
+      // Custom upload - just show preview
+      this.showPreview({
+        name: fileInfo.name || 'Uploaded File',
+        info: 'Custom upload - previously validated'
+      });
+    }
   }
 
   /**

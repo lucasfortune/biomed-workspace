@@ -16,9 +16,9 @@ class SegmentationModule {
 
     // File uploads
     this.uploadedFiles = {
-      rawImages: null,
+      raw_images: null,
       annotations: null,
-      inferenceData: null
+      inference_data: null
     };
 
     // File selectors
@@ -48,6 +48,10 @@ class SegmentationModule {
 
     // Visualization initialized flag
     this.visualizationInitialized = false;
+
+    // Cached visualization data (for fast resume on Step 5)
+    this.cachedVisualizationData = null;
+    this.cachedInferenceResult = null;
 
     // Bind methods
     this.activate = this.activate.bind(this);
@@ -411,6 +415,12 @@ class SegmentationModule {
                   <span id="inferenceStatusText">Processing your data...</span>
                 </div>
               </div>
+
+              <!-- Inference Result Display -->
+              <div id="inferenceResult" style="display: none; margin-top: 25px; padding: 20px; background: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;">
+                <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #155724;">✓ Segmentation Completed Successfully</h4>
+                <p style="margin: 0; font-size: 14px; color: #155724;">Your segmentation is ready for visualization. Click "Next: 3D Visualization" to view the results.</p>
+              </div>
             </div>
 
             <div class="navigation-buttons">
@@ -579,9 +589,15 @@ class SegmentationModule {
 
   /**
    * Called when a file is uploaded via FileSelector
+   * @returns {Promise<boolean>} - Returns true if validation was triggered, false otherwise
    */
   async onFileUploaded(type, file, uploadedFileInfo) {
-    console.log(`[SegmentationModule] File uploaded for ${type}:`, uploadedFileInfo);
+    console.log(`[SegmentationModule] File uploaded for ${type}:`, {
+      fileName: file.name,
+      fileSize: file.size,
+      uploadedPath: uploadedFileInfo.path,
+      category: uploadedFileInfo.category
+    });
 
     // Store the actual File object for validation
     if (!this.pendingFiles) {
@@ -589,15 +605,34 @@ class SegmentationModule {
     }
     this.pendingFiles[type] = file;
 
+    // Log pending files state for debugging
+    console.log(`[SegmentationModule] Pending files state:`, {
+      keys: Object.keys(this.pendingFiles),
+      has_raw_images: !!this.pendingFiles.raw_images,
+      has_annotations: !!this.pendingFiles.annotations,
+      has_inference_data: !!this.pendingFiles.inference_data
+    });
+
     // If both training files uploaded, validate them together
     if (type === 'raw_images' || type === 'annotations') {
-      if (this.pendingFiles.rawImages && this.pendingFiles.annotations) {
+      const hasBoth = this.pendingFiles.raw_images && this.pendingFiles.annotations;
+      console.log(`[SegmentationModule] Validation check:`, {
+        type: type,
+        hasBoth: hasBoth,
+        willValidate: hasBoth
+      });
+
+      if (hasBoth) {
         await this.validateUploadedFiles();
+        return true; // Validation was triggered
       }
     } else if (type === 'inference_data') {
       // Validate inference file immediately
       await this.validateInferenceFile(file);
+      return true; // Validation was triggered
     }
+
+    return false; // No validation triggered
   }
 
   /**
@@ -621,7 +656,7 @@ class SegmentationModule {
 
       if (result.success) {
         // Store actual file info from backend
-        this.uploadedFiles.rawImages = { path: result.raw_images_path, isTestData: true };
+        this.uploadedFiles.raw_images = { path: result.raw_images_path, isTestData: true };
         this.uploadedFiles.annotations = { path: result.annotations_path, isTestData: true };
 
         // Show validation results
@@ -632,6 +667,9 @@ class SegmentationModule {
         if (step1Next) {
           step1Next.disabled = false;
         }
+
+        // Save state to persist uploaded files
+        this.saveState();
 
         this.state.notify('success', 'Test data loaded and validated successfully');
       } else {
@@ -655,7 +693,7 @@ class SegmentationModule {
       this.state.update('ui.loading', true);
 
       const formData = new FormData();
-      formData.append('raw_images', this.pendingFiles.rawImages);
+      formData.append('raw_images', this.pendingFiles.raw_images);
       formData.append('annotations', this.pendingFiles.annotations);
 
       const response = await fetch('/upload-data', {
@@ -666,9 +704,15 @@ class SegmentationModule {
       const result = await response.json();
 
       if (result.success) {
-        // Update uploadedFiles with validated info
-        this.uploadedFiles.rawImages = { path: result.raw_images_path };
-        this.uploadedFiles.annotations = { path: result.annotations_path };
+        // Update uploadedFiles with validated info (preserve file names from original upload)
+        this.uploadedFiles.raw_images = {
+          path: result.raw_images_path,
+          name: this.pendingFiles.raw_images?.name || 'Raw Images'
+        };
+        this.uploadedFiles.annotations = {
+          path: result.annotations_path,
+          name: this.pendingFiles.annotations?.name || 'Annotations'
+        };
 
         // Show validation results
         this.displayValidationResults(result.validation);
@@ -679,8 +723,19 @@ class SegmentationModule {
           step1Next.disabled = false;
         }
 
+        // Update FileSelector UI to show uploaded files
+        if (this.rawImageSelector && this.uploadedFiles.raw_images) {
+          this.rawImageSelector.setSelectedFile(this.uploadedFiles.raw_images);
+        }
+        if (this.annotationsSelector && this.uploadedFiles.annotations) {
+          this.annotationsSelector.setSelectedFile(this.uploadedFiles.annotations);
+        }
+
         // Clear pending files
         this.pendingFiles = {};
+
+        // Save state to persist uploaded files
+        this.saveState();
 
         this.state.notify('success', 'Files validated successfully');
       } else {
@@ -717,13 +772,16 @@ class SegmentationModule {
       const result = await response.json();
 
       if (result.success) {
-        this.uploadedFiles.inferenceData = { path: result.file_path, isTestData: true };
+        this.uploadedFiles.inference_data = { path: result.file_path, isTestData: true };
 
         // Enable run inference button
         const runInferenceBtn = document.getElementById('runInferenceBtn');
         if (runInferenceBtn) {
           runInferenceBtn.disabled = false;
         }
+
+        // Save state to persist uploaded files
+        this.saveState();
 
         this.state.notify('success', 'Test inference data loaded successfully');
       } else {
@@ -757,13 +815,24 @@ class SegmentationModule {
       const result = await response.json();
 
       if (result.success) {
-        this.uploadedFiles.inferenceData = { path: result.file_path };
+        this.uploadedFiles.inference_data = {
+          path: result.file_path,
+          name: file?.name || 'Inference Data'
+        };
 
         // Enable run inference button
         const runInferenceBtn = document.getElementById('runInferenceBtn');
         if (runInferenceBtn) {
           runInferenceBtn.disabled = false;
         }
+
+        // Update FileSelector UI to show uploaded file
+        if (this.inferenceSelector && this.uploadedFiles.inference_data) {
+          this.inferenceSelector.setSelectedFile(this.uploadedFiles.inference_data);
+        }
+
+        // Save state to persist uploaded files
+        this.saveState();
 
         this.state.notify('success', 'Inference file validated successfully');
       } else {
@@ -1074,86 +1143,85 @@ class SegmentationModule {
    * Initialize 3D visualization module
    */
   async initialize3DVisualization() {
-    if (this.visualizationInitialized) {
-      console.log('[SegmentationModule] 3D visualization already initialized');
+    // Check if visualization is already initialized with cached data
+    if (this.visualizationInitialized && this.cachedVisualizationData) {
+      console.log('[SegmentationModule] Using cached visualization data');
+
+      // Just show container and re-render with cached data
+      const container = document.getElementById('threejsContainer');
+      if (container) {
+        container.style.display = 'block';
+      }
+
+      // Re-render using cached data (scene will be rebuilt but data won't be fetched)
+      if (window.visualizationModule && window.visualizationModule.initialize3DVisualization) {
+        await window.visualizationModule.initialize3DVisualization();
+      }
+
       return;
     }
 
+    // Check if inference result exists
     if (!window.inferenceResult) {
-      console.warn('[SegmentationModule] No inference result available for visualization');
-      const container = document.getElementById('threejsContainer');
-      if (container) {
-        container.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666; padding: 20px;">
-            <div>
-              <h3>No Inference Data Available</h3>
-              <p style="color: #999; margin-top: 10px;">Please complete inference in Step 4 first.</p>
-            </div>
-          </div>
-        `;
-      }
+      console.warn('[SegmentationModule] No inference result available');
+      this.showVisualizationError('No inference data available');
       return;
     }
 
-    // Debug: Log the inference result to see what we have
-    console.log('[SegmentationModule] Inference result:', window.inferenceResult);
-    console.log('[SegmentationModule] Visualization path:', window.inferenceResult.visualization_path);
-    console.log('[SegmentationModule] Inference ID:', this.currentInferenceId);
-
-    // Validate that we have the necessary data
     if (!window.inferenceResult.visualization_path) {
-      console.error('[SegmentationModule] Missing visualization_path in inference result');
-      const container = document.getElementById('threejsContainer');
-      if (container) {
-        container.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666; padding: 20px;">
-            <div>
-              <h3>Visualization Data Not Found</h3>
-              <p style="color: #999; margin-top: 10px;">The inference result does not contain a visualization path.</p>
-              <p style="color: #999; margin-top: 10px; font-size: 12px;">This may indicate that inference did not complete successfully.</p>
-            </div>
-          </div>
-        `;
-      }
+      console.error('[SegmentationModule] Missing visualization_path');
+      this.showVisualizationError('Visualization data not found');
       return;
     }
 
     console.log('[SegmentationModule] Initializing 3D visualization...');
 
     try {
-      // Dynamically import the visualization module
+      // Cache inference result
+      this.cachedInferenceResult = window.inferenceResult;
+
+      // Dynamically import visualization module
       const visualizationModule = await import('/workspace/js/modules/segmentation/visualization/main.js');
 
       console.log('[SegmentationModule] Visualization module loaded');
 
-      // Expose visualization functions globally
+      // Expose globally
       window.resetCameraView = visualizationModule.resetView;
       window.visualizationModule = visualizationModule;
 
-      // Call the initialization function
+      // Initialize visualization (this will fetch and cache data)
       if (visualizationModule.initialize3DVisualization) {
         await visualizationModule.initialize3DVisualization();
+
+        // Cache the loaded data for next time
+        if (visualizationModule.segmentationData) {
+          this.cachedVisualizationData = visualizationModule.segmentationData;
+        }
+
         this.visualizationInitialized = true;
-        console.log('[SegmentationModule] 3D visualization initialized successfully');
-      } else {
-        console.error('[SegmentationModule] initialize3DVisualization function not found in module');
+        console.log('[SegmentationModule] 3D visualization initialized and cached');
       }
     } catch (error) {
       console.error('[SegmentationModule] Failed to initialize 3D visualization:', error);
+      this.showVisualizationError(error.message);
+    }
+  }
 
-      // Show user-friendly error message in container
-      const container = document.getElementById('threejsContainer');
-      if (container) {
-        container.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666; padding: 20px;">
-            <div>
-              <h3>3D Visualization Failed to Load</h3>
-              <p style="color: #999; margin-top: 10px;">${error.message}</p>
-              <p style="font-size: 12px; color: #999; margin-top: 10px;">Check the browser console for more details.</p>
-            </div>
+  /**
+   * Show visualization error message
+   */
+  showVisualizationError(message) {
+    const container = document.getElementById('threejsContainer');
+    if (container) {
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666; padding: 20px;">
+          <div>
+            <h3>${message === 'No inference data available' ? 'No Inference Data Available' : '3D Visualization Failed to Load'}</h3>
+            <p style="color: #999; margin-top: 10px;">${message}</p>
+            ${message !== 'No inference data available' ? '<p style="font-size: 12px; color: #999; margin-top: 10px;">Check the browser console for more details.</p>' : '<p style="color: #999; margin-top: 10px;">Please complete inference in Step 4 first.</p>'}
           </div>
-        `;
-      }
+        </div>
+      `;
     }
   }
 
@@ -1183,13 +1251,52 @@ class SegmentationModule {
       }
     });
 
-    // Initialize 3D visualization when reaching step 5
-    if (stepNumber === 5 && window.inferenceResult) {
-      console.log('[SegmentationModule] Reached step 5, initializing 3D visualization...');
-      // Use setTimeout to allow UI to update first
-      setTimeout(() => {
-        this.initialize3DVisualization();
-      }, 100);
+    // Handle step-specific UI restoration
+    if (stepNumber === 1) {
+      // Restore step 1 button state based on uploaded files
+      this.checkStep1Validation();
+    } else if (stepNumber === 2) {
+      // Step 2: Configuration is always accessible if we reached it
+      const step2Next = document.getElementById('step2Next');
+      if (step2Next && this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
+        step2Next.disabled = false;
+      }
+    } else if (stepNumber === 3) {
+      // Step 3: Enable next button if training is complete
+      const trainingNextBtn = document.getElementById('trainingNextBtn');
+      if (trainingNextBtn && this.currentTrainingId) {
+        trainingNextBtn.disabled = false;
+      }
+    } else if (stepNumber === 4) {
+      // Step 4: Restore inference button states
+      if (this.uploadedFiles.inference_data) {
+        const runInferenceBtn = document.getElementById('runInferenceBtn');
+        if (runInferenceBtn) {
+          runInferenceBtn.disabled = false;
+        }
+      }
+      if (this.currentInferenceId) {
+        const inferenceNextBtn = document.getElementById('inferenceNextBtn');
+        if (inferenceNextBtn) {
+          inferenceNextBtn.disabled = false;
+        }
+      }
+    } else if (stepNumber === 5 && window.inferenceResult) {
+      // Only initialize visualization if not already initialized
+      if (!this.visualizationInitialized) {
+        console.log('[SegmentationModule] Reached step 5 for first time, initializing 3D visualization...');
+        // Use setTimeout to allow UI to update first
+        setTimeout(() => {
+          this.initialize3DVisualization();
+        }, 100);
+      } else {
+        console.log('[SegmentationModule] Returned to step 5, visualization already initialized');
+        // Visualization is already there, just make sure container is visible
+        const container = document.getElementById('threejsContainer');
+        if (container) {
+          container.style.display = 'block';
+        }
+      }
     }
 
     // Update progress bar
@@ -1201,8 +1308,8 @@ class SegmentationModule {
       mainContent.scrollTop = 0;
     }
 
-    // Update state
-    this.state.update('modules.segmentation.currentStep', stepNumber);
+    // Save state to persist current step
+    this.saveState();
   }
 
   /**
@@ -1280,15 +1387,14 @@ class SegmentationModule {
 
       if (result.success) {
         this.currentTrainingId = result.training_id;
-        this.state.update('modules.segmentation.currentTask', {
-          type: 'training',
-          trainingId: result.training_id
-        });
 
         // Join training room
         if (this.socket) {
           this.socket.emit('join-training', result.training_id);
         }
+
+        // Save state to persist training ID
+        this.saveState();
 
         this.state.notify('success', 'Training started successfully');
       } else {
@@ -1320,8 +1426,8 @@ class SegmentationModule {
       const requestBody = {};
 
       // Add data path (required)
-      if (this.uploadedFiles.inferenceData && this.uploadedFiles.inferenceData.path) {
-        requestBody.data_path = this.uploadedFiles.inferenceData.path;
+      if (this.uploadedFiles.inference_data && this.uploadedFiles.inference_data.path) {
+        requestBody.data_path = this.uploadedFiles.inference_data.path;
         console.log('[SegmentationModule] Using data path:', requestBody.data_path);
       } else {
         throw new Error('No inference data uploaded. Please select or upload inference data first.');
@@ -1345,14 +1451,16 @@ class SegmentationModule {
 
       if (result.success) {
         this.currentInferenceId = result.inference_id;
-        this.state.update('modules.segmentation.currentTask', {
-          type: 'inference',
-          inferenceId: result.inference_id
-        });
 
         // Sync to global variable for inference.js
         if (typeof currentInferenceId !== 'undefined') {
           currentInferenceId = result.inference_id;
+        }
+
+        // Hide result div from previous inference (if any)
+        const resultDiv = document.getElementById('inferenceResult');
+        if (resultDiv) {
+          resultDiv.style.display = 'none';
         }
 
         // Show progress container
@@ -1379,6 +1487,9 @@ class SegmentationModule {
         if (this.socket) {
           this.socket.emit('join-inference', result.inference_id);
         }
+
+        // Save state to persist inference ID
+        this.saveState();
 
         this.state.notify('success', 'Inference started successfully');
       } else {
@@ -1424,6 +1535,70 @@ class SegmentationModule {
         const result = await response.json();
 
         if (result.success) {
+          // Clear visualization cache
+          this.cachedVisualizationData = null;
+          this.cachedInferenceResult = null;
+          this.visualizationInitialized = false;
+
+          // Clear global inference result
+          if (typeof window.inferenceResult !== 'undefined') {
+            window.inferenceResult = null;
+          }
+
+          // Clear global visualization module
+          if (typeof window.visualizationModule !== 'undefined') {
+            window.visualizationModule = null;
+          }
+          if (typeof window.resetCameraView !== 'undefined') {
+            window.resetCameraView = null;
+          }
+
+          // Clear visualization container DOM
+          const vizContainer = document.getElementById('threejsContainer');
+          if (vizContainer) {
+            vizContainer.innerHTML = '';
+          }
+
+          // Clear class controls container
+          const classControlPanels = document.getElementById('classControlPanels');
+          if (classControlPanels) {
+            classControlPanels.innerHTML = '';
+          }
+
+          // Destroy existing charts before reinitializing
+          if (this.lossChart) {
+            this.lossChart.destroy();
+            this.lossChart = null;
+          }
+          if (this.diceChart) {
+            this.diceChart.destroy();
+            this.diceChart = null;
+          }
+
+          // Reset uploaded files
+          this.uploadedFiles = {
+            raw_images: null,
+            annotations: null,
+            inference_data: null
+          };
+
+          // Reset IDs
+          this.currentTrainingId = null;
+          this.currentInferenceId = null;
+
+          // Reset training UI state
+          this.resetTrainingUIState();
+
+          // Reset inference UI state
+          this.resetInferenceUIState();
+
+          // Clear validation result div on Step 1
+          const validationResult = document.getElementById('validationResult');
+          if (validationResult) {
+            validationResult.style.display = 'none';
+            validationResult.innerHTML = '';
+          }
+
           this.state.notify('success', 'Session reset successfully');
           this.goToStep(1);
           // Reinitialize
@@ -1437,30 +1612,277 @@ class SegmentationModule {
   }
 
   /**
+   * Reset training UI to initial state
+   */
+  resetTrainingUIState() {
+    // Show start button, hide progress
+    const trainingActionContent = document.getElementById('trainingActionContent');
+    const trainingProgressContent = document.getElementById('trainingProgressContent');
+
+    if (trainingActionContent) {
+      trainingActionContent.style.display = 'block';
+    }
+    if (trainingProgressContent) {
+      trainingProgressContent.style.display = 'none';
+    }
+
+    // Reset progress bar
+    const trainingProgressFill = document.getElementById('trainingProgressFill');
+    if (trainingProgressFill) {
+      trainingProgressFill.style.width = '0%';
+    }
+
+    // Reset epoch counters
+    const currentEpoch = document.getElementById('currentEpoch');
+    const totalEpochs = document.getElementById('totalEpochs');
+    if (currentEpoch) currentEpoch.textContent = '0';
+    if (totalEpochs) totalEpochs.textContent = '0';
+
+    // Reset metrics
+    const trainLoss = document.getElementById('trainLoss');
+    const valLoss = document.getElementById('valLoss');
+    const trainDice = document.getElementById('trainDice');
+    const valDice = document.getElementById('valDice');
+    if (trainLoss) trainLoss.textContent = '--';
+    if (valLoss) valLoss.textContent = '--';
+    if (trainDice) trainDice.textContent = '--';
+    if (valDice) valDice.textContent = '--';
+
+    // Reset status text
+    const trainingStatusText = document.getElementById('trainingStatusText');
+    if (trainingStatusText) {
+      trainingStatusText.textContent = 'Training started... Preparing data...';
+    }
+
+    // Disable Next button
+    const trainingNextBtn = document.getElementById('trainingNextBtn');
+    if (trainingNextBtn) {
+      trainingNextBtn.disabled = true;
+    }
+
+    console.log('[SegmentationModule] Training UI state reset to initial');
+  }
+
+  /**
+   * Reset inference UI to initial state
+   */
+  resetInferenceUIState() {
+    // Hide inference progress container
+    const inferenceProgressContainer = document.getElementById('inferenceProgressContainer');
+    if (inferenceProgressContainer) {
+      inferenceProgressContainer.style.display = 'none';
+    }
+
+    // Hide inference result div
+    const inferenceResult = document.getElementById('inferenceResult');
+    if (inferenceResult) {
+      inferenceResult.style.display = 'none';
+    }
+
+    // Reset progress elements
+    const currentSlice = document.getElementById('currentSlice');
+    const totalSlices = document.getElementById('totalSlices');
+    const inferenceProgressPercent = document.getElementById('inferenceProgressPercent');
+    const inferenceProgressBar = document.getElementById('inferenceProgressBar');
+
+    if (currentSlice) currentSlice.textContent = '0';
+    if (totalSlices) totalSlices.textContent = '0';
+    if (inferenceProgressPercent) inferenceProgressPercent.textContent = '0%';
+    if (inferenceProgressBar) inferenceProgressBar.style.width = '0%';
+
+    // Disable "Next: Visualization" button
+    const inferenceNextBtn = document.getElementById('inferenceNextBtn');
+    if (inferenceNextBtn) {
+      inferenceNextBtn.disabled = true;
+    }
+
+    // Disable "Run Inference" button (will be enabled when data is uploaded)
+    const runInferenceBtn = document.getElementById('runInferenceBtn');
+    if (runInferenceBtn) {
+      runInferenceBtn.disabled = true;
+    }
+
+    console.log('[SegmentationModule] Inference UI state reset to initial');
+  }
+
+  /**
+   * Save current module state to StateManager for persistence
+   */
+  saveState() {
+    const state = {
+      currentStep: this.currentStep,
+      uploadedFiles: this.uploadedFiles,
+      currentTrainingId: this.currentTrainingId,
+      currentInferenceId: this.currentInferenceId,
+      currentTask: null
+    };
+
+    // Preserve currentTask if it exists
+    if (this.currentTrainingId) {
+      state.currentTask = { type: 'training', trainingId: this.currentTrainingId };
+    } else if (this.currentInferenceId) {
+      state.currentTask = { type: 'inference', inferenceId: this.currentInferenceId };
+    }
+
+    // Update state in StateManager
+    this.state.update('modules.segmentation.currentStep', this.currentStep);
+    this.state.update('modules.segmentation.uploadedFiles', this.uploadedFiles);
+    this.state.update('modules.segmentation.currentTrainingId', this.currentTrainingId);
+    this.state.update('modules.segmentation.currentInferenceId', this.currentInferenceId);
+    if (state.currentTask) {
+      this.state.update('modules.segmentation.currentTask', state.currentTask);
+    }
+
+    console.log('[SegmentationModule] State saved:', state);
+  }
+
+  /**
    * Check if there's a task to resume
    */
   async checkForResume() {
     const segmentationState = this.state.get('modules.segmentation');
 
-    if (segmentationState && segmentationState.currentTask) {
-      const task = segmentationState.currentTask;
+    if (!segmentationState) {
+      console.log('[SegmentationModule] No saved state to resume');
+      return;
+    }
 
-      if (task.type === 'training') {
-        this.currentTrainingId = task.trainingId;
-        this.goToStep(3);
-        // Rejoin training room
-        if (this.socket) {
-          this.socket.emit('join-training', task.trainingId);
-        }
-      } else if (task.type === 'inference') {
-        this.currentInferenceId = task.inferenceId;
-        this.goToStep(4);
-        // Rejoin inference room
-        if (this.socket) {
-          this.socket.emit('join-inference', task.inferenceId);
+    console.log('[SegmentationModule] Checking for resume:', segmentationState);
+
+    // Restore uploaded files
+    if (segmentationState.uploadedFiles) {
+      this.uploadedFiles = segmentationState.uploadedFiles;
+      console.log('[SegmentationModule] Restored uploaded files:', this.uploadedFiles);
+    }
+
+    // Restore training/inference IDs
+    if (segmentationState.currentTrainingId) {
+      this.currentTrainingId = segmentationState.currentTrainingId;
+      console.log('[SegmentationModule] Restored training ID:', this.currentTrainingId);
+    }
+
+    if (segmentationState.currentInferenceId) {
+      this.currentInferenceId = segmentationState.currentInferenceId;
+      console.log('[SegmentationModule] Restored inference ID:', this.currentInferenceId);
+    }
+
+    // Restore current step
+    if (segmentationState.currentStep && segmentationState.currentStep !== 1) {
+      console.log('[SegmentationModule] Restoring to step:', segmentationState.currentStep);
+      this.goToStep(segmentationState.currentStep);
+
+      // Rejoin Socket.IO rooms if needed
+      if (segmentationState.currentTask) {
+        if (segmentationState.currentTask.type === 'training' && this.socket) {
+          this.socket.emit('join-training', segmentationState.currentTask.trainingId);
+          console.log('[SegmentationModule] Rejoined training room');
+        } else if (segmentationState.currentTask.type === 'inference' && this.socket) {
+          this.socket.emit('join-inference', segmentationState.currentTask.inferenceId);
+          console.log('[SegmentationModule] Rejoined inference room');
         }
       }
     }
+
+    // If we have uploaded files on step 1, restore the validation UI
+    if (this.currentStep === 1 && (this.uploadedFiles.raw_images || this.uploadedFiles.annotations)) {
+      console.log('[SegmentationModule] Restoring step 1 validation UI');
+      this.restoreStep1Validation();
+    }
+
+    // Restore training UI state if training is in progress
+    if (segmentationState.currentTask?.type === 'training') {
+      console.log('[SegmentationModule] Restoring training UI state');
+      this.restoreTrainingUI();
+    }
+
+    // If we're on step 4 (inference), restore inference UI
+    if (this.currentStep === 4 && this.uploadedFiles.inference_data) {
+      console.log('[SegmentationModule] Restoring step 4 inference UI');
+      this.restoreStep4InferenceUI();
+    }
+  }
+
+  /**
+   * Restore Step 1 validation UI after resume
+   */
+  restoreStep1Validation() {
+    // Check if both files are present
+    if (this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
+      const step1Next = document.getElementById('step1Next');
+      if (step1Next) {
+        step1Next.disabled = false;
+      }
+
+      const validationResult = document.getElementById('validationResult');
+      if (validationResult) {
+        validationResult.className = 'success';
+        validationResult.innerHTML = `
+          <h4>✅ Files Loaded</h4>
+          <div class="validation-details">
+            <p><strong>Raw Images:</strong> ${this.uploadedFiles.raw_images.isTestData ? 'Test Dataset' : 'Custom Upload'}</p>
+            <p><strong>Annotations:</strong> ${this.uploadedFiles.annotations.isTestData ? 'Test Dataset' : 'Custom Upload'}</p>
+            <p style="color: #666; font-size: 13px;">Files are ready. Click Next to configure training.</p>
+          </div>
+        `;
+        validationResult.style.display = 'block';
+      }
+
+      // Update FileSelector UI to show selected files
+      if (this.rawImageSelector && this.uploadedFiles.raw_images) {
+        this.rawImageSelector.setSelectedFile(this.uploadedFiles.raw_images);
+      }
+      if (this.annotationsSelector && this.uploadedFiles.annotations) {
+        this.annotationsSelector.setSelectedFile(this.uploadedFiles.annotations);
+      }
+    }
+  }
+
+  /**
+   * Restore training UI state (show progress, hide start button)
+   */
+  restoreTrainingUI() {
+    // Toggle UI visibility
+    const trainingActionContent = document.getElementById('trainingActionContent');
+    const trainingProgressContent = document.getElementById('trainingProgressContent');
+
+    if (trainingActionContent) {
+      trainingActionContent.style.display = 'none';
+    }
+    if (trainingProgressContent) {
+      trainingProgressContent.style.display = 'block';
+    }
+
+    // Set status text
+    const statusText = document.getElementById('trainingStatusText');
+    if (statusText) {
+      statusText.textContent = 'Training in progress...';
+    }
+
+    // Enable Next button (training may have completed while away)
+    const trainingNextBtn = document.getElementById('trainingNextBtn');
+    if (trainingNextBtn) {
+      trainingNextBtn.disabled = false;
+    }
+
+    console.log('[SegmentationModule] Training UI state restored');
+  }
+
+  /**
+   * Restore Step 4 inference UI after resume
+   */
+  restoreStep4InferenceUI() {
+    // Enable run inference button
+    const runInferenceBtn = document.getElementById('runInferenceBtn');
+    if (runInferenceBtn) {
+      runInferenceBtn.disabled = false;
+    }
+
+    // Update FileSelector UI to show selected file
+    if (this.inferenceSelector && this.uploadedFiles.inference_data) {
+      this.inferenceSelector.setSelectedFile(this.uploadedFiles.inference_data);
+    }
+
+    console.log('[SegmentationModule] Step 4 inference UI restored');
   }
 
   /**
@@ -1486,7 +1908,7 @@ class SegmentationModule {
       this.diceChart = null;
     }
 
-    // Clean up Three.js
+    // Clean up Three.js (but keep cached data)
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer = null;
@@ -1515,15 +1937,15 @@ class SegmentationModule {
       this.trainingPollInterval = null;
     }
 
-    // Reset visualization flag to allow re-initialization
-    this.visualizationInitialized = false;
+    // DON'T reset visualizationInitialized - keep it for fast resume
+    // DON'T clear cachedVisualizationData - keep it for fast resume
 
     // Clear container
     if (this.container) {
       this.container.innerHTML = '';
     }
 
-    console.log('[SegmentationModule] Deactivation complete');
+    console.log('[SegmentationModule] Deactivation complete (cached data preserved)');
   }
 
   /**

@@ -139,15 +139,15 @@ async function runInference() {
 }
 
 function updateInferenceProgress(data) {
-    
+
     const { current_slice, total_slices, progress_percent } = data;
-    
+
     // Validate data
     if (current_slice === undefined || total_slices === undefined || progress_percent === undefined) {
         console.warn('Incomplete inference progress data:', data);
         return;
     }
-    
+
     // Update slice counters
     const currentSliceEl = document.getElementById('currentSlice');
     if (currentSliceEl) {
@@ -155,14 +155,14 @@ function updateInferenceProgress(data) {
     } else {
         console.warn('currentSlice element not found');
     }
-    
+
     const totalSlicesEl = document.getElementById('totalSlices');
     if (totalSlicesEl) {
         totalSlicesEl.textContent = total_slices;
     } else {
         console.warn('totalSlices element not found');
     }
-    
+
     // Update progress bar
     const progressBarEl = document.getElementById('inferenceProgressBar');
     if (progressBarEl) {
@@ -171,14 +171,28 @@ function updateInferenceProgress(data) {
     } else {
         console.warn('inferenceProgressBar element not found');
     }
-    
+
     const progressPercentEl = document.getElementById('inferenceProgressPercent');
     if (progressPercentEl) {
         progressPercentEl.textContent = Math.round(progress_percent) + '%';
     } else {
         console.warn('inferenceProgressPercent element not found');
     }
-    
+
+    // When inference reaches 100%, show loading overlay for sparse data generation
+    if (progress_percent >= 100) {
+        console.log('Inference complete, generating visualization data...');
+        const overlay = document.getElementById('moduleLoadingOverlay');
+        const loadingText = document.getElementById('moduleLoadingText');
+        const loadingDescription = document.getElementById('moduleLoadingDescription');
+
+        if (overlay && loadingText && loadingDescription) {
+            loadingText.textContent = 'Generating Visualization Data';
+            loadingDescription.textContent = 'Creating 3D visualization data from segmentation results. This may take a moment...';
+            overlay.style.display = 'flex';
+        }
+    }
+
     // If elements don't exist, try to recreate the UI
     if (!currentSliceEl || !totalSlicesEl || !progressBarEl || !progressPercentEl) {
         console.log('Some progress elements not found, checking loading overlay...');
@@ -196,6 +210,12 @@ function updateInferenceProgress(data) {
 function onInferenceComplete(data) {
 
     hideLoading();
+
+    // Hide the module loading overlay (used for sparse data generation)
+    const overlay = document.getElementById('moduleLoadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
 
     // Hide progress container
     const progressContainer = document.getElementById('inferenceProgressContainer');
@@ -263,19 +283,23 @@ function onInferenceComplete(data) {
 }
 
 function showSuccess(message) {
-    const successDiv = document.createElement('div');
-    successDiv.className = 'success-message';
-    successDiv.textContent = message;
-    successDiv.style.display = 'block';
-    
-    // Insert after the inference section
-    const inferenceSection = document.querySelector('.inference-section');
-    inferenceSection.parentNode.insertBefore(successDiv, inferenceSection.nextSibling);
-    
-    // Remove after 5 seconds
-    setTimeout(() => {
-        successDiv.remove();
-    }, 5000);
+    // Show the persistent inference result div
+    const resultDiv = document.getElementById('inferenceResult');
+    if (resultDiv) {
+        resultDiv.style.display = 'block';
+    } else {
+        console.warn('inferenceResult div not found, falling back to temporary message');
+        // Fallback to temporary message if div not found
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success-message';
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+
+        const inferenceSection = document.querySelector('.inference-section');
+        if (inferenceSection) {
+            inferenceSection.parentNode.insertBefore(successDiv, inferenceSection.nextSibling);
+        }
+    }
 }
 
 function updateInferenceLoadingUI() {
