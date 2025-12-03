@@ -2,7 +2,7 @@
 // This file handles all UI panel creation and user interaction events
 
 import { getClassColor, populateClassFilter } from './utils.js';
-import { applyRangeToSingleClass, updateSliceDirectionIndicator, setSliceDirection, applySliceRangeToMeshes, removeCappingMeshesForClass } from './clipping.js';
+import { applyRangeToSingleClass, updateSliceDirectionIndicator, setSliceDirection, applySliceRangeToMeshes, removeCappingMeshesForClass, applyRangeToOriginalData } from './clipping.js';
 import { getGlobalState, updateGlobalState } from './main.js';
 
 /**
@@ -91,18 +91,37 @@ export function createOriginalDataControlPanel() {
     opacitySection.className = 'class-opacity-section';
     opacitySection.innerHTML = `
         <label class="class-opacity-label">Opacity:</label>
-        <input type="range" 
-               class="slider class-opacity-slider" 
+        <input type="range"
+               class="slider class-opacity-slider"
                id="originalDataOpacity"
-               min="5" 
-               max="100" 
+               min="5"
+               max="100"
                value="30">
         <span class="class-opacity-value" id="originalDataOpacityValue">30%</span>
     `;
-    
-    // Assemble the panel (no range slider for original data)
+
+    // Create range section with dual slider
+    const rangeSection = document.createElement('div');
+    rangeSection.className = 'class-range-section';
+    rangeSection.innerHTML = `
+        <label class="class-range-label">Range:</label>
+    `;
+
+    // Create dual range slider
+    const dualRangeContainer = createDualRangeSliderForOriginalData();
+    rangeSection.appendChild(dualRangeContainer);
+
+    // Add range value display
+    const rangeValue = document.createElement('span');
+    rangeValue.className = 'class-range-value';
+    rangeValue.id = 'originalDataRangeValue';
+    rangeValue.textContent = '0% - 100%';
+    rangeSection.appendChild(rangeValue);
+
+    // Assemble the panel
     panel.appendChild(checkboxSection);
     panel.appendChild(opacitySection);
+    panel.appendChild(rangeSection);
     
     // Add event listeners
     setupOriginalDataListeners();
@@ -156,7 +175,7 @@ function handleOriginalDataVisibilityChange(visible) {
 function handleOriginalDataOpacityChange(value) {
     const state = getGlobalState();
     const opacity = parseInt(value) / 100;
-    
+
     // Access the plane group and iterate through its children
     if (state.originalDataPlaneGroup && state.originalDataPlaneGroup.children) {
         state.originalDataPlaneGroup.children.forEach(plane => {
@@ -166,6 +185,106 @@ function handleOriginalDataOpacityChange(value) {
             }
         });
     }
+}
+
+/**
+ * NEW FUNCTION: Create a dual-handle range slider for original data
+ * @returns {HTMLElement} - The dual range slider container
+ */
+function createDualRangeSliderForOriginalData() {
+    const container = document.createElement('div');
+    container.className = 'dual-range-container';
+
+    const track = document.createElement('div');
+    track.className = 'dual-range-track';
+
+    const fill = document.createElement('div');
+    fill.className = 'dual-range-fill';
+    fill.id = 'dualRangeFill_original';
+
+    const minInput = document.createElement('input');
+    minInput.type = 'range';
+    minInput.min = 0;
+    minInput.max = 100;
+    minInput.value = 0;
+    minInput.className = 'dual-range-input';
+    minInput.id = 'dualRangeMin_original';
+
+    const maxInput = document.createElement('input');
+    maxInput.type = 'range';
+    maxInput.min = 0;
+    maxInput.max = 100;
+    maxInput.value = 100;
+    maxInput.className = 'dual-range-input';
+    maxInput.id = 'dualRangeMax_original';
+
+    const updateFill = () => {
+        const min = parseInt(minInput.value);
+        const max = parseInt(maxInput.value);
+
+        if (min > max) {
+            minInput.value = max;
+        }
+
+        const minPercent = (minInput.value / 100) * 100;
+        const maxPercent = (maxInput.value / 100) * 100;
+
+        fill.style.left = minPercent + '%';
+        fill.style.width = (maxPercent - minPercent) + '%';
+    };
+
+    minInput.addEventListener('input', () => {
+        updateFill();
+        handleOriginalDataRangeChange();
+    });
+
+    maxInput.addEventListener('input', () => {
+        updateFill();
+        handleOriginalDataRangeChange();
+    });
+
+    updateFill();
+
+    container.appendChild(track);
+    track.appendChild(fill);
+    container.appendChild(minInput);
+    container.appendChild(maxInput);
+
+    return container;
+}
+
+/**
+ * NEW FUNCTION: Handle original data range slider changes
+ */
+export function handleOriginalDataRangeChange() {
+    const rangeMin = document.getElementById('dualRangeMin_original');
+    const rangeMax = document.getElementById('dualRangeMax_original');
+    const rangeValue = document.getElementById('originalDataRangeValue');
+
+    if (!rangeMin || !rangeMax || !rangeValue) return;
+
+    let minVal = parseInt(rangeMin.value);
+    let maxVal = parseInt(rangeMax.value);
+
+    // Ensure min doesn't exceed max
+    if (minVal > maxVal) {
+        minVal = maxVal;
+        rangeMin.value = maxVal;
+    }
+
+    const state = getGlobalState();
+
+    // Update state
+    updateGlobalState({
+        originalDataRangeMin: minVal,
+        originalDataRangeMax: maxVal
+    });
+
+    // Update display
+    rangeValue.textContent = `${minVal}% - ${maxVal}%`;
+
+    // Apply range filtering to original data planes
+    applyRangeToOriginalData(minVal, maxVal);
 }
 
 /**

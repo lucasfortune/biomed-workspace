@@ -27,6 +27,8 @@ export let availableClasses = [], visibleClasses = [];
 export let segmentationData = null;
 export let sliceDirection = 'z';
 export let classControlStates = {};
+export let originalDataRangeMin = 0;
+export let originalDataRangeMax = 100;
 
 /**
  * Main initialization function for the 3D visualization
@@ -395,6 +397,10 @@ export function resetView() {
     const originalDataCheckbox = document.getElementById('originalDataCheckbox');
     const originalDataOpacity = document.getElementById('originalDataOpacity');
     const originalDataOpacityValue = document.getElementById('originalDataOpacityValue');
+    const originalDataRangeMin = document.getElementById('dualRangeMin_original');
+    const originalDataRangeMax = document.getElementById('dualRangeMax_original');
+    const originalDataRangeValue = document.getElementById('originalDataRangeValue');
+    const originalDataRangeFill = document.getElementById('dualRangeFill_original');
 
     if (originalDataCheckbox) {
         originalDataCheckbox.checked = false;  // Default: hidden
@@ -408,17 +414,36 @@ export function resetView() {
         originalDataOpacityValue.textContent = '30%';
     }
 
+    // Reset range sliders to full range (0-100%)
+    if (originalDataRangeMin) originalDataRangeMin.value = 0;
+    if (originalDataRangeMax) originalDataRangeMax.value = 100;
+    if (originalDataRangeValue) originalDataRangeValue.textContent = '0% - 100%';
+    if (originalDataRangeFill) {
+        originalDataRangeFill.style.left = '0%';
+        originalDataRangeFill.style.width = '100%';
+    }
+
+    // Reset range state
+    updateGlobalState({
+        originalDataRangeMin: 0,
+        originalDataRangeMax: 100
+    });
+
     // Hide original data overlay
     if (originalDataPlaneGroup) {
         originalDataPlaneGroup.visible = false;
     }
 
-    // Reset opacity to 30%
+    // Reset opacity to 30% and show all planes
     if (originalDataPlaneGroup && originalDataPlaneGroup.children) {
         originalDataPlaneGroup.children.forEach(plane => {
             if (plane.material) {
                 plane.material.opacity = 0.3;
                 plane.material.needsUpdate = true;
+            }
+            // Show all planes (full range)
+            if (plane.userData && plane.userData.isOriginalDataPlane) {
+                plane.visible = true;
             }
         });
     }
@@ -445,14 +470,16 @@ export function getGlobalState() {
         segmentationMesh,
         classMeshes,
         sliceMeshes,
-        sliceMetadata, 
+        sliceMetadata,
         availableClasses,
         visibleClasses,
         segmentationData,
         sliceDirection,
         classControlStates,
         originalDataPlanes,
-        originalDataPlaneGroup
+        originalDataPlaneGroup,
+        originalDataRangeMin,
+        originalDataRangeMax
     };
 }
 
@@ -496,4 +523,6 @@ export function updateGlobalState(updates) {
     if (updates.classControlStates !== undefined) classControlStates = updates.classControlStates;
     if (updates.originalDataPlanes !== undefined) originalDataPlanes = updates.originalDataPlanes;
     if (updates.originalDataPlaneGroup !== undefined) originalDataPlaneGroup = updates.originalDataPlaneGroup;
+    if (updates.originalDataRangeMin !== undefined) originalDataRangeMin = updates.originalDataRangeMin;
+    if (updates.originalDataRangeMax !== undefined) originalDataRangeMax = updates.originalDataRangeMax;
 }

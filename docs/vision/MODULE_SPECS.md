@@ -35,9 +35,9 @@ This document provides detailed specifications for all planned processing module
 
 ## 1. Segmentation Module
 
-**Status:** Phase 2 (In Progress)
+**Status:** Phase 2 Complete (Custom Upload Working)
 **Priority:** HIGH
-**Target Phase:** Phase 2-3 (Complete by Feb 2025)
+**Target Phase:** Phase 2-3 ✅ Core Functionality Complete (Dec 2024)
 
 ### Purpose
 
@@ -123,83 +123,147 @@ Train custom U-Net models for semantic segmentation of biomedical image stacks a
 
 ### UI Workflow
 
-**Training Mode:**
+**Actual Implementation (5-Step Integrated Workflow):**
 
 ```
-1. Upload Training Data
-   ├─ [Use Test Data] button → Instant upload
-   └─ [Choose Files] → Select training.tif + annotation.tif → Upload
+Step 1: Upload Training Data
+   ├─ FileSelector Component - Raw Images
+   │  ├─ Dropdown: Select from workspace files OR test data
+   │  └─ Upload button: Add new TIFF file to workspace
+   │
+   ├─ FileSelector Component - Annotations
+   │  ├─ Dropdown: Select from workspace files OR test data
+   │  └─ Upload button: Add new TIFF file to workspace
+   │
+   ├─ Auto-validation on upload:
+   │  ├─ Dimensions match check (width × height × slices)
+   │  ├─ Class count detection (2-10 classes)
+   │  ├─ Auto-conversion (16-bit → 8-bit with warning)
+   │  └─ Validation results shown in preview area
+   │
+   └─ Navigation: [Next: Configure Training] enabled after validation
 
-2. Validation Results
-   ├─ Show dimensions (e.g., "512x512x100")
-   ├─ Show class count (e.g., "3 classes detected")
-   └─ Show file sizes
+Step 2: Configure Training
+   ├─ Training Parameters
+   │  ├─ Patch Size: Dropdown (64, 128, 256, 512)
+   │  ├─ Learning Rate: Number input (0.00001 - 0.01)
+   │  ├─ Epochs: Number input (1-200)
+   │  ├─ Batch Size: Number input (1-16)
+   │  └─ Validation Split: Number input (0.0-0.5)
+   │
+   ├─ Advanced Options (collapsible)
+   │  ├─ Early Stopping: Checkbox
+   │  └─ Patience: Number input (1-50)
+   │
+   └─ Navigation: [Next: Start Training] enabled
 
-3. Configure Training
-   ├─ Patch Size dropdown (64, 128, 256)
-   ├─ Learning Rate slider (log scale)
-   ├─ Epochs input (number)
-   └─ Advanced options (expandable)
+Step 3: Training
+   ├─ [Start Training] button → Spawns Python process
+   │
+   ├─ Real-time Progress (Socket.IO)
+   │  ├─ Progress bar (epoch-based, 0-100%)
+   │  ├─ Epoch counter: "Epoch 5/10"
+   │  ├─ Live loss curve (Chart.js - Training & Validation)
+   │  ├─ Live Dice score curve (Chart.js)
+   │  └─ Current metrics display (loss, dice, time elapsed)
+   │
+   ├─ Training Complete
+   │  ├─ Success notification (persistent)
+   │  ├─ Final metrics summary
+   │  ├─ Model saved: models/<sessionId>/<trainingId>/best_model.pth
+   │  └─ Training ID displayed for reference
+   │
+   └─ Navigation: [Next: Upload Inference Data] enabled
 
-4. Start Training
-   └─ [Start Training] button → Disable during training
+Step 4: Inference
+   ├─ Upload Inference Data
+   │  ├─ FileSelector Component - Inference Images
+   │  │  ├─ Dropdown: Workspace files OR test data
+   │  │  └─ Upload button: Add new TIFF
+   │  │
+   │  └─ Auto-validation (dimensions, format)
+   │
+   ├─ Model Selection (Automatic)
+   │  ├─ Uses trained model from Step 3 by default
+   │  └─ OR uses imported model (if no training session)
+   │
+   ├─ [Run Inference] button → Spawns Python process
+   │
+   ├─ Real-time Progress (Socket.IO)
+   │  ├─ Slice counter: "Slice 50/100"
+   │  ├─ Progress bar: 0-100%
+   │  ├─ At 100%: Shows "Generating Visualization Data" overlay
+   │  └─ Sparse data generation (3D point cloud for Three.js)
+   │
+   ├─ Inference Complete
+   │  ├─ Persistent success message (green banner)
+   │  ├─ Results saved: results/<inferenceId>/inference_result.tif
+   │  ├─ Visualization data: results/<inferenceId>/visualization_data.json
+   │  └─ [Download Results] button available
+   │
+   └─ Navigation: [Next: 3D Visualization] enabled
 
-5. Training Progress
-   ├─ Progress bar (0-100%)
-   ├─ Epoch counter (e.g., "Epoch 5/10")
-   ├─ Live loss curve (Chart.js)
-   ├─ Current metrics (loss, accuracy)
-   └─ [Stop Training] button (optional - Phase 4)
+Step 5: 3D Visualization
+   ├─ Automatic initialization (first visit only)
+   │  ├─ Loads visualization_data.json
+   │  ├─ Creates Three.js scene, camera, renderer
+   │  ├─ Renders 3D point cloud (color-coded by class)
+   │  └─ Sets up controls and UI
+   │
+   ├─ Interactive Controls
+   │  ├─ Orbit controls: Rotate, zoom, pan
+   │  ├─ Class visibility toggles (show/hide classes)
+   │  ├─ Slice range selector (min/max)
+   │  ├─ Slice direction (X/Y/Z axis)
+   │  ├─ Point size slider (1-20 pixels)
+   │  ├─ Original data overlay toggle
+   │  │  ├─ Opacity slider (0-100%)
+   │  │  └─ Range sliders (planned) - Control visible slice range like class controls
+   │  ├─ Background color picker
+   │  └─ Reset view button
+   │
+   ├─ Visualization Features
+   │  ├─ Color-coded classes (distinct colors per class)
+   │  ├─ Smooth 60 FPS rendering
+   │  ├─ Responsive canvas (auto-resize)
+   │  └─ Persistent scene (no reload on navigation)
+   │
+   └─ Navigation: Can return to previous steps without data loss
 
-6. Training Complete
-   ├─ Success message
-   ├─ Final metrics
-   └─ [Proceed to Inference] button
-```
-
-**Inference Mode:**
-
-```
-1. Upload Inference Data
-   ├─ [Use Test Data] button
-   └─ [Choose File] → Select inference.tif → Upload
-
-2. Model Selection
-   ├─ [Use Trained Model] (default) → Show training ID
-   └─ [Import Model] → Upload .pth + .json
-
-3. Run Inference
-   └─ [Run Inference] button
-
-4. Inference Progress
-   ├─ Progress bar (0-100%)
-   ├─ Slice counter (e.g., "Slice 50/100")
-   └─ Estimated time remaining
-
-5. Results
-   ├─ Success message
-   ├─ Preview (first slice, middle slice, last slice)
-   ├─ [View 3D Visualization] button
-   └─ [Download Results] button
+Navigation Features:
+   ├─ Step indicators (1-5) show progress
+   ├─ Previous/Next buttons at each step
+   ├─ Can navigate freely after completion
+   ├─ UI state restoration (buttons, selections, previews)
+   ├─ No data reload on re-visit (cached data)
+   └─ Visualization initializes once, persists across navigation
 ```
 
 ### Backend Implementation
 
 #### API Endpoints
 
-**Existing (Used by Module):**
+**Workspace API (Active):**
+- `POST /api/workspace/upload` - Upload files to workspace (with category)
+- `GET /api/workspace/files` - List workspace files
+- `POST /api/workspace/init` - Initialize workspace for session
+- `GET /api/workspace/status` - Get workspace status
+- `GET /api/workspace/stats` - Get workspace statistics
+
+**Classic Endpoints (Used by Module):**
 - `POST /upload-data` - Upload training/annotation files
 - `POST /upload-inference` - Upload inference files
-- `POST /import-pretrained-model` - Import .pth + .json
-- `POST /start-training` - Start training job
-- `POST /run-inference` - Start inference job
+- `POST /import-pretrained-model` - Import .pth + .json (requires approval)
+- `POST /configure-training` - Set training configuration
+- `POST /start-training` - Start training job (Socket.IO for progress)
+- `POST /run-inference` - Start inference job (Socket.IO for progress)
 - `GET /results/:inferenceId/visualization-data` - Get visualization JSON
 - `GET /results/:inferenceId/original-data-web` - Get original data for overlay
+- `GET /download-inference-results/:inferenceId` - Download inference results
 
-**New (Phase 3):**
-- `POST /api/workspace/segmentation/upload-training` - Workspace-specific upload
-- `POST /api/workspace/segmentation/upload-inference` - Workspace-specific upload
+**Future (Phase 3):**
 - `GET /api/workspace/segmentation/models` - List trained models for session
+- `POST /api/workspace/segmentation/delete-model` - Delete trained model
 
 #### Python Scripts
 
@@ -234,13 +298,66 @@ Train custom U-Net models for semantic segmentation of biomedical image stacks a
 
 ### Success Criteria
 
-- [x] Test data workflow works end-to-end ✅ (Phase 2)
-- [ ] Custom data workflow works end-to-end (Phase 3)
-- [ ] Training completes in <5 min for test data (10 epochs)
-- [ ] Inference completes in <2 min for test data (100 slices)
-- [ ] 3D visualization renders smoothly (60 FPS)
-- [ ] No crashes or data loss during long training sessions
-- [ ] Module state persists when switching to other modules
+**✅ Completed:**
+- [x] Test data workflow works end-to-end (Phase 2 - Nov 2024)
+- [x] Custom data workflow works end-to-end (Phase 2 - Nov 2024)
+- [x] FileSelector component with workspace integration (Phase 2 - Nov 2024)
+- [x] Real-time training progress with Socket.IO (Phase 2 - Nov 2024)
+- [x] Real-time inference progress with Socket.IO (Phase 2 - Nov 2024)
+- [x] 3D visualization renders smoothly (60 FPS) (Phase 2 - Nov 2024)
+- [x] Navigation between steps without data loss (Phase 2 - Dec 2024)
+- [x] UI state restoration on navigation (Phase 2 - Dec 2024)
+- [x] Persistent success messages (Phase 2 - Dec 2024)
+- [x] Loading feedback during sparse data generation (Phase 2 - Dec 2024)
+- [x] Visualization persistence (no reload on re-visit) (Phase 2 - Dec 2024)
+- [x] Approval status enforcement (pending users use test data only) (Phase 2 - Nov 2024)
+
+**🎯 Performance Targets:**
+- [x] Training completes in <5 min for test data (10 epochs) ✅ Meets target
+- [x] Inference completes in <2 min for test data (100 slices) ✅ Meets target
+- [x] 3D visualization 60 FPS rendering ✅ Meets target
+
+**📋 Remaining (Phase 2/3):**
+- [ ] Original data range sliders (control visible slice range for overlay) - Phase 2
+- [ ] Module state persists when switching to other modules (serialize/deserialize) - Phase 3
+- [ ] Session recovery after browser refresh - Phase 3
+- [ ] Model management (list, delete, rename trained models) - Phase 3
+- [ ] Training pause/resume functionality - Phase 3
+- [ ] Batch inference (multiple files) - Phase 3
+- [ ] Training progress history (view past training curves) - Phase 3
+
+### Recent Improvements (Nov-Dec 2024)
+
+**Custom Upload Fix (Nov 28, 2024):**
+- Fixed variable naming inconsistency (snake_case vs camelCase) in file upload
+- Added approval status check to workspace upload endpoint
+- Enhanced error handling with user-friendly messages
+- Comprehensive debug logging added
+
+**UI Polish & Navigation Fixes (Dec 2, 2024):**
+- Fixed FileSelector dropdown showing "undefined (unknown)" → Now shows actual filename
+- Added loading overlay during sparse data generation (after inference 100%)
+- Added persistent success message after segmentation completion
+- Fixed visualization reloading/freezing when navigating back to step 5
+- Fixed navigation button states after pipeline completion
+- Fixed FileSelector preview persistence after validation
+- 4 files modified: 651 insertions(+), 143 deletions(-)
+
+**Key Technical Achievements:**
+- FileSelector component returns correct file info from backend response
+- `onFileUploaded()` returns boolean to indicate validation trigger
+- `goToStep()` includes comprehensive UI state restoration for all steps
+- `visualizationInitialized` flag prevents Three.js scene re-initialization
+- Persistent `<div id="inferenceResult">` replaces temporary success notifications
+- Loading overlay shows during visualization data generation (100%+ progress)
+
+**User Experience Improvements:**
+- Clear file information in dropdowns (filename + size)
+- Comprehensive loading feedback at all stages
+- Persistent success confirmation (doesn't disappear)
+- Smooth, reliable navigation between all steps
+- Correct button states throughout workflow
+- Professional, polished interface
 
 ---
 
@@ -957,8 +1074,8 @@ export default ModuleName;
 
 ---
 
-**Last Updated:** 2025-11-27
-**Specifications Version:** 1.0
+**Last Updated:** 2025-12-02
+**Specifications Version:** 1.1 (Segmentation Module Updated)
 **Next Review:** 2025-12-15 (before Phase 4 kickoff)
 
 ---

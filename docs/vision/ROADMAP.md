@@ -125,7 +125,7 @@ Classic Version        Workspace Foundation    File Browser &        Additional 
 ## Phase 2: Workspace Version & Module System ✅
 
 **Duration:** June - November 2024 (6 months)
-**Status:** COMPLETE
+**Status:** COMPLETE (minor enhancements remaining)
 **Goal:** Create modular architecture and workspace foundation
 
 ### Objectives
@@ -198,33 +198,45 @@ Classic Version        Workspace Foundation    File Browser &        Additional 
 - Custom data upload not yet integrated in workspace
 - Need better file organization/browsing
 
+### Phase 2 Remaining Enhancements
+
+~~Phase 2 enhancements are now complete!~~ ✅
+
+- [x] **Original Data Range Sliders** (3D Visualization Enhancement) ✅ **COMPLETE**
+  - **Status:** ✅ Implemented (Dec 3, 2024)
+  - Added dual range sliders (0-100%) to original data overlay controls
+  - Matches class controls pattern - checkbox, opacity slider, and range sliders
+  - Allows users to control which slice range is visible for the original data overlay
+  - Implementation: Min/max range inputs identical to class range controls
+  - **Session:** docs/sessions/2025-12-03_original_data_range_sliders.md
+
 ### Known Issues
 
 #### 🐛 **Issue #1: Workspace Custom Data Upload Not Functional**
 
-**Status:** OPEN (High Priority for Phase 3)
-**Severity:** Medium
-**Impact:** Users can only use test data in workspace version
+**Status:** ✅ RESOLVED (Nov-Dec 2024)
+**Severity:** Medium (was)
+**Impact:** Users can only use test data in workspace version (was)
 
 **Description:**
-The workspace version can use test data successfully, but custom file upload is not yet integrated. The segmentation module needs to support the same file upload workflow as Classic version.
+The workspace version can use test data successfully, but custom file upload was not integrated. The segmentation module needed to support the same file upload workflow as Classic version.
 
 **Root Cause:**
-- Segmentation module UI not yet complete
-- Classic upload code not yet wrapped in module
-- File upload form needs to be added to module view
+- Variable naming inconsistency (snake_case vs camelCase)
+- FileSelector component not properly integrated
+- Approval status checks missing from workspace upload endpoint
 
-**Workaround:**
-- Use Classic version for custom data
-- Use test data in workspace
+**Resolution:**
+Fixed in two sessions:
+- **Nov 28, 2024:** Variable naming consistency fix, approval status check added to `/api/workspace/upload`
+- **Dec 2, 2024:** UI polish and navigation fixes (dropdown display, loading overlays, persistent success messages)
 
-**Fix Plan (Phase 3):**
-1. Add file upload form to segmentation module
-2. Integrate multer upload handling
-3. Connect to existing backend endpoints
-4. Test full workflow (upload → validate → train → inference)
+**Result:**
+Custom file upload now fully functional in workspace version with FileSelector component integration.
 
-**Tracking:** docs/sessions/2025-11-26_overlay_debugging.md
+**Tracking:**
+- docs/sessions/2025-11-28_custom_upload_fix.md
+- docs/sessions/2025-12-02_ui_navigation_fixes.md
 
 ---
 
@@ -783,8 +795,8 @@ Pipeline 3: Denoise → Segment → Quantify → Export CSV
 
 ---
 
-**Last Updated:** 2025-11-27
-**Roadmap Version:** 1.0
+**Last Updated:** 2025-12-03
+**Roadmap Version:** 1.2 (Phase 2 fully complete - all enhancements implemented)
 **Next Review:** 2025-12-15 (monthly review)
 
 ---

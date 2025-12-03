@@ -188,6 +188,42 @@ export function applySliceRangeToSingleClass(classValue, minPercent, maxPercent)
 }
 
 /**
+ * Apply range filtering to original data planes
+ * @param {number} minPercent - Minimum percentage (0-100)
+ * @param {number} maxPercent - Maximum percentage (0-100)
+ */
+export function applyRangeToOriginalData(minPercent, maxPercent) {
+    const state = getGlobalState();
+
+    if (!state.originalDataPlaneGroup || !state.originalDataPlaneGroup.children) {
+        return;
+    }
+
+    const planes = state.originalDataPlaneGroup.children;
+    const planeCount = planes.length;
+
+    if (planeCount === 0) return;
+
+    // Convert percentages to plane indices
+    const minIndex = Math.floor(minPercent / 100 * planeCount);
+    const maxIndex = Math.ceil(maxPercent / 100 * planeCount) - 1;
+
+    // Update visibility for each plane based on its slice index
+    planes.forEach(plane => {
+        if (plane.userData && plane.userData.isOriginalDataPlane) {
+            const sliceIndex = plane.userData.sliceIndex;
+            const shouldBeVisible = (sliceIndex >= minIndex && sliceIndex <= maxIndex);
+            plane.visible = shouldBeVisible;
+        }
+    });
+
+    // Force re-render
+    if (state.renderer && state.scene && state.camera) {
+        state.renderer.render(state.scene, state.camera);
+    }
+}
+
+/**
  * Update slice direction indicator based on current model rotation
  * This provides visual feedback about which direction slicing will occur
  */
