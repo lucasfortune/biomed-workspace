@@ -20,6 +20,15 @@ class WorkspaceManager {
   }
 
   /**
+   * Generate unique ID with prefix
+   * @param {string} prefix - Prefix for the ID (e.g., 'file', 'folder')
+   * @returns {string} Unique ID in format: prefix_timestamp_random
+   */
+  generateId(prefix) {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
    * Get workspace path for a session
    */
   getWorkspacePath(sessionId) {
@@ -62,8 +71,9 @@ class WorkspaceManager {
       sessionId: sessionId,
       createdAt: new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
-      version: '1.0.0',
+      version: '1.1.0',
       files: [],
+      folders: [],
       modules: {
         segmentation: { runs: [] },
         denoising: { runs: [] },
@@ -169,7 +179,16 @@ class WorkspaceManager {
 
     try {
       const data = fs.readFileSync(metadataPath, 'utf8');
-      return JSON.parse(data);
+      const metadata = JSON.parse(data);
+
+      // Backward compatibility: Add folders array if missing (v1.0.0 -> v1.1.0)
+      if (!metadata.folders) {
+        metadata.folders = [];
+        metadata.version = '1.1.0';
+        // Note: Auto-save happens on next operation
+      }
+
+      return metadata;
     } catch (error) {
       console.error(`Error loading metadata for session ${sessionId}:`, error);
       throw error;
@@ -192,20 +211,409 @@ class WorkspaceManager {
 
   /**
    * Add file to workspace metadata
+   * @param {string} sessionId - Session ID
+   * @param {object} fileInfo - File information
+   * @returns {object} Created file entry
    */
   addFileToMetadata(sessionId, fileInfo) {
     const metadata = this.loadMetadata(sessionId);
 
-    metadata.files.push({
-      id: fileInfo.id || `file_${Date.now()}`,
+    // Check if file with same path already exists (prevent duplicates)
+    const existingFile = metadata.files.find(f => f.path === fileInfo.path);
+    if (existingFile) {
+      console.log('[WorkspaceManager] File already tracked:', fileInfo.path);
+      return existingFile;
+    }
+
+    const fileEntry = {
+      id: fileInfo.id || this.generateId('file'),
       name: fileInfo.name,
       path: fileInfo.path,
       category: fileInfo.category,
       size: fileInfo.size,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      folderId: fileInfo.folderId || null,
+      thumbnailPath: null
+    };
+
+    metadata.files.push(fileEntry);
+    this.saveMetadata(sessionId, metadata);
+
+    console.log('[WorkspaceManager] File tracked:', fileEntry.id, fileEntry.path);
+    return fileEntry;
+  }
+
+  /**
+   * Create a new folder
+   * @param {string} sessionId - Session ID
+   * @param {string} folderName - Name of the folder
+   * @param {string|null} parentId - Parent folder ID (null for root)
+   * @param {string} color - Folder color
+   * @returns {object} Created folder object
+   */
+  async createFolder(sessionId, folderName, parentId = null, color = '#4A90E2') {
+    const metadata = this.loadMetadata(sessionId);
+
+    // Validate parent exists if specified
+    if (parentId && !metadata.folders.find(f => f.id === parentId)) {
+      throw new Error('Parent folder not found');
+    }
+
+    const folder = {
+      id: this.generateId('folder'),
+      name: folderName,
+      parentId: parentId,
+      createdAt: new Date().toISOString(),
+      color: color
+    };
+
+    metadata.folders.push(folder);
+    this.saveMetadata(sessionId, metadata);
+
+    return folder;
+  }
+
+  /**
+   * Rename a folder
+   * @param {string} sessionId - Session ID
+   * @param {string} folderId - Folder ID to rename
+   * @param {string} newName - New folder name
+   * @returns {object} Updated folder object
+   */
+  async renameFolder(sessionId, folderId, newName) {
+    const metadata = this.loadMetadata(sessionId);
+    const folder = metadata.folders.find(f => f.id === folderId);
+
+    if (!folder) {
+      throw new Error('Folder not found');
+    }
+
+    folder.name = newName;
+    this.saveMetadata(sessionId, metadata);
+
+    return folder;
+  }
+
+  /**
+   * Delete a folder (moves files to root)
+   * @param {string} sessionId - Session ID
+   * @param {string} folderId - Folder ID to delete
+   * @returns {object} Success message
+   */
+  async deleteFolder(sessionId, folderId) {
+    const metadata = this.loadMetadata(sessionId);
+
+    // Remove folder from array
+    metadata.folders = metadata.folders.filter(f => f.id !== folderId);
+
+    // Move all files in folder to root (folderId = null)
+    metadata.files.forEach(file => {
+      if (file.folderId === folderId) {
+        file.folderId = null;
+      }
+    });
+
+    // Move all child folders to root
+    metadata.folders.forEach(folder => {
+      if (folder.parentId === folderId) {
+        folder.parentId = null;
+      }
     });
 
     this.saveMetadata(sessionId, metadata);
+
+    return { success: true, message: 'Folder deleted, contents moved to root' };
+  }
+
+  /**
+   * Get all folders
+   * @param {string} sessionId - Session ID
+   * @returns {array} Array of folder objects
+   */
+  async getFolders(sessionId) {
+    const metadata = this.loadMetadata(sessionId);
+    return metadata.folders || [];
+  }
+
+  /**
+   * Get file by ID
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @returns {object} File object
+   */
+  async getFile(sessionId, fileId) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+
+    if (!file) {
+      throw new Error('File not found');
+    }
+
+    return file;
+  }
+
+  /**
+   * Rename a file
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @param {string} newName - New file name
+   * @returns {object} Updated file object
+   */
+  async renameFile(sessionId, fileId, newName) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+
+    if (!file) {
+      throw new Error('File not found');
+    }
+
+    // Validate extension matches
+    const oldExt = path.extname(file.name);
+    const newExt = path.extname(newName);
+
+    if (oldExt !== newExt) {
+      throw new Error('Cannot change file extension');
+    }
+
+    file.name = newName;
+    this.saveMetadata(sessionId, metadata);
+
+    return file;
+  }
+
+  /**
+   * Move file to folder
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @param {string|null} targetFolderId - Target folder ID (null for root)
+   * @returns {object} Updated file object
+   */
+  async moveFile(sessionId, fileId, targetFolderId) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+
+    if (!file) {
+      throw new Error('File not found');
+    }
+
+    // Validate folder exists if specified
+    if (targetFolderId && !metadata.folders.find(f => f.id === targetFolderId)) {
+      throw new Error('Target folder not found');
+    }
+
+    file.folderId = targetFolderId;
+    this.saveMetadata(sessionId, metadata);
+
+    return file;
+  }
+
+  /**
+   * Delete a file
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @returns {object} Success message
+   */
+  async deleteFile(sessionId, fileId) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+
+    if (!file) {
+      throw new Error('File not found');
+    }
+
+    // Delete physical file
+    const filePath = path.join(this.getWorkspacePath(sessionId), file.path);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Delete thumbnail if exists
+    if (file.thumbnailPath) {
+      const thumbPath = path.join(this.getWorkspacePath(sessionId), file.thumbnailPath);
+      if (fs.existsSync(thumbPath)) {
+        fs.unlinkSync(thumbPath);
+      }
+    }
+
+    // Remove from metadata
+    metadata.files = metadata.files.filter(f => f.id !== fileId);
+    this.saveMetadata(sessionId, metadata);
+
+    return { success: true, message: 'File deleted' };
+  }
+
+  /**
+   * Delete multiple files (batch)
+   * @param {string} sessionId - Session ID
+   * @param {array} fileIds - Array of file IDs
+   * @returns {object} Result with deleted count
+   */
+  async deleteFiles(sessionId, fileIds) {
+    let deletedCount = 0;
+
+    for (const fileId of fileIds) {
+      try {
+        await this.deleteFile(sessionId, fileId);
+        deletedCount++;
+      } catch (error) {
+        console.error(`Failed to delete file ${fileId}:`, error);
+      }
+    }
+
+    return { success: true, deletedCount };
+  }
+
+  /**
+   * Move multiple files to folder (batch)
+   * @param {string} sessionId - Session ID
+   * @param {array} fileIds - Array of file IDs
+   * @param {string|null} targetFolderId - Target folder ID (null for root)
+   * @returns {object} Result with moved count
+   */
+  async moveFilesToFolder(sessionId, fileIds, targetFolderId) {
+    const metadata = this.loadMetadata(sessionId);
+
+    // Validate folder exists
+    if (targetFolderId && !metadata.folders.find(f => f.id === targetFolderId)) {
+      throw new Error('Target folder not found');
+    }
+
+    let movedCount = 0;
+
+    metadata.files.forEach(file => {
+      if (fileIds.includes(file.id)) {
+        file.folderId = targetFolderId;
+        movedCount++;
+      }
+    });
+
+    this.saveMetadata(sessionId, metadata);
+
+    return { success: true, movedCount };
+  }
+
+  /**
+   * Search files by name
+   * @param {string} sessionId - Session ID
+   * @param {string} query - Search query
+   * @returns {array} Array of matching files
+   */
+  async searchFiles(sessionId, query) {
+    const metadata = this.loadMetadata(sessionId);
+
+    if (!query || query.trim() === '') {
+      return metadata.files;
+    }
+
+    const lowerQuery = query.toLowerCase();
+
+    return metadata.files.filter(file =>
+      file.name.toLowerCase().includes(lowerQuery)
+    );
+  }
+
+  /**
+   * Get files by category
+   * @param {string} sessionId - Session ID
+   * @param {string} category - File category
+   * @returns {array} Array of files in category
+   */
+  async getFilesByCategory(sessionId, category) {
+    const metadata = this.loadMetadata(sessionId);
+
+    return metadata.files.filter(file => file.category === category);
+  }
+
+  /**
+   * Set thumbnail path for a file
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @param {string} thumbnailPath - Relative path to thumbnail
+   * @returns {object} Updated file object
+   */
+  async setThumbnailPath(sessionId, fileId, thumbnailPath) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+
+    if (!file) {
+      throw new Error('File not found');
+    }
+
+    file.thumbnailPath = thumbnailPath;
+    this.saveMetadata(sessionId, metadata);
+
+    return file;
+  }
+
+  /**
+   * Get thumbnail path for a file
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @returns {string|null} Thumbnail path or null
+   */
+  async getThumbnailPath(sessionId, fileId) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+
+    if (!file) {
+      throw new Error('File not found');
+    }
+
+    return file.thumbnailPath;
+  }
+
+  /**
+   * Get file tree with folder structure
+   * @param {string} sessionId - Session ID
+   * @returns {object} Hierarchical tree structure
+   */
+  async getFileTree(sessionId) {
+    const metadata = this.loadMetadata(sessionId);
+
+    // Build tree structure
+    const tree = {
+      id: 'root',
+      name: 'Root',
+      type: 'folder',
+      children: []
+    };
+
+    // Create folder map
+    const folderMap = new Map();
+    folderMap.set(null, tree); // root
+
+    // Add folders
+    metadata.folders.forEach(folder => {
+      folderMap.set(folder.id, {
+        ...folder,
+        type: 'folder',
+        children: []
+      });
+    });
+
+    // Build folder hierarchy
+    metadata.folders.forEach(folder => {
+      const folderNode = folderMap.get(folder.id);
+      const parent = folderMap.get(folder.parentId);
+
+      if (parent) {
+        parent.children.push(folderNode);
+      }
+    });
+
+    // Add files to appropriate folders
+    metadata.files.forEach(file => {
+      const parent = folderMap.get(file.folderId);
+
+      if (parent) {
+        parent.children.push({
+          ...file,
+          type: 'file'
+        });
+      }
+    });
+
+    return tree;
   }
 
   /**

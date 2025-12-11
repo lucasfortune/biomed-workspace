@@ -304,7 +304,9 @@ class FileSelector {
    */
   async uploadFileToWorkspace(file) {
     const formData = new FormData();
-    formData.append('file', file);
+    // Use type as field name so multer routes to correct directory
+    // This ensures annotations go to /annotations, raw_images to /raw, etc.
+    formData.append(this.type, file);
     formData.append('category', this.type); // Auto-categorize
 
     const response = await fetch('/api/workspace/upload', {

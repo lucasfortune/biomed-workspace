@@ -286,27 +286,38 @@ def calculate_inference_metrics(segmented_stack):
 
 def save_segmentation_results(segmented_stack, output_path, input_path, model_config):
     """Save segmentation results and metadata"""
+
+    # Create directory structure: /segmented/ and /visualizations/
+    base_dir = os.path.dirname(output_path)
+    segmented_dir = os.path.join(base_dir, 'segmented')
+    visualizations_dir = os.path.join(base_dir, 'visualizations')
+
+    os.makedirs(segmented_dir, exist_ok=True)
+    os.makedirs(visualizations_dir, exist_ok=True)
+
+    # Update paths to use new subdirectories
+    segmented_output_path = os.path.join(segmented_dir, 'inference_result.tif')
+    metadata_path = os.path.join(segmented_dir, 'inference_result_metadata.json')
+
     # Save the segmented TIFF stack
-    tifffile.imwrite(output_path, segmented_stack)
-    print(f"Segmentation saved to: {output_path}", flush=True)
-    
-    # Save metadata
+    tifffile.imwrite(segmented_output_path, segmented_stack)
+    print(f"Segmentation saved to: {segmented_output_path}", flush=True)
+
+    # Save metadata (will be updated with overlay path if successful)
     metadata = {
         'input_file': str(input_path),
-        'output_file': str(output_path),
+        'output_file': str(segmented_output_path),
         'input_shape': list(segmented_stack.shape),
         'model_config': model_config,
         'metrics': calculate_inference_metrics(segmented_stack)
     }
-    
-    metadata_path = output_path.replace('.tif', '_metadata.json')
 
     # Create downsampled version of original data for web visualization
     try:
         print("Creating downsampled original data for web visualization...", flush=True)
-        
-        # Define output path for downsampled original data
-        downsampled_path = output_path.replace('.tif', '_original_web.tif')
+
+        # Define output path for downsampled original data (renamed file)
+        downsampled_path = os.path.join(visualizations_dir, 'original_data_overlay.tif')
         
         # Call the downsampling script
         import subprocess
@@ -331,6 +342,12 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
                     import json
                     downsample_info = json.loads(line[18:])
                     if downsample_info['success']:
+                        # Store with new key name (and keep old for backward compatibility)
+                        metadata['original_data_overlay'] = {
+                            'path': downsampled_path,
+                            'info': downsample_info
+                        }
+                        # Keep old key for backward compatibility
                         metadata['original_data_web'] = {
                             'path': downsampled_path,
                             'info': downsample_info
@@ -523,36 +540,45 @@ def main():
         # Save results
         print("Saving results...", flush=True)
         metadata = save_segmentation_results(segmented_stack, args.output, args.input, model_config)
-        
+
+        # NEW: Calculate actual paths based on new directory structure
+        base_dir = os.path.dirname(args.output)
+        segmented_output_path = os.path.join(base_dir, 'segmented', 'inference_result.tif')
+        metadata_path = os.path.join(base_dir, 'segmented', 'inference_result_metadata.json')
+        visualizations_dir = os.path.join(base_dir, 'visualizations')
+        overlay_path = os.path.join(visualizations_dir, 'original_data_overlay.tif')
+
         try:
-            # Create 3D visualization data
+            # Create 3D visualization data in visualizations directory
             print("Creating 3D visualization data...", flush=True)
-            viz_path = create_3d_visualization_data(segmented_stack, output_dir)
-            
-            # Prepare results
+            viz_path = create_3d_visualization_data(segmented_stack, visualizations_dir)
+
+            # Prepare results with all file paths
             result = {
                 'success': True,
-                'output_path': args.output,
-                'metadata_path': args.output.replace('.tif', '_metadata.json'),
+                'output_path': segmented_output_path,
+                'metadata_path': metadata_path,
                 'visualization_path': viz_path,
+                'original_data_overlay_path': overlay_path if os.path.exists(overlay_path) else None,
                 'metrics': metadata['metrics']
             }
-            
+
             print("Inference completed successfully!", flush=True)
             print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
-            
+
         except Exception as viz_error:
             print(f"Error creating visualization data: {viz_error}", flush=True)
             # Still report success for the main inference, just without visualization
             result = {
                 'success': True,
-                'output_path': args.output,
-                'metadata_path': args.output.replace('.tif', '_metadata.json'),
+                'output_path': segmented_output_path,
+                'metadata_path': metadata_path,
                 'visualization_path': None,
+                'original_data_overlay_path': overlay_path if os.path.exists(overlay_path) else None,
                 'visualization_error': str(viz_error),
                 'metrics': metadata['metrics']
             }
-            
+
             print("Inference completed with visualization error!", flush=True)
             print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
         

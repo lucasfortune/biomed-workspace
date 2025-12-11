@@ -62,18 +62,20 @@ async function runInference() {
         if (usingImportedModel) {
             console.log('Running inference with imported model');
             // For imported model, send minimal request - server will handle model path
+            // Note: Server generates the actual output_path, this is just a hint
             inferenceRequestBody = {
                 data_path: uploadResult.file_path,
-                output_path: `results/imported_model_${Date.now()}/inference_result.tif`,
+                output_path: `results/segmentation/imported_model_${Date.now()}/segmented/inference_result.tif`,
                 // Don't send training_id for imported models
             };
         } else {
             console.log('Running inference with trained model');
             // For trained model, use training ID from module
+            // Note: Server generates the actual output_path, this is just a hint
             inferenceRequestBody = {
                 model_path: `models/${trainingId}/best_model.pth`,
                 data_path: uploadResult.file_path,
-                output_path: `results/${trainingId}/inference_result.tif`,
+                output_path: `results/segmentation/${trainingId}/segmented/inference_result.tif`,
                 training_id: trainingId
             };
         }
@@ -249,16 +251,17 @@ function onInferenceComplete(data) {
             // Handle both training and imported model cases
             const usingImportedModel = window.importedModelInfo;
             const trainingId = window.segmentationModule?.currentTrainingId;
-            const resultPath = usingImportedModel
-                ? `/results/imported_model_${Date.now()}/inference_result.tif`
-                : `/results/${trainingId}/inference_result.tif`;
+            const baseResultPath = usingImportedModel
+                ? `/results/segmentation/imported_model_${Date.now()}`
+                : `/results/segmentation/${trainingId}`;
 
-            // Create a basic result if not provided
+            // Create a basic result if not provided (using new directory structure)
             window.inferenceResult = {
                 success: true,
-                output_path: resultPath,
-                metadata_path: resultPath.replace('.tif', '_metadata.json'),
-                visualization_path: resultPath.replace('.tif', '_visualization.json').replace('inference_result', 'visualization_data')
+                output_path: `${baseResultPath}/segmented/inference_result.tif`,
+                metadata_path: `${baseResultPath}/segmented/inference_result_metadata.json`,
+                visualization_path: `${baseResultPath}/visualizations/visualization_data.json`,
+                original_data_overlay_path: `${baseResultPath}/visualizations/original_data_overlay.tif`
             };
         }
         

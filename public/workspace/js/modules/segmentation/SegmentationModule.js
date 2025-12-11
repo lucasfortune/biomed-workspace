@@ -605,6 +605,12 @@ class SegmentationModule {
     }
     this.pendingFiles[type] = file;
 
+    // Store the uploaded file info (contains path from server)
+    if (!this.uploadedFiles) {
+      this.uploadedFiles = {};
+    }
+    this.uploadedFiles[type] = uploadedFileInfo;
+
     // Log pending files state for debugging
     console.log(`[SegmentationModule] Pending files state:`, {
       keys: Object.keys(this.pendingFiles),
@@ -692,9 +698,12 @@ class SegmentationModule {
     try {
       this.state.update('ui.loading', true);
 
+      // Files are already uploaded to workspace, just validate them
+      // Don't send file objects again (would cause multer to save duplicates)
       const formData = new FormData();
-      formData.append('raw_images', this.pendingFiles.raw_images);
-      formData.append('annotations', this.pendingFiles.annotations);
+      formData.append('skipUpload', 'true'); // Signal to skip multer processing
+      formData.append('raw_images_path', this.uploadedFiles.raw_images?.path || '');
+      formData.append('annotations_path', this.uploadedFiles.annotations?.path || '');
 
       const response = await fetch('/upload-data', {
         method: 'POST',
@@ -804,8 +813,11 @@ class SegmentationModule {
     try {
       this.state.update('ui.loading', true);
 
+      // File is already uploaded to workspace, just validate it
+      // Don't send file object again (would cause multer to save duplicate)
       const formData = new FormData();
-      formData.append('inference_data', file);
+      formData.append('skipUpload', 'true');
+      formData.append('inference_data_path', this.uploadedFiles.inference_data?.path || '');
 
       const response = await fetch('/upload-inference', {
         method: 'POST',
@@ -816,7 +828,7 @@ class SegmentationModule {
 
       if (result.success) {
         this.uploadedFiles.inference_data = {
-          path: result.file_path,
+          path: result.inference_data_path,
           name: file?.name || 'Inference Data'
         };
 

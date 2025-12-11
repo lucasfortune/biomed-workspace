@@ -287,18 +287,22 @@ def send_progress(epoch, total_epochs, train_loss, train_dice, val_loss, val_dic
 
 def prepare_data_from_tiff_stacks(raw_images_path, annotations_path, output_dir, config):
     """Extract individual images from TIFF stacks and organize them"""
-    
+
     # Read TIFF stacks
     raw_stack = tifffile.imread(raw_images_path)
     annotation_stack = tifffile.imread(annotations_path)
-    
-    # Create directories
-    train_imgs_dir = os.path.join(output_dir, 'train_images')
-    train_masks_dir = os.path.join(output_dir, 'train_masks')
-    val_imgs_dir = os.path.join(output_dir, 'val_images')
-    val_masks_dir = os.path.join(output_dir, 'val_masks')
-    test_imgs_dir = os.path.join(output_dir, 'test_images')
-    test_masks_dir = os.path.join(output_dir, 'test_masks')
+
+    # Use /tmp directory for temporary split images (not in output_dir)
+    import tempfile
+    temp_dir = tempfile.mkdtemp(prefix='training_data_')
+
+    # Create directories in temp location
+    train_imgs_dir = os.path.join(temp_dir, 'train_images')
+    train_masks_dir = os.path.join(temp_dir, 'train_masks')
+    val_imgs_dir = os.path.join(temp_dir, 'val_images')
+    val_masks_dir = os.path.join(temp_dir, 'val_masks')
+    test_imgs_dir = os.path.join(temp_dir, 'test_images')
+    test_masks_dir = os.path.join(temp_dir, 'test_masks')
     
     for dir_path in [train_imgs_dir, train_masks_dir, val_imgs_dir, val_masks_dir, test_imgs_dir, test_masks_dir]:
         os.makedirs(dir_path, exist_ok=True)
@@ -329,7 +333,8 @@ def prepare_data_from_tiff_stacks(raw_images_path, annotations_path, output_dir,
         'val_imgs_dir': val_imgs_dir,
         'val_masks_dir': val_masks_dir,
         'test_imgs_dir': test_imgs_dir,
-        'test_masks_dir': test_masks_dir
+        'test_masks_dir': test_masks_dir,
+        'temp_dir': temp_dir  # Return temp dir for cleanup
     }
 
 def train_model_with_progress(model, train_loader, val_loader, test_loader, 
@@ -562,9 +567,26 @@ def main():
         )
 
         print("Training completed successfully!", flush=True)
-        
+
+        # Cleanup temporary directory
+        print("Cleaning up temporary files...", flush=True)
+        import shutil
+        if 'temp_dir' in data_dirs:
+            try:
+                shutil.rmtree(data_dirs['temp_dir'])
+                print(f"Removed temporary directory: {data_dirs['temp_dir']}", flush=True)
+            except Exception as cleanup_error:
+                print(f"Warning: Could not remove temporary directory: {cleanup_error}", flush=True)
+
     except Exception as e:
         print(f"Error during training: {str(e)}", file=sys.stderr, flush=True)
+        # Try to cleanup temp directory even on error
+        try:
+            import shutil
+            if 'data_dirs' in locals() and 'temp_dir' in data_dirs:
+                shutil.rmtree(data_dirs['temp_dir'])
+        except:
+            pass
         sys.exit(1)
 
 if __name__ == "__main__":

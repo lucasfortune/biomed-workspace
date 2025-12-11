@@ -25,6 +25,66 @@ const PYTHON_PATH = path.join(__dirname, 'venv', 'bin', 'python');
 // Initialize WorkspaceManager
 const workspaceManager = new WorkspaceManager();
 
+/**
+ * Helper function to track module outputs in file browser
+ * @param {string} sessionId - Session ID
+ * @param {string} filePath - Absolute path to the output file
+ * @param {string} category - File category (models, segmentations, denoised, etc.)
+ * @param {object} metadata - Optional metadata about the file
+ * @returns {Promise<object>} File entry object
+ */
+async function trackModuleOutput(sessionId, filePath, category, metadata = {}) {
+  try {
+    const fileName = path.basename(filePath);
+    const fileSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
+
+    // Get relative path from workspace root
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+    const relativePath = path.relative(workspacePath, filePath);
+
+    const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
+      name: fileName,
+      path: relativePath,
+      category: category,
+      size: fileSize,
+      folderId: null
+    });
+
+    console.log(`Tracked ${category} output:`, fileName);
+
+    // Generate thumbnail for TIFF files (async, don't wait)
+    const ext = path.extname(fileName).toLowerCase();
+    if (ext === '.tif' || ext === '.tiff') {
+      const { spawn } = require('child_process');
+      const thumbnailsDir = path.join(workspacePath, '.thumbnails');
+      if (!fs.existsSync(thumbnailsDir)) {
+        fs.mkdirSync(thumbnailsDir, { recursive: true });
+      }
+
+      const thumbnailPath = path.join(thumbnailsDir, `${fileEntry.id}.jpg`);
+
+      spawn('python', [
+        'python/generate_thumbnail.py',
+        filePath,
+        thumbnailPath
+      ]).on('close', async (code) => {
+        if (code === 0) {
+          await workspaceManager.setThumbnailPath(
+            sessionId,
+            fileEntry.id,
+            `.thumbnails/${fileEntry.id}.jpg`
+          );
+        }
+      });
+    }
+
+    return fileEntry;
+  } catch (error) {
+    console.error('Error tracking module output:', error);
+    return null;
+  }
+}
+
 // Session configuration with file-based storage for persistence
 app.use(session({
   store: new FileStore({
@@ -76,13 +136,40 @@ app.use(express.static('public'));
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const sessionId = req.session.id;
-    const uploadDir = path.join('uploads', sessionId);
-    
-    // Create session-specific directory
+
+    // NEW: Use workspace directory structure
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+    // Initialize workspace if it doesn't exist
+    if (!fs.existsSync(workspacePath)) {
+      console.log('[Multer] Initializing workspace for session:', sessionId);
+      workspaceManager.initializeWorkspace(sessionId);
+    }
+
+    // Determine subdirectory based on field name
+    let subdir = 'uploads/raw'; // Default
+
+    if (file.fieldname === 'raw_images') {
+      subdir = 'uploads/raw';
+    } else if (file.fieldname === 'annotations') {
+      subdir = 'uploads/annotations';
+    } else if (file.fieldname === 'inference_data') {
+      subdir = 'uploads/inference_data';
+    } else if (file.fieldname === 'file') {
+      // For workspace upload endpoint, use category from body if available
+      subdir = 'uploads/raw'; // Will be moved if needed
+    }
+
+    console.log('[Multer] Field name:', file.fieldname, '→ Directory:', subdir);
+
+    const uploadDir = path.join(workspacePath, subdir);
+
+    // Create directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-    
+
+    console.log('[Multer] Upload destination:', uploadDir);
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
@@ -445,23 +532,44 @@ app.post('/api/workspace/init', requireAuth, (req, res) => {
 /**
  * Get workspace status and file tree
  */
-app.get('/api/workspace/status', requireAuth, (req, res) => {
+app.get('/api/workspace/status', requireAuth, async (req, res) => {
   try {
     const sessionId = req.session.id;
     const workspaceInfo = workspaceManager.getWorkspaceInfo(sessionId);
+    const metadata = workspaceManager.loadMetadata(sessionId);
 
     res.json({
       success: true,
-      workspace: workspaceInfo
+      workspace: {
+        sessionId: sessionId,
+        path: workspaceManager.getWorkspacePath(sessionId),
+        initialized: true,
+        files: metadata.files || [],
+        folders: metadata.folders || [],
+        fileTree: workspaceInfo.fileTree,
+        createdAt: metadata.createdAt,
+        lastAccessed: metadata.lastAccessed,
+        version: metadata.version
+      }
     });
   } catch (error) {
     // If workspace doesn't exist, initialize it
     if (error.message.includes('not found')) {
       const workspaceInfo = workspaceManager.initializeWorkspace(req.session.id);
+      const metadata = workspaceManager.loadMetadata(req.session.id);
       return res.json({
         success: true,
-        workspace: workspaceInfo,
-        initialized: true
+        workspace: {
+          sessionId: req.session.id,
+          path: workspaceManager.getWorkspacePath(req.session.id),
+          initialized: true,
+          files: metadata.files || [],
+          folders: metadata.folders || [],
+          fileTree: workspaceInfo.fileTree,
+          createdAt: metadata.createdAt,
+          lastAccessed: metadata.lastAccessed,
+          version: metadata.version
+        }
       });
     }
 
@@ -496,8 +604,9 @@ app.get('/api/workspace/files', requireAuth, (req, res) => {
 
 /**
  * Upload file to workspace
+ * Accepts any field name (raw_images, annotations, inference_data, etc.)
  */
-app.post('/api/workspace/upload', requireAuth, upload.single('file'), async (req, res) => {
+app.post('/api/workspace/upload', requireAuth, upload.any(), async (req, res) => {
   try {
     const sessionId = req.session.id;
     const category = req.body.category || 'uploads'; // raw_images, annotations, inference_data
@@ -512,31 +621,68 @@ app.post('/api/workspace/upload', requireAuth, upload.single('file'), async (req
       });
     }
 
-    if (!req.file) {
+    // upload.any() puts files in req.files array
+    if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
         error: 'No file uploaded'
       });
     }
 
-    // File info
-    const fileInfo = {
-      name: req.file.originalname,
-      path: req.file.path,
-      size: req.file.size,
+    // Get first (and should be only) file
+    const uploadedFile = req.files[0];
+
+    // Determine relative path within workspace
+    const relativePath = path.relative(
+      workspaceManager.getWorkspacePath(sessionId),
+      uploadedFile.path
+    );
+
+    // Add file to metadata
+    const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
+      name: uploadedFile.originalname,
+      path: relativePath,
       category: category,
-      uploadDate: new Date().toISOString()
-    };
+      size: uploadedFile.size,
+      folderId: req.body.folderId || null
+    });
+
+    // Trigger thumbnail generation for TIFF files (async, don't wait)
+    const ext = path.extname(uploadedFile.originalname).toLowerCase();
+    if (ext === '.tif' || ext === '.tiff') {
+      const { spawn } = require('child_process');
+      const thumbnailsDir = path.join(workspaceManager.getWorkspacePath(sessionId), '.thumbnails');
+      if (!fs.existsSync(thumbnailsDir)) {
+        fs.mkdirSync(thumbnailsDir, { recursive: true });
+      }
+
+      const thumbnailPath = path.join(thumbnailsDir, `${fileEntry.id}.jpg`);
+      const filePath = uploadedFile.path;
+
+      spawn('python', [
+        'python/generate_thumbnail.py',
+        filePath,
+        thumbnailPath
+      ]).on('close', async (code) => {
+        if (code === 0) {
+          await workspaceManager.setThumbnailPath(
+            sessionId,
+            fileEntry.id,
+            `.thumbnails/${fileEntry.id}.jpg`
+          );
+        }
+      });
+    }
 
     activityLogger.logActivity(req.session.user.username, 'file_upload', {
-      filename: req.file.originalname,
+      filename: uploadedFile.originalname,
       category: category,
-      size: req.file.size
+      size: uploadedFile.size
     });
 
     res.json({
       success: true,
-      file: fileInfo,
+      file: fileEntry,
       message: 'File uploaded successfully'
     });
 
@@ -571,6 +717,413 @@ app.get('/api/workspace/stats', requireAuth, (req, res) => {
 });
 
 // ==============================================================================
+// FILE OPERATIONS ENDPOINTS
+// ==============================================================================
+
+/**
+ * Get file info by ID
+ */
+app.get('/api/workspace/file/:fileId', requireAuth, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const sessionId = req.session.id;
+
+    const file = await workspaceManager.getFile(sessionId, fileId);
+
+    res.json({ success: true, file });
+  } catch (error) {
+    console.error('Get file error:', error);
+    res.status(404).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Delete file by ID
+ */
+app.delete('/api/workspace/file/:fileId', requireAuth, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const sessionId = req.session.id;
+
+    const result = await workspaceManager.deleteFile(sessionId, fileId);
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'file_deleted',
+      { fileId }
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Delete file error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Rename file
+ */
+app.patch('/api/workspace/file/:fileId/rename', requireAuth, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { newName } = req.body;
+    const sessionId = req.session.id;
+
+    if (!newName) {
+      return res.status(400).json({ success: false, error: 'New name required' });
+    }
+
+    const file = await workspaceManager.renameFile(sessionId, fileId, newName);
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'file_renamed',
+      { fileId, newName }
+    );
+
+    res.json({ success: true, file });
+  } catch (error) {
+    console.error('Rename file error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Move file to folder
+ */
+app.patch('/api/workspace/file/:fileId/move', requireAuth, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { targetFolderId } = req.body;
+    const sessionId = req.session.id;
+
+    const file = await workspaceManager.moveFile(sessionId, fileId, targetFolderId);
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'file_moved',
+      { fileId, targetFolderId }
+    );
+
+    res.json({ success: true, file });
+  } catch (error) {
+    console.error('Move file error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Download file
+ */
+app.get('/api/workspace/file/:fileId/download', requireAuth, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const sessionId = req.session.id;
+
+    const file = await workspaceManager.getFile(sessionId, fileId);
+    const filePath = path.join(workspaceManager.getWorkspacePath(sessionId), file.path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+
+    res.download(filePath, file.name);
+  } catch (error) {
+    console.error('Download file error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Batch delete files
+ */
+app.post('/api/workspace/files/batch-delete', requireAuth, async (req, res) => {
+  try {
+    const { fileIds } = req.body;
+    const sessionId = req.session.id;
+
+    if (!Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'File IDs array required' });
+    }
+
+    const result = await workspaceManager.deleteFiles(sessionId, fileIds);
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'batch_delete',
+      { count: result.deletedCount }
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Batch delete error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Batch download files as zip
+ */
+app.post('/api/workspace/files/batch-download', requireAuth, async (req, res) => {
+  try {
+    const { fileIds } = req.body;
+    const sessionId = req.session.id;
+
+    if (!Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'File IDs array required' });
+    }
+
+    const archiver = require('archiver');
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    // Set headers
+    res.attachment('workspace_files.zip');
+    archive.pipe(res);
+
+    // Get file metadata
+    const metadata = await workspaceManager.loadMetadata(sessionId);
+    const files = metadata.files.filter(f => fileIds.includes(f.id));
+
+    // Add files to archive
+    for (const file of files) {
+      const filePath = path.join(workspaceManager.getWorkspacePath(sessionId), file.path);
+      if (fs.existsSync(filePath)) {
+        archive.file(filePath, { name: file.name });
+      }
+    }
+
+    await archive.finalize();
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'batch_download',
+      { count: files.length }
+    );
+
+  } catch (error) {
+    console.error('Batch download error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Search files by name
+ */
+app.get('/api/workspace/files/search', requireAuth, async (req, res) => {
+  try {
+    const { q } = req.query;
+    const sessionId = req.session.id;
+
+    const files = await workspaceManager.searchFiles(sessionId, q);
+
+    res.json({ success: true, files });
+  } catch (error) {
+    console.error('Search files error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Filter files by category
+ */
+app.get('/api/workspace/files/category/:category', requireAuth, async (req, res) => {
+  try {
+    const { category } = req.params;
+    const sessionId = req.session.id;
+
+    const files = await workspaceManager.getFilesByCategory(sessionId, category);
+
+    res.json({ success: true, files });
+  } catch (error) {
+    console.error('Filter files error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ==============================================================================
+// FOLDER OPERATIONS ENDPOINTS
+// ==============================================================================
+
+/**
+ * Get all folders
+ */
+app.get('/api/workspace/folders', requireAuth, async (req, res) => {
+  try {
+    const sessionId = req.session.id;
+
+    const folders = await workspaceManager.getFolders(sessionId);
+
+    res.json({ success: true, folders });
+  } catch (error) {
+    console.error('Get folders error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Create folder
+ */
+app.post('/api/workspace/folders', requireAuth, async (req, res) => {
+  try {
+    const { name, parentId, color } = req.body;
+    const sessionId = req.session.id;
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Folder name required' });
+    }
+
+    const folder = await workspaceManager.createFolder(
+      sessionId,
+      name,
+      parentId || null,
+      color || '#4A90E2'
+    );
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'folder_created',
+      { folderId: folder.id, name }
+    );
+
+    res.json({ success: true, folder });
+  } catch (error) {
+    console.error('Create folder error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Rename folder
+ */
+app.patch('/api/workspace/folders/:folderId', requireAuth, async (req, res) => {
+  try {
+    const { folderId } = req.params;
+    const { name } = req.body;
+    const sessionId = req.session.id;
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Folder name required' });
+    }
+
+    const folder = await workspaceManager.renameFolder(sessionId, folderId, name);
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'folder_renamed',
+      { folderId, name }
+    );
+
+    res.json({ success: true, folder });
+  } catch (error) {
+    console.error('Rename folder error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Delete folder
+ */
+app.delete('/api/workspace/folders/:folderId', requireAuth, async (req, res) => {
+  try {
+    const { folderId } = req.params;
+    const sessionId = req.session.id;
+
+    const result = await workspaceManager.deleteFolder(sessionId, folderId);
+
+    activityLogger.logActivity(
+      req.session.user.username,
+      'folder_deleted',
+      { folderId }
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Delete folder error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ==============================================================================
+// THUMBNAIL ENDPOINT
+// ==============================================================================
+
+/**
+ * Get or generate thumbnail for a file
+ */
+app.get('/api/workspace/thumbnail/:fileId', requireAuth, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const sessionId = req.session.id;
+
+    const file = await workspaceManager.getFile(sessionId, fileId);
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+    // Check if thumbnail already exists
+    if (file.thumbnailPath) {
+      const thumbPath = path.join(workspacePath, file.thumbnailPath);
+      if (fs.existsSync(thumbPath)) {
+        return res.sendFile(path.resolve(thumbPath));
+      }
+    }
+
+    // Generate thumbnail if TIFF file
+    const ext = path.extname(file.name).toLowerCase();
+    if (ext !== '.tif' && ext !== '.tiff') {
+      return res.status(400).json({
+        success: false,
+        error: 'Thumbnails only available for TIFF files'
+      });
+    }
+
+    // Create .thumbnails directory
+    const thumbnailsDir = path.join(workspacePath, '.thumbnails');
+    if (!fs.existsSync(thumbnailsDir)) {
+      fs.mkdirSync(thumbnailsDir, { recursive: true });
+    }
+
+    const thumbnailFilename = `${fileId}.jpg`;
+    const thumbnailPath = path.join(thumbnailsDir, thumbnailFilename);
+    const filePath = path.join(workspacePath, file.path);
+
+    // Spawn Python script
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python', [
+      'python/generate_thumbnail.py',
+      filePath,
+      thumbnailPath
+    ]);
+
+    let output = '';
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.on('close', async (code) => {
+      if (code === 0 && output.includes('SUCCESS:')) {
+        // Update metadata with thumbnail path
+        await workspaceManager.setThumbnailPath(
+          sessionId,
+          fileId,
+          `.thumbnails/${thumbnailFilename}`
+        );
+
+        res.sendFile(path.resolve(thumbnailPath));
+      } else {
+        console.error('Thumbnail generation failed:', output);
+        res.status(500).json({
+          success: false,
+          error: 'Thumbnail generation failed'
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error('Thumbnail error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ==============================================================================
 // MAIN ROUTES
 // ==============================================================================
 
@@ -589,19 +1142,22 @@ app.get('/workspace', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'workspace', 'index.html'));
 });
 
-// Step 1: Upload and validate TIFF stacks (MODIFIED to support test data)
+// Step 1: Upload and validate TIFF stacks (MODIFIED to support test data + pre-uploaded files)
 app.post('/upload-data', upload.fields([
     { name: 'raw_images', maxCount: 1 },
     { name: 'annotations', maxCount: 1 }
 ]), async (req, res) => {
     try {
         let rawFile, annotationFile;
-        
-        // NEW: Check if using test data or custom upload
+        const sessionId = req.session.id;
+        const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+        // NEW: Check if files are already uploaded (skipUpload flag)
+        const skipUpload = req.body.skipUpload === 'true';
         const isTestData = req.body.isTestData === 'true';
-        
-        // If NOT test data, require approved status
-        if (!isTestData && req.session.user.status !== 'active') {
+
+        // If NOT test data and NOT already uploaded, require approved status
+        if (!isTestData && !skipUpload && req.session.user.status !== 'active') {
             return res.status(403).json({
                 error: 'Custom data upload requires account approval',
                 status: req.session.user.status,
@@ -609,28 +1165,92 @@ app.post('/upload-data', upload.fields([
             });
         }
 
-        // Check if this is a test data request
-        if (req.body.isTestData === 'true') {
-            console.log('Processing test data request...');
-            
-            const sessionId = req.session.id;
-            const uploadDir = path.join('uploads', sessionId);
-            
-            // Create session directory if it doesn't exist
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
+        // Case 1: Files already uploaded via FileSelector (custom upload flow)
+        if (skipUpload) {
+            console.log('Validating pre-uploaded files...');
+
+            const rawImagesPath = req.body.raw_images_path;
+            const annotationsPath = req.body.annotations_path;
+
+            if (!rawImagesPath || !annotationsPath) {
+                return res.status(400).json({
+                    error: 'File paths are required when skipUpload is true'
+                });
             }
-            
+
+            // Convert relative paths to absolute paths
+            const rawFullPath = path.join(workspacePath, rawImagesPath);
+            const annFullPath = path.join(workspacePath, annotationsPath);
+
+            // Verify files exist
+            if (!fs.existsSync(rawFullPath)) {
+                return res.status(400).json({
+                    error: 'Raw images file not found',
+                    path: rawImagesPath
+                });
+            }
+
+            if (!fs.existsSync(annFullPath)) {
+                return res.status(400).json({
+                    error: 'Annotations file not found',
+                    path: annotationsPath
+                });
+            }
+
+            // Create file objects for validation
+            rawFile = {
+                path: rawFullPath,
+                filename: path.basename(rawFullPath),
+                originalname: path.basename(rawFullPath),
+                size: fs.statSync(rawFullPath).size,
+                mimetype: 'image/tiff'
+            };
+
+            annotationFile = {
+                path: annFullPath,
+                filename: path.basename(annFullPath),
+                originalname: path.basename(annFullPath),
+                size: fs.statSync(annFullPath).size,
+                mimetype: 'image/tiff'
+            };
+
+            console.log('Using pre-uploaded files:', {
+                raw: rawImagesPath,
+                annotations: annotationsPath
+            });
+        }
+        // Case 2: Test data request
+        else if (isTestData) {
+            console.log('Processing test data request...');
+
+            // Use workspace directory structure
+            const rawUploadDir = path.join(workspacePath, 'uploads', 'raw');
+            const annUploadDir = path.join(workspacePath, 'uploads', 'annotations');
+
+            // Initialize workspace if it doesn't exist
+            if (!fs.existsSync(workspacePath)) {
+                console.log('Initializing workspace for session:', sessionId);
+                workspaceManager.initializeWorkspace(sessionId);
+            }
+
+            // Create upload directories if they don't exist
+            if (!fs.existsSync(rawUploadDir)) {
+                fs.mkdirSync(rawUploadDir, { recursive: true });
+            }
+            if (!fs.existsSync(annUploadDir)) {
+                fs.mkdirSync(annUploadDir, { recursive: true });
+            }
+
             // Define test file paths
             const testFiles = {
                 raw_images: 'trypB_testData_training.tif',
                 annotations: 'trypB_testData_annotations.tif'
             };
-            
+
             // Copy test files and create mock file objects
             const rawSourcePath = path.join('test_data', testFiles.raw_images);
             const annotationSourcePath = path.join('test_data', testFiles.annotations);
-            
+
             // Check if test files exist
             if (!fs.existsSync(rawSourcePath)) {
                 return res.status(400).json({
@@ -638,21 +1258,21 @@ app.post('/upload-data', upload.fields([
                     details: `Expected file: test_data/${testFiles.raw_images}`
                 });
             }
-            
+
             if (!fs.existsSync(annotationSourcePath)) {
                 return res.status(400).json({
-                    error: 'Test annotation images not found', 
+                    error: 'Test annotation images not found',
                     details: `Expected file: test_data/${testFiles.annotations}`
                 });
             }
-            
-            // Copy files to session directory
-            const rawDestPath = path.join(uploadDir, testFiles.raw_images);
-            const annotationDestPath = path.join(uploadDir, testFiles.annotations);
-            
+
+            // Copy files to appropriate directories
+            const rawDestPath = path.join(rawUploadDir, testFiles.raw_images);
+            const annotationDestPath = path.join(annUploadDir, testFiles.annotations);
+
             fs.copyFileSync(rawSourcePath, rawDestPath);
             fs.copyFileSync(annotationSourcePath, annotationDestPath);
-            
+
             // Create mock file objects that match the expected structure
             rawFile = {
                 path: rawDestPath,
@@ -661,7 +1281,7 @@ app.post('/upload-data', upload.fields([
                 size: fs.statSync(rawDestPath).size,
                 mimetype: 'image/tiff'
             };
-            
+
             annotationFile = {
                 path: annotationDestPath,
                 filename: testFiles.annotations,
@@ -669,17 +1289,19 @@ app.post('/upload-data', upload.fields([
                 size: fs.statSync(annotationDestPath).size,
                 mimetype: 'image/tiff'
             };
-            
+
             console.log('Test files copied successfully');
-            
-        } else {
+
+        }
+        // Case 3: Regular file upload (legacy, should not happen in workspace version)
+        else {
             // Handle regular uploaded files
             if (!req.files.raw_images || !req.files.annotations) {
                 return res.status(400).json({
                     error: 'Both raw images and annotations are required'
                 });
             }
-            
+
             rawFile = req.files.raw_images[0];
             annotationFile = req.files.annotations[0];
         }
@@ -705,23 +1327,65 @@ app.post('/upload-data', upload.fields([
             isTestData: req.body.isTestData === 'true'
         };
 
-        // NEW: Log the upload
-        activityLogger.logFileUpload(
-            req.session.user.username,
-            req.body.isTestData === 'true' ? 'test_data' : 'custom_data',
-            rawFile.filename,
-            rawFile.size
-        );
-        
+        // NEW: Track files in workspace metadata
+        // BUT: Skip if files were already uploaded (skipUpload=true means already tracked)
+        let rawFileEntry, annFileEntry;
+
+        if (!skipUpload) {
+            // Add raw images file to metadata
+            const rawRelPath = path.relative(workspacePath, rawFile.path);
+            rawFileEntry = workspaceManager.addFileToMetadata(sessionId, {
+                name: rawFile.filename || rawFile.originalname,
+                path: rawRelPath,
+                category: 'raw_images',
+                size: rawFile.size,
+                folderId: null
+            });
+
+            // Add annotations file to metadata
+            const annRelPath = path.relative(workspacePath, annotationFile.path);
+            annFileEntry = workspaceManager.addFileToMetadata(sessionId, {
+                name: annotationFile.filename || annotationFile.originalname,
+                path: annRelPath,
+                category: 'annotations',
+                size: annotationFile.size,
+                folderId: null
+            });
+
+            console.log('Files tracked in metadata:', {
+                raw: rawFileEntry.id,
+                annotations: annFileEntry.id
+            });
+        } else {
+            console.log('Files already tracked in metadata, skipping duplicate tracking');
+            // For skipUpload case, just return the paths
+            rawFileEntry = { path: path.relative(workspacePath, rawFile.path) };
+            annFileEntry = { path: path.relative(workspacePath, annotationFile.path) };
+        }
+
+        // NEW: Log the upload (only for new uploads, not validation-only)
+        if (!skipUpload) {
+            activityLogger.logFileUpload(
+                req.session.user.username,
+                req.body.isTestData === 'true' ? 'test_data' : 'custom_data',
+                rawFile.filename || rawFile.originalname,
+                rawFile.size
+            );
+        }
+
         console.log('Files processed and validated successfully');
-        
+
         res.json({
             success: true,
-            message: req.body.isTestData === 'true' 
-                ? 'Test dataset loaded and validated successfully'
-                : 'Files uploaded and validated successfully',
+            message: skipUpload
+                ? 'Files validated successfully'
+                : (req.body.isTestData === 'true'
+                    ? 'Test dataset loaded and validated successfully'
+                    : 'Files uploaded and validated successfully'),
             validation: validationResult,
-            isTestData: req.body.isTestData === 'true'
+            isTestData: req.body.isTestData === 'true',
+            raw_images_path: rawFileEntry.path,
+            annotations_path: annFileEntry.path
         });
         
     } catch (error) {
@@ -799,15 +1463,16 @@ app.post('/start-training', requireAuth, (req, res) => {
     }
     
     // Prepare training parameters
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
     const trainingParams = {
       session_id: sessionId,
       training_id: trainingId,
       raw_images: req.session.uploadedFiles.raw_images,
       annotations: req.session.uploadedFiles.annotations,
       config: req.session.trainingConfig,
-      output_dir: path.join('models', sessionId, trainingId)
+      output_dir: path.join(workspacePath, 'models', 'segmentation', trainingId)
     };
-    
+
     // Create output directory
     if (!fs.existsSync(trainingParams.output_dir)) {
       fs.mkdirSync(trainingParams.output_dir, { recursive: true });
@@ -866,35 +1531,78 @@ app.get('/training-status/:trainingId', requireAuth, (req, res) => {
 app.post('/upload-inference', requireAuth, upload.single('inference_data'), async (req, res) => {
     try {
         let inferenceFile;
-        
-        // NEW: Check if using test data or custom upload
+        const sessionId = req.session.id;
+        const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+        // NEW: Check if file is already uploaded (skipUpload flag)
+        const skipUpload = req.body.skipUpload === 'true';
         const isTestData = req.body.isTestData === 'true';
-        
-        // If NOT test data, require approved status
-        if (!isTestData && req.session.user.status !== 'active') {
+
+        // If NOT test data and NOT already uploaded, require approved status
+        if (!isTestData && !skipUpload && req.session.user.status !== 'active') {
             return res.status(403).json({
                 error: 'Custom inference data upload requires account approval',
                 status: req.session.user.status,
                 message: 'You can use test data while waiting for approval'
             });
         }
-        
-        // Check if this is a test data request
-        if (req.body.isTestData === 'true') {
-            console.log('Processing test inference data request...');
-            
-            const sessionId = req.session.id;
-            const uploadDir = path.join('uploads', sessionId);
-            
-            // Create session directory if it doesn't exist
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
+
+        // Case 1: File already uploaded via FileSelector (custom upload flow)
+        if (skipUpload) {
+            console.log('Validating pre-uploaded inference file...');
+
+            const inferenceDataPath = req.body.inference_data_path;
+
+            if (!inferenceDataPath) {
+                return res.status(400).json({
+                    error: 'File path is required when skipUpload is true'
+                });
             }
-            
+
+            // Convert relative path to absolute path
+            const inferenceFullPath = path.join(workspacePath, inferenceDataPath);
+
+            // Verify file exists
+            if (!fs.existsSync(inferenceFullPath)) {
+                return res.status(400).json({
+                    error: 'Inference data file not found',
+                    path: inferenceDataPath
+                });
+            }
+
+            // Create file object for validation
+            inferenceFile = {
+                path: inferenceFullPath,
+                filename: path.basename(inferenceFullPath),
+                originalname: path.basename(inferenceFullPath),
+                size: fs.statSync(inferenceFullPath).size,
+                mimetype: 'image/tiff'
+            };
+
+            console.log('Using pre-uploaded inference file:', inferenceDataPath);
+        }
+        // Case 2: Test data request
+        else if (isTestData) {
+            console.log('Processing test inference data request...');
+
+            // Use workspace directory structure
+            const inferenceUploadDir = path.join(workspacePath, 'uploads', 'inference_data');
+
+            // Initialize workspace if it doesn't exist
+            if (!fs.existsSync(workspacePath)) {
+                console.log('Initializing workspace for session:', sessionId);
+                workspaceManager.initializeWorkspace(sessionId);
+            }
+
+            // Create upload directory if it doesn't exist
+            if (!fs.existsSync(inferenceUploadDir)) {
+                fs.mkdirSync(inferenceUploadDir, { recursive: true });
+            }
+
             // Define test inference file
             const testInferenceFile = 'trypB_testData_inference.tif';
             const sourceInferencePath = path.join('test_data', testInferenceFile);
-            
+
             // Check if test inference file exists
             if (!fs.existsSync(sourceInferencePath)) {
                 return res.status(400).json({
@@ -902,11 +1610,11 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
                     details: `Expected file: test_data/${testInferenceFile}`
                 });
             }
-            
-            // Copy file to session directory
-            const destInferencePath = path.join(uploadDir, testInferenceFile);
+
+            // Copy file to workspace directory
+            const destInferencePath = path.join(inferenceUploadDir, testInferenceFile);
             fs.copyFileSync(sourceInferencePath, destInferencePath);
-            
+
             // Create mock file object
             inferenceFile = {
                 path: destInferencePath,
@@ -915,38 +1623,64 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
                 size: fs.statSync(destInferencePath).size,
                 mimetype: 'image/tiff'
             };
-            
+
             console.log('Test inference file copied successfully');
-            
-        } else {
+
+        }
+        // Case 3: Regular file upload (legacy, should not happen in workspace version)
+        else {
             // Handle regular uploaded file
             if (!req.file) {
                 return res.status(400).json({ error: 'No file provided for inference' });
             }
-            
+
             inferenceFile = req.file;
         }
         
         console.log('Validating inference TIFF...');
-        
+
         // Validate TIFF file (same logic for both test data and uploads)
         const validationResult = await validateInferenceTiff(inferenceFile.path);
-        
+
         if (!validationResult.valid) {
             return res.status(400).json({
                 error: 'TIFF validation failed',
                 details: validationResult.error
             });
         }
-        
+
+        // NEW: Track file in workspace metadata (only for test data, not skipUpload)
+        let inferenceFileEntry;
+
+        if (!skipUpload && isTestData) {
+            // Add inference file to metadata (test data flow)
+            const inferenceRelPath = path.relative(workspacePath, inferenceFile.path);
+            inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
+                name: inferenceFile.filename || inferenceFile.originalname,
+                path: inferenceRelPath,
+                category: 'inference_data',
+                size: inferenceFile.size,
+                folderId: null
+            });
+
+            console.log('Inference file tracked in metadata:', inferenceFileEntry.id);
+        } else if (skipUpload) {
+            console.log('Inference file already tracked in metadata, skipping duplicate tracking');
+            // For skipUpload case, just return the path
+            inferenceFileEntry = { path: path.relative(workspacePath, inferenceFile.path) };
+        }
+
         console.log('Inference file processed and validated successfully');
-        
+
         res.json({
             success: true,
-            message: req.body.isTestData === 'true'
-                ? 'Test inference data loaded successfully'
-                : 'Inference data uploaded successfully',
+            message: skipUpload
+                ? 'Inference file validated successfully'
+                : (req.body.isTestData === 'true'
+                    ? 'Test inference data loaded successfully'
+                    : 'Inference data uploaded successfully'),
             file_path: inferenceFile.path,
+            inference_data_path: inferenceFileEntry ? inferenceFileEntry.path : path.relative(workspacePath, inferenceFile.path),
             validation: validationResult,
             isTestData: req.body.isTestData === 'true'
         });
@@ -1070,9 +1804,30 @@ app.get('/verify-imported-model', (req, res) => {
 app.post('/run-inference', async (req, res) => {
   try {
     const { model_path, data_path, output_path, training_id } = req.body;
-    
+
     console.log('Inference request received:', { model_path, data_path, output_path, training_id });
-    
+
+    // Convert data_path to absolute workspace path if it's not already absolute
+    const sessionId = req.session.id;
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+    let actualDataPath = data_path;
+
+    // Check if data_path is relative or absolute
+    if (!path.isAbsolute(data_path)) {
+      // If relative, join with workspace path
+      actualDataPath = path.join(workspacePath, data_path);
+      console.log('Converted relative data path to absolute:', actualDataPath);
+    }
+
+    // Verify the data file exists
+    if (!fs.existsSync(actualDataPath)) {
+      return res.status(400).json({
+        error: 'Input file not found',
+        details: `File not found at: ${actualDataPath}`,
+        original_path: data_path
+      });
+    }
+
     let actualModelPath;
     let modelConfig;
     let inferenceId;
@@ -1142,20 +1897,20 @@ app.post('/run-inference', async (req, res) => {
     // Generate inference ID
     inferenceId = uuid.v4();
 
-    // Generate output path if not provided
+    // Generate output path if not provided (sessionId and workspacePath already declared above)
     let actualOutputPath = output_path;
     if (!actualOutputPath) {
       // Determine base directory based on whether using imported model or trained model
       if (req.session.importedModel && req.session.importedModel.validated) {
         // For imported models, use a timestamp-based directory
         const timestamp = Date.now();
-        actualOutputPath = path.join('results', `imported_model_${timestamp}`, 'inference_result.tif');
+        actualOutputPath = path.join(workspacePath, 'results', 'segmentation', `imported_model_${timestamp}`, 'inference_result.tif');
       } else if (training_id) {
         // For trained models, use the training ID
-        actualOutputPath = path.join('results', training_id, 'inference_result.tif');
+        actualOutputPath = path.join(workspacePath, 'results', 'segmentation', training_id, 'inference_result.tif');
       } else {
         // Fallback
-        actualOutputPath = path.join('results', `inference_${inferenceId}`, 'inference_result.tif');
+        actualOutputPath = path.join(workspacePath, 'results', 'segmentation', `inference_${inferenceId}`, 'inference_result.tif');
       }
       console.log('Generated output path:', actualOutputPath);
     }
@@ -1194,9 +1949,9 @@ app.post('/run-inference', async (req, res) => {
     // Start inference after a short delay to allow frontend to join room
     setTimeout(() => {
       console.log('Starting inference with model path:', actualModelPath);
-      console.log('Data path:', data_path);
+      console.log('Data path:', actualDataPath);
       console.log('Output path:', actualOutputPath);
-      startInferenceProcess(actualModelPath, data_path, actualOutputPath, inferenceId, io);
+      startInferenceProcess(actualModelPath, actualDataPath, actualOutputPath, inferenceId, io);
     }, 1000); // 1 second delay
 
   } catch (error) {
@@ -1320,11 +2075,13 @@ app.get('/download-inference-results/:inferenceId', requireAuth, (req, res) => {
   const outputPath = result.output_path;
   const metadataPath = result.metadata_path;
   const visualizationPath = result.visualization_path;
-  
+  const overlayPath = result.original_data_overlay_path;  // NEW: overlay file path
+
   console.log('Download request for inference:', inferenceId);
   console.log('Output path:', outputPath);
   console.log('Metadata path:', metadataPath);
   console.log('Visualization path:', visualizationPath);
+  console.log('Overlay path:', overlayPath);
   
   // Check if main result file exists
   if (!fs.existsSync(outputPath)) {
@@ -1435,7 +2192,38 @@ For questions about these results, please refer to the application documentation
   console.log('Archive finalized for inference:', inferenceId);
 });
 
-// Serve static files
+// Serve static files from workspace directories (session-scoped)
+app.use('/workspaces/:sessionId/results', requireAuth, (req, res, next) => {
+  const sessionId = req.params.sessionId;
+
+  // Verify the session ID matches the current user's session
+  if (sessionId !== req.session.id) {
+    return res.status(403).json({ error: 'Access denied to this workspace' });
+  }
+
+  const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+  const resultsPath = path.join(workspacePath, 'results');
+
+  // Serve files from the workspace results directory
+  express.static(resultsPath)(req, res, next);
+});
+
+app.use('/workspaces/:sessionId/uploads', requireAuth, (req, res, next) => {
+  const sessionId = req.params.sessionId;
+
+  // Verify the session ID matches the current user's session
+  if (sessionId !== req.session.id) {
+    return res.status(403).json({ error: 'Access denied to this workspace' });
+  }
+
+  const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+  const uploadsPath = path.join(workspacePath, 'uploads');
+
+  // Serve files from the workspace uploads directory
+  express.static(uploadsPath)(req, res, next);
+});
+
+// Legacy static file serving (for backward compatibility with old results/uploads directories)
 app.use('/uploads', express.static('uploads'));
 app.use('/results', express.static('results'));
 
@@ -1463,15 +2251,18 @@ app.get('/results/:inferenceId/original-data-web', requireAuth, (req, res) => {
   try {
     // Read metadata to get downsampled original data path
     const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-    
-    if (!metadata.original_data_web || !metadata.original_data_web.path) {
-      return res.status(404).json({ 
+
+    // Check new key first, then fall back to old key for backward compatibility
+    const overlayData = metadata.original_data_overlay || metadata.original_data_web;
+
+    if (!overlayData || !overlayData.path) {
+      return res.status(404).json({
         error: 'Downsampled original data not available for this inference',
         message: 'Original data overlay was not generated during inference'
       });
     }
-    
-    const downsampledPath = metadata.original_data_web.path;
+
+    const downsampledPath = overlayData.path;
     
     if (!fs.existsSync(downsampledPath)) {
       return res.status(404).json({ error: 'Downsampled original data file not found' });
@@ -1843,13 +2634,28 @@ function startTrainingProcess(params, io) {
     console.error('Training error:', data.toString());
   });
 
-  pythonScript.on('close', (code) => {
+  pythonScript.on('close', async (code) => {
     const training = trainingSessions.get(params.training_id);
     if (training) {
       if (code === 0) {
         training.status = 'completed';
         training.endTime = new Date();
         io.to(`training-${params.training_id}`).emit('training-complete', { success: true });
+
+        // Track training outputs in file browser
+        const modelPath = path.join(params.output_dir, 'best_model.pth');
+        const configPath = path.join(params.output_dir, 'config.json');
+        const resultsPath = path.join(params.output_dir, 'results.json');
+
+        if (fs.existsSync(modelPath)) {
+          await trackModuleOutput(training.sessionId, modelPath, 'models');
+        }
+        if (fs.existsSync(configPath)) {
+          await trackModuleOutput(training.sessionId, configPath, 'models');
+        }
+        if (fs.existsSync(resultsPath)) {
+          await trackModuleOutput(training.sessionId, resultsPath, 'models');
+        }
       } else {
         training.status = 'failed';
         training.endTime = new Date();
@@ -1984,7 +2790,7 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
       console.error('Inference error:', data.toString());
     });
 
-    pythonScript.on('close', (code) => {
+    pythonScript.on('close', async (code) => {
       const inference = inferenceSessions.get(inferenceId);
       
       console.log(`Python script finished with code: ${code}`);
@@ -1999,12 +2805,52 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
             inference.status = 'completed';
             inference.endTime = new Date();
           }
-          
-          io.to(`inference-${inferenceId}`).emit('inference-complete', { 
-            success: true, 
-            result: finalResult 
+
+          // Store original paths for file tracking
+          const originalPaths = {
+            output_path: finalResult.output_path,
+            metadata_path: finalResult.metadata_path,
+            visualization_path: finalResult.visualization_path,
+            original_data_overlay_path: finalResult.original_data_overlay_path
+          };
+
+          // Track inference outputs in file browser (using original absolute paths)
+          if (finalResult.success && inference) {
+            if (originalPaths.output_path && fs.existsSync(originalPaths.output_path)) {
+              await trackModuleOutput(inference.sessionId, originalPaths.output_path, 'segmentations');
+            }
+            if (originalPaths.metadata_path && fs.existsSync(originalPaths.metadata_path)) {
+              await trackModuleOutput(inference.sessionId, originalPaths.metadata_path, 'segmentations');
+            }
+            if (originalPaths.visualization_path && fs.existsSync(originalPaths.visualization_path)) {
+              await trackModuleOutput(inference.sessionId, originalPaths.visualization_path, 'segmentations');
+            }
+          }
+
+          // Convert absolute file paths to web-accessible paths
+          const workspacePath = workspaceManager.getWorkspacePath(inference.sessionId);
+          const sessionId = inference.sessionId;
+
+          if (finalResult.output_path) {
+            finalResult.output_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.output_path);
+          }
+          if (finalResult.metadata_path) {
+            finalResult.metadata_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.metadata_path);
+          }
+          if (finalResult.visualization_path) {
+            finalResult.visualization_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.visualization_path);
+          }
+          if (finalResult.original_data_overlay_path) {
+            finalResult.original_data_overlay_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.original_data_overlay_path);
+          }
+
+          console.log('Converted paths for web access:', finalResult);
+
+          io.to(`inference-${inferenceId}`).emit('inference-complete', {
+            success: true,
+            result: finalResult
           });
-          
+
           if (finalResult.success) {
             resolve(finalResult);
           } else {
@@ -2021,15 +2867,57 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
             if (jsonMatch) {
               const result = JSON.parse(jsonMatch[0]);
               console.log('Successfully parsed JSON from buffer:', result);
-              
+
               if (inference) {
                 inference.status = 'completed';
                 inference.endTime = new Date();
               }
-              io.to(`inference-${inferenceId}`).emit('inference-complete', { 
-                success: true, 
-                result: finalResult 
+
+              // Store original paths for file tracking
+              const originalPaths = {
+                output_path: result.output_path,
+                metadata_path: result.metadata_path,
+                visualization_path: result.visualization_path,
+                original_data_overlay_path: result.original_data_overlay_path
+              };
+
+              // Track inference outputs in file browser (using original absolute paths)
+              if (result && result.success && inference) {
+                if (originalPaths.output_path && fs.existsSync(originalPaths.output_path)) {
+                  await trackModuleOutput(inference.sessionId, originalPaths.output_path, 'segmentations');
+                }
+                if (originalPaths.metadata_path && fs.existsSync(originalPaths.metadata_path)) {
+                  await trackModuleOutput(inference.sessionId, originalPaths.metadata_path, 'segmentations');
+                }
+                if (originalPaths.visualization_path && fs.existsSync(originalPaths.visualization_path)) {
+                  await trackModuleOutput(inference.sessionId, originalPaths.visualization_path, 'segmentations');
+                }
+              }
+
+              // Convert absolute file paths to web-accessible paths
+              const workspacePath = workspaceManager.getWorkspacePath(inference.sessionId);
+              const sessionId = inference.sessionId;
+
+              if (result.output_path) {
+                result.output_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.output_path);
+              }
+              if (result.metadata_path) {
+                result.metadata_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.metadata_path);
+              }
+              if (result.visualization_path) {
+                result.visualization_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.visualization_path);
+              }
+              if (result.original_data_overlay_path) {
+                result.original_data_overlay_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.original_data_overlay_path);
+              }
+
+              console.log('Converted paths for web access (backup):', result);
+
+              io.to(`inference-${inferenceId}`).emit('inference-complete', {
+                success: true,
+                result: result
               });
+
               resolve(result);
               return;
             }
@@ -2049,10 +2937,24 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
               inference.status = 'completed';
               inference.endTime = new Date();
             }
-            io.to(`inference-${inferenceId}`).emit('inference-complete', { 
-              success: true, 
-              result: finalResult 
+            io.to(`inference-${inferenceId}`).emit('inference-complete', {
+              success: true,
+              result: manualResult
             });
+
+            // Track inference outputs in file browser
+            if (manualResult && manualResult.success && inference) {
+              if (manualResult.output_path && fs.existsSync(manualResult.output_path)) {
+                await trackModuleOutput(inference.sessionId, manualResult.output_path, 'segmentations');
+              }
+              if (manualResult.metadata_path && fs.existsSync(manualResult.metadata_path)) {
+                await trackModuleOutput(inference.sessionId, manualResult.metadata_path, 'segmentations');
+              }
+              if (manualResult.visualization_path && fs.existsSync(manualResult.visualization_path)) {
+                await trackModuleOutput(inference.sessionId, manualResult.visualization_path, 'segmentations');
+              }
+            }
+
             resolve(manualResult);
             
           } catch (e) {

@@ -240,19 +240,36 @@ Custom file upload now fully functional in workspace version with FileSelector c
 
 ---
 
-## Phase 3: File Browser & Workspace Management 📅
+## Phase 3: File Browser & Workspace Management 🚧
 
 **Duration:** December 2024 - February 2025 (3 months)
-**Status:** NEXT
+**Status:** IN PROGRESS (Phase 3.1 Complete ✅)
 **Goal:** Complete workspace file management and fix custom upload
+
+### Phase 3.1: Backend Infrastructure ✅ COMPLETE
+
+**Completed:** 2025-12-04
+**Summary:** Implemented complete backend infrastructure for file browser system
+
+**Delivered:**
+- ✅ Enhanced metadata schema v1.1.0 with folders support
+- ✅ 15 WorkspaceManager methods (folder ops, file ops, thumbnail tracking, tree builder)
+- ✅ 14 new API endpoints (file operations, folder operations, thumbnails)
+- ✅ Python thumbnail generator (120x120px JPEG from TIFF)
+- ✅ Automatic file tracking for uploads and module outputs
+- ✅ Batch operations (download as zip, batch delete)
+- ✅ Integration with training/inference endpoints
+
+**Session:** [docs/sessions/2025-12-04_phase3_1_backend_infrastructure.md](../sessions/2025-12-04_phase3_1_backend_infrastructure.md)
 
 ### Objectives
 
-- [ ] Implement fully functional file browser
-- [ ] Fix custom data upload in workspace
-- [ ] Add project/workspace organization
-- [ ] Complete segmentation module integration
-- [ ] Add search, filter, and batch operations
+- [x] **Backend infrastructure** ✅ (Phase 3.1)
+- [ ] Implement fully functional file browser UI
+- [x] Fix custom data upload in workspace ✅ (Completed in Nov-Dec 2024)
+- [ ] Add project/workspace organization (logical folders)
+- [x] Complete segmentation module integration ✅ (Completed Nov 2024)
+- [ ] Add search, filter, and batch operations UI
 
 ### Deliverables
 
@@ -305,11 +322,15 @@ Custom file upload now fully functional in workspace version with FileSelector c
 - [ ] Results visualization
 - [ ] Module state persistence (resume after leaving module)
 
-**Backend:**
-- [ ] Enhanced `/api/workspace/files` endpoint (full file tree)
-- [ ] File operation endpoints (download, delete, rename, move)
-- [ ] Project management endpoints (CRUD)
-- [ ] Workspace template save/load
+**Backend:** ✅ **Phase 3.1 Complete**
+- [x] Enhanced `/api/workspace/status` endpoint (returns files and folders) ✅
+- [x] File operation endpoints (download, delete, rename, move) ✅
+- [x] Folder management endpoints (create, rename, delete) ✅
+- [x] Batch operations endpoints (batch delete, batch download as zip) ✅
+- [x] Thumbnail generation endpoint ✅
+- [x] Search and filter endpoints ✅
+- [x] Automatic file tracking for uploads and module outputs ✅
+- [ ] Workspace template save/load (Phase 3.4)
 
 **Testing:**
 - [ ] File browser UI tests
@@ -329,9 +350,24 @@ Custom file upload now fully functional in workspace version with FileSelector c
 
 ### Timeline
 
-- **Month 1 (Dec 2024):** Fix custom upload + file browser backend
-- **Month 2 (Jan 2025):** File browser UI + operations
-- **Month 3 (Feb 2025):** Projects, templates, testing
+- **Week 1 (Dec 2-6, 2024):** ✅ Phase 3.1 Backend Infrastructure (COMPLETE)
+  - Enhanced metadata schema v1.1.0
+  - WorkspaceManager methods
+  - API endpoints
+  - Thumbnail generation
+  - Module output tracking
+- **Week 2-3 (Dec 9-20, 2024):** Phase 3.2-3.3 File Browser UI Core
+  - FileBrowser component
+  - Tree rendering with thumbnails
+  - File operations UI
+  - Search and filter UI
+  - Context menu
+- **Week 4 (Dec 23-27, 2024):** Phase 3.4 Batch Operations & Polish
+  - Multi-select
+  - Batch toolbar
+  - Keyboard shortcuts
+  - Loading states
+- **Jan 2025:** Testing, refinement, workspace templates
 
 ### Dependencies
 
@@ -795,8 +831,8 @@ Pipeline 3: Denoise → Segment → Quantify → Export CSV
 
 ---
 
-**Last Updated:** 2025-12-03
-**Roadmap Version:** 1.2 (Phase 2 fully complete - all enhancements implemented)
+**Last Updated:** 2025-12-04
+**Roadmap Version:** 1.3 (Phase 3.1 Backend Infrastructure complete)
 **Next Review:** 2025-12-15 (monthly review)
 
 ---

@@ -46,8 +46,16 @@ export async function loadAndCreateOriginalDataPlanes(inferenceId, segmentationD
     try {
         console.log('Loading downsampled original data for overlay...');
 
-        // Fetch the downsampled TIFF from server
-        const fetchUrl = `/results/${inferenceId}/original-data-web`;
+        // Use the original_data_overlay_path from inferenceResult if available
+        let fetchUrl;
+        if (window.inferenceResult && window.inferenceResult.original_data_overlay_path) {
+            fetchUrl = window.inferenceResult.original_data_overlay_path;
+            console.log('Using overlay path from inference result:', fetchUrl);
+        } else {
+            // Fallback to legacy endpoint
+            fetchUrl = `/results/${inferenceId}/original-data-web`;
+            console.log('Using legacy overlay endpoint:', fetchUrl);
+        }
         console.log('[OriginalData] Fetching from:', fetchUrl);
 
         const response = await fetch(fetchUrl);
