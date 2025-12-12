@@ -110,7 +110,8 @@ class WorkspaceAPI {
    */
   async uploadFile(file, category) {
     const formData = new FormData();
-    formData.append('file', file);
+    // Use category as field name so backend routes to correct directory
+    formData.append(category, file);
     formData.append('category', category);
 
     const response = await fetch(`${this.baseURL}/api/workspace/upload`, {
@@ -133,7 +134,7 @@ class WorkspaceAPI {
    * @param {string} fileId - File ID to download
    */
   downloadFile(fileId) {
-    window.location.href = `${this.baseURL}/api/workspace/download/${fileId}`;
+    window.location.href = `${this.baseURL}/api/workspace/file/${fileId}/download`;
   }
 
   /**

@@ -57,6 +57,14 @@ class FileSelector {
   async init() {
     await this.loadAvailableFiles();
     this.setupEventListeners();
+
+    // Subscribe to workspace file changes to auto-refresh dropdown
+    if (this.module && this.module.state) {
+      this.module.state.subscribe('workspace.files', () => {
+        console.log(`[FileSelector] Files changed, reloading ${this.type} files`);
+        this.loadAvailableFiles();
+      });
+    }
   }
 
   /**
@@ -221,10 +229,17 @@ class FileSelector {
         info: 'Built-in test dataset for demonstration'
       });
     } else {
-      // Regular file
+      // Regular workspace file - trigger validation
       const fileInfo = JSON.parse(selectedOption.dataset.fileInfo || '{}');
       this.selectedFile = fileInfo;
       await this.loadFilePreview(fileInfo);
+
+      // Trigger validation for workspace files (similar to uploaded files)
+      if (this.module && typeof this.module.onFileUploaded === 'function') {
+        // Create a mock File object for validation
+        const mockFile = new File([], fileInfo.name, { type: 'image/tiff' });
+        await this.module.onFileUploaded(this.type, mockFile, fileInfo);
+      }
     }
 
     // Notify module that file was selected
@@ -277,6 +292,11 @@ class FileSelector {
       // If validation was triggered, the module will update the UI (including preview)
       if (!validationTriggered) {
         this.hideUploading();
+      }
+
+      // Refresh file browser to show newly uploaded file
+      if (window.workspace && window.workspace.fileBrowser) {
+        await window.workspace.fileBrowser.refresh();
       }
 
     } catch (error) {
@@ -349,7 +369,6 @@ class FileSelector {
         <strong>📄 ${data.name}</strong>
       </div>
       ${data.size ? `<div class="preview-item">Size: ${data.size}</div>` : ''}
-      ${data.uploadDate ? `<div class="preview-item">Uploaded: ${data.uploadDate}</div>` : ''}
       ${data.info ? `<div class="preview-item">ℹ️ ${data.info}</div>` : ''}
     `;
 

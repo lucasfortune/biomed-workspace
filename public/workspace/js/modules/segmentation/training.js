@@ -160,7 +160,12 @@ function onTrainingComplete(data) {
 
         // Update navigation buttons
         updateNavigationButtons();
-        
+
+        // Refresh file browser to show newly created model files
+        if (window.workspace && window.workspace.fileBrowser) {
+            window.workspace.fileBrowser.refresh();
+        }
+
     } else {
         document.getElementById('trainingStatusText').textContent = 'Training failed!';
         showError('Training failed. Please check your configuration and try again.');

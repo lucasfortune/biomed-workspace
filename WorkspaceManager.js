@@ -375,8 +375,33 @@ class WorkspaceManager {
       throw new Error('Cannot change file extension');
     }
 
+    // Get the actual filename from the path (not from file.name which may be outdated)
+    const workspaceDir = path.join('workspaces', sessionId);
+    const oldFullPath = path.join(workspaceDir, file.path);
+
+    // Build new path: get directory from old path, append new filename
+    const pathParts = file.path.split('/');
+    const oldFilename = pathParts[pathParts.length - 1]; // Original filename from path
+    pathParts[pathParts.length - 1] = newName; // Replace with new filename
+    const newPath = pathParts.join('/');
+    const newFullPath = path.join(workspaceDir, newPath);
+
+    // Check if old file exists
+    if (fs.existsSync(oldFullPath)) {
+      // Rename the physical file
+      console.log(`[WorkspaceManager] Renaming file: ${oldFullPath} -> ${newFullPath}`);
+      fs.renameSync(oldFullPath, newFullPath);
+    } else {
+      console.warn(`[WorkspaceManager] File not found for rename: ${oldFullPath}`);
+      // File doesn't exist at old path, but continue to update metadata
+    }
+
+    // Update metadata
     file.name = newName;
+    file.path = newPath;
     this.saveMetadata(sessionId, metadata);
+
+    console.log(`[WorkspaceManager] File metadata updated: name=${newName}, path=${newPath}`);
 
     return file;
   }

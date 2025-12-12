@@ -591,7 +591,7 @@ app.get('/api/workspace/files', requireAuth, (req, res) => {
 
     res.json({
       success: true,
-      files: workspaceInfo.fileTree || []
+      files: workspaceInfo.metadata.files || []
     });
   } catch (error) {
     console.error('Error getting workspace files:', error);
@@ -769,11 +769,15 @@ app.patch('/api/workspace/file/:fileId/rename', requireAuth, async (req, res) =>
     const { newName } = req.body;
     const sessionId = req.session.id;
 
+    console.log(`[server.js] Rename endpoint hit: fileId=${fileId}, newName=${newName}, sessionId=${sessionId}`);
+
     if (!newName) {
       return res.status(400).json({ success: false, error: 'New name required' });
     }
 
+    console.log('[server.js] Calling workspaceManager.renameFile()...');
     const file = await workspaceManager.renameFile(sessionId, fileId, newName);
+    console.log('[server.js] renameFile returned:', file);
 
     activityLogger.logActivity(
       req.session.user.username,
@@ -783,7 +787,7 @@ app.patch('/api/workspace/file/:fileId/rename', requireAuth, async (req, res) =>
 
     res.json({ success: true, file });
   } catch (error) {
-    console.error('Rename file error:', error);
+    console.error('[server.js] Rename file error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

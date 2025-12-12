@@ -8,6 +8,7 @@ class Workspace {
     this.moduleLoader = null;
     this.api = null;
     this.socket = null;
+    this.fileBrowser = null;  // File browser component (Phase 3.2)
     this.initialized = false;
 
     console.log('[Workspace] Initializing...');
@@ -35,6 +36,10 @@ class Workspace {
 
       // Initialize workspace
       await this.initializeWorkspace();
+
+      // Initialize file browser (Phase 3.2)
+      this.fileBrowser = new FileBrowser(this.state, this.api);
+      await this.fileBrowser.initialize('file-tree-container');
 
       // Set up UI
       this.setupUI();
@@ -288,6 +293,12 @@ class Workspace {
     this.state.update('ui.loading', true);
     try {
       await this.loadWorkspaceStats();
+
+      // Refresh file browser (Phase 3.2)
+      if (this.fileBrowser) {
+        await this.fileBrowser.refresh();
+      }
+
       this.state.notify('success', 'Workspace refreshed');
     } catch (error) {
       console.error('[Workspace] Refresh error:', error);

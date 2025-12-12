@@ -275,10 +275,15 @@ function onInferenceComplete(data) {
         }
         
         showSuccess('Inference completed successfully! Your segmentation is ready.');
-        
+
         // Update navigation buttons
         updateNavigationButtons();
-        
+
+        // Refresh file browser to show newly created inference result files
+        if (window.workspace && window.workspace.fileBrowser) {
+            window.workspace.fileBrowser.refresh();
+        }
+
     } else {
         showError('Inference failed: ' + (data.error || 'Unknown error'));
         processStates.inferenceInProgress = false;
