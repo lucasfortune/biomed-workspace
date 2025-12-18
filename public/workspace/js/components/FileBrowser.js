@@ -17,6 +17,11 @@ class FileBrowser {
     this.scrollPosition = 0;           // Save scroll position for refresh
     this.isRendering = false;          // Prevent render loops
 
+    // Selection state for batch operations
+    this.selectedFiles = new Set();    // Track selected file IDs
+    this.allFiles = [];                // Cache all visible files for "Select All"
+    this.batchToolbarVisible = false;  // Track toolbar visibility across renders
+
     // Category keyword mapping for unified search
     this.categoryKeywords = {
       'raw_images': ['raw', 'image', 'images', 'training', 'input'],
@@ -86,6 +91,140 @@ class FileBrowser {
   }
 
   /**
+   * Selection Management Methods
+   */
+
+  /**
+   * Check if a file is selected
+   * @param {string} fileId - File ID to check
+   * @returns {boolean} True if file is selected
+   */
+  isFileSelected(fileId) {
+    return this.selectedFiles.has(fileId);
+  }
+
+  /**
+   * Toggle file selection on/off
+   * @param {string} fileId - File ID to toggle
+   */
+  toggleFileSelection(fileId) {
+    if (this.selectedFiles.has(fileId)) {
+      this.selectedFiles.delete(fileId);
+    } else {
+      this.selectedFiles.add(fileId);
+    }
+    this.updateSelectionUI();
+    this.updateBatchToolbar();
+  }
+
+  /**
+   * Select all visible files
+   */
+  selectAll() {
+    this.allFiles.forEach(file => this.selectedFiles.add(file.id));
+    this.updateSelectionUI();
+    this.updateBatchToolbar();
+  }
+
+  /**
+   * Clear all selections
+   */
+  clearSelection() {
+    this.selectedFiles.clear();
+    this.updateSelectionUI();
+    this.updateBatchToolbar();
+  }
+
+  /**
+   * Get count of selected files
+   * @returns {number} Number of selected files
+   */
+  getSelectedCount() {
+    return this.selectedFiles.size;
+  }
+
+  /**
+   * Get array of selected file IDs
+   * @returns {Array<string>} Array of selected file IDs
+   */
+  getSelectedFileIds() {
+    return Array.from(this.selectedFiles);
+  }
+
+  /**
+   * Update UI to reflect current selection state
+   */
+  updateSelectionUI() {
+    if (!this.container) return;
+
+    // Update checkbox states for all visible files
+    this.container.querySelectorAll('.fb-file-checkbox').forEach(checkbox => {
+      const fileId = checkbox.dataset.fileId;
+      checkbox.checked = this.isFileSelected(fileId);
+    });
+
+    // Update file row highlighting
+    this.container.querySelectorAll('.fb-file').forEach(fileRow => {
+      const fileId = fileRow.dataset.fileId;
+      if (this.isFileSelected(fileId)) {
+        fileRow.classList.add('fb-file-selected');
+      } else {
+        fileRow.classList.remove('fb-file-selected');
+      }
+    });
+
+    // Update "Select All" checkbox state
+    const selectAllCheckbox = this.container.querySelector('.fb-select-all-checkbox');
+    if (selectAllCheckbox) {
+      const allSelected = this.allFiles.length > 0 &&
+                          this.allFiles.every(f => this.isFileSelected(f.id));
+      const someSelected = this.allFiles.some(f => this.isFileSelected(f.id));
+
+      selectAllCheckbox.checked = allSelected;
+      selectAllCheckbox.indeterminate = someSelected && !allSelected;
+    }
+  }
+
+  /**
+   * Update batch toolbar visibility and count
+   */
+  updateBatchToolbar() {
+    if (!this.container) return;
+
+    const toolbar = this.container.querySelector('#fb-batch-toolbar');
+    const countEl = this.container.querySelector('#fb-batch-count');
+    const selectedCount = this.getSelectedCount();
+
+    if (toolbar && countEl) {
+      if (selectedCount > 0) {
+        // Only set display and animate if transitioning from hidden to visible
+        if (!this.batchToolbarVisible) {
+          toolbar.style.display = 'flex';
+          this.batchToolbarVisible = true;
+
+          // Add animation class for entrance
+          toolbar.classList.add('fb-toolbar-entering');
+
+          // Remove animation class after animation completes
+          setTimeout(() => {
+            toolbar.classList.remove('fb-toolbar-entering');
+          }, 200);
+        }
+
+        // Update count text
+        const fileWord = selectedCount === 1 ? 'file' : 'files';
+        countEl.textContent = `${selectedCount} ${fileWord} selected`;
+      } else {
+        // Hide toolbar
+        if (this.batchToolbarVisible) {
+          toolbar.style.display = 'none';
+          this.batchToolbarVisible = false;
+        }
+      }
+    }
+  }
+
+  /**
    * Render the file browser UI
    */
   render() {
@@ -110,13 +249,22 @@ class FileBrowser {
       // Filter files based on search
       const filteredFiles = this.filterFiles(files);
 
+      // Cache all visible files for "Select All" functionality
+      this.allFiles = filteredFiles;
+
       // Build tree structure with all standard folders
       const tree = this.buildPhysicalTree(filteredFiles);
 
       // Render HTML
       this.container.innerHTML = `
         <div class="fb-header">
-          <h3>Files</h3>
+          <div class="fb-header-left">
+            <input type="checkbox"
+                   class="fb-select-all-checkbox"
+                   id="fb-select-all"
+                   title="Select all files">
+            <label for="fb-select-all" class="fb-select-all-label">Files</label>
+          </div>
           <button class="fb-btn-refresh" title="Refresh">🔄</button>
         </div>
 
@@ -162,6 +310,31 @@ class FileBrowser {
             <button class="fb-search-clear" title="Clear search">✕</button>
           ` : ''}
         </div>
+
+        <!-- Batch Toolbar (hidden by default) -->
+        <div class="fb-batch-toolbar" id="fb-batch-toolbar" style="display: ${this.batchToolbarVisible ? 'flex' : 'none'};">
+          <div class="fb-batch-info">
+            <span class="fb-batch-count" id="fb-batch-count">0</span>
+          </div>
+          <div class="fb-batch-actions">
+            <button class="fb-btn-batch fb-btn-batch-download"
+                    id="fb-batch-download"
+                    title="Download selected files as ZIP">
+              ⬇️
+            </button>
+            <button class="fb-btn-batch fb-btn-batch-delete"
+                    id="fb-batch-delete"
+                    title="Delete selected files">
+              🗑️
+            </button>
+            <button class="fb-btn-batch fb-btn-batch-clear"
+                    id="fb-batch-clear"
+                    title="Clear selection">
+              ✕
+            </button>
+          </div>
+        </div>
+
         <div class="fb-tree">
           ${this.searchQuery && filteredFiles.length === 0 ? `
             <div class="fb-empty-state">
@@ -171,6 +344,14 @@ class FileBrowser {
               <button class="fb-btn-clear-search">Clear search</button>
             </div>
           ` : this.searchQuery ? this.renderSearchResults(filteredFiles) : this.renderTree(tree)}
+        </div>
+
+        <!-- Loading Overlay (hidden by default) -->
+        <div class="fb-loading-overlay" id="fb-loading-overlay" style="display: none;">
+          <div class="fb-loading-content">
+            <div class="fb-spinner"></div>
+            <p class="fb-loading-text" id="fb-loading-text">Loading...</p>
+          </div>
         </div>
       `;
 
@@ -193,6 +374,10 @@ class FileBrowser {
           }
         }
       }
+
+      // Update selection UI and batch toolbar to reflect current selection state
+      this.updateSelectionUI();
+      this.updateBatchToolbar();
     } finally {
       this.isRendering = false;
     }
@@ -377,12 +562,18 @@ class FileBrowser {
     const isRecent = this.recentFileIds.has(file.id);
     const hasThumbnail = this.shouldShowThumbnail(file.name);
     const icon = this.getFileIcon(file.name);
+    const isSelected = this.isFileSelected(file.id);
 
     return `
-      <div class="fb-file ${isRecent ? 'fb-file-new' : ''}"
+      <div class="fb-file ${isRecent ? 'fb-file-new' : ''} ${isSelected ? 'fb-file-selected' : ''}"
            data-file-id="${file.id}"
            style="padding-left: ${indent}px">
         <div class="fb-file-content">
+          <input type="checkbox"
+                 class="fb-file-checkbox"
+                 data-file-id="${file.id}"
+                 ${isSelected ? 'checked' : ''}
+                 title="Select file">
           ${hasThumbnail ? `
             <img src="/api/workspace/thumbnail/${file.id}"
                  class="fb-thumbnail"
@@ -437,6 +628,7 @@ class FileBrowser {
     const isRecent = this.recentFileIds.has(file.id);
     const hasThumbnail = this.shouldShowThumbnail(file.name);
     const icon = this.getFileIcon(file.name);
+    const isSelected = this.isFileSelected(file.id);
 
     // Extract directory path for display
     const pathParts = file.path.split('/');
@@ -444,8 +636,13 @@ class FileBrowser {
     const dirPath = pathParts.join('/') || 'root';
 
     return `
-      <div class="fb-search-result ${isRecent ? 'fb-file-new' : ''}"
+      <div class="fb-search-result ${isRecent ? 'fb-file-new' : ''} ${isSelected ? 'fb-file-selected' : ''}"
            data-file-id="${file.id}">
+        <input type="checkbox"
+               class="fb-file-checkbox"
+               data-file-id="${file.id}"
+               ${isSelected ? 'checked' : ''}
+               title="Select file">
         ${hasThumbnail ? `
           <img src="/api/workspace/thumbnail/${file.id}"
                class="fb-result-thumbnail"
@@ -612,6 +809,60 @@ class FileBrowser {
         }
       }
     });
+
+    // Batch toolbar buttons
+    const batchDownloadBtn = this.container.querySelector('#fb-batch-download');
+    if (batchDownloadBtn) {
+      batchDownloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.batchDownloadSelected();
+      });
+    }
+
+    const batchDeleteBtn = this.container.querySelector('#fb-batch-delete');
+    if (batchDeleteBtn) {
+      batchDeleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.batchDeleteSelected();
+      });
+    }
+
+    const batchClearBtn = this.container.querySelector('#fb-batch-clear');
+    if (batchClearBtn) {
+      batchClearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.clearSelection();
+      });
+    }
+
+    // Select All checkbox
+    const selectAllCheckbox = this.container.querySelector('.fb-select-all-checkbox');
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        if (e.target.checked) {
+          this.selectAll();
+        } else {
+          this.clearSelection();
+        }
+      });
+    }
+
+    // Individual file checkboxes - use event delegation
+    this.container.addEventListener('change', (e) => {
+      if (e.target.classList.contains('fb-file-checkbox')) {
+        e.stopPropagation();
+        const fileId = e.target.dataset.fileId;
+        this.toggleFileSelection(fileId);
+      }
+    });
+
+    // Prevent checkbox clicks from propagating to parent elements
+    this.container.addEventListener('click', (e) => {
+      if (e.target.classList.contains('fb-file-checkbox')) {
+        e.stopPropagation();
+      }
+    });
   }
 
   /**
@@ -712,6 +963,119 @@ class FileBrowser {
     } finally {
       this.state.update('ui.loading', false);
     }
+  }
+
+  /**
+   * Batch download selected files as ZIP
+   */
+  async batchDownloadSelected() {
+    const selectedIds = this.getSelectedFileIds();
+
+    if (selectedIds.length === 0) {
+      this.state.notify('warning', 'No files selected', 3000);
+      return;
+    }
+
+    try {
+      // Show loading state
+      this.setLoading(true, 'Preparing download...');
+
+      // Call API
+      await this.api.batchDownloadFiles(selectedIds);
+
+      // Success notification
+      this.state.notify('success', `Downloaded ${selectedIds.length} file${selectedIds.length !== 1 ? 's' : ''}`, 3000);
+
+      // Optional: Clear selection after download
+      // this.clearSelection();
+
+    } catch (error) {
+      console.error('[FileBrowser] Batch download error:', error);
+      this.state.notify('error', `Download failed: ${error.message}`, 5000);
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  /**
+   * Batch delete selected files
+   */
+  async batchDeleteSelected() {
+    const selectedIds = this.getSelectedFileIds();
+
+    if (selectedIds.length === 0) {
+      this.state.notify('warning', 'No files selected', 3000);
+      return;
+    }
+
+    // CONFIRMATION DIALOG (REQUIRED)
+    const fileWord = selectedIds.length === 1 ? 'file' : 'files';
+    const confirmMessage = `Are you sure you want to delete ${selectedIds.length} ${fileWord}?\n\nThis action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) {
+      return; // User cancelled
+    }
+
+    try {
+      // Show loading state
+      this.setLoading(true, `Deleting ${selectedIds.length} ${fileWord}...`);
+
+      // Call API
+      const response = await this.api.batchDeleteFiles(selectedIds);
+
+      // Success notification
+      this.state.notify('success', `Deleted ${response.deletedCount} ${fileWord}`, 3000);
+
+      // Clear selection
+      this.clearSelection();
+
+      // Refresh file list
+      await this.refresh();
+
+    } catch (error) {
+      console.error('[FileBrowser] Batch delete error:', error);
+      this.state.notify('error', `Delete failed: ${error.message}`, 5000);
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  /**
+   * Set loading state with custom message
+   * @param {boolean} isLoading - Show or hide loading overlay
+   * @param {string} message - Loading message to display
+   */
+  setLoading(isLoading, message = 'Loading...') {
+    if (!this.container) return;
+
+    const overlay = this.container.querySelector('#fb-loading-overlay');
+    const text = this.container.querySelector('#fb-loading-text');
+
+    if (overlay && text) {
+      if (isLoading) {
+        overlay.style.display = 'flex';
+        text.textContent = message;
+
+        // Disable batch toolbar buttons
+        const toolbar = this.container.querySelector('#fb-batch-toolbar');
+        if (toolbar) {
+          toolbar.style.pointerEvents = 'none';
+          toolbar.style.opacity = '0.6';
+        }
+      } else {
+        overlay.style.display = 'none';
+
+        // Re-enable batch toolbar
+        const toolbar = this.container.querySelector('#fb-batch-toolbar');
+        if (toolbar) {
+          toolbar.style.pointerEvents = 'auto';
+          toolbar.style.opacity = '1';
+        }
+      }
+    }
+
+    // Also update global loading state
+    this.state.update('ui.loading', isLoading);
   }
 
   /**
