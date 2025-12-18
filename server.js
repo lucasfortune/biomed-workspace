@@ -67,6 +67,13 @@ const {
   globalErrorHandler
 } = require('./src/middleware/error.middleware');
 
+// =============================================================================
+// REFACTORED MODULES (Phase 3 - Sockets)
+// =============================================================================
+const {
+  initializeSocketHandlers
+} = require('./src/sockets');
+
 // Aliases for backward compatibility with existing code
 const trainingSessions = sessionTracker.trainingSessions;
 const inferenceSessions = sessionTracker.inferenceSessions;
@@ -75,6 +82,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const PORT = env.PORT;
+
+// Initialize Socket.IO handlers (Phase 3 refactoring)
+initializeSocketHandlers(io, logger);
 
 // Validate Python interpreter exists at startup (using imported function)
 if (!validatePythonPath()) {
@@ -2414,26 +2424,8 @@ app.post('/reset-session', requireAuth, async (req, res) => {
 });
 
 // WebSocket connection for real-time updates
-io.on('connection', (socket) => {
-  logger.debug('Client connected:', socket.id);
-  
-  socket.on('join-training', (trainingId) => {
-    socket.join(`training-${trainingId}`);
-    logger.debug(`Client ${socket.id} joined training room: training-${trainingId}`);
-  });
-  
-  socket.on('join-inference', (inferenceId) => {
-    socket.join(`inference-${inferenceId}`);
-    logger.debug(`Client ${socket.id} joined inference room: inference-${inferenceId}`);
-    
-    // Send a confirmation message
-    socket.emit('inference-room-joined', { inferenceId: inferenceId });
-  });
-
-  socket.on('disconnect', () => {
-    logger.debug('Client disconnected:', socket.id);
-  });
-});
+// NOTE: Socket.IO handlers are now initialized via initializeSocketHandlers()
+// from ./src/sockets/index.js (Phase 3 refactoring)
 
 // Helper functions
 async function validateTiffStacks(rawPath, annotationPath) {
