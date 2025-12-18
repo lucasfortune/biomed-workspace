@@ -243,7 +243,7 @@ Custom file upload now fully functional in workspace version with FileSelector c
 ## Phase 3: File Browser & Workspace Management 🚧
 
 **Duration:** December 2024 - February 2025 (3 months)
-**Status:** IN PROGRESS (Phase 3.1 Complete ✅)
+**Status:** IN PROGRESS (Phases 3.1, 3.2, 3.3 Complete ✅)
 **Goal:** Complete workspace file management and fix custom upload
 
 ### Phase 3.1: Backend Infrastructure ✅ COMPLETE
@@ -262,14 +262,50 @@ Custom file upload now fully functional in workspace version with FileSelector c
 
 **Session:** [docs/sessions/2025-12-04_phase3_1_backend_infrastructure.md](../sessions/2025-12-04_phase3_1_backend_infrastructure.md)
 
+### Phase 3.2: File Browser UI Core ✅ COMPLETE
+
+**Completed:** 2025-12-18
+**Summary:** Implemented complete file browser UI with tree view, upload, and drag-and-drop
+
+**Delivered:**
+- ✅ Visual file tree with folders and files
+- ✅ File metadata display (name, size, date, category)
+- ✅ Thumbnail previews for TIFF files
+- ✅ Folder expand/collapse functionality
+- ✅ Custom file upload with category selection
+- ✅ Drag-and-drop file upload
+- ✅ File download functionality
+
+**Session:** [docs/sessions/2025-12-18_phase3_2_file_browser_ui.md](../sessions/2025-12-18_phase3_2_file_browser_ui.md)
+
+### Phase 3.3: Search, Filter & Context Menu ✅ COMPLETE
+
+**Completed:** 2025-12-18
+**Summary:** Added unified search, file context menu, and file operations
+
+**Delivered:**
+- ✅ Real-time unified search (filename + category with natural language keywords)
+- ✅ 300ms debounced search with focus preservation
+- ✅ Flat list view for search results
+- ✅ Context menu component (reusable)
+- ✅ File context menu (Download, View Info, Rename, Delete)
+- ✅ File info modal with complete metadata display
+- ✅ File rename with extension validation
+- ✅ File delete with confirmation
+- ❌ Folder operations (intentionally skipped to preserve folder structure)
+- ❌ Move to folder dialog (intentionally skipped to maintain data organization)
+
+**Session:** [docs/sessions/2025-12-18_phase3_3_implementation.md](../sessions/2025-12-18_phase3_3_implementation.md)
+
 ### Objectives
 
-- [x] **Backend infrastructure** ✅ (Phase 3.1)
-- [ ] Implement fully functional file browser UI
+- [x] **Backend infrastructure** ✅ (Phase 3.1 - 2025-12-04)
+- [x] **File browser UI core** ✅ (Phase 3.2 - 2025-12-18)
+- [x] **Search, filter & context menu** ✅ (Phase 3.3 - 2025-12-18)
 - [x] Fix custom data upload in workspace ✅ (Completed in Nov-Dec 2024)
 - [ ] Add project/workspace organization (logical folders)
 - [x] Complete segmentation module integration ✅ (Completed Nov 2024)
-- [ ] Add search, filter, and batch operations UI
+- [ ] Add batch operations UI (Phase 3.4)
 
 ### Deliverables
 
@@ -287,19 +323,23 @@ Custom file upload now fully functional in workspace version with FileSelector c
   - [ ] File sizes and timestamps
   - [ ] Thumbnail previews for TIFF (first slice)
 
-- [ ] File Operations
-  - [ ] Select single/multiple files
-  - [ ] Download files
-  - [ ] Delete files
-  - [ ] Rename files
-  - [ ] Move files to folders
-  - [ ] Copy files
+- [x] File Operations ✅ **(Phase 3.3 - 2025-12-18)**
+  - [x] Right-click context menu for files ✅
+  - [x] Download files ✅
+  - [x] Delete files (with confirmation) ✅
+  - [x] Rename files (with extension validation) ✅
+  - [x] View file info modal (metadata display) ✅
+  - [ ] Select multiple files (Phase 3.4)
+  - [ ] Move files to folders (intentionally skipped - preserves folder structure)
+  - [ ] Copy files (deferred)
 
-- [ ] Search & Filter
-  - [ ] Search by filename
-  - [ ] Filter by file type (TIFF, model, results)
-  - [ ] Filter by date range
-  - [ ] Sort (name, size, date)
+- [x] Search & Filter ✅ **(Phase 3.3 - 2025-12-18)**
+  - [x] Unified search by filename and category (natural language keywords) ✅
+  - [x] Real-time filtering with 300ms debounce ✅
+  - [x] Flat list view for search results ✅
+  - [ ] Filter by date range (deferred)
+  - [ ] Sort (name, size, date) (deferred)
+  - **Note:** File type filter replaced by unified search (searches category keywords like "model", "mesh")
 
 **Workspace Organization:**
 - [ ] Projects/Folders

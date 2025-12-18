@@ -16,6 +16,20 @@ class FileBrowser {
     this.recentFileIds = new Set();    // Track new files for badges
     this.scrollPosition = 0;           // Save scroll position for refresh
     this.isRendering = false;          // Prevent render loops
+
+    // Category keyword mapping for unified search
+    this.categoryKeywords = {
+      'raw_images': ['raw', 'image', 'images', 'training', 'input'],
+      'annotations': ['annotation', 'annotations', 'mask', 'masks', 'label', 'labels'],
+      'inference_data': ['inference', 'test', 'predict', 'prediction'],
+      'imported_models': ['model', 'models', 'imported', 'pth', 'weights', 'checkpoint'],
+      'segmentation_results': ['segmentation', 'segment', 'result', 'results', 'output'],
+      'denoised': ['denoise', 'denoised', 'denoising', 'clean', 'cleaned'],
+      'meshes': ['mesh', 'meshes', '3d', 'surface', 'reconstruction']
+    };
+
+    // Create context menu instance
+    this.contextMenu = new ContextMenu();
   }
 
   /**
@@ -81,6 +95,11 @@ class FileBrowser {
         this.scrollPosition = treeEl.scrollTop;
       }
 
+      // Save search input focus and cursor position
+      const searchInput = this.container.querySelector('.fb-search-input');
+      const hadFocus = searchInput && document.activeElement === searchInput;
+      const cursorPosition = hadFocus ? searchInput.selectionStart : null;
+
       const files = this.state.get('workspace.files') || [];
 
       // Filter files based on search
@@ -131,11 +150,22 @@ class FileBrowser {
         <div class="fb-search">
           <input type="text"
                  class="fb-search-input"
-                 placeholder="Search files..."
+                 placeholder="Search files by name or type..."
+                 title="Search by filename or category (raw, annotation, model, mesh, etc.)"
                  value="${this.escapeHtml(this.searchQuery)}">
+          ${this.searchQuery ? `
+            <button class="fb-search-clear" title="Clear search">✕</button>
+          ` : ''}
         </div>
         <div class="fb-tree">
-          ${this.renderTree(tree)}
+          ${this.searchQuery && filteredFiles.length === 0 ? `
+            <div class="fb-empty-state">
+              <div class="fb-empty-icon">🔍</div>
+              <div class="fb-empty-text">No files found</div>
+              <div class="fb-empty-subtext">No files match "${this.escapeHtml(this.searchQuery)}"</div>
+              <button class="fb-btn-clear-search">Clear search</button>
+            </div>
+          ` : this.searchQuery ? this.renderSearchResults(filteredFiles) : this.renderTree(tree)}
         </div>
       `;
 
@@ -147,6 +177,17 @@ class FileBrowser {
 
       // Attach event listeners
       this.attachEventListeners();
+
+      // Restore search input focus and cursor position
+      if (hadFocus) {
+        const newSearchInput = this.container.querySelector('.fb-search-input');
+        if (newSearchInput) {
+          newSearchInput.focus();
+          if (cursorPosition !== null) {
+            newSearchInput.setSelectionRange(cursorPosition, cursorPosition);
+          }
+        }
+      }
     } finally {
       this.isRendering = false;
     }
@@ -362,6 +403,68 @@ class FileBrowser {
   }
 
   /**
+   * Render search results as a flat list
+   * @param {Array} files - Filtered files array
+   * @returns {string} HTML string
+   */
+  renderSearchResults(files) {
+    if (files.length === 0) {
+      return '';
+    }
+
+    return `
+      <div class="fb-search-results">
+        <div class="fb-search-header">
+          <span class="fb-search-count">${files.length} result${files.length !== 1 ? 's' : ''}</span>
+          <span class="fb-search-query">matching "${this.escapeHtml(this.searchQuery)}"</span>
+        </div>
+        ${files.map(file => this.renderSearchResultItem(file)).join('')}
+      </div>
+    `;
+  }
+
+  /**
+   * Render a single search result item
+   * @param {Object} file - File object
+   * @returns {string} HTML string
+   */
+  renderSearchResultItem(file) {
+    const isRecent = this.recentFileIds.has(file.id);
+    const hasThumbnail = this.shouldShowThumbnail(file.name);
+    const icon = this.getFileIcon(file.name);
+
+    // Extract directory path for display
+    const pathParts = file.path.split('/');
+    pathParts.pop(); // Remove filename
+    const dirPath = pathParts.join('/') || 'root';
+
+    return `
+      <div class="fb-search-result ${isRecent ? 'fb-file-new' : ''}"
+           data-file-id="${file.id}">
+        ${hasThumbnail ? `
+          <img src="/api/workspace/thumbnail/${file.id}"
+               class="fb-result-thumbnail"
+               alt="thumbnail"
+               loading="lazy"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+          <span class="fb-result-icon" style="display: none;">${icon}</span>
+        ` : `
+          <span class="fb-result-icon">${icon}</span>
+        `}
+        <div class="fb-result-info">
+          <div class="fb-result-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</div>
+          <div class="fb-result-path" title="${this.escapeHtml(file.path)}">📁 ${this.escapeHtml(dirPath)}</div>
+        </div>
+        <div class="fb-result-actions">
+          <button class="fb-btn-icon" title="Download" data-action="download">⬇️</button>
+          <button class="fb-btn-icon" title="Rename" data-action="rename">✏️</button>
+          <button class="fb-btn-icon" title="Delete" data-action="delete">🗑️</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
    * Attach event listeners to UI elements
    */
   attachEventListeners() {
@@ -381,6 +484,28 @@ class FileBrowser {
           this.searchQuery = e.target.value;
           this.render();
         }, 300);
+      });
+    }
+
+    // Clear search button (X in search input)
+    const searchClearBtn = this.container.querySelector('.fb-search-clear');
+    if (searchClearBtn) {
+      searchClearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.searchQuery = '';
+        if (searchInput) searchInput.value = '';
+        this.render();
+      });
+    }
+
+    // Clear search button in empty state
+    const clearSearchBtn = this.container.querySelector('.fb-btn-clear-search');
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.searchQuery = '';
+        if (searchInput) searchInput.value = '';
+        this.render();
       });
     }
 
@@ -463,6 +588,22 @@ class FileBrowser {
           case 'delete':
             this.deleteFile(fileId);
             break;
+        }
+      }
+    });
+
+    // Context menu for files and search results
+    this.container.addEventListener('contextmenu', (e) => {
+      // Check if right-click is on a file element (tree or search result)
+      const fileEl = e.target.closest('.fb-file, .fb-search-result');
+
+      if (fileEl) {
+        e.preventDefault(); // Prevent browser context menu
+        e.stopPropagation();
+
+        const fileId = fileEl.dataset.fileId;
+        if (fileId) {
+          this.showFileContextMenu(e.pageX, e.pageY, fileId);
         }
       }
     });
@@ -569,7 +710,136 @@ class FileBrowser {
   }
 
   /**
-   * Filter files based on search query
+   * Show context menu for a file
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {string} fileId - File ID
+   */
+  showFileContextMenu(x, y, fileId) {
+    const file = this.state.get('workspace.files').find(f => f.id === fileId);
+    if (!file) return;
+
+    const menuItems = [
+      {
+        icon: '⬇️',
+        label: 'Download',
+        onClick: () => this.downloadFile(fileId)
+      },
+      {
+        icon: 'ℹ️',
+        label: 'View Info',
+        onClick: () => this.showFileInfo(fileId)
+      },
+      {
+        icon: '✏️',
+        label: 'Rename',
+        onClick: () => this.renameFile(fileId)
+      },
+      {
+        separator: true
+      },
+      {
+        icon: '🗑️',
+        label: 'Delete',
+        shortcut: 'Del',
+        onClick: () => this.deleteFile(fileId)
+      }
+    ];
+
+    this.contextMenu.show(x, y, menuItems);
+  }
+
+  /**
+   * Show file info modal with metadata
+   * @param {string} fileId - File ID
+   */
+  showFileInfo(fileId) {
+    const file = this.state.get('workspace.files').find(f => f.id === fileId);
+    if (!file) return;
+
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'file-info-modal';
+    modal.innerHTML = `
+      <div class="file-info-overlay"></div>
+      <div class="file-info-content">
+        <div class="file-info-header">
+          <h3>File Information</h3>
+          <button class="file-info-close" title="Close">✕</button>
+        </div>
+        <div class="file-info-body">
+          ${this.shouldShowThumbnail(file.name) ? `
+            <div class="file-info-thumbnail">
+              <img src="/api/workspace/thumbnail/${file.id}"
+                   alt="Thumbnail"
+                   onerror="this.parentElement.style.display='none';">
+            </div>
+          ` : ''}
+          <div class="file-info-details">
+            <div class="file-info-row">
+              <span class="file-info-label">Name:</span>
+              <span class="file-info-value">${this.escapeHtml(file.name)}</span>
+            </div>
+            <div class="file-info-row">
+              <span class="file-info-label">Path:</span>
+              <span class="file-info-value">${this.escapeHtml(file.path)}</span>
+            </div>
+            <div class="file-info-row">
+              <span class="file-info-label">Size:</span>
+              <span class="file-info-value">${this.formatFileSize(file.size)}</span>
+            </div>
+            <div class="file-info-row">
+              <span class="file-info-label">Category:</span>
+              <span class="file-info-value">${this.escapeHtml(file.category || 'N/A')}</span>
+            </div>
+            <div class="file-info-row">
+              <span class="file-info-label">Uploaded:</span>
+              <span class="file-info-value">${this.formatDate(file.uploadedAt)}</span>
+            </div>
+            <div class="file-info-row">
+              <span class="file-info-label">ID:</span>
+              <span class="file-info-value file-info-mono">${this.escapeHtml(file.id)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add to document
+    document.body.appendChild(modal);
+
+    // Close handlers
+    const closeModal = () => {
+      if (modal.parentNode) {
+        modal.parentNode.removeChild(modal);
+      }
+    };
+
+    // Close button
+    const closeBtn = modal.querySelector('.file-info-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeModal);
+    }
+
+    // Click overlay to close
+    const overlay = modal.querySelector('.file-info-overlay');
+    if (overlay) {
+      overlay.addEventListener('click', closeModal);
+    }
+
+    // ESC key to close
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        closeModal();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+  }
+
+  /**
+   * Filter files based on search query - matches filename OR category
+   * Supports multi-word search (OR logic between words)
    * @param {Array} files - List of files
    * @returns {Array} Filtered files
    */
@@ -578,10 +848,33 @@ class FileBrowser {
       return files;
     }
 
-    const query = this.searchQuery.toLowerCase();
-    return files.filter(file =>
-      file.name.toLowerCase().includes(query)
-    );
+    const query = this.searchQuery.toLowerCase().trim();
+    const queryWords = query.split(/\s+/); // Split by whitespace for multi-word search
+
+    return files.filter(file => {
+      // Check if ANY word in query matches filename or category
+      return queryWords.some(word => {
+        // Match 1: Filename (case-insensitive substring match)
+        if (file.name.toLowerCase().includes(word)) {
+          return true;
+        }
+
+        // Match 2: Category value (direct partial match)
+        // e.g., "seg" matches "segmentation_results"
+        if (file.category && file.category.toLowerCase().includes(word)) {
+          return true;
+        }
+
+        // Match 3: Category keywords (mapped natural language terms)
+        // e.g., "model" matches imported_models, "mesh" matches meshes
+        if (file.category && this.categoryKeywords[file.category]) {
+          const keywords = this.categoryKeywords[file.category];
+          return keywords.some(keyword => keyword.toLowerCase().includes(word));
+        }
+
+        return false;
+      });
+    });
   }
 
   /**
