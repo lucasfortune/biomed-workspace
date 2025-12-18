@@ -1,3 +1,7 @@
+// Load environment configuration FIRST (before any other requires)
+const { initializeEnvironment } = require('./utils/envLoader');
+const env = initializeEnvironment();
+
 const express = require('express');
 const multer = require('multer');
 const { spawn } = require('child_process');
@@ -13,11 +17,12 @@ const archiver = require('archiver');
 const bcrypt = require('bcrypt');
 const activityLogger = require('./activityLogger');
 const WorkspaceManager = require('./WorkspaceManager');
+const { attachErrorHandler, createTrainingErrorHandler, createInferenceErrorHandler } = require('./utils/processErrorHandler');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
 
 // Python interpreter configuration - use venv Python to ensure all dependencies are available
 const PYTHON_PATH = path.join(__dirname, 'venv', 'bin', 'python');
@@ -85,15 +90,74 @@ async function trackModuleOutput(sessionId, filePath, category, metadata = {}) {
   }
 }
 
+/**
+ * Convert inference result paths from absolute to web-accessible paths
+ * @param {object} result - Result object with file paths
+ * @param {string} sessionId - Session ID
+ * @param {string} workspacePath - Workspace root path
+ * @returns {object} Result object with converted paths
+ */
+function convertResultPathsForWeb(result, sessionId, workspacePath) {
+  const resultsDir = path.join(workspacePath, 'results');
+  const convertedResult = { ...result };
+
+  if (result.output_path) {
+    convertedResult.output_path = `/workspaces/${sessionId}/results/` + path.relative(resultsDir, result.output_path);
+  }
+  if (result.metadata_path) {
+    convertedResult.metadata_path = `/workspaces/${sessionId}/results/` + path.relative(resultsDir, result.metadata_path);
+  }
+  if (result.visualization_path) {
+    convertedResult.visualization_path = `/workspaces/${sessionId}/results/` + path.relative(resultsDir, result.visualization_path);
+  }
+  if (result.original_data_overlay_path) {
+    convertedResult.original_data_overlay_path = `/workspaces/${sessionId}/results/` + path.relative(resultsDir, result.original_data_overlay_path);
+  }
+
+  return convertedResult;
+}
+
+/**
+ * Track inference result files in workspace metadata (SINGLE tracking point)
+ * @param {object} result - Result object with file paths (absolute paths)
+ * @param {string} inferenceId - Inference ID
+ * @param {string} sessionId - Session ID
+ * @param {string} source - Source of result (FINAL_RESULT, BUFFER_JSON, MANUAL)
+ * @returns {Promise<void>}
+ */
+async function trackInferenceResults(result, inferenceId, sessionId, source) {
+  if (!result || !result.success) {
+    console.log(`[TRACKING] Skipping tracking - result not successful (source: ${source})`);
+    return;
+  }
+
+  console.log(`[TRACKING] Tracking inference results from ${source} for inference ${inferenceId}`);
+
+  const filesToTrack = [
+    { path: result.output_path, category: 'segmentations' },
+    { path: result.metadata_path, category: 'segmentations' },
+    { path: result.visualization_path, category: 'segmentations' }
+  ];
+
+  for (const file of filesToTrack) {
+    if (file.path && fs.existsSync(file.path)) {
+      await trackModuleOutput(sessionId, file.path, file.category);
+      console.log(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
+    }
+  }
+
+  console.log(`[TRACKING] Completed tracking for inference ${inferenceId} (source: ${source})`);
+}
+
 // Session configuration with file-based storage for persistence
 app.use(session({
   store: new FileStore({
     path: './sessions',
     ttl: 86400 * 7, // 7 days
     retries: 0,
-    secret: process.env.SESSION_SECRET || 'segmentation-app-secret'
+    secret: env.SESSION_SECRET
   }),
-  secret: process.env.SESSION_SECRET || 'segmentation-app-secret',
+  secret: env.SESSION_SECRET,
   resave: false,
   saveUninitialized: true,
   cookie: {
@@ -2593,27 +2657,33 @@ function startTrainingProcess(params, io) {
     '--training_id', params.training_id
   ]);
 
+  // Attach unified error handler (handles spawn errors and stderr buffering)
+  const stderrBuffer = attachErrorHandler(
+    pythonScript,
+    createTrainingErrorHandler(params.training_id, PYTHON_PATH, io, trainingSessions)
+  );
+
   let outputBuffer = '';
-  
+
   pythonScript.stdout.on('data', (data) => {
     const output = data.toString();
     console.log('Training output:', output);
-    
+
     // Add to buffer
     outputBuffer += output;
-    
+
     // Process complete lines
     const lines = outputBuffer.split('\n');
     outputBuffer = lines.pop(); // Keep incomplete line in buffer
-    
+
     for (const line of lines) {
       if (line.startsWith('PROGRESS:')) {
         try {
           const progressData = line.substring(9);
           const progress = JSON.parse(progressData);
-          
+
           console.log('Parsed progress:', progress);
-          
+
           // Update training session
           const training = trainingSessions.get(params.training_id);
           if (training) {
@@ -2622,20 +2692,16 @@ function startTrainingProcess(params, io) {
             training.total_epochs = progress.total_epochs;
             training.metrics = progress.metrics;
           }
-          
+
           // Send real-time update to clients
           io.to(`training-${params.training_id}`).emit('training-progress', progress);
           console.log(`Emitted progress to room: training-${params.training_id}`);
-          
+
         } catch (e) {
           console.error('Error parsing progress data:', e.message);
         }
       }
     }
-  });
-
-  pythonScript.stderr.on('data', (data) => {
-    console.error('Training error:', data.toString());
   });
 
   pythonScript.on('close', async (code) => {
@@ -2663,7 +2729,18 @@ function startTrainingProcess(params, io) {
       } else {
         training.status = 'failed';
         training.endTime = new Date();
-        io.to(`training-${params.training_id}`).emit('training-complete', { success: false });
+
+        // Include stderr output in error message
+        const stderrOutput = stderrBuffer.getBuffer();
+        const errorMessage = stderrOutput || 'Training failed with unknown error';
+
+        console.error(`[TRAINING] Process failed with code ${code}`);
+        console.error(`[TRAINING] stderr output: ${stderrOutput}`);
+
+        io.to(`training-${params.training_id}`).emit('training-complete', {
+          success: false,
+          error: errorMessage
+        });
       }
     }
   });
@@ -2716,12 +2793,20 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
       '--inference_id', inferenceId
     ]);
 
+    // Attach unified error handler (handles spawn errors and stderr buffering)
+    const stderrBuffer = attachErrorHandler(
+      pythonScript,
+      createInferenceErrorHandler(inferenceId, PYTHON_PATH, io, inferenceSessions, (error) => {
+        // Custom error callback - reject the promise on spawn error
+        reject(error);
+      })
+    );
+
     let outputBuffer = '';
-    let errorOutput = '';
     let finalResult = null;
     let backupJsonLines = [];
     let collectingBackupJson = false;
-    
+
     pythonScript.stdout.on('data', (data) => {
       const output = data.toString();
       console.log('Inference output:', output);
@@ -2788,203 +2873,101 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
         }
       }
     });
-    
-    pythonScript.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-      console.error('Inference error:', data.toString());
-    });
 
     pythonScript.on('close', async (code) => {
       const inference = inferenceSessions.get(inferenceId);
-      
-      console.log(`Python script finished with code: ${code}`);
-      console.log(`Final result found: ${finalResult ? 'yes' : 'no'}`);
-      console.log(`Output buffer length: ${outputBuffer.length}`);
-      console.log(`Output buffer content: "${outputBuffer}"`);
-      
-      if (code === 0) {
-        // Check if we got a final result
-        if (finalResult) {
-          if (inference) {
-            inference.status = 'completed';
-            inference.endTime = new Date();
-          }
 
-          // Store original paths for file tracking
-          const originalPaths = {
-            output_path: finalResult.output_path,
-            metadata_path: finalResult.metadata_path,
-            visualization_path: finalResult.visualization_path,
-            original_data_overlay_path: finalResult.original_data_overlay_path
-          };
+      console.log(`[INFERENCE] Python script finished with code: ${code}`);
+      console.log(`[INFERENCE] Final result found: ${finalResult ? 'yes' : 'no'}`);
 
-          // Track inference outputs in file browser (using original absolute paths)
-          if (finalResult.success && inference) {
-            if (originalPaths.output_path && fs.existsSync(originalPaths.output_path)) {
-              await trackModuleOutput(inference.sessionId, originalPaths.output_path, 'segmentations');
-            }
-            if (originalPaths.metadata_path && fs.existsSync(originalPaths.metadata_path)) {
-              await trackModuleOutput(inference.sessionId, originalPaths.metadata_path, 'segmentations');
-            }
-            if (originalPaths.visualization_path && fs.existsSync(originalPaths.visualization_path)) {
-              await trackModuleOutput(inference.sessionId, originalPaths.visualization_path, 'segmentations');
-            }
-          }
+      // STEP 1: Handle non-zero exit codes (failures)
+      if (code !== 0) {
+        const stderrOutput = stderrBuffer.getBuffer();
+        const errorMessage = stderrOutput || 'Inference failed with unknown error';
 
-          // Convert absolute file paths to web-accessible paths
-          const workspacePath = workspaceManager.getWorkspacePath(inference.sessionId);
-          const sessionId = inference.sessionId;
+        console.error(`[INFERENCE] Process failed with code ${code}`);
+        console.error(`[INFERENCE] Error output: ${stderrOutput}`);
 
-          if (finalResult.output_path) {
-            finalResult.output_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.output_path);
-          }
-          if (finalResult.metadata_path) {
-            finalResult.metadata_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.metadata_path);
-          }
-          if (finalResult.visualization_path) {
-            finalResult.visualization_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.visualization_path);
-          }
-          if (finalResult.original_data_overlay_path) {
-            finalResult.original_data_overlay_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), finalResult.original_data_overlay_path);
-          }
-
-          console.log('Converted paths for web access:', finalResult);
-
-          io.to(`inference-${inferenceId}`).emit('inference-complete', {
-            success: true,
-            result: finalResult
-          });
-
-          if (finalResult.success) {
-            resolve(finalResult);
-          } else {
-            reject(new Error(finalResult.error || 'Inference failed'));
-          }
-        } else {
-          // Try to parse any remaining output as backup
-          console.log('No FINAL_RESULT found, trying to parse remaining buffer...');
-          
-          // Try to find JSON in the remaining buffer
-          try {
-            // Look for JSON-like content in the buffer
-            const jsonMatch = outputBuffer.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const result = JSON.parse(jsonMatch[0]);
-              console.log('Successfully parsed JSON from buffer:', result);
-
-              if (inference) {
-                inference.status = 'completed';
-                inference.endTime = new Date();
-              }
-
-              // Store original paths for file tracking
-              const originalPaths = {
-                output_path: result.output_path,
-                metadata_path: result.metadata_path,
-                visualization_path: result.visualization_path,
-                original_data_overlay_path: result.original_data_overlay_path
-              };
-
-              // Track inference outputs in file browser (using original absolute paths)
-              if (result && result.success && inference) {
-                if (originalPaths.output_path && fs.existsSync(originalPaths.output_path)) {
-                  await trackModuleOutput(inference.sessionId, originalPaths.output_path, 'segmentations');
-                }
-                if (originalPaths.metadata_path && fs.existsSync(originalPaths.metadata_path)) {
-                  await trackModuleOutput(inference.sessionId, originalPaths.metadata_path, 'segmentations');
-                }
-                if (originalPaths.visualization_path && fs.existsSync(originalPaths.visualization_path)) {
-                  await trackModuleOutput(inference.sessionId, originalPaths.visualization_path, 'segmentations');
-                }
-              }
-
-              // Convert absolute file paths to web-accessible paths
-              const workspacePath = workspaceManager.getWorkspacePath(inference.sessionId);
-              const sessionId = inference.sessionId;
-
-              if (result.output_path) {
-                result.output_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.output_path);
-              }
-              if (result.metadata_path) {
-                result.metadata_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.metadata_path);
-              }
-              if (result.visualization_path) {
-                result.visualization_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.visualization_path);
-              }
-              if (result.original_data_overlay_path) {
-                result.original_data_overlay_path = `/workspaces/${sessionId}/results/` + path.relative(path.join(workspacePath, 'results'), result.original_data_overlay_path);
-              }
-
-              console.log('Converted paths for web access (backup):', result);
-
-              io.to(`inference-${inferenceId}`).emit('inference-complete', {
-                success: true,
-                result: result
-              });
-
-              resolve(result);
-              return;
-            }
-            
-            // If no JSON found, create a success result manually
-            const manualResult = {
-              success: true,
-              output_path: outputPath,
-              metadata_path: outputPath.replace('.tif', '_metadata.json'),
-              visualization_path: outputPath.replace('.tif', '') + '_visualization_data.json',
-              metrics: { message: 'Inference completed but metrics not available' }
-            };
-            
-            console.log('Created manual result:', manualResult);
-            
-            if (inference) {
-              inference.status = 'completed';
-              inference.endTime = new Date();
-            }
-            io.to(`inference-${inferenceId}`).emit('inference-complete', {
-              success: true,
-              result: manualResult
-            });
-
-            // Track inference outputs in file browser
-            if (manualResult && manualResult.success && inference) {
-              if (manualResult.output_path && fs.existsSync(manualResult.output_path)) {
-                await trackModuleOutput(inference.sessionId, manualResult.output_path, 'segmentations');
-              }
-              if (manualResult.metadata_path && fs.existsSync(manualResult.metadata_path)) {
-                await trackModuleOutput(inference.sessionId, manualResult.metadata_path, 'segmentations');
-              }
-              if (manualResult.visualization_path && fs.existsSync(manualResult.visualization_path)) {
-                await trackModuleOutput(inference.sessionId, manualResult.visualization_path, 'segmentations');
-              }
-            }
-
-            resolve(manualResult);
-            
-          } catch (e) {
-            console.error('Failed to parse any output as JSON:', e.message);
-            console.error('Complete output buffer:', outputBuffer);
-            console.error('Complete error output:', errorOutput);
-            
-            if (inference) {
-              inference.status = 'failed';
-              inference.endTime = new Date();
-            }
-            io.to(`inference-${inferenceId}`).emit('inference-complete', { success: false });
-            reject(new Error(`Failed to get inference result. Output: "${outputBuffer}"`));
-          }
-        }
-      } else {
-        console.error(`Python script failed with code ${code}`);
-        console.error('Error output:', errorOutput);
-        
         if (inference) {
           inference.status = 'failed';
           inference.endTime = new Date();
         }
-        
-        io.to(`inference-${inferenceId}`).emit('inference-complete', { success: false });
-        reject(new Error(`Inference failed with code ${code}: ${errorOutput}`));
+
+        io.to(`inference-${inferenceId}`).emit('inference-complete', {
+          success: false,
+          error: errorMessage
+        });
+        reject(new Error(`Inference failed with code ${code}: ${errorMessage}`));
+        return;
+      }
+
+      // STEP 2: Determine result source and parse result
+      let result = null;
+      let resultSource = null;
+
+      if (finalResult) {
+        // Source 1: FINAL_RESULT prefix from Python script
+        result = finalResult;
+        resultSource = 'FINAL_RESULT';
+        console.log('[INFERENCE] Using FINAL_RESULT from Python script');
+      } else {
+        // Source 2: Try to parse JSON from output buffer
+        console.log('[INFERENCE] No FINAL_RESULT found, trying to parse buffer...');
+        const jsonMatch = outputBuffer.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+          try {
+            result = JSON.parse(jsonMatch[0]);
+            resultSource = 'BUFFER_JSON';
+            console.log('[INFERENCE] Successfully parsed JSON from buffer');
+          } catch (e) {
+            console.error('[INFERENCE] Failed to parse buffer JSON:', e.message);
+          }
+        }
+
+        // Source 3: Create manual result as last resort
+        if (!result) {
+          result = {
+            success: true,
+            output_path: outputPath,
+            metadata_path: outputPath.replace('.tif', '_metadata.json'),
+            visualization_path: outputPath.replace('.tif', '') + '_visualization_data.json',
+            metrics: { message: 'Inference completed but metrics not available' }
+          };
+          resultSource = 'MANUAL';
+          console.log('[INFERENCE] Created manual result (no JSON output found)');
+        }
+      }
+
+      // STEP 3: Update session status
+      if (inference) {
+        inference.status = 'completed';
+        inference.endTime = new Date();
+      }
+
+      // STEP 4: Track files ONCE (single tracking point)
+      if (inference && result) {
+        await trackInferenceResults(result, inferenceId, inference.sessionId, resultSource);
+      }
+
+      // STEP 5: Convert paths to web-accessible format
+      if (inference && result) {
+        const workspacePath = workspaceManager.getWorkspacePath(inference.sessionId);
+        result = convertResultPathsForWeb(result, inference.sessionId, workspacePath);
+        console.log('[INFERENCE] Converted paths for web access');
+      }
+
+      // STEP 6: Emit completion event
+      io.to(`inference-${inferenceId}`).emit('inference-complete', {
+        success: true,
+        result: result
+      });
+
+      // STEP 7: Resolve or reject promise
+      if (result && result.success) {
+        resolve(result);
+      } else {
+        reject(new Error(result?.error || 'Inference failed'));
       }
     });
   });
