@@ -16,7 +16,8 @@
   ],
   "watch": [
     "server.js",
-    "public/"
+    "public/",
+    "src/"
   ],
   "ext": "js,html,css",
   "env": {

@@ -22,21 +22,62 @@ const activityLogger = require('./activityLogger');
 const WorkspaceManager = require('./WorkspaceManager');
 const { attachErrorHandler, createTrainingErrorHandler, createInferenceErrorHandler } = require('./utils/processErrorHandler');
 
+// =============================================================================
+// REFACTORED MODULES (Phase 1)
+// =============================================================================
+const {
+  PYTHON_PATH,
+  DIRECTORIES,
+  UPLOAD_LIMITS,
+  SESSION_CONFIG,
+  PYTHON_SCRIPTS,
+  validatePythonPath,
+  ensureDirectories
+} = require('./src/config/constants');
+const {
+  validateTrainingConfig: validateTrainingConfigHelper,
+  validateTiffStacks: validateTiffStacksHelper,
+  validateImportedModel: validateImportedModelHelper,
+  validateInferenceTiff: validateInferenceTiffHelper
+} = require('./src/helpers/validation');
+const {
+  convertResultPathsForWeb: convertResultPathsForWebHelper
+} = require('./src/helpers/pathHelpers');
+const {
+  deleteDirectory: deleteDirectoryHelper
+} = require('./src/helpers/fileHelpers');
+const sessionTracker = require('./src/services/SessionTracker');
+
+// =============================================================================
+// REFACTORED MODULES (Phase 2 - Middleware)
+// =============================================================================
+const {
+  requireAuth,
+  requireApproved,
+  requireAdmin
+} = require('./src/middleware/auth.middleware');
+const {
+  createUploadMiddleware,
+  handleMulterError
+} = require('./src/middleware/upload.middleware');
+const {
+  createSessionMiddleware
+} = require('./src/middleware/session.middleware');
+const {
+  globalErrorHandler
+} = require('./src/middleware/error.middleware');
+
+// Aliases for backward compatibility with existing code
+const trainingSessions = sessionTracker.trainingSessions;
+const inferenceSessions = sessionTracker.inferenceSessions;
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const PORT = env.PORT;
 
-// Python interpreter configuration - use venv Python to ensure all dependencies are available
-const PYTHON_PATH = path.join(__dirname, 'venv', 'bin', 'python');
-
-// Validate Python interpreter exists at startup
-if (!fs.existsSync(PYTHON_PATH)) {
-  logger.error('FATAL: Python interpreter not found at:', PYTHON_PATH);
-  logger.error('Please set up the virtual environment:');
-  logger.error('  1. Run: python -m venv venv');
-  logger.error('  2. Run: source venv/bin/activate');
-  logger.error('  3. Run: pip install -r requirements.txt');
+// Validate Python interpreter exists at startup (using imported function)
+if (!validatePythonPath()) {
   process.exit(1);
 }
 logger.info('Python interpreter found at:', PYTHON_PATH);
@@ -164,21 +205,8 @@ async function trackInferenceResults(result, inferenceId, sessionId, source) {
 }
 
 // Session configuration with file-based storage for persistence
-app.use(session({
-  store: new FileStore({
-    path: './sessions',
-    ttl: 86400 * 7, // 7 days
-    retries: 0,
-    secret: env.SESSION_SECRET
-  }),
-  secret: env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: true,
-  cookie: {
-    secure: false, // Set to true in production with HTTPS
-    maxAge: 86400000 * 7 // 7 days
-  }
-}));
+// NOTE: Using createSessionMiddleware from Phase 2 refactoring
+app.use(createSessionMiddleware(env));
 
 // Middleware
 app.use(cors());
@@ -211,128 +239,20 @@ app.get('/test_data/:filename', requireAuth, (req, res) => {
 app.use(express.static('public'));
 
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const sessionId = req.session.id;
+// NOTE: Using createUploadMiddleware factory from Phase 2 refactoring
+const { upload, uploadImport } = createUploadMiddleware(workspaceManager, logger);
 
-    // NEW: Use workspace directory structure
-    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+// NOTE: trainingSessions and inferenceSessions are now imported from SessionTracker
+// (aliases defined at top of file for backward compatibility)
 
-    // Initialize workspace if it doesn't exist
-    if (!fs.existsSync(workspacePath)) {
-      logger.debug('[Multer] Initializing workspace for session:', sessionId);
-      workspaceManager.initializeWorkspace(sessionId);
-    }
-
-    // Determine subdirectory based on field name
-    let subdir = 'uploads/raw'; // Default
-
-    if (file.fieldname === 'raw_images') {
-      subdir = 'uploads/raw';
-    } else if (file.fieldname === 'annotations') {
-      subdir = 'uploads/annotations';
-    } else if (file.fieldname === 'inference_data') {
-      subdir = 'uploads/inference_data';
-    } else if (file.fieldname === 'file') {
-      // For workspace upload endpoint, use category from body if available
-      subdir = 'uploads/raw'; // Will be moved if needed
-    }
-
-    logger.debug('[Multer] Field name:', file.fieldname, '→ Directory:', subdir);
-
-    const uploadDir = path.join(workspacePath, subdir);
-
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    logger.debug('[Multer] Upload destination:', uploadDir);
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const timestamp = Date.now();
-    cb(null, `${timestamp}-${file.originalname}`);
-  }
-});
-
-const upload = multer({ 
-  storage: storage,
-  fileFilter: (req, file, cb) => {
-    // Accept only TIFF files
-    if (file.mimetype === 'image/tiff' || file.originalname.toLowerCase().endsWith('.tif')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only TIFF files are allowed!'), false);
-    }
-  },
-  limits: {
-    fileSize: 200 * 1024 * 1024 // 200MB limit for TIFF stacks
-  }
-});
-// NEW: Separate multer configuration for importing pre-trained models
-const uploadImport = multer({ 
-  storage: storage,
-  fileFilter: (req, file, cb) => {
-    // Accept .pth (PyTorch model) and .json (config) files
-    const fileName = file.originalname.toLowerCase();
-    if (fileName.endsWith('.pth') || fileName.endsWith('.json')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only .pth (model) and .json (config) files are allowed for import!'), false);
-    }
-  },
-  limits: {
-    fileSize: 2 * 1024 * 1024 * 1024, // 2GB limit for model files (they can be quite large)
-    files: 2 // Maximum 2 files (model + config)
-  }
-});
-
-// Store active training sessions and inference sessions
-const trainingSessions = new Map();
-const inferenceSessions = new Map();
-
-// Ensure directories exist
-const dirs = ['uploads', 'results', 'models', 'public'];
-dirs.forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
+// Ensure directories exist (using imported function)
+ensureDirectories();
 
 // ==============================================================================
 // AUTHENTICATION MIDDLEWARE
 // ==============================================================================
-
-/**
- * Basic authentication - allows pending & approved users
- */
-function requireAuth(req, res, next) {
-  if (req.session && req.session.user) {
-    return next();
-  }
-  res.status(401).json({ error: 'Authentication required', authenticated: false });
-}
-
-/**
- * Requires approved status - full access
- */
-function requireApproved(req, res, next) {
-  if (req.session && req.session.user && req.session.user.status === 'active') {
-    return next();
-  }
-  res.status(403).json({ error: 'Account approval required' });
-}
-
-/**
- * Admin-only access
- */
-function requireAdmin(req, res, next) {
-  if (req.session && req.session.user && req.session.user.isAdmin) {
-    return next();
-  }
-  res.status(403).json({ error: 'Admin access required' });
-}
+// NOTE: requireAuth, requireApproved, requireAdmin are now imported from
+// ./src/middleware/auth.middleware.js (Phase 2 refactoring)
 
 // ==============================================================================
 // USER MANAGEMENT FUNCTIONS
@@ -2999,14 +2919,8 @@ app.get('/inference-status/:inferenceId', requireAuth, (req, res) => {
 });
 
 // Error handling middleware
-app.use((error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large (max 200MB)' });
-    }
-  }
-  res.status(500).json({ error: error.message });
-});
+// NOTE: Using globalErrorHandler from Phase 2 refactoring
+app.use(globalErrorHandler);
 
 server.listen(PORT, () => {
   logger.info(`Server running on http://localhost:${PORT}`);
