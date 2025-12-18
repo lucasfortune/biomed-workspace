@@ -9,10 +9,16 @@ import json
 import tifffile
 import numpy as np
 from pathlib import Path
-import base64
-import io
-from PIL import Image
 from convert_annotations import convert_annotation_values, validate_annotation_classes
+from tiff_validation_utils import (
+    convert_signed_integer_to_uint16,
+    create_preview_image,
+    validate_tiff_data_type,
+    validate_tiff_dimensions,
+    validate_tiff_data_content,
+    calculate_data_statistics,
+    get_supported_types
+)
 
 def validate_tiff_stacks(raw_path, annotation_path):
     """
@@ -52,52 +58,31 @@ def validate_tiff_stacks(raw_path, annotation_path):
                 "error": f"Shape mismatch: raw={raw_stack.shape}, annotations={annotation_stack.shape}"
             }
         
-        # Check if stacks are 3D (multiple slices)
-        if len(raw_stack.shape) != 3:
+        # Validate dimensions - expect 3D stack
+        is_valid_dim, dim_error = validate_tiff_dimensions(raw_stack, expected_ndim=3)
+        if not is_valid_dim:
             return {
                 "valid": False,
-                "error": f"Expected 3D stack, got {len(raw_stack.shape)}D"
+                "error": f"Raw images: {dim_error}"
             }
-        
-        # Validate and convert data types
-        supported_types = [np.uint8, np.uint16, np.int16, np.int32, np.float32, np.float64]
-        
-        if raw_stack.dtype not in supported_types:
+
+        # Validate data type
+        is_valid_type, type_error = validate_tiff_data_type(raw_stack)
+        if not is_valid_type:
             return {
                 "valid": False,
-                "error": f"Unsupported raw image data type: {raw_stack.dtype}. Supported types: uint8, uint16, int16, int32, float32, float64"
+                "error": f"Raw images: {type_error}"
             }
-        
-        # Convert signed integer types to float32 for consistent processing
-        # This handles int16 and int32 which some microscopy software uses
-        conversion_applied = False
+
+        # Convert signed integer types to uint16 if needed
         original_dtype = str(raw_stack.dtype)
-        
-        if raw_stack.dtype in [np.int16, np.int32]:
-            # Normalize to [0, 1] range based on actual data range
-            # This preserves the full dynamic range of the data
-            data_min = raw_stack.min()
-            data_max = raw_stack.max()
-            
-            if data_max > data_min:
-                raw_stack = ((raw_stack.astype(np.float32) - data_min) / (data_max - data_min))
-            else:
-                raw_stack = np.zeros_like(raw_stack, dtype=np.float32)
-            
-            # Scale to uint16 range for consistency with training pipeline
-            raw_stack = (raw_stack * 65535).astype(np.uint16)
-            
-            # Save the converted file back
-            try:
-                tifffile.imwrite(raw_path, raw_stack)
-                conversion_applied = True
-                print(f"[Bit Depth Conversion] Conversion successful! Original range: [{data_min}, {data_max}]", file=sys.stderr, flush=True)
-                print(f"[Bit Depth Conversion] Converted from {original_dtype} to uint16", file=sys.stderr, flush=True)
-            except Exception as e:
-                return {
-                    "valid": False,
-                    "error": f"Failed to convert signed integer format: {str(e)}"
-                }
+        raw_stack, conversion_applied, _, data_min, data_max = convert_signed_integer_to_uint16(raw_stack, raw_path)
+
+        if raw_stack is None:
+            return {
+                "valid": False,
+                "error": "Failed to convert signed integer format"
+            }
         
         # Check annotation values and convert if necessary
         unique_values = np.unique(annotation_stack)
@@ -146,14 +131,9 @@ def validate_tiff_stacks(raw_path, annotation_path):
         # Calculate file sizes
         raw_size_mb = Path(raw_path).stat().st_size / (1024 * 1024)
         annotation_size_mb = Path(annotation_path).stat().st_size / (1024 * 1024)
-        
-        # Calculate statistics
-        raw_stats = {
-            "min": float(raw_stack.min()),
-            "max": float(raw_stack.max()),
-            "mean": float(raw_stack.mean()),
-            "std": float(raw_stack.std())
-        }
+
+        # Calculate statistics using shared utility
+        raw_stats = calculate_data_statistics(raw_stack)
         
         # Detect number of classes from annotations
         num_classes = len(unique_values)
@@ -202,54 +182,28 @@ def validate_tiff_stacks(raw_path, annotation_path):
             "error": f"Unexpected error during validation: {str(e)}"
         }
     
-def create_downsampled_preview(image_slice, is_annotation=False, target_size=(256, 256)):
-    """Create downsampled preview with appropriate resampling method"""
-    # Normalize the image data for display
-    if is_annotation:
-        # For annotations, preserve exact values
-        display_image = image_slice.astype(np.uint8)
-        # Scale annotation values for better visibility (0=black, 1=gray, 2=white)
-        display_image = (display_image * 127).astype(np.uint8)
-        resample_method = Image.NEAREST
-    else:
-        # For raw images, normalize to 0-255 range
-        image_min, image_max = image_slice.min(), image_slice.max()
-        if image_max > image_min:
-            display_image = ((image_slice - image_min) / (image_max - image_min) * 255).astype(np.uint8)
-        else:
-            display_image = np.zeros_like(image_slice, dtype=np.uint8)
-        resample_method = Image.LANCZOS
-    
-    # Create PIL image and resize
-    pil_image = Image.fromarray(display_image)
-    downsampled = pil_image.resize(target_size, resample_method)
-    
-    # Convert to base64 PNG
-    buffer = io.BytesIO()
-    downsampled.save(buffer, format='PNG', optimize=True)
-    base64_string = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    
-    return base64_string
-
 def generate_training_preview(raw_path, annotation_path):
     """Generate preview images for training data"""
     try:
         # Read first slice from each stack
         raw_stack = tifffile.imread(raw_path)
         annotation_stack = tifffile.imread(annotation_path)
-        
+
         raw_slice = raw_stack[0]  # First slice
         annotation_slice = annotation_stack[0]  # First slice
-        
-        # Generate previews
-        raw_preview = create_downsampled_preview(raw_slice, is_annotation=False)
-        ann_preview = create_downsampled_preview(annotation_slice, is_annotation=True)
-        
-        return {
-            'raw_preview': raw_preview,
-            'annotation_preview': ann_preview
-        }
-        
+
+        # Generate previews using shared utility
+        raw_preview = create_preview_image(raw_slice, is_annotation=False)
+        ann_preview = create_preview_image(annotation_slice, is_annotation=True)
+
+        if raw_preview and ann_preview:
+            return {
+                'raw_preview': raw_preview,
+                'annotation_preview': ann_preview
+            }
+        else:
+            return None
+
     except Exception as e:
         print(f"Preview generation failed: {str(e)}", flush=True)
         return None

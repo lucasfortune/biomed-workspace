@@ -2,6 +2,9 @@
 const { initializeEnvironment } = require('./utils/envLoader');
 const env = initializeEnvironment();
 
+// Load logger (after env is initialized)
+const logger = require('./utils/logger');
+
 const express = require('express');
 const multer = require('multer');
 const { spawn } = require('child_process');
@@ -26,6 +29,17 @@ const PORT = env.PORT;
 
 // Python interpreter configuration - use venv Python to ensure all dependencies are available
 const PYTHON_PATH = path.join(__dirname, 'venv', 'bin', 'python');
+
+// Validate Python interpreter exists at startup
+if (!fs.existsSync(PYTHON_PATH)) {
+  logger.error('FATAL: Python interpreter not found at:', PYTHON_PATH);
+  logger.error('Please set up the virtual environment:');
+  logger.error('  1. Run: python -m venv venv');
+  logger.error('  2. Run: source venv/bin/activate');
+  logger.error('  3. Run: pip install -r requirements.txt');
+  process.exit(1);
+}
+logger.info('Python interpreter found at:', PYTHON_PATH);
 
 // Initialize WorkspaceManager
 const workspaceManager = new WorkspaceManager();
@@ -55,7 +69,7 @@ async function trackModuleOutput(sessionId, filePath, category, metadata = {}) {
       folderId: null
     });
 
-    console.log(`Tracked ${category} output:`, fileName);
+    logger.debug(`Tracked ${category} output:`, fileName);
 
     // Generate thumbnail for TIFF files (async, don't wait)
     const ext = path.extname(fileName).toLowerCase();
@@ -68,7 +82,7 @@ async function trackModuleOutput(sessionId, filePath, category, metadata = {}) {
 
       const thumbnailPath = path.join(thumbnailsDir, `${fileEntry.id}.jpg`);
 
-      spawn('python', [
+      spawn(PYTHON_PATH, [
         'python/generate_thumbnail.py',
         filePath,
         thumbnailPath
@@ -85,7 +99,7 @@ async function trackModuleOutput(sessionId, filePath, category, metadata = {}) {
 
     return fileEntry;
   } catch (error) {
-    console.error('Error tracking module output:', error);
+    logger.error('Error tracking module output:', error);
     return null;
   }
 }
@@ -127,11 +141,11 @@ function convertResultPathsForWeb(result, sessionId, workspacePath) {
  */
 async function trackInferenceResults(result, inferenceId, sessionId, source) {
   if (!result || !result.success) {
-    console.log(`[TRACKING] Skipping tracking - result not successful (source: ${source})`);
+    logger.debug(`[TRACKING] Skipping tracking - result not successful (source: ${source})`);
     return;
   }
 
-  console.log(`[TRACKING] Tracking inference results from ${source} for inference ${inferenceId}`);
+  logger.debug(`[TRACKING] Tracking inference results from ${source} for inference ${inferenceId}`);
 
   const filesToTrack = [
     { path: result.output_path, category: 'segmentations' },
@@ -142,11 +156,11 @@ async function trackInferenceResults(result, inferenceId, sessionId, source) {
   for (const file of filesToTrack) {
     if (file.path && fs.existsSync(file.path)) {
       await trackModuleOutput(sessionId, file.path, file.category);
-      console.log(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
+      logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
     }
   }
 
-  console.log(`[TRACKING] Completed tracking for inference ${inferenceId} (source: ${source})`);
+  logger.debug(`[TRACKING] Completed tracking for inference ${inferenceId} (source: ${source})`);
 }
 
 // Session configuration with file-based storage for persistence
@@ -206,7 +220,7 @@ const storage = multer.diskStorage({
 
     // Initialize workspace if it doesn't exist
     if (!fs.existsSync(workspacePath)) {
-      console.log('[Multer] Initializing workspace for session:', sessionId);
+      logger.debug('[Multer] Initializing workspace for session:', sessionId);
       workspaceManager.initializeWorkspace(sessionId);
     }
 
@@ -224,7 +238,7 @@ const storage = multer.diskStorage({
       subdir = 'uploads/raw'; // Will be moved if needed
     }
 
-    console.log('[Multer] Field name:', file.fieldname, '→ Directory:', subdir);
+    logger.debug('[Multer] Field name:', file.fieldname, '→ Directory:', subdir);
 
     const uploadDir = path.join(workspacePath, subdir);
 
@@ -233,7 +247,7 @@ const storage = multer.diskStorage({
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
-    console.log('[Multer] Upload destination:', uploadDir);
+    logger.debug('[Multer] Upload destination:', uploadDir);
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
@@ -443,7 +457,7 @@ app.post('/register', async (req, res) => {
     // Log registration
     activityLogger.logRegistration(username, institution);
 
-    console.log(`New user registered: ${username} (pending approval)`);
+    logger.info(`New user registered: ${username} (pending approval)`);
 
     res.json({
       success: true,
@@ -456,7 +470,7 @@ app.post('/register', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error:', error);
     res.status(500).json({
       success: false,
       error: 'Registration failed. Please try again.'
@@ -519,7 +533,7 @@ app.post('/login', async (req, res) => {
     // Log successful login
     activityLogger.logLogin(username, true);
 
-    console.log(`User logged in: ${username} (status: ${user.status})`);
+    logger.info(`User logged in: ${username} (status: ${user.status})`);
 
     res.json({
       success: true,
@@ -534,7 +548,7 @@ app.post('/login', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({
       success: false,
       error: 'Login failed. Please try again.'
@@ -547,14 +561,14 @@ app.post('/logout', (req, res) => {
   const username = req.session?.user?.username || 'unknown';
   req.session.destroy((err) => {
     if (err) {
-      console.error('Logout error:', err);
+      logger.error('Logout error:', err);
       return res.status(500).json({
         success: false,
         error: 'Logout failed'
       });
     }
 
-    console.log(`User logged out: ${username}`);
+    logger.info(`User logged out: ${username}`);
     res.json({
       success: true,
       message: 'Logged out successfully'
@@ -585,7 +599,7 @@ app.post('/api/workspace/init', requireAuth, (req, res) => {
       workspace: workspaceInfo
     });
   } catch (error) {
-    console.error('Error initializing workspace:', error);
+    logger.error('Error initializing workspace:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -637,7 +651,7 @@ app.get('/api/workspace/status', requireAuth, async (req, res) => {
       });
     }
 
-    console.error('Error getting workspace status:', error);
+    logger.error('Error getting workspace status:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -658,7 +672,7 @@ app.get('/api/workspace/files', requireAuth, (req, res) => {
       files: workspaceInfo.metadata.files || []
     });
   } catch (error) {
-    console.error('Error getting workspace files:', error);
+    logger.error('Error getting workspace files:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -723,7 +737,7 @@ app.post('/api/workspace/upload', requireAuth, upload.any(), async (req, res) =>
       const thumbnailPath = path.join(thumbnailsDir, `${fileEntry.id}.jpg`);
       const filePath = uploadedFile.path;
 
-      spawn('python', [
+      spawn(PYTHON_PATH, [
         'python/generate_thumbnail.py',
         filePath,
         thumbnailPath
@@ -751,7 +765,7 @@ app.post('/api/workspace/upload', requireAuth, upload.any(), async (req, res) =>
     });
 
   } catch (error) {
-    console.error('Error uploading file to workspace:', error);
+    logger.error('Error uploading file to workspace:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -772,7 +786,7 @@ app.get('/api/workspace/stats', requireAuth, (req, res) => {
       stats: stats
     });
   } catch (error) {
-    console.error('Error getting workspace stats:', error);
+    logger.error('Error getting workspace stats:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -796,7 +810,7 @@ app.get('/api/workspace/file/:fileId', requireAuth, async (req, res) => {
 
     res.json({ success: true, file });
   } catch (error) {
-    console.error('Get file error:', error);
+    logger.error('Get file error:', error);
     res.status(404).json({ success: false, error: error.message });
   }
 });
@@ -819,7 +833,7 @@ app.delete('/api/workspace/file/:fileId', requireAuth, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Delete file error:', error);
+    logger.error('Delete file error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -833,15 +847,15 @@ app.patch('/api/workspace/file/:fileId/rename', requireAuth, async (req, res) =>
     const { newName } = req.body;
     const sessionId = req.session.id;
 
-    console.log(`[server.js] Rename endpoint hit: fileId=${fileId}, newName=${newName}, sessionId=${sessionId}`);
+    logger.debug(`[server.js] Rename endpoint hit: fileId=${fileId}, newName=${newName}, sessionId=${sessionId}`);
 
     if (!newName) {
       return res.status(400).json({ success: false, error: 'New name required' });
     }
 
-    console.log('[server.js] Calling workspaceManager.renameFile()...');
+    logger.debug('[server.js] Calling workspaceManager.renameFile()...');
     const file = await workspaceManager.renameFile(sessionId, fileId, newName);
-    console.log('[server.js] renameFile returned:', file);
+    logger.debug('[server.js] renameFile returned:', file);
 
     activityLogger.logActivity(
       req.session.user.username,
@@ -851,7 +865,7 @@ app.patch('/api/workspace/file/:fileId/rename', requireAuth, async (req, res) =>
 
     res.json({ success: true, file });
   } catch (error) {
-    console.error('[server.js] Rename file error:', error);
+    logger.error('[server.js] Rename file error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -875,7 +889,7 @@ app.patch('/api/workspace/file/:fileId/move', requireAuth, async (req, res) => {
 
     res.json({ success: true, file });
   } catch (error) {
-    console.error('Move file error:', error);
+    logger.error('Move file error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -897,7 +911,7 @@ app.get('/api/workspace/file/:fileId/download', requireAuth, async (req, res) =>
 
     res.download(filePath, file.name);
   } catch (error) {
-    console.error('Download file error:', error);
+    logger.error('Download file error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -924,7 +938,7 @@ app.post('/api/workspace/files/batch-delete', requireAuth, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Batch delete error:', error);
+    logger.error('Batch delete error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -969,7 +983,7 @@ app.post('/api/workspace/files/batch-download', requireAuth, async (req, res) =>
     );
 
   } catch (error) {
-    console.error('Batch download error:', error);
+    logger.error('Batch download error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -986,7 +1000,7 @@ app.get('/api/workspace/files/search', requireAuth, async (req, res) => {
 
     res.json({ success: true, files });
   } catch (error) {
-    console.error('Search files error:', error);
+    logger.error('Search files error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1003,7 +1017,7 @@ app.get('/api/workspace/files/category/:category', requireAuth, async (req, res)
 
     res.json({ success: true, files });
   } catch (error) {
-    console.error('Filter files error:', error);
+    logger.error('Filter files error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1023,7 +1037,7 @@ app.get('/api/workspace/folders', requireAuth, async (req, res) => {
 
     res.json({ success: true, folders });
   } catch (error) {
-    console.error('Get folders error:', error);
+    logger.error('Get folders error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1055,7 +1069,7 @@ app.post('/api/workspace/folders', requireAuth, async (req, res) => {
 
     res.json({ success: true, folder });
   } catch (error) {
-    console.error('Create folder error:', error);
+    logger.error('Create folder error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1083,7 +1097,7 @@ app.patch('/api/workspace/folders/:folderId', requireAuth, async (req, res) => {
 
     res.json({ success: true, folder });
   } catch (error) {
-    console.error('Rename folder error:', error);
+    logger.error('Rename folder error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1106,7 +1120,7 @@ app.delete('/api/workspace/folders/:folderId', requireAuth, async (req, res) => 
 
     res.json(result);
   } catch (error) {
-    console.error('Delete folder error:', error);
+    logger.error('Delete folder error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1155,7 +1169,7 @@ app.get('/api/workspace/thumbnail/:fileId', requireAuth, async (req, res) => {
 
     // Spawn Python script
     const { spawn } = require('child_process');
-    const pythonProcess = spawn('python', [
+    const pythonProcess = spawn(PYTHON_PATH, [
       'python/generate_thumbnail.py',
       filePath,
       thumbnailPath
@@ -1177,7 +1191,7 @@ app.get('/api/workspace/thumbnail/:fileId', requireAuth, async (req, res) => {
 
         res.sendFile(path.resolve(thumbnailPath));
       } else {
-        console.error('Thumbnail generation failed:', output);
+        logger.error('Thumbnail generation failed:', output);
         res.status(500).json({
           success: false,
           error: 'Thumbnail generation failed'
@@ -1186,7 +1200,7 @@ app.get('/api/workspace/thumbnail/:fileId', requireAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Thumbnail error:', error);
+    logger.error('Thumbnail error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1235,7 +1249,7 @@ app.post('/upload-data', upload.fields([
 
         // Case 1: Files already uploaded via FileSelector (custom upload flow)
         if (skipUpload) {
-            console.log('Validating pre-uploaded files...');
+            logger.debug('Validating pre-uploaded files...');
 
             const rawImagesPath = req.body.raw_images_path;
             const annotationsPath = req.body.annotations_path;
@@ -1282,14 +1296,14 @@ app.post('/upload-data', upload.fields([
                 mimetype: 'image/tiff'
             };
 
-            console.log('Using pre-uploaded files:', {
+            logger.debug('Using pre-uploaded files:', {
                 raw: rawImagesPath,
                 annotations: annotationsPath
             });
         }
         // Case 2: Test data request
         else if (isTestData) {
-            console.log('Processing test data request...');
+            logger.debug('Processing test data request...');
 
             // Use workspace directory structure
             const rawUploadDir = path.join(workspacePath, 'uploads', 'raw');
@@ -1297,7 +1311,7 @@ app.post('/upload-data', upload.fields([
 
             // Initialize workspace if it doesn't exist
             if (!fs.existsSync(workspacePath)) {
-                console.log('Initializing workspace for session:', sessionId);
+                logger.debug('Initializing workspace for session:', sessionId);
                 workspaceManager.initializeWorkspace(sessionId);
             }
 
@@ -1358,7 +1372,7 @@ app.post('/upload-data', upload.fields([
                 mimetype: 'image/tiff'
             };
 
-            console.log('Test files copied successfully');
+            logger.debug('Test files copied successfully');
 
         }
         // Case 3: Regular file upload (legacy, should not happen in workspace version)
@@ -1374,7 +1388,7 @@ app.post('/upload-data', upload.fields([
             annotationFile = req.files.annotations[0];
         }
         
-        console.log('Validating TIFF stacks...');
+        logger.debug('Validating TIFF stacks...');
         
         // Validate TIFF stacks (same logic for both test data and uploads)
         const validationResult = await validateTiffStacks(rawFile.path, annotationFile.path);
@@ -1420,12 +1434,12 @@ app.post('/upload-data', upload.fields([
                 folderId: null
             });
 
-            console.log('Files tracked in metadata:', {
+            logger.debug('Files tracked in metadata:', {
                 raw: rawFileEntry.id,
                 annotations: annFileEntry.id
             });
         } else {
-            console.log('Files already tracked in metadata, skipping duplicate tracking');
+            logger.debug('Files already tracked in metadata, skipping duplicate tracking');
             // For skipUpload case, just return the paths
             rawFileEntry = { path: path.relative(workspacePath, rawFile.path) };
             annFileEntry = { path: path.relative(workspacePath, annotationFile.path) };
@@ -1441,7 +1455,7 @@ app.post('/upload-data', upload.fields([
             );
         }
 
-        console.log('Files processed and validated successfully');
+        logger.info('Files processed and validated successfully');
 
         res.json({
             success: true,
@@ -1457,7 +1471,7 @@ app.post('/upload-data', upload.fields([
         });
         
     } catch (error) {
-        console.error('Upload/Test data error:', error);
+        logger.error('Upload/Test data error:', error);
         res.status(500).json({ 
             error: error.message,
             isTestData: req.body.isTestData === 'true'
@@ -1489,7 +1503,7 @@ app.post('/configure-training', (req, res) => {
     });
 
   } catch (error) {
-    console.error('Configuration error:', error);
+    logger.error('Configuration error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1523,11 +1537,11 @@ app.post('/start-training', requireAuth, (req, res) => {
     const config = req.session.trainingConfig;
     if (req.session.uploadedFiles.validation && req.session.uploadedFiles.validation.num_classes) {
       config.num_classes = req.session.uploadedFiles.validation.num_classes;
-      console.log(`Using ${config.num_classes} classes detected from annotations`);
+      logger.info(`Using ${config.num_classes} classes detected from annotations`);
     } else {
       // Fallback to 3 if not detected (shouldn't happen with new validation)
       config.num_classes = 3;
-      console.log('Warning: num_classes not detected, defaulting to 3');
+      logger.info('Warning: num_classes not detected, defaulting to 3');
     }
     
     // Prepare training parameters
@@ -1578,7 +1592,7 @@ app.post('/start-training', requireAuth, (req, res) => {
     });
     
   } catch (error) {
-    console.error('Training start error:', error);
+    logger.error('Training start error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1617,7 +1631,7 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
 
         // Case 1: File already uploaded via FileSelector (custom upload flow)
         if (skipUpload) {
-            console.log('Validating pre-uploaded inference file...');
+            logger.debug('Validating pre-uploaded inference file...');
 
             const inferenceDataPath = req.body.inference_data_path;
 
@@ -1647,18 +1661,18 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
                 mimetype: 'image/tiff'
             };
 
-            console.log('Using pre-uploaded inference file:', inferenceDataPath);
+            logger.debug('Using pre-uploaded inference file:', inferenceDataPath);
         }
         // Case 2: Test data request
         else if (isTestData) {
-            console.log('Processing test inference data request...');
+            logger.debug('Processing test inference data request...');
 
             // Use workspace directory structure
             const inferenceUploadDir = path.join(workspacePath, 'uploads', 'inference_data');
 
             // Initialize workspace if it doesn't exist
             if (!fs.existsSync(workspacePath)) {
-                console.log('Initializing workspace for session:', sessionId);
+                logger.debug('Initializing workspace for session:', sessionId);
                 workspaceManager.initializeWorkspace(sessionId);
             }
 
@@ -1692,7 +1706,7 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
                 mimetype: 'image/tiff'
             };
 
-            console.log('Test inference file copied successfully');
+            logger.debug('Test inference file copied successfully');
 
         }
         // Case 3: Regular file upload (legacy, should not happen in workspace version)
@@ -1705,7 +1719,7 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
             inferenceFile = req.file;
         }
         
-        console.log('Validating inference TIFF...');
+        logger.debug('Validating inference TIFF...');
 
         // Validate TIFF file (same logic for both test data and uploads)
         const validationResult = await validateInferenceTiff(inferenceFile.path);
@@ -1731,14 +1745,14 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
                 folderId: null
             });
 
-            console.log('Inference file tracked in metadata:', inferenceFileEntry.id);
+            logger.debug('Inference file tracked in metadata:', inferenceFileEntry.id);
         } else if (skipUpload) {
-            console.log('Inference file already tracked in metadata, skipping duplicate tracking');
+            logger.debug('Inference file already tracked in metadata, skipping duplicate tracking');
             // For skipUpload case, just return the path
             inferenceFileEntry = { path: path.relative(workspacePath, inferenceFile.path) };
         }
 
-        console.log('Inference file processed and validated successfully');
+        logger.info('Inference file processed and validated successfully');
 
         res.json({
             success: true,
@@ -1754,7 +1768,7 @@ app.post('/upload-inference', requireAuth, upload.single('inference_data'), asyn
         });
         
     } catch (error) {
-        console.error('Inference upload/test data error:', error);
+        logger.error('Inference upload/test data error:', error);
         res.status(500).json({ 
             error: error.message,
             isTestData: req.body.isTestData === 'true'
@@ -1793,7 +1807,7 @@ app.post('/import-pretrained-model', requireApproved, uploadImport.fields([
       });
     }
 
-    console.log('Validating imported model and config...');
+    logger.debug('Validating imported model and config...');
     
     // Validate the imported files
     const validationResult = await validateImportedModel(modelFile.path, configFile.path);
@@ -1823,7 +1837,7 @@ app.post('/import-pretrained-model', requireApproved, uploadImport.fields([
     }
 
   } catch (error) {
-    console.error('Import model error:', error);
+    logger.error('Import model error:', error);
     res.status(500).json({ 
       success: false, 
       error: 'Server error during model import: ' + error.message 
@@ -1860,7 +1874,7 @@ app.get('/verify-imported-model', (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error verifying imported model:', error);
+    logger.error('Error verifying imported model:', error);
     res.status(500).json({
       success: false,
       error: 'Server error during model verification'
@@ -1873,7 +1887,7 @@ app.post('/run-inference', async (req, res) => {
   try {
     const { model_path, data_path, output_path, training_id } = req.body;
 
-    console.log('Inference request received:', { model_path, data_path, output_path, training_id });
+    logger.info('Inference request received:', { model_path, data_path, output_path, training_id });
 
     // Convert data_path to absolute workspace path if it's not already absolute
     const sessionId = req.session.id;
@@ -1884,7 +1898,7 @@ app.post('/run-inference', async (req, res) => {
     if (!path.isAbsolute(data_path)) {
       // If relative, join with workspace path
       actualDataPath = path.join(workspacePath, data_path);
-      console.log('Converted relative data path to absolute:', actualDataPath);
+      logger.debug('Converted relative data path to absolute:', actualDataPath);
     }
 
     // Verify the data file exists
@@ -1902,7 +1916,7 @@ app.post('/run-inference', async (req, res) => {
 
     // Check if using imported model first
     if (req.session.importedModel && req.session.importedModel.validated) {
-      console.log('Using imported model for inference');
+      logger.info('Using imported model for inference');
       
       // Use imported model
       actualModelPath = req.session.importedModel.modelPath;
@@ -1911,7 +1925,7 @@ app.post('/run-inference', async (req, res) => {
       try {
         const configData = fs.readFileSync(req.session.importedModel.configPath, 'utf8');
         modelConfig = JSON.parse(configData);
-        console.log('Loaded imported model config:', modelConfig);
+        logger.debug('Loaded imported model config:', modelConfig);
       } catch (error) {
         return res.status(400).json({ 
           error: 'Failed to load imported model config: ' + error.message 
@@ -1925,7 +1939,7 @@ app.post('/run-inference', async (req, res) => {
         });
       }
 
-      console.log('Imported model validated. Model at:', actualModelPath);
+      logger.debug('Imported model validated. Model at:', actualModelPath);
 
     } else {
       // Original logic: Check if training session exists and model file exists
@@ -1941,16 +1955,16 @@ app.post('/run-inference', async (req, res) => {
       actualModelPath = path.join(training.params.output_dir, 'best_model.pth');
       modelConfig = training.params.config;
       
-      console.log('Training session found. Checking model at:', actualModelPath);
-      
+      logger.debug('Training session found. Checking model at:', actualModelPath);
+
       if (!fs.existsSync(actualModelPath)) {
-        console.error('Model file not found at:', actualModelPath);
-        console.log('Contents of training output directory:');
+        logger.error('Model file not found at:', actualModelPath);
+        logger.debug('Contents of training output directory:');
         try {
           const files = fs.readdirSync(training.params.output_dir);
-          console.log('Files in directory:', files);
+          logger.debug('Files in directory:', files);
         } catch (e) {
-          console.log('Could not read directory:', e.message);
+          logger.debug('Could not read directory:', e.message);
         }
         
         return res.status(404).json({ 
@@ -1959,11 +1973,16 @@ app.post('/run-inference', async (req, res) => {
         });
       }
 
-      console.log('Training model validated. Model at:', actualModelPath);
+      logger.debug('Training model validated. Model at:', actualModelPath);
     }
     
     // Generate inference ID
     inferenceId = uuid.v4();
+
+    // Initialize session tracking for imported model results directories
+    if (!req.session.importedModelResultsDirs) {
+      req.session.importedModelResultsDirs = [];
+    }
 
     // Generate output path if not provided (sessionId and workspacePath already declared above)
     let actualOutputPath = output_path;
@@ -1972,7 +1991,13 @@ app.post('/run-inference', async (req, res) => {
       if (req.session.importedModel && req.session.importedModel.validated) {
         // For imported models, use a timestamp-based directory
         const timestamp = Date.now();
-        actualOutputPath = path.join(workspacePath, 'results', 'segmentation', `imported_model_${timestamp}`, 'inference_result.tif');
+        const importedModelDir = `imported_model_${timestamp}`;
+        actualOutputPath = path.join(workspacePath, 'results', 'segmentation', importedModelDir, 'inference_result.tif');
+
+        // Track this directory for cleanup
+        const resultsDir = path.join(workspacePath, 'results', 'segmentation', importedModelDir);
+        req.session.importedModelResultsDirs.push(resultsDir);
+        logger.debug('Tracking imported model results directory:', resultsDir);
       } else if (training_id) {
         // For trained models, use the training ID
         actualOutputPath = path.join(workspacePath, 'results', 'segmentation', training_id, 'inference_result.tif');
@@ -1980,7 +2005,7 @@ app.post('/run-inference', async (req, res) => {
         // Fallback
         actualOutputPath = path.join(workspacePath, 'results', 'segmentation', `inference_${inferenceId}`, 'inference_result.tif');
       }
-      console.log('Generated output path:', actualOutputPath);
+      logger.debug('Generated output path:', actualOutputPath);
     }
 
     // Store inference session
@@ -2003,7 +2028,7 @@ app.post('/run-inference', async (req, res) => {
       !!(req.session.importedModel && req.session.importedModel.validated)
     );
 
-    console.log('Generated inference ID:', inferenceId);
+    logger.info('Generated inference ID:', inferenceId);
 
     // Send response immediately with inference ID so frontend can join room
     res.json({
@@ -2016,14 +2041,14 @@ app.post('/run-inference', async (req, res) => {
 
     // Start inference after a short delay to allow frontend to join room
     setTimeout(() => {
-      console.log('Starting inference with model path:', actualModelPath);
-      console.log('Data path:', actualDataPath);
-      console.log('Output path:', actualOutputPath);
+      logger.debug('Starting inference with model path:', actualModelPath);
+      logger.debug('Data path:', actualDataPath);
+      logger.debug('Output path:', actualOutputPath);
       startInferenceProcess(actualModelPath, actualDataPath, actualOutputPath, inferenceId, io);
     }, 1000); // 1 second delay
 
   } catch (error) {
-    console.error('Inference error:', error);
+    logger.error('Inference error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2117,7 +2142,7 @@ Generated: ${new Date().toISOString()}
   archive.finalize();
   
   archive.on('error', (err) => {
-    console.error('Archive error:', err);
+    logger.error('Archive error:', err);
     res.status(500).json({ error: 'Failed to create archive' });
   });
 });
@@ -2145,11 +2170,11 @@ app.get('/download-inference-results/:inferenceId', requireAuth, (req, res) => {
   const visualizationPath = result.visualization_path;
   const overlayPath = result.original_data_overlay_path;  // NEW: overlay file path
 
-  console.log('Download request for inference:', inferenceId);
-  console.log('Output path:', outputPath);
-  console.log('Metadata path:', metadataPath);
-  console.log('Visualization path:', visualizationPath);
-  console.log('Overlay path:', overlayPath);
+  logger.debug('Download request for inference:', inferenceId);
+  logger.debug('Output path:', outputPath);
+  logger.debug('Metadata path:', metadataPath);
+  logger.debug('Visualization path:', visualizationPath);
+  logger.debug('Overlay path:', overlayPath);
   
   // Check if main result file exists
   if (!fs.existsSync(outputPath)) {
@@ -2168,7 +2193,7 @@ app.get('/download-inference-results/:inferenceId', requireAuth, (req, res) => {
   
   // Handle archive errors
   archive.on('error', (err) => {
-    console.error('Archive error:', err);
+    logger.error('Archive error:', err);
     res.status(500).json({ error: 'Failed to create archive: ' + err.message });
   });
   
@@ -2177,22 +2202,22 @@ app.get('/download-inference-results/:inferenceId', requireAuth, (req, res) => {
   
   // Add segmentation results TIFF file
   archive.file(outputPath, { name: path.basename(outputPath) });
-  console.log('Added to archive:', path.basename(outputPath));
+  logger.debug('Added to archive:', path.basename(outputPath));
   
   // Add metadata file if it exists
   if (metadataPath && fs.existsSync(metadataPath)) {
     archive.file(metadataPath, { name: path.basename(metadataPath) });
-    console.log('Added to archive:', path.basename(metadataPath));
+    logger.debug('Added to archive:', path.basename(metadataPath));
   } else {
-    console.log('Metadata file not found:', metadataPath);
+    logger.debug('Metadata file not found:', metadataPath);
   }
   
   // Add visualization data if it exists
   if (visualizationPath && fs.existsSync(visualizationPath)) {
     archive.file(visualizationPath, { name: path.basename(visualizationPath) });
-    console.log('Added to archive:', path.basename(visualizationPath));
+    logger.debug('Added to archive:', path.basename(visualizationPath));
   } else {
-    console.log('Visualization file not found:', visualizationPath);
+    logger.debug('Visualization file not found:', visualizationPath);
   }
   
   // Add a readme file with information about the results
@@ -2257,7 +2282,7 @@ For questions about these results, please refer to the application documentation
   // Finalize the archive
   archive.finalize();
   
-  console.log('Archive finalized for inference:', inferenceId);
+  logger.debug('Archive finalized for inference:', inferenceId);
 });
 
 // Serve static files from workspace directories (session-scoped)
@@ -2340,7 +2365,7 @@ app.get('/results/:inferenceId/original-data-web', requireAuth, (req, res) => {
     res.sendFile(path.resolve(downsampledPath));
     
   } catch (error) {
-    console.error('Error serving downsampled original data:', error);
+    logger.error('Error serving downsampled original data:', error);
     res.status(500).json({ error: 'Failed to serve original data' });
   }
 });
@@ -2351,7 +2376,7 @@ app.use('/models', express.static('models'));
 app.post('/reset-session', requireAuth, async (req, res) => {
   try {
     const sessionId = req.session.id;
-    console.log('Resetting session:', sessionId);
+    logger.info('Resetting session:', sessionId);
     
     // Clean up session-specific files and directories
     const sessionDir = path.join('uploads', sessionId);
@@ -2363,10 +2388,10 @@ app.post('/reset-session', requireAuth, async (req, res) => {
       if (fs.existsSync(dirPath)) {
         try {
           fs.rmSync(dirPath, { recursive: true, force: true });
-          console.log('Deleted directory:', dirPath);
+          logger.debug('Deleted directory:', dirPath);
           return true;
         } catch (error) {
-          console.error('Error deleting directory:', dirPath, error);
+          logger.error('Error deleting directory:', dirPath, error);
           return false;
         }
       }
@@ -2389,7 +2414,7 @@ app.post('/reset-session', requireAuth, async (req, res) => {
         const trainingResultsDir = path.join('results', trainingId);
         deleteDirectory(trainingResultsDir);
         
-        console.log('Cleaned up training results for:', trainingId);
+        logger.debug('Cleaned up training results for:', trainingId);
       }
     }
     
@@ -2404,82 +2429,39 @@ app.post('/reset-session', requireAuth, async (req, res) => {
           const resultPath = inference.result.output_path;
           const resultDir = path.dirname(resultPath);
           deleteDirectory(resultDir);
-          console.log('Cleaned up inference results from:', resultDir);
+          logger.debug('Cleaned up inference results from:', resultDir);
         }
       }
     }
     
-    // NEW: Clean up any remaining imported model results directories
-    // Scan the results directory for any directories that might belong to this session
-    const resultsBaseDir = 'results';
-    if (fs.existsSync(resultsBaseDir)) {
-      try {
-        const resultsDirs = fs.readdirSync(resultsBaseDir);
-        
-        for (const dir of resultsDirs) {
-          const fullDirPath = path.join(resultsBaseDir, dir);
-          
-          // Check if it's a directory and matches patterns we expect
-          if (fs.statSync(fullDirPath).isDirectory()) {
-            
-            // Check if it's an imported model directory from this session
-            if (dir.startsWith('imported_model_')) {
-              // We can't easily tie this back to a session, but we can clean up
-              // any that don't have corresponding active inference sessions
-              let hasActiveInference = false;
-              
-              for (const [inferenceId, inference] of inferenceSessions.entries()) {
-                if (inference.result && 
-                    inference.result.output_path && 
-                    inference.result.output_path.includes(dir)) {
-                  // Don't delete if it belongs to a different active session
-                  if (inference.sessionId !== sessionId) {
-                    hasActiveInference = true;
-                    break;
-                  }
-                }
-              }
-              
-              // If this imported model results directory belongs to our session, delete it
-              if (!hasActiveInference) {
-                // Check if any inference in our session used this directory
-                let belongsToOurSession = false;
-                for (const inferenceId of inferenceIdsToCleanup) {
-                  const inference = inferenceSessions.get(inferenceId);
-                  if (inference && inference.result && 
-                      inference.result.output_path && 
-                      inference.result.output_path.includes(dir)) {
-                    belongsToOurSession = true;
-                    break;
-                  }
-                }
-                
-                if (belongsToOurSession) {
-                  deleteDirectory(fullDirPath);
-                  console.log('Cleaned up imported model results:', dir);
-                }
-              }
-            }
-          }
+    // Clean up tracked imported model results directories
+    if (req.session.importedModelResultsDirs && req.session.importedModelResultsDirs.length > 0) {
+      logger.debug(`Cleaning up ${req.session.importedModelResultsDirs.length} tracked imported model directories`);
+
+      for (const resultsDir of req.session.importedModelResultsDirs) {
+        if (fs.existsSync(resultsDir)) {
+          deleteDirectory(resultsDir);
+          logger.debug('Cleaned up imported model results directory:', resultsDir);
         }
-      } catch (error) {
-        console.error('Error scanning results directory:', error);
       }
+
+      // Clear the tracking array
+      req.session.importedModelResultsDirs = [];
     }
     
     // Clean up training sessions for this session
     for (const trainingId of trainingIdsToCleanup) {
       trainingSessions.delete(trainingId);
-      console.log('Removed training session:', trainingId);
+      logger.debug('Removed training session:', trainingId);
     }
     
     // Clean up inference sessions for this session
     for (const inferenceId of inferenceIdsToCleanup) {
       inferenceSessions.delete(inferenceId);
-      console.log('Removed inference session:', inferenceId);
+      logger.debug('Removed inference session:', inferenceId);
     }
     
-    console.log(`Session cleanup summary:
+    logger.info(`Session cleanup summary:
       - Training sessions removed: ${trainingIdsToCleanup.length}
       - Inference sessions removed: ${inferenceIdsToCleanup.length}
       - Directories cleaned: uploads/${sessionId}, models/${sessionId}, outputs/${sessionId}, and all associated results`);
@@ -2496,7 +2478,7 @@ app.post('/reset-session', requireAuth, async (req, res) => {
     // Restore user info
     req.session.user = user;
 
-    console.log('Session reset completed successfully');
+    logger.info('Session reset completed successfully');
     res.json({
       success: true,
       message: 'Session reset successfully',
@@ -2507,7 +2489,7 @@ app.post('/reset-session', requireAuth, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error in reset-session:', error);
+    logger.error('Error in reset-session:', error);
     res.status(500).json({ 
       success: false, 
       error: 'Internal server error during session reset' 
@@ -2517,23 +2499,23 @@ app.post('/reset-session', requireAuth, async (req, res) => {
 
 // WebSocket connection for real-time updates
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  logger.debug('Client connected:', socket.id);
   
   socket.on('join-training', (trainingId) => {
     socket.join(`training-${trainingId}`);
-    console.log(`Client ${socket.id} joined training room: training-${trainingId}`);
+    logger.debug(`Client ${socket.id} joined training room: training-${trainingId}`);
   });
   
   socket.on('join-inference', (inferenceId) => {
     socket.join(`inference-${inferenceId}`);
-    console.log(`Client ${socket.id} joined inference room: inference-${inferenceId}`);
+    logger.debug(`Client ${socket.id} joined inference room: inference-${inferenceId}`);
     
     // Send a confirmation message
     socket.emit('inference-room-joined', { inferenceId: inferenceId });
   });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    logger.debug('Client disconnected:', socket.id);
   });
 });
 
@@ -2554,7 +2536,7 @@ async function validateTiffStacks(rawPath, annotationPath) {
       // Log Python output to console for debugging (includes conversion messages)
       const message = data.toString().trim();
       if (message) {
-        console.log('[Python Validation]:', message);
+        logger.debug('[Python Validation]:', message);
       }
     });
 
@@ -2563,7 +2545,7 @@ async function validateTiffStacks(rawPath, annotationPath) {
       // Log errors to console
       const message = data.toString().trim();
       if (message) {
-        console.error('[Python Validation Error]:', message);
+        logger.error('[Python Validation Error]:', message);
       }
     });
 
@@ -2575,8 +2557,8 @@ async function validateTiffStacks(rawPath, annotationPath) {
         resolve(result);
       } catch (e) {
         // If JSON parsing fails, fall back to generic error
-        console.error('Failed to parse validation output:', output);
-        console.error('Stderr:', error);
+        logger.error('Failed to parse validation output:', output);
+        logger.error('Stderr:', error);
         resolve({ 
           valid: false, 
           error: error || 'Invalid validation output - failed to parse JSON response'
@@ -2667,7 +2649,7 @@ function startTrainingProcess(params, io) {
 
   pythonScript.stdout.on('data', (data) => {
     const output = data.toString();
-    console.log('Training output:', output);
+    logger.debug('Training output:', output);
 
     // Add to buffer
     outputBuffer += output;
@@ -2682,7 +2664,7 @@ function startTrainingProcess(params, io) {
           const progressData = line.substring(9);
           const progress = JSON.parse(progressData);
 
-          console.log('Parsed progress:', progress);
+          logger.debug('Parsed progress:', progress);
 
           // Update training session
           const training = trainingSessions.get(params.training_id);
@@ -2695,10 +2677,10 @@ function startTrainingProcess(params, io) {
 
           // Send real-time update to clients
           io.to(`training-${params.training_id}`).emit('training-progress', progress);
-          console.log(`Emitted progress to room: training-${params.training_id}`);
+          logger.debug(`Emitted progress to room: training-${params.training_id}`);
 
         } catch (e) {
-          console.error('Error parsing progress data:', e.message);
+          logger.error('Error parsing progress data:', e.message);
         }
       }
     }
@@ -2734,8 +2716,8 @@ function startTrainingProcess(params, io) {
         const stderrOutput = stderrBuffer.getBuffer();
         const errorMessage = stderrOutput || 'Training failed with unknown error';
 
-        console.error(`[TRAINING] Process failed with code ${code}`);
-        console.error(`[TRAINING] stderr output: ${stderrOutput}`);
+        logger.error(`[TRAINING] Process failed with code ${code}`);
+        logger.error(`[TRAINING] stderr output: ${stderrOutput}`);
 
         io.to(`training-${params.training_id}`).emit('training-complete', {
           success: false,
@@ -2772,8 +2754,8 @@ async function validateInferenceTiff(filePath) {
         resolve(result);
       } catch (e) {
         // If JSON parsing fails, fall back to generic error
-        console.error('Failed to parse validation output:', output);
-        console.error('Stderr:', error);
+        logger.error('Failed to parse validation output:', output);
+        logger.error('Stderr:', error);
         resolve({ 
           valid: false, 
           error: error || 'Invalid validation output - failed to parse JSON response'
@@ -2809,7 +2791,7 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
 
     pythonScript.stdout.on('data', (data) => {
       const output = data.toString();
-      console.log('Inference output:', output);
+      logger.debug('Inference output:', output);
       
       // Add to buffer
       outputBuffer += output;
@@ -2824,7 +2806,7 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
             const progressData = line.substring(19);
             const progress = JSON.parse(progressData);
             
-            console.log('Parsed inference progress:', progress);
+            logger.debug('Parsed inference progress:', progress);
             
             // Update inference session
             const inference = inferenceSessions.get(inferenceId);
@@ -2836,36 +2818,36 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
             
             // Send real-time update to clients
             io.to(`inference-${inferenceId}`).emit('inference-progress', progress);
-            console.log(`Emitted inference progress to room: inference-${inferenceId}`);
+            logger.debug(`Emitted inference progress to room: inference-${inferenceId}`);
             
           } catch (e) {
-            console.error('Error parsing inference progress data:', e.message);
+            logger.error('Error parsing inference progress data:', e.message);
           }
         } else if (line.startsWith('FINAL_RESULT:')) {
           try {
             const resultData = line.substring(13);
             finalResult = JSON.parse(resultData);
-            console.log('Parsed final result:', finalResult);
+            logger.debug('Parsed final result:', finalResult);
           } catch (e) {
-            console.error('Error parsing final result:', e.message);
+            logger.error('Error parsing final result:', e.message);
             finalResult = { success: false, error: 'Failed to parse final result' };
           }
         } else if (line === 'BACKUP_JSON_START') {
           collectingBackupJson = true;
           backupJsonLines = [];
-          console.log('Started collecting backup JSON');
+          logger.debug('Started collecting backup JSON');
         } else if (line === 'BACKUP_JSON_END') {
           collectingBackupJson = false;
-          console.log('Finished collecting backup JSON');
+          logger.debug('Finished collecting backup JSON');
           
           // Try to parse backup JSON if we don't have final result yet
           if (!finalResult && backupJsonLines.length > 0) {
             try {
               const backupJsonString = backupJsonLines.join('\n');
               finalResult = JSON.parse(backupJsonString);
-              console.log('Successfully parsed backup JSON:', finalResult);
+              logger.debug('Successfully parsed backup JSON:', finalResult);
             } catch (e) {
-              console.error('Failed to parse backup JSON:', e.message);
+              logger.error('Failed to parse backup JSON:', e.message);
             }
           }
         } else if (collectingBackupJson) {
@@ -2877,16 +2859,16 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
     pythonScript.on('close', async (code) => {
       const inference = inferenceSessions.get(inferenceId);
 
-      console.log(`[INFERENCE] Python script finished with code: ${code}`);
-      console.log(`[INFERENCE] Final result found: ${finalResult ? 'yes' : 'no'}`);
+      logger.debug(`[INFERENCE] Python script finished with code: ${code}`);
+      logger.debug(`[INFERENCE] Final result found: ${finalResult ? 'yes' : 'no'}`);
 
       // STEP 1: Handle non-zero exit codes (failures)
       if (code !== 0) {
         const stderrOutput = stderrBuffer.getBuffer();
         const errorMessage = stderrOutput || 'Inference failed with unknown error';
 
-        console.error(`[INFERENCE] Process failed with code ${code}`);
-        console.error(`[INFERENCE] Error output: ${stderrOutput}`);
+        logger.error(`[INFERENCE] Process failed with code ${code}`);
+        logger.error(`[INFERENCE] Error output: ${stderrOutput}`);
 
         if (inference) {
           inference.status = 'failed';
@@ -2909,19 +2891,19 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
         // Source 1: FINAL_RESULT prefix from Python script
         result = finalResult;
         resultSource = 'FINAL_RESULT';
-        console.log('[INFERENCE] Using FINAL_RESULT from Python script');
+        logger.debug('[INFERENCE] Using FINAL_RESULT from Python script');
       } else {
         // Source 2: Try to parse JSON from output buffer
-        console.log('[INFERENCE] No FINAL_RESULT found, trying to parse buffer...');
+        logger.debug('[INFERENCE] No FINAL_RESULT found, trying to parse buffer...');
         const jsonMatch = outputBuffer.match(/\{[\s\S]*\}/);
 
         if (jsonMatch) {
           try {
             result = JSON.parse(jsonMatch[0]);
             resultSource = 'BUFFER_JSON';
-            console.log('[INFERENCE] Successfully parsed JSON from buffer');
+            logger.debug('[INFERENCE] Successfully parsed JSON from buffer');
           } catch (e) {
-            console.error('[INFERENCE] Failed to parse buffer JSON:', e.message);
+            logger.error('[INFERENCE] Failed to parse buffer JSON:', e.message);
           }
         }
 
@@ -2935,7 +2917,7 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
             metrics: { message: 'Inference completed but metrics not available' }
           };
           resultSource = 'MANUAL';
-          console.log('[INFERENCE] Created manual result (no JSON output found)');
+          logger.debug('[INFERENCE] Created manual result (no JSON output found)');
         }
       }
 
@@ -2954,7 +2936,7 @@ async function runInferenceWithProgress(modelPath, dataPath, outputPath, inferen
       if (inference && result) {
         const workspacePath = workspaceManager.getWorkspacePath(inference.sessionId);
         result = convertResultPathsForWeb(result, inference.sessionId, workspacePath);
-        console.log('[INFERENCE] Converted paths for web access');
+        logger.debug('[INFERENCE] Converted paths for web access');
       }
 
       // STEP 6: Emit completion event
@@ -2983,7 +2965,7 @@ function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, io)
   // Start the inference process
   runInferenceWithProgress(modelPath, dataPath, outputPath, inferenceId, io)
     .then((result) => {
-      console.log('Inference completed successfully:', result);
+      logger.info('Inference completed successfully:', result);
       
       // Update inference session with final result
       const inference = inferenceSessions.get(inferenceId);
@@ -2995,7 +2977,7 @@ function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, io)
       
     })
     .catch((error) => {
-      console.error('Inference failed:', error);
+      logger.error('Inference failed:', error);
       
       // Update inference session with error
       const inference = inferenceSessions.get(inferenceId);
@@ -3031,5 +3013,5 @@ app.use((error, req, res, next) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  logger.info(`Server running on http://localhost:${PORT}`);
 });

@@ -9,9 +9,14 @@ import json
 import tifffile
 import numpy as np
 from pathlib import Path
-import base64
-import io
-from PIL import Image
+from tiff_validation_utils import (
+    convert_signed_integer_to_uint16,
+    create_preview_image,
+    validate_tiff_data_type,
+    validate_tiff_dimensions,
+    validate_tiff_data_content,
+    calculate_data_statistics
+)
 
 def validate_inference_tiff(file_path):
     """
@@ -49,72 +54,39 @@ def validate_inference_tiff(file_path):
             # Single 2D image - convert to 3D stack with one slice
             tiff_data = np.expand_dims(tiff_data, axis=0)
             print("Converted 2D image to 3D stack with 1 slice", flush=True)
-        
-        # Validate and convert data types
-        supported_types = [np.uint8, np.uint16, np.int16, np.int32, np.float32, np.float64]
-        
-        if tiff_data.dtype not in supported_types:
+
+        # Validate data type
+        is_valid_type, type_error = validate_tiff_data_type(tiff_data)
+        if not is_valid_type:
             return {
                 "valid": False,
-                "error": f"Unsupported data type: {tiff_data.dtype}. Supported types: uint8, uint16, int16, int32, float32, float64"
+                "error": type_error
             }
-        
-        # Convert signed integer types to float32 for consistent processing
-        conversion_applied = False
+
+        # Convert signed integer types to uint16 if needed
         original_dtype = str(tiff_data.dtype)
-        
-        if tiff_data.dtype in [np.int16, np.int32]:
-            print(f"[Bit Depth Conversion] Detected signed integer type: {tiff_data.dtype}", file=sys.stderr, flush=True)
-            print(f"[Bit Depth Conversion] Converting to float32 for inference...", file=sys.stderr, flush=True)
-            
-            # Normalize to [0, 1] range based on actual data range
-            data_min = tiff_data.min()
-            data_max = tiff_data.max()
-            
-            if data_max > data_min:
-                tiff_data = ((tiff_data.astype(np.float32) - data_min) / (data_max - data_min))
-            else:
-                tiff_data = np.zeros_like(tiff_data, dtype=np.float32)
-            
-            # Scale to uint16 range for consistency
-            tiff_data = (tiff_data * 65535).astype(np.uint16)
-            
-            # Save the converted file back
-            try:
-                tifffile.imwrite(file_path, tiff_data)
-                conversion_applied = True
-                print(f"[Bit Depth Conversion] Conversion successful! Original range: [{data_min}, {data_max}]", file=sys.stderr, flush=True)
-                print(f"[Bit Depth Conversion] Converted from {original_dtype} to uint16", file=sys.stderr, flush=True)
-            except Exception as e:
-                return {
-                    "valid": False,
-                    "error": f"Failed to convert signed integer format: {str(e)}"
-                }
-        
-        # Check for reasonable dimensions
-        if any(dim > 4096 for dim in tiff_data.shape):
+        tiff_data, conversion_applied, _, data_min, data_max = convert_signed_integer_to_uint16(tiff_data, file_path)
+
+        if tiff_data is None:
             return {
                 "valid": False,
-                "error": f"Image dimensions too large: {tiff_data.shape}. Maximum dimension: 4096 pixels"
+                "error": "Failed to convert signed integer format"
             }
-        
-        if any(dim < 32 for dim in tiff_data.shape[1:]):  # Skip the first dimension (slices)
+
+        # Validate dimensions (check reasonable size limits)
+        is_valid_dim, dim_error = validate_tiff_dimensions(tiff_data, min_dimension=32, max_dimension=4096)
+        if not is_valid_dim:
             return {
                 "valid": False,
-                "error": f"Image dimensions too small: {tiff_data.shape}. Minimum slice size: 32x32 pixels"
+                "error": dim_error
             }
-        
-        # Check for empty or invalid data
-        if tiff_data.size == 0:
+
+        # Validate data content (not empty, not all zeros, has contrast)
+        is_valid_content, content_error = validate_tiff_data_content(tiff_data)
+        if not is_valid_content:
             return {
                 "valid": False,
-                "error": "Empty TIFF file"
-            }
-        
-        if np.all(tiff_data == 0):
-            return {
-                "valid": False,
-                "error": "TIFF file contains only zero values"
+                "error": content_error
             }
         
         # Calculate file size
@@ -127,21 +99,9 @@ def validate_inference_tiff(file_path):
                 "valid": False,
                 "error": f"File too large: {file_size_mb:.1f}MB. Maximum allowed: {max_size_mb}MB"
             }
-        
-        # Calculate statistics
-        data_stats = {
-            "min": float(tiff_data.min()),
-            "max": float(tiff_data.max()),
-            "mean": float(tiff_data.mean()),
-            "std": float(tiff_data.std())
-        }
-        
-        # Check for reasonable value ranges
-        if data_stats["max"] == data_stats["min"]:
-            return {
-                "valid": False,
-                "error": "Image has no contrast (all pixels have same value)"
-            }
+
+        # Calculate statistics using shared utility
+        data_stats = calculate_data_statistics(tiff_data)
         
         # Estimate memory usage for processing
         estimated_memory_mb = (tiff_data.nbytes * 4) / (1024 * 1024)  # Rough estimate for processing
@@ -204,51 +164,26 @@ def generate_warnings(tiff_data, file_size_mb, estimated_memory_mb):
     
     return warnings
 
-def create_inference_preview(image_slice, target_size=(256, 256)):
-    """Create downsampled preview for inference data"""
-    try:
-        # Normalize the image data for display (same logic as training raw images)
-        image_min, image_max = image_slice.min(), image_slice.max()
-        if image_max > image_min:
-            display_image = ((image_slice - image_min) / (image_max - image_min) * 255).astype(np.uint8)
-        else:
-            display_image = np.zeros_like(image_slice, dtype=np.uint8)
-        
-        # Create PIL image and resize
-        pil_image = Image.fromarray(display_image)
-        downsampled = pil_image.resize(target_size, Image.LANCZOS)
-        
-        # Convert to base64 PNG
-        buffer = io.BytesIO()
-        downsampled.save(buffer, format='PNG', optimize=True)
-        base64_string = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        
-        return base64_string
-        
-    except Exception as e:
-        print(f"Inference preview generation failed: {str(e)}", flush=True)
-        return None
-
 def generate_inference_preview(file_path):
     """Generate preview image for inference data"""
     try:
         # Read first slice from the stack
         tiff_data = tifffile.imread(file_path)
-        
+
         # Handle both 2D and 3D data
         if len(tiff_data.shape) == 2:
             first_slice = tiff_data
         else:
             first_slice = tiff_data[0]  # First slice
-        
-        # Generate preview
-        preview = create_inference_preview(first_slice)
-        
+
+        # Generate preview using shared utility
+        preview = create_preview_image(first_slice, is_annotation=False)
+
         if preview:
             return {'inference_preview': preview}
         else:
             return None
-            
+
     except Exception as e:
         print(f"Inference preview generation failed: {str(e)}", flush=True)
         return None
