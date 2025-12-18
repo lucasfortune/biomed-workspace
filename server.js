@@ -1210,10 +1210,6 @@ app.get('/api/workspace/thumbnail/:fileId', requireAuth, async (req, res) => {
 // ==============================================================================
 
 // Serve welcome page as default
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'welcome.html'));
-});
-
 // Serve classic app
 app.get('/classic', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'classic', 'index.html'));
