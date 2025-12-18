@@ -31,6 +31,9 @@ class Workspace {
       // Register all modules
       this.moduleLoader.registerAll(moduleRegistry);
 
+      // Subscribe to state changes (MUST be before initializeWorkspace so it catches initial stats)
+      this.setupStateSubscriptions();
+
       // Check authentication
       await this.checkAuth();
 
@@ -44,9 +47,6 @@ class Workspace {
       // Set up UI
       this.setupUI();
       this.setupEventListeners();
-
-      // Subscribe to state changes
-      this.setupStateSubscriptions();
 
       // Render module cards
       this.renderModuleCards();
@@ -193,7 +193,8 @@ class Workspace {
         }
 
         if (workspaceSizeEl) {
-          workspaceSizeEl.textContent = stats.totalSizeMB || '0 MB';
+          // stats.totalSizeMB is a string like "10.50", so append " MB"
+          workspaceSizeEl.textContent = (stats.totalSizeMB || '0') + ' MB';
         }
       }
     });

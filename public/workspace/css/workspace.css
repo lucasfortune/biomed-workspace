@@ -98,8 +98,9 @@ body {
 
 .sidebar-content {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 16px;
   transition: opacity var(--transition-speed);
 }
@@ -167,11 +168,25 @@ body {
 }
 
 /* File Browser */
-.file-tree-container {
+.file-browser {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  margin-bottom: 16px; /* Override sidebar-section margin for proper flex behavior */
+}
+
+/* FileBrowser renders directly into this container */
+#file-tree-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   background-color: var(--darker-bg);
   border-radius: 4px;
-  padding: 8px;
-  min-height: 200px;
+  overflow: hidden;
+  min-height: 0;
+  padding: 4px;
 }
 
 .empty-state {
@@ -185,11 +200,7 @@ body {
    File Browser Component (Phase 3.2)
    ============================================================================ */
 
-.file-browser {
-  display: flex;
-  flex-direction: column;
-  
-}
+/* Note: .file-browser base styles are defined above in the sidebar section */
 
 /* Header */
 .fb-header {
@@ -198,6 +209,7 @@ body {
   align-items: center;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .fb-header h3 {
@@ -229,6 +241,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .fb-category-dropdown {
@@ -292,6 +305,7 @@ body {
   padding: 8px 12px;
   background-color: var(--darker-bg);
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .fb-progress-bar {
@@ -365,6 +379,7 @@ body {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   position: relative;
+  flex-shrink: 0;
 }
 
 .fb-search-input {
@@ -409,11 +424,13 @@ body {
   color: var(--text-primary);
 }
 
-/* Tree Container */
+/* Tree Container - Scrollable content area */
 .fb-tree {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 0;
+  min-height: 0; /* Important for flex child scrolling */
 }
 
 /* Empty State */
@@ -745,9 +762,8 @@ body {
 
 /* Quick Actions */
 .quick-actions {
-  width: 90%;
-  position: absolute;
-  bottom: 0;
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 .btn-action {

@@ -74,6 +74,11 @@ class FileBrowser {
       }
 
       this.render();
+
+      // Also refresh workspace stats (file count and size in sidebar)
+      if (window.workspace && window.workspace.loadWorkspaceStats) {
+        await window.workspace.loadWorkspaceStats();
+      }
     } catch (error) {
       console.error('[FileBrowser] Error refreshing file list:', error);
       this.state.notify('error', `Failed to load files: ${error.message}`);
