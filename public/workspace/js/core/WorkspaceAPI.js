@@ -145,6 +145,46 @@ class WorkspaceAPI {
     return this.delete(`/api/workspace/file/${fileId}`);
   }
 
+  /**
+   * Batch delete files from workspace
+   * @param {Array<string>} fileIds - Array of file IDs to delete
+   */
+  async batchDeleteFiles(fileIds) {
+    return this.post('/api/workspace/files/batch-delete', { fileIds });
+  }
+
+  /**
+   * Batch download files as ZIP
+   * @param {Array<string>} fileIds - Array of file IDs to download
+   */
+  async batchDownloadFiles(fileIds) {
+    // Use fetch with blob response for file download
+    const response = await fetch(`${this.baseURL}/api/workspace/files/batch-download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fileIds })
+    });
+
+    if (!response.ok) {
+      throw new Error('Batch download failed');
+    }
+
+    // Trigger download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'workspace_files.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    return { success: true };
+  }
+
   // ===========================================================================
   // Authentication
   // ===========================================================================
