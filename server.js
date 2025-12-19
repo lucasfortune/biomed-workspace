@@ -36,8 +36,8 @@ const sessionTracker = require('./src/services/SessionTracker');
 // Socket.IO handlers
 const { initializeSocketHandlers } = require('./src/sockets');
 
-// App factory
-const createApp = require('./src/app');
+// App configuration
+const configureApp = require('./src/app');
 
 // =============================================================================
 // STARTUP VALIDATION
@@ -93,24 +93,29 @@ const inferenceService = new InferenceService({
 });
 
 // =============================================================================
-// CREATE HTTP SERVER AND SOCKET.IO
+// CREATE EXPRESS APP, HTTP SERVER, AND SOCKET.IO
 // =============================================================================
 
-// Create a temporary express app to create the server
-// (We'll replace it with the fully configured app below)
+// Create Express app first
 const express = require('express');
-const tempApp = express();
-const server = http.createServer(tempApp);
+const app = express();
+
+// Create HTTP server with the app
+const server = http.createServer(app);
+
+// Create Socket.IO (attaches to server for both WebSocket and polling)
 const io = socketIo(server);
 
 // Initialize Socket.IO handlers
 initializeSocketHandlers(io, logger);
 
 // =============================================================================
-// CREATE AND CONFIGURE EXPRESS APP
+// CONFIGURE EXPRESS APP
 // =============================================================================
 
-const app = createApp({
+// Now configure the app with all middleware and routes
+// (This happens after Socket.IO is attached, so io can be passed to routes)
+configureApp(app, {
   env,
   logger,
   io,
@@ -124,10 +129,6 @@ const app = createApp({
   },
   activityLogger
 });
-
-// Replace the temporary app with the configured one
-server.removeAllListeners('request');
-server.on('request', app);
 
 // =============================================================================
 // START SERVER

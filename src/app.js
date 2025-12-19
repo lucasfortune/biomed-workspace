@@ -40,7 +40,8 @@ const {
 const sessionTracker = require('./services/SessionTracker');
 
 /**
- * Create and configure the Express application
+ * Configure an Express application with all middleware and routes
+ * @param {Express} app - Express application instance to configure
  * @param {object} dependencies - External dependencies
  * @param {object} dependencies.env - Environment configuration
  * @param {object} dependencies.logger - Logger instance
@@ -48,9 +49,8 @@ const sessionTracker = require('./services/SessionTracker');
  * @param {object} dependencies.workspaceManager - WorkspaceManager instance
  * @param {object} dependencies.services - Service instances
  * @param {object} dependencies.activityLogger - Activity logger instance
- * @returns {Express} Configured Express application
  */
-function createApp(dependencies) {
+function configureApp(app, dependencies) {
   const {
     env,
     logger,
@@ -67,9 +67,6 @@ function createApp(dependencies) {
     trainingService,
     inferenceService
   } = services;
-
-  // Create Express app
-  const app = express();
 
   // Aliases for backward compatibility
   const trainingSessions = sessionTracker.trainingSessions;
@@ -305,8 +302,6 @@ function createApp(dependencies) {
 
   // Error handling middleware (must be last)
   app.use(globalErrorHandler);
-
-  return app;
 }
 
-module.exports = createApp;
+module.exports = configureApp;
