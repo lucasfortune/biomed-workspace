@@ -74,6 +74,17 @@ const {
   initializeSocketHandlers
 } = require('./src/sockets');
 
+// =============================================================================
+// REFACTORED MODULES (Phase 4 - Services)
+// =============================================================================
+const {
+  AuthService,
+  WorkspaceService,
+  FileService,
+  TrainingService,
+  InferenceService
+} = require('./src/services');
+
 // Aliases for backward compatibility with existing code
 const trainingSessions = sessionTracker.trainingSessions;
 const inferenceSessions = sessionTracker.inferenceSessions;
@@ -94,6 +105,46 @@ logger.info('Python interpreter found at:', PYTHON_PATH);
 
 // Initialize WorkspaceManager
 const workspaceManager = new WorkspaceManager();
+
+// =============================================================================
+// SERVICE INITIALIZATION (Phase 4)
+// =============================================================================
+// Note: Services are initialized here but existing functions are kept for
+// backward compatibility during gradual migration. Replace inline functions
+// with service calls incrementally.
+
+const workspaceService = new WorkspaceService({
+  workspaceManager,
+  activityLogger,
+  logger
+});
+
+const fileService = new FileService({
+  workspaceService,
+  pythonPath: PYTHON_PATH,
+  logger
+});
+
+const authService = new AuthService({
+  usersFilePath: path.join(process.cwd(), 'users.json'),
+  activityLogger,
+  logger
+});
+
+const trainingService = new TrainingService({
+  pythonPath: PYTHON_PATH,
+  sessionTracker,
+  fileService,
+  logger
+});
+
+const inferenceService = new InferenceService({
+  pythonPath: PYTHON_PATH,
+  sessionTracker,
+  fileService,
+  workspaceService,
+  logger
+});
 
 /**
  * Helper function to track module outputs in file browser
