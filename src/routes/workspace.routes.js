@@ -292,6 +292,209 @@ function createWorkspaceRoutes(dependencies) {
     }
   });
 
+  // ===========================================================================
+  // IMAGE VIEWER - SLICE EXTRACTION
+  // ===========================================================================
+
+  /**
+   * Get TIFF file information (slice count, dimensions, dtype)
+   * GET /api/workspace/tiff-info/:fileId
+   */
+  router.get('/tiff-info/:fileId', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const sessionId = req.session.id;
+
+      const file = await workspaceService.getFile(sessionId, fileId);
+      const workspacePath = workspaceService.getWorkspacePath(sessionId);
+      const filePath = path.join(workspacePath, file.path);
+
+      // Verify file exists
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'File not found'
+        });
+      }
+
+      // Only allow TIFF files
+      const ext = path.extname(file.name).toLowerCase();
+      if (ext !== '.tif' && ext !== '.tiff') {
+        return res.status(400).json({
+          success: false,
+          error: 'Only TIFF files are supported'
+        });
+      }
+
+      // Spawn Python script to get info
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/extract_slice.py',
+        filePath,
+        '--info'
+      ]);
+
+      let output = '';
+      let errorOutput = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0 && output.includes('INFO:')) {
+          const jsonStr = output.replace('INFO:', '').trim();
+          try {
+            const info = JSON.parse(jsonStr);
+            res.json({
+              success: true,
+              fileId: fileId,
+              fileName: file.name,
+              ...info
+            });
+          } catch (parseError) {
+            res.status(500).json({
+              success: false,
+              error: 'Failed to parse TIFF info'
+            });
+          }
+        } else {
+          const errorMsg = output.includes('ERROR:')
+            ? output.replace('ERROR:', '').trim()
+            : errorOutput || 'Unknown error';
+          res.status(500).json({
+            success: false,
+            error: errorMsg
+          });
+        }
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('TIFF info error:', error);
+      }
+      res.status(error.message.includes('not found') ? 404 : 500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Extract and serve a slice from a TIFF file as JPEG
+   * GET /api/workspace/slice/:fileId/:sliceIndex
+   * Query params:
+   *   - size: 'icon' (128px), 'gallery' (512px), or number (default: 512)
+   */
+  router.get('/slice/:fileId/:sliceIndex', requireAuth, async (req, res) => {
+    try {
+      const { fileId, sliceIndex } = req.params;
+      const size = req.query.size || 'gallery';
+      const sessionId = req.session.id;
+
+      // Validate slice index
+      const sliceNum = parseInt(sliceIndex, 10);
+      if (isNaN(sliceNum) || sliceNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid slice index'
+        });
+      }
+
+      const file = await workspaceService.getFile(sessionId, fileId);
+      const workspacePath = workspaceService.getWorkspacePath(sessionId);
+      const filePath = path.join(workspacePath, file.path);
+
+      // Verify file exists
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'File not found'
+        });
+      }
+
+      // Only allow TIFF files
+      const ext = path.extname(file.name).toLowerCase();
+      if (ext !== '.tif' && ext !== '.tiff') {
+        return res.status(400).json({
+          success: false,
+          error: 'Only TIFF files are supported'
+        });
+      }
+
+      // Create cache directory for slices
+      const slicesDir = path.join(workspacePath, '.slices');
+      if (!fs.existsSync(slicesDir)) {
+        fs.mkdirSync(slicesDir, { recursive: true });
+      }
+
+      // Generate cache filename based on fileId, slice, and size
+      const cacheFilename = `${fileId}_${sliceIndex}_${size}.jpg`;
+      const cachePath = path.join(slicesDir, cacheFilename);
+
+      // Check cache first
+      if (fs.existsSync(cachePath)) {
+        return res.sendFile(path.resolve(cachePath));
+      }
+
+      // Spawn Python script to extract slice
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/extract_slice.py',
+        filePath,
+        sliceIndex.toString(),
+        cachePath,
+        '--size',
+        size
+      ]);
+
+      let output = '';
+      let errorOutput = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0 && output.includes('SUCCESS:')) {
+          res.sendFile(path.resolve(cachePath));
+        } else {
+          const errorMsg = output.includes('ERROR:')
+            ? output.replace('ERROR:', '').trim()
+            : errorOutput || 'Unknown error';
+
+          // Check for specific error types
+          if (errorMsg.includes('out of range')) {
+            res.status(400).json({
+              success: false,
+              error: errorMsg
+            });
+          } else {
+            res.status(500).json({
+              success: false,
+              error: errorMsg
+            });
+          }
+        }
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('Slice extraction error:', error);
+      }
+      res.status(error.message.includes('not found') ? 404 : 500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   return router;
 }
 
