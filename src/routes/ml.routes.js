@@ -1,0 +1,1077 @@
+/**
+ * ML Pipeline Routes
+ *
+ * Handles training and inference pipeline:
+ * - Upload training/inference data
+ * - Configure training
+ * - Start/monitor training
+ * - Import models
+ * - Run inference
+ * - Download results
+ * - Reset session
+ */
+
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const uuid = require('uuid');
+const archiver = require('archiver');
+const { requireAuth, requireApproved } = require('../middleware/auth.middleware');
+const { PYTHON_PATH } = require('../config/constants');
+
+/**
+ * Create ML routes router
+ * @param {object} dependencies - Shared dependencies
+ * @param {object} dependencies.workspaceManager - WorkspaceManager instance
+ * @param {object} dependencies.workspaceService - WorkspaceService instance
+ * @param {object} dependencies.trainingService - TrainingService instance
+ * @param {object} dependencies.inferenceService - InferenceService instance
+ * @param {object} dependencies.sessionTracker - SessionTracker instance
+ * @param {object} dependencies.activityLogger - Activity logger instance
+ * @param {object} dependencies.logger - Logger instance
+ * @param {object} dependencies.io - Socket.IO instance
+ * @param {function} dependencies.upload - Multer upload middleware
+ * @param {function} dependencies.uploadImport - Multer upload middleware for imports
+ * @param {function} dependencies.validateTiffStacks - TIFF validation function
+ * @param {function} dependencies.validateImportedModel - Model validation function
+ * @param {function} dependencies.validateInferenceTiff - Inference TIFF validation function
+ * @param {function} dependencies.validateTrainingConfig - Config validation function
+ * @param {function} dependencies.startTrainingProcess - Training process starter
+ * @param {function} dependencies.startInferenceProcess - Inference process starter
+ * @returns {Router} Express router
+ */
+function createMLRoutes(dependencies) {
+  const router = express.Router();
+  const {
+    workspaceManager,
+    workspaceService,
+    trainingService,
+    inferenceService,
+    sessionTracker,
+    activityLogger,
+    logger,
+    io,
+    upload,
+    uploadImport,
+    validateTiffStacks,
+    validateImportedModel,
+    validateInferenceTiff,
+    validateTrainingConfig,
+    startTrainingProcess,
+    startInferenceProcess
+  } = dependencies;
+
+  // Aliases for backward compatibility
+  const trainingSessions = sessionTracker.trainingSessions;
+  const inferenceSessions = sessionTracker.inferenceSessions;
+
+  // ===========================================================================
+  // TRAINING DATA UPLOAD
+  // ===========================================================================
+
+  /**
+   * Upload and validate training data
+   * POST /upload-data
+   */
+  router.post('/upload-data', upload.fields([
+    { name: 'raw_images', maxCount: 1 },
+    { name: 'annotations', maxCount: 1 }
+  ]), async (req, res) => {
+    try {
+      let rawFile, annotationFile;
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      const skipUpload = req.body.skipUpload === 'true';
+      const isTestData = req.body.isTestData === 'true';
+
+      // If NOT test data and NOT already uploaded, require approved status
+      if (!isTestData && !skipUpload && req.session.user.status !== 'active') {
+        return res.status(403).json({
+          error: 'Custom data upload requires account approval',
+          status: req.session.user.status,
+          message: 'You can use test data while waiting for approval'
+        });
+      }
+
+      // Case 1: Files already uploaded via FileSelector
+      if (skipUpload) {
+        if (logger) logger.debug('Validating pre-uploaded files...');
+
+        const rawImagesPath = req.body.raw_images_path;
+        const annotationsPath = req.body.annotations_path;
+
+        if (!rawImagesPath || !annotationsPath) {
+          return res.status(400).json({
+            error: 'File paths are required when skipUpload is true'
+          });
+        }
+
+        const rawFullPath = path.join(workspacePath, rawImagesPath);
+        const annFullPath = path.join(workspacePath, annotationsPath);
+
+        if (!fs.existsSync(rawFullPath)) {
+          return res.status(400).json({ error: 'Raw images file not found', path: rawImagesPath });
+        }
+        if (!fs.existsSync(annFullPath)) {
+          return res.status(400).json({ error: 'Annotations file not found', path: annotationsPath });
+        }
+
+        rawFile = {
+          path: rawFullPath,
+          filename: path.basename(rawFullPath),
+          originalname: path.basename(rawFullPath),
+          size: fs.statSync(rawFullPath).size,
+          mimetype: 'image/tiff'
+        };
+
+        annotationFile = {
+          path: annFullPath,
+          filename: path.basename(annFullPath),
+          originalname: path.basename(annFullPath),
+          size: fs.statSync(annFullPath).size,
+          mimetype: 'image/tiff'
+        };
+      }
+      // Case 2: Test data request
+      else if (isTestData) {
+        if (logger) logger.debug('Processing test data request...');
+
+        const rawUploadDir = path.join(workspacePath, 'uploads', 'raw');
+        const annUploadDir = path.join(workspacePath, 'uploads', 'annotations');
+
+        if (!fs.existsSync(workspacePath)) {
+          workspaceManager.initializeWorkspace(sessionId);
+        }
+
+        if (!fs.existsSync(rawUploadDir)) fs.mkdirSync(rawUploadDir, { recursive: true });
+        if (!fs.existsSync(annUploadDir)) fs.mkdirSync(annUploadDir, { recursive: true });
+
+        const testFiles = {
+          raw_images: 'trypB_testData_training.tif',
+          annotations: 'trypB_testData_annotations.tif'
+        };
+
+        const rawSourcePath = path.join('test_data', testFiles.raw_images);
+        const annotationSourcePath = path.join('test_data', testFiles.annotations);
+
+        if (!fs.existsSync(rawSourcePath)) {
+          return res.status(400).json({
+            error: 'Test training images not found',
+            details: `Expected file: test_data/${testFiles.raw_images}`
+          });
+        }
+        if (!fs.existsSync(annotationSourcePath)) {
+          return res.status(400).json({
+            error: 'Test annotation images not found',
+            details: `Expected file: test_data/${testFiles.annotations}`
+          });
+        }
+
+        const rawDestPath = path.join(rawUploadDir, testFiles.raw_images);
+        const annotationDestPath = path.join(annUploadDir, testFiles.annotations);
+
+        fs.copyFileSync(rawSourcePath, rawDestPath);
+        fs.copyFileSync(annotationSourcePath, annotationDestPath);
+
+        rawFile = {
+          path: rawDestPath,
+          filename: testFiles.raw_images,
+          originalname: testFiles.raw_images,
+          size: fs.statSync(rawDestPath).size,
+          mimetype: 'image/tiff'
+        };
+
+        annotationFile = {
+          path: annotationDestPath,
+          filename: testFiles.annotations,
+          originalname: testFiles.annotations,
+          size: fs.statSync(annotationDestPath).size,
+          mimetype: 'image/tiff'
+        };
+      }
+      // Case 3: Regular file upload
+      else {
+        if (!req.files.raw_images || !req.files.annotations) {
+          return res.status(400).json({
+            error: 'Both raw images and annotations are required'
+          });
+        }
+        rawFile = req.files.raw_images[0];
+        annotationFile = req.files.annotations[0];
+      }
+
+      // Validate TIFF stacks
+      const validationResult = await validateTiffStacks(rawFile.path, annotationFile.path);
+
+      if (!validationResult.valid) {
+        return res.status(400).json({
+          error: 'TIFF validation failed',
+          details: validationResult.error
+        });
+      }
+
+      // Store file paths in session
+      req.session.uploadedFiles = {
+        raw_images: rawFile.path,
+        annotations: annotationFile.path,
+        validation: validationResult,
+        isTestData: isTestData
+      };
+
+      // Track files in workspace metadata
+      let rawFileEntry, annFileEntry;
+
+      if (!skipUpload) {
+        const rawRelPath = path.relative(workspacePath, rawFile.path);
+        rawFileEntry = workspaceManager.addFileToMetadata(sessionId, {
+          name: rawFile.filename || rawFile.originalname,
+          path: rawRelPath,
+          category: 'raw_images',
+          size: rawFile.size,
+          folderId: null
+        });
+
+        const annRelPath = path.relative(workspacePath, annotationFile.path);
+        annFileEntry = workspaceManager.addFileToMetadata(sessionId, {
+          name: annotationFile.filename || annotationFile.originalname,
+          path: annRelPath,
+          category: 'annotations',
+          size: annotationFile.size,
+          folderId: null
+        });
+
+        if (activityLogger) {
+          activityLogger.logFileUpload(
+            req.session.user.username,
+            isTestData ? 'test_data' : 'custom_data',
+            rawFile.filename || rawFile.originalname,
+            rawFile.size
+          );
+        }
+      } else {
+        rawFileEntry = { path: path.relative(workspacePath, rawFile.path) };
+        annFileEntry = { path: path.relative(workspacePath, annotationFile.path) };
+      }
+
+      res.json({
+        success: true,
+        message: skipUpload
+          ? 'Files validated successfully'
+          : (isTestData
+            ? 'Test dataset loaded and validated successfully'
+            : 'Files uploaded and validated successfully'),
+        validation: validationResult,
+        isTestData: isTestData,
+        raw_images_path: rawFileEntry.path,
+        annotations_path: annFileEntry.path
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Upload/Test data error:', error);
+      res.status(500).json({
+        error: error.message,
+        isTestData: req.body.isTestData === 'true'
+      });
+    }
+  });
+
+  // ===========================================================================
+  // TRAINING CONFIGURATION
+  // ===========================================================================
+
+  /**
+   * Configure training parameters
+   * POST /configure-training
+   */
+  router.post('/configure-training', (req, res) => {
+    try {
+      const config = req.body;
+
+      const validationResult = validateTrainingConfig(config);
+      if (!validationResult.valid) {
+        return res.status(400).json({
+          error: 'Invalid configuration',
+          details: validationResult.errors
+        });
+      }
+
+      req.session.trainingConfig = config;
+
+      res.json({
+        success: true,
+        message: 'Training configuration saved',
+        config: config
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Configuration error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // TRAINING EXECUTION
+  // ===========================================================================
+
+  /**
+   * Start training
+   * POST /start-training
+   */
+  router.post('/start-training', requireAuth, (req, res) => {
+    try {
+      if (!req.session.uploadedFiles || !req.session.trainingConfig) {
+        return res.status(400).json({
+          error: 'Missing uploaded files or configuration'
+        });
+      }
+
+      const isUsingTestData = req.session.uploadedFiles?.isTestData;
+
+      if (!isUsingTestData && req.session.user.status !== 'active') {
+        return res.status(403).json({
+          error: 'Training with custom data requires account approval',
+          status: req.session.user.status,
+          message: 'You can train models with test data while waiting for approval'
+        });
+      }
+
+      const sessionId = req.session.id;
+      const trainingId = uuid.v4();
+
+      // Add num_classes from validation
+      const config = req.session.trainingConfig;
+      if (req.session.uploadedFiles.validation?.num_classes) {
+        config.num_classes = req.session.uploadedFiles.validation.num_classes;
+      } else {
+        config.num_classes = 3;
+      }
+
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const trainingParams = {
+        session_id: sessionId,
+        training_id: trainingId,
+        raw_images: req.session.uploadedFiles.raw_images,
+        annotations: req.session.uploadedFiles.annotations,
+        config: config,
+        output_dir: path.join(workspacePath, 'models', 'segmentation', trainingId)
+      };
+
+      if (!fs.existsSync(trainingParams.output_dir)) {
+        fs.mkdirSync(trainingParams.output_dir, { recursive: true });
+      }
+
+      // Store training session
+      trainingSessions.set(trainingId, {
+        sessionId: sessionId,
+        username: req.session.user.username,
+        fullName: req.session.user.fullName,
+        status: 'starting',
+        startTime: new Date(),
+        current_epoch: 0,
+        total_epochs: config.num_epochs,
+        params: trainingParams,
+        isTestData: isUsingTestData
+      });
+
+      if (activityLogger) {
+        activityLogger.logTrainingStart(
+          req.session.user.username,
+          trainingId,
+          config
+        );
+      }
+
+      req.session.currentTraining = trainingId;
+
+      // Start training process
+      startTrainingProcess(trainingParams, io);
+
+      res.json({
+        success: true,
+        training_id: trainingId,
+        message: 'Training started successfully'
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Training start error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Get training status
+   * GET /training-status/:trainingId
+   */
+  router.get('/training-status/:trainingId', requireAuth, (req, res) => {
+    const trainingId = req.params.trainingId;
+    const training = trainingSessions.get(trainingId);
+
+    if (!training) {
+      return res.status(404).json({ error: 'Training session not found' });
+    }
+
+    res.json(training);
+  });
+
+  // ===========================================================================
+  // INFERENCE DATA UPLOAD
+  // ===========================================================================
+
+  /**
+   * Upload inference data
+   * POST /upload-inference
+   */
+  router.post('/upload-inference', requireAuth, upload.single('inference_data'), async (req, res) => {
+    try {
+      let inferenceFile;
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      const skipUpload = req.body.skipUpload === 'true';
+      const isTestData = req.body.isTestData === 'true';
+
+      if (!isTestData && !skipUpload && req.session.user.status !== 'active') {
+        return res.status(403).json({
+          error: 'Custom inference data upload requires account approval',
+          status: req.session.user.status,
+          message: 'You can use test data while waiting for approval'
+        });
+      }
+
+      // Case 1: File already uploaded
+      if (skipUpload) {
+        const inferenceDataPath = req.body.inference_data_path;
+
+        if (!inferenceDataPath) {
+          return res.status(400).json({
+            error: 'File path is required when skipUpload is true'
+          });
+        }
+
+        const inferenceFullPath = path.join(workspacePath, inferenceDataPath);
+
+        if (!fs.existsSync(inferenceFullPath)) {
+          return res.status(400).json({
+            error: 'Inference data file not found',
+            path: inferenceDataPath
+          });
+        }
+
+        inferenceFile = {
+          path: inferenceFullPath,
+          filename: path.basename(inferenceFullPath),
+          originalname: path.basename(inferenceFullPath),
+          size: fs.statSync(inferenceFullPath).size,
+          mimetype: 'image/tiff'
+        };
+      }
+      // Case 2: Test data
+      else if (isTestData) {
+        const inferenceUploadDir = path.join(workspacePath, 'uploads', 'inference_data');
+
+        if (!fs.existsSync(workspacePath)) {
+          workspaceManager.initializeWorkspace(sessionId);
+        }
+
+        if (!fs.existsSync(inferenceUploadDir)) {
+          fs.mkdirSync(inferenceUploadDir, { recursive: true });
+        }
+
+        const testInferenceFile = 'trypB_testData_inference.tif';
+        const sourceInferencePath = path.join('test_data', testInferenceFile);
+
+        if (!fs.existsSync(sourceInferencePath)) {
+          return res.status(400).json({
+            error: 'Test inference images not found',
+            details: `Expected file: test_data/${testInferenceFile}`
+          });
+        }
+
+        const destInferencePath = path.join(inferenceUploadDir, testInferenceFile);
+        fs.copyFileSync(sourceInferencePath, destInferencePath);
+
+        inferenceFile = {
+          path: destInferencePath,
+          filename: testInferenceFile,
+          originalname: testInferenceFile,
+          size: fs.statSync(destInferencePath).size,
+          mimetype: 'image/tiff'
+        };
+      }
+      // Case 3: Regular upload
+      else {
+        if (!req.file) {
+          return res.status(400).json({ error: 'No file provided for inference' });
+        }
+        inferenceFile = req.file;
+      }
+
+      // Validate TIFF
+      const validationResult = await validateInferenceTiff(inferenceFile.path);
+
+      if (!validationResult.valid) {
+        return res.status(400).json({
+          error: 'TIFF validation failed',
+          details: validationResult.error
+        });
+      }
+
+      // Track file in metadata
+      let inferenceFileEntry;
+
+      if (!skipUpload && isTestData) {
+        const inferenceRelPath = path.relative(workspacePath, inferenceFile.path);
+        inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
+          name: inferenceFile.filename || inferenceFile.originalname,
+          path: inferenceRelPath,
+          category: 'inference_data',
+          size: inferenceFile.size,
+          folderId: null
+        });
+      } else if (skipUpload) {
+        inferenceFileEntry = { path: path.relative(workspacePath, inferenceFile.path) };
+      }
+
+      res.json({
+        success: true,
+        message: skipUpload
+          ? 'Inference file validated successfully'
+          : (isTestData
+            ? 'Test inference data loaded successfully'
+            : 'Inference data uploaded successfully'),
+        file_path: inferenceFile.path,
+        inference_data_path: inferenceFileEntry ? inferenceFileEntry.path : path.relative(workspacePath, inferenceFile.path),
+        validation: validationResult,
+        isTestData: isTestData
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Inference upload error:', error);
+      res.status(500).json({
+        error: error.message,
+        isTestData: req.body.isTestData === 'true'
+      });
+    }
+  });
+
+  // ===========================================================================
+  // MODEL IMPORT
+  // ===========================================================================
+
+  /**
+   * Import pre-trained model
+   * POST /import-pretrained-model
+   */
+  router.post('/import-pretrained-model', requireApproved, uploadImport.fields([
+    { name: 'model_file', maxCount: 1 },
+    { name: 'config_file', maxCount: 1 }
+  ]), async (req, res) => {
+    try {
+      if (!req.files || !req.files.model_file || !req.files.config_file) {
+        return res.status(400).json({
+          success: false,
+          error: 'Both model file (.pth) and config file (.json) are required.'
+        });
+      }
+
+      const modelFile = req.files.model_file[0];
+      const configFile = req.files.config_file[0];
+
+      if (!modelFile.originalname.toLowerCase().endsWith('.pth')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Model file must be a .pth file.'
+        });
+      }
+
+      if (!configFile.originalname.toLowerCase().endsWith('.json')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Config file must be a .json file.'
+        });
+      }
+
+      const validationResult = await validateImportedModel(modelFile.path, configFile.path);
+
+      if (validationResult.success) {
+        req.session.importedModel = {
+          modelPath: modelFile.path,
+          configPath: configFile.path,
+          validated: true,
+          validation: validationResult
+        };
+
+        res.json({
+          success: true,
+          message: 'Model and config validated successfully',
+          validation: {
+            model_info: `Valid PyTorch model (${validationResult.model_size})`,
+            config_info: `Valid configuration with ${validationResult.config.features} features, ${validationResult.config.num_layers} layers`
+          }
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: validationResult.error
+        });
+      }
+
+    } catch (error) {
+      if (logger) logger.error('Import model error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Server error during model import: ' + error.message
+      });
+    }
+  });
+
+  /**
+   * Verify imported model
+   * GET /verify-imported-model
+   */
+  router.get('/verify-imported-model', (req, res) => {
+    try {
+      const importedModel = req.session.importedModel;
+
+      if (!importedModel || !importedModel.validated) {
+        return res.status(400).json({
+          success: false,
+          error: 'No valid imported model found in session'
+        });
+      }
+
+      if (!fs.existsSync(importedModel.modelPath) || !fs.existsSync(importedModel.configPath)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Imported model files no longer exist'
+        });
+      }
+
+      res.json({
+        success: true,
+        modelInfo: {
+          model_size: importedModel.validation.model_size,
+          config: importedModel.validation.config
+        }
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Error verifying imported model:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Server error during model verification'
+      });
+    }
+  });
+
+  // ===========================================================================
+  // INFERENCE EXECUTION
+  // ===========================================================================
+
+  /**
+   * Run inference
+   * POST /run-inference
+   */
+  router.post('/run-inference', async (req, res) => {
+    try {
+      const { model_path, data_path, output_path, training_id } = req.body;
+
+      if (logger) logger.info('Inference request received:', { model_path, data_path, output_path, training_id });
+
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      let actualDataPath = data_path;
+
+      if (!path.isAbsolute(data_path)) {
+        actualDataPath = path.join(workspacePath, data_path);
+      }
+
+      if (!fs.existsSync(actualDataPath)) {
+        return res.status(400).json({
+          error: 'Input file not found',
+          details: `File not found at: ${actualDataPath}`,
+          original_path: data_path
+        });
+      }
+
+      let actualModelPath;
+      let modelConfig;
+      let inferenceId;
+
+      // Check if using imported model
+      if (req.session.importedModel && req.session.importedModel.validated) {
+        actualModelPath = req.session.importedModel.modelPath;
+
+        try {
+          const configData = fs.readFileSync(req.session.importedModel.configPath, 'utf8');
+          modelConfig = JSON.parse(configData);
+        } catch (error) {
+          return res.status(400).json({
+            error: 'Failed to load imported model config: ' + error.message
+          });
+        }
+
+        if (!fs.existsSync(actualModelPath)) {
+          return res.status(400).json({
+            error: 'Imported model file not found: ' + actualModelPath
+          });
+        }
+
+      } else {
+        // Use training session model
+        if (!training_id || !trainingSessions.has(training_id)) {
+          return res.status(400).json({
+            error: 'No imported model found and training session not found',
+            training_id: training_id,
+            available_sessions: Array.from(trainingSessions.keys())
+          });
+        }
+
+        const training = trainingSessions.get(training_id);
+        actualModelPath = path.join(training.params.output_dir, 'best_model.pth');
+        modelConfig = training.params.config;
+
+        if (!fs.existsSync(actualModelPath)) {
+          return res.status(404).json({
+            error: 'Model file not found. Training may not have completed successfully.',
+            details: `Expected: ${actualModelPath}`
+          });
+        }
+      }
+
+      inferenceId = uuid.v4();
+
+      // Initialize imported model results directories tracking
+      if (!req.session.importedModelResultsDirs) {
+        req.session.importedModelResultsDirs = [];
+      }
+
+      // Generate output path if not provided
+      let actualOutputPath = output_path;
+      if (!actualOutputPath) {
+        if (req.session.importedModel && req.session.importedModel.validated) {
+          const timestamp = Date.now();
+          const importedModelDir = `imported_model_${timestamp}`;
+          actualOutputPath = path.join(workspacePath, 'results', 'segmentation', importedModelDir, 'inference_result.tif');
+
+          const resultsDir = path.join(workspacePath, 'results', 'segmentation', importedModelDir);
+          req.session.importedModelResultsDirs.push(resultsDir);
+        } else if (training_id) {
+          actualOutputPath = path.join(workspacePath, 'results', 'segmentation', training_id, 'inference_result.tif');
+        } else {
+          actualOutputPath = path.join(workspacePath, 'results', 'segmentation', `inference_${inferenceId}`, 'inference_result.tif');
+        }
+      }
+
+      // Store inference session
+      inferenceSessions.set(inferenceId, {
+        sessionId: req.session.id,
+        username: req.session.user.username,
+        fullName: req.session.user.fullName,
+        status: 'starting',
+        startTime: new Date(),
+        progress: 0,
+        currentSlice: 0,
+        totalSlices: 0,
+        usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated)
+      });
+
+      if (activityLogger) {
+        activityLogger.logInferenceStart(
+          req.session.user.username,
+          inferenceId,
+          !!(req.session.importedModel && req.session.importedModel.validated)
+        );
+      }
+
+      res.json({
+        success: true,
+        inference_id: inferenceId,
+        status: 'starting',
+        message: 'Inference request accepted. Join the WebSocket room for progress updates.',
+        model_info: req.session.importedModel ? 'Using imported model' : 'Using trained model'
+      });
+
+      // Start inference after delay to allow frontend to join room
+      setTimeout(() => {
+        startInferenceProcess(actualModelPath, actualDataPath, actualOutputPath, inferenceId, io);
+      }, 1000);
+
+    } catch (error) {
+      if (logger) logger.error('Inference error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Get inference status
+   * GET /inference-status/:inferenceId
+   */
+  router.get('/inference-status/:inferenceId', requireAuth, (req, res) => {
+    const inferenceId = req.params.inferenceId;
+    const inference = inferenceSessions.get(inferenceId);
+
+    if (!inference) {
+      return res.status(404).json({ error: 'Inference session not found' });
+    }
+
+    res.json(inference);
+  });
+
+  // ===========================================================================
+  // DOWNLOADS
+  // ===========================================================================
+
+  /**
+   * Download trained model
+   * GET /download-model/:trainingId
+   */
+  router.get('/download-model/:trainingId', requireAuth, (req, res) => {
+    const trainingId = req.params.trainingId;
+    const training = trainingSessions.get(trainingId);
+
+    if (!training || training.status !== 'completed') {
+      return res.status(404).json({ error: 'Model not found or training not completed' });
+    }
+
+    const modelDir = training.params.output_dir;
+    const modelPath = path.join(modelDir, 'best_model.pth');
+    const configPath = path.join(modelDir, 'config.json');
+    const resultsPath = path.join(modelDir, 'results.json');
+
+    if (!fs.existsSync(modelPath)) {
+      return res.status(404).json({ error: 'Model file not found' });
+    }
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    res.attachment(`trained_model_${trainingId.substring(0, 8)}.zip`);
+    archive.pipe(res);
+
+    archive.file(modelPath, { name: 'best_model.pth' });
+
+    if (fs.existsSync(configPath)) {
+      archive.file(configPath, { name: 'training_config.json' });
+    }
+
+    if (fs.existsSync(resultsPath)) {
+      archive.file(resultsPath, { name: 'training_results.json' });
+    }
+
+    const readmeContent = `# Trained U-Net Model\n\nTraining ID: ${trainingId}\nGenerated: ${new Date().toISOString()}\n`;
+    archive.append(readmeContent, { name: 'README.md' });
+
+    archive.finalize();
+
+    archive.on('error', (err) => {
+      if (logger) logger.error('Archive error:', err);
+      res.status(500).json({ error: 'Failed to create archive' });
+    });
+  });
+
+  /**
+   * Download inference results
+   * GET /download-inference-results/:inferenceId
+   */
+  router.get('/download-inference-results/:inferenceId', requireAuth, (req, res) => {
+    const inferenceId = req.params.inferenceId;
+    const inference = inferenceSessions.get(inferenceId);
+
+    if (!inference || inference.status !== 'completed') {
+      return res.status(404).json({
+        error: 'Inference results not found or inference not completed'
+      });
+    }
+
+    const result = inference.result;
+    if (!result) {
+      return res.status(404).json({ error: 'Inference result data not found' });
+    }
+
+    const outputPath = result.output_path;
+
+    if (!fs.existsSync(outputPath)) {
+      return res.status(404).json({
+        error: 'Segmentation result file not found',
+        path: outputPath
+      });
+    }
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substr(0, 19);
+    res.attachment(`segmentation_results_${timestamp}.zip`);
+
+    archive.on('error', (err) => {
+      if (logger) logger.error('Archive error:', err);
+      res.status(500).json({ error: 'Failed to create archive: ' + err.message });
+    });
+
+    archive.pipe(res);
+
+    archive.file(outputPath, { name: path.basename(outputPath) });
+
+    if (result.metadata_path && fs.existsSync(result.metadata_path)) {
+      archive.file(result.metadata_path, { name: path.basename(result.metadata_path) });
+    }
+
+    if (result.visualization_path && fs.existsSync(result.visualization_path)) {
+      archive.file(result.visualization_path, { name: path.basename(result.visualization_path) });
+    }
+
+    const readmeContent = `# Segmentation Results\n\nInference ID: ${inferenceId}\nGenerated: ${new Date().toISOString()}\n`;
+    archive.append(readmeContent, { name: 'README.md' });
+
+    archive.finalize();
+  });
+
+  /**
+   * Get original data for web visualization
+   * GET /results/:inferenceId/original-data-web
+   */
+  router.get('/results/:inferenceId/original-data-web', requireAuth, (req, res) => {
+    const inferenceId = req.params.inferenceId;
+    const inference = inferenceSessions.get(inferenceId);
+
+    if (!inference || !inference.result) {
+      return res.status(404).json({
+        error: 'Inference session not found or incomplete',
+        inferenceId: inferenceId
+      });
+    }
+
+    const metadataPath = inference.result.metadata_path;
+
+    if (!fs.existsSync(metadataPath)) {
+      return res.status(404).json({ error: 'Metadata file not found' });
+    }
+
+    try {
+      const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+      const overlayData = metadata.original_data_overlay || metadata.original_data_web;
+
+      if (!overlayData || !overlayData.path) {
+        return res.status(404).json({
+          error: 'Downsampled original data not available for this inference',
+          message: 'Original data overlay was not generated during inference'
+        });
+      }
+
+      const downsampledPath = overlayData.path;
+
+      if (!fs.existsSync(downsampledPath)) {
+        return res.status(404).json({ error: 'Downsampled original data file not found' });
+      }
+
+      res.sendFile(path.resolve(downsampledPath));
+
+    } catch (error) {
+      if (logger) logger.error('Error serving downsampled original data:', error);
+      res.status(500).json({ error: 'Failed to serve original data' });
+    }
+  });
+
+  // ===========================================================================
+  // SESSION RESET
+  // ===========================================================================
+
+  /**
+   * Reset session
+   * POST /reset-session
+   */
+  router.post('/reset-session', requireAuth, async (req, res) => {
+    try {
+      const sessionId = req.session.id;
+      if (logger) logger.info('Resetting session:', sessionId);
+
+      const sessionDir = path.join('uploads', sessionId);
+      const modelDir = path.join('models', sessionId);
+      const outputDir = path.join('outputs', sessionId);
+
+      const deleteDirectory = (dirPath) => {
+        if (fs.existsSync(dirPath)) {
+          try {
+            fs.rmSync(dirPath, { recursive: true, force: true });
+            return true;
+          } catch (error) {
+            if (logger) logger.error('Error deleting directory:', dirPath, error);
+            return false;
+          }
+        }
+        return true;
+      };
+
+      deleteDirectory(sessionDir);
+      deleteDirectory(modelDir);
+      deleteDirectory(outputDir);
+
+      // Clean up training sessions
+      const trainingIdsToCleanup = [];
+      for (const [trainingId, training] of trainingSessions.entries()) {
+        if (training.sessionId === sessionId) {
+          trainingIdsToCleanup.push(trainingId);
+          const trainingResultsDir = path.join('results', trainingId);
+          deleteDirectory(trainingResultsDir);
+        }
+      }
+
+      // Clean up inference sessions
+      const inferenceIdsToCleanup = [];
+      for (const [inferenceId, inference] of inferenceSessions.entries()) {
+        if (inference.sessionId === sessionId) {
+          inferenceIdsToCleanup.push(inferenceId);
+          if (inference.result && inference.result.output_path) {
+            const resultDir = path.dirname(inference.result.output_path);
+            deleteDirectory(resultDir);
+          }
+        }
+      }
+
+      // Clean up imported model results directories
+      if (req.session.importedModelResultsDirs?.length > 0) {
+        for (const resultsDir of req.session.importedModelResultsDirs) {
+          if (fs.existsSync(resultsDir)) {
+            deleteDirectory(resultsDir);
+          }
+        }
+        req.session.importedModelResultsDirs = [];
+      }
+
+      // Remove sessions from maps
+      for (const trainingId of trainingIdsToCleanup) {
+        trainingSessions.delete(trainingId);
+      }
+
+      for (const inferenceId of inferenceIdsToCleanup) {
+        inferenceSessions.delete(inferenceId);
+      }
+
+      // Clear session data but keep user authenticated
+      const user = req.session.user;
+      req.session.uploadedFiles = undefined;
+      req.session.trainingConfig = undefined;
+      req.session.currentTraining = undefined;
+      req.session.importedModel = undefined;
+      req.session.user = user;
+
+      res.json({
+        success: true,
+        message: 'Session reset successfully',
+        cleanupSummary: {
+          trainingSessions: trainingIdsToCleanup.length,
+          inferenceSessions: inferenceIdsToCleanup.length
+        }
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Error in reset-session:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error during session reset'
+      });
+    }
+  });
+
+  return router;
+}
+
+module.exports = createMLRoutes;
