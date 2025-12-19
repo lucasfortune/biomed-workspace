@@ -4,7 +4,7 @@
 
 This document provides a comprehensive overview of the project's file structure, explaining the purpose of each directory and key files.
 
-**Last Updated:** 2025-11-27
+**Last Updated:** 2025-12-19
 **Project Root:** `/home/lucas/Documents/phd/RKI_laue/viz_app/`
 
 ---
@@ -21,7 +21,9 @@ The project uses a **dual-version architecture** with separate directories for C
 viz_app/
 ├── docs/                    # Documentation (comprehensive)
 ├── public/                  # Frontend code (dual version)
+├── src/                     # MODULAR BACKEND (routes, services, middleware)
 ├── python/                  # ML scripts (shared by both versions)
+├── utils/                   # Shared utilities (logger, env loader)
 ├── test_data/               # Test datasets
 ├── uploads/                 # User uploads (session-specific)
 ├── models/                  # Trained models (session-specific)
@@ -31,7 +33,7 @@ viz_app/
 ├── logs/                    # Activity logs
 ├── venv/                    # Python virtual environment
 ├── node_modules/            # Node.js dependencies
-├── server.js                # Main Express server
+├── server.js                # Entry point (~160 lines)
 ├── WorkspaceManager.js      # Workspace management
 ├── activityLogger.js        # Activity logging utility
 ├── manageUsers.js           # User management CLI
@@ -154,82 +156,96 @@ public/
 
 ---
 
-## Backend (`server.js` + utilities)
+## Backend (Modular Architecture)
 
 **Purpose:** Express server with session management and ML pipeline
 
+The backend has been refactored from a monolithic ~3000-line `server.js` into a modular architecture in the `src/` directory.
+
 ```
 viz_app/
-├── server.js                # Main Express server (2,135 lines)
-│   ├── Authentication (lines 142-392)
-│   ├── Workspace API (lines 418-561)
-│   ├── Training endpoints (lines 582-853)
-│   ├── Inference endpoints (lines 856-1196)
-│   ├── Download endpoints (lines 1199-1426)
-│   ├── Session management (lines 1482-1646)
-│   └── Socket.IO handlers (lines 1648-1668)
+├── server.js                # Entry point (~160 lines)
+│   └── Startup, services, server creation, graceful shutdown
+│
+├── src/                     # Modular backend
+│   ├── app.js               # Express app configuration (~307 lines)
+│   │
+│   ├── config/
+│   │   └── constants.js     # Python path, directories, validation
+│   │
+│   ├── middleware/
+│   │   ├── auth.middleware.js     # requireAuth, requireApproved, requireAdmin
+│   │   ├── session.middleware.js  # Express session configuration
+│   │   ├── upload.middleware.js   # Multer file upload configuration
+│   │   └── error.middleware.js    # Global error handler
+│   │
+│   ├── routes/
+│   │   ├── static.routes.js       # HTML pages, static files, workspace serving
+│   │   ├── auth.routes.js         # Login, register, logout, check-auth
+│   │   ├── folders.routes.js      # Folder CRUD operations
+│   │   ├── files.routes.js        # File operations (rename, delete, etc.)
+│   │   ├── workspace.routes.js    # Workspace init, status, upload, download
+│   │   └── ml.routes.js           # Training, inference, model import
+│   │
+│   ├── services/
+│   │   ├── index.js               # Service exports
+│   │   ├── AuthService.js         # User authentication logic
+│   │   ├── WorkspaceService.js    # Workspace/session management
+│   │   ├── FileService.js         # File validation, thumbnails
+│   │   ├── TrainingService.js     # ML training orchestration
+│   │   ├── InferenceService.js    # ML inference orchestration
+│   │   └── SessionTracker.js      # Training/inference session maps
+│   │
+│   ├── sockets/
+│   │   └── index.js               # Socket.IO event handlers
+│   │
+│   └── helpers/
+│       ├── index.js               # Helper exports
+│       ├── pythonRunner.js        # Python process spawning (~520 lines)
+│       ├── validation.js          # Input validation helpers
+│       ├── pathHelpers.js         # Path utilities
+│       └── fileHelpers.js         # File system utilities
+│
+├── utils/
+│   ├── logger.js            # Logging utility
+│   ├── envLoader.js         # Environment configuration
+│   └── processErrorHandler.js # Python process error handling
 │
 ├── WorkspaceManager.js      # Workspace directory management
 ├── activityLogger.js        # Activity logging utility
 └── manageUsers.js           # User management CLI tool
 ```
 
-**Key Sections:**
+### Module Descriptions
 
-### server.js Structure
+**server.js (Entry Point):**
+- Environment initialization via `utils/envLoader`
+- Service instantiation (Auth, Workspace, File, Training, Inference)
+- HTTP server and Socket.IO setup
+- Graceful shutdown handlers (SIGTERM, SIGINT)
 
-**Imports & Setup (1-136):**
-- Dependencies
-- Multer configuration
-- Session setup
-- Directory creation
+**src/app.js (App Configuration):**
+- Express middleware registration (session, CORS, JSON)
+- Route mounting with dependency injection
+- Python runner wrapper functions
+- Helper functions for tracking and path conversion
 
-**Authentication Middleware (142-170):**
-- `requireAuth()` - Basic auth
-- `requireApproved()` - Approved users only
-- `requireAdmin()` - Admin only
+**src/routes/ (HTTP Endpoints):**
+- Each route module exports a factory function
+- Dependencies injected at registration time
+- Auth middleware applied per-route
+- Consistent JSON response format
 
-**User Management (176-392):**
-- Helper functions
-- Authentication routes
-- User CRUD operations
+**src/services/ (Business Logic):**
+- Encapsulated service classes
+- Injected dependencies via constructor
+- Stateless operations (except SessionTracker)
 
-**Workspace API (418-561):**
-- `/api/workspace/init`
-- `/api/workspace/status`
-- `/api/workspace/files`
-- `/api/workspace/upload`
-- `/api/workspace/stats`
-
-**Main Routes (564-580):**
-- `/` - Welcome page
-- `/classic` - Classic app
-- `/workspace` - Workspace app
-
-**ML Pipeline (582-1196):**
-- Upload & validation
-- Training configuration
-- Training execution
-- Inference execution
-- Model import
-
-**Download Routes (1199-1426):**
-- Model download
-- Results download
-- Original data serving
-
-**Session Management (1482-1646):**
-- Session reset
-- File cleanup
-
-**Socket.IO (1648-1668):**
-- Connection handling
-- Room join handlers
-
-**Helper Functions (1671-2109):**
-- TIFF validation
-- Training process spawning
-- Inference process spawning
+**src/helpers/pythonRunner.js (Python Integration):**
+- Centralized Python process spawning
+- Functions: validateTiffStacks, validateImportedModel, validateInferenceTiff
+- Functions: generateThumbnail, startTrainingProcess, startInferenceProcess
+- Real-time progress parsing and Socket.IO emission
 
 ---
 
@@ -736,4 +752,4 @@ echo "" > logs/activity.log
 ---
 
 **Status:** ✅ Complete
-**Last Updated:** 2025-11-27
+**Last Updated:** 2025-12-19

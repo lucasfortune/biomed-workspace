@@ -106,7 +106,7 @@ node manageUsers.js reset-password <username> <newPassword>
 
 ### Application Structure (Dual Version)
 
-The application has been restructured to support **two parallel interfaces**:
+The application has been restructured to support **two parallel interfaces** with a **modular backend architecture**:
 
 ```
 /viz_app/
@@ -136,8 +136,40 @@ The application has been restructured to support **two parallel interfaces**:
 │   ├── register.html
 │   └── admin.html
 │
-├── server.js                  # Express server (serves both versions)
+├── server.js                  # Entry point (~160 lines) - creates server & starts
+├── /src/                      # MODULAR BACKEND (refactored from monolithic server.js)
+│   ├── app.js                 # Express app configuration factory
+│   ├── /config/
+│   │   └── constants.js       # Python path, directories, validation
+│   ├── /middleware/
+│   │   ├── auth.middleware.js # requireAuth, requireApproved, requireAdmin
+│   │   ├── session.middleware.js
+│   │   ├── upload.middleware.js
+│   │   └── error.middleware.js
+│   ├── /routes/
+│   │   ├── static.routes.js   # HTML pages, static files
+│   │   ├── auth.routes.js     # Login, register, logout
+│   │   ├── folders.routes.js  # Folder CRUD
+│   │   ├── files.routes.js    # File operations
+│   │   ├── workspace.routes.js# Workspace management
+│   │   └── ml.routes.js       # Training, inference, model import
+│   ├── /services/
+│   │   ├── AuthService.js     # User authentication logic
+│   │   ├── WorkspaceService.js# Workspace/session management
+│   │   ├── FileService.js     # File validation, thumbnails
+│   │   ├── TrainingService.js # ML training orchestration
+│   │   ├── InferenceService.js# ML inference orchestration
+│   │   └── SessionTracker.js  # Training/inference session maps
+│   ├── /sockets/
+│   │   └── index.js           # Socket.IO event handlers
+│   └── /helpers/
+│       ├── pythonRunner.js    # Python process spawning
+│       ├── validation.js      # Input validation helpers
+│       ├── pathHelpers.js     # Path utilities
+│       └── fileHelpers.js     # File system utilities
+│
 ├── /python/                   # ML scripts (shared by both versions)
+├── /utils/                    # Shared utilities (logger, env loader)
 └── package.json               # Dependencies include mitt, split.js
 ```
 
@@ -399,7 +431,7 @@ All validation scripts output JSON to stdout for parsing.
 
 ### State Management
 
-**In-memory Maps (server.js):**
+**In-memory Maps (src/services/SessionTracker.js):**
 - `trainingSessions` - Map of `trainingId` → training session data
 - `inferenceSessions` - Map of `inferenceId` → inference session data
 
@@ -462,18 +494,34 @@ The application provides **built-in test data** for users awaiting approval:
 
 ## Key Files Reference
 
-**Backend Core:**
-- `server.js:867-952` - Training endpoint with approval checks
-- `server.js:1171-1289` - Inference endpoint (handles imported vs trained models)
-- `server.js:694-835` - Upload data endpoint with test data support
-- `server.js:1575-1739` - Session reset (cleans all directories and maps)
+**Backend Core (Modular Architecture):**
+- `server.js` - Entry point (~160 lines): env setup, service creation, server start
+- `src/app.js` - Express app configuration: middleware, routes, error handling
+- `src/routes/ml.routes.js` - Training & inference endpoints
+- `src/routes/workspace.routes.js` - Workspace management endpoints
+- `src/routes/auth.routes.js` - Login, register, logout endpoints
+- `src/services/SessionTracker.js` - Training/inference session maps
+- `src/helpers/pythonRunner.js` - Centralized Python process spawning
 
-**Frontend:**
-- `public/js/app.js` - Main application controller
-- `public/js/socket.js` - Socket.IO connection manager
-- `public/js/visualization.js` - Three.js 3D visualization
-- `public/js/training.js` - Training UI and progress charts
-- `public/js/inference.js` - Inference UI and result handling
+**Backend Services:**
+- `src/services/AuthService.js` - User authentication and authorization
+- `src/services/WorkspaceService.js` - Workspace initialization and management
+- `src/services/FileService.js` - File validation, thumbnails, operations
+- `src/services/TrainingService.js` - ML training orchestration
+- `src/services/InferenceService.js` - ML inference orchestration
+
+**Frontend (Classic):**
+- `public/classic/js/app.js` - Main application controller
+- `public/classic/js/socket.js` - Socket.IO connection manager
+- `public/classic/js/visualization.js` - Three.js 3D visualization
+- `public/classic/js/training.js` - Training UI and progress charts
+- `public/classic/js/inference.js` - Inference UI and result handling
+
+**Frontend (Workspace):**
+- `public/workspace/js/workspace.js` - Main workspace controller
+- `public/workspace/js/core/StateManager.js` - Centralized state management
+- `public/workspace/js/core/WorkspaceAPI.js` - Backend API client
+- `public/workspace/js/modules/segmentation/SegmentationModule.js` - Segmentation module
 
 **Python ML:**
 - `python/train_model.py` - U-Net training with real-time progress
@@ -492,10 +540,15 @@ The application provides **built-in test data** for users awaiting approval:
 - `PORT` - Server port (default: 3000)
 - `SESSION_SECRET` - Express session secret
 - `MAX_FILE_SIZE` - File upload limit (default: 200MB for TIFF)
+- `DEBUG` - Enable debug logging (default: false)
+
+**Configuration Files:**
+- `src/config/constants.js` - Python path, directory paths, validation rules
+- `utils/envLoader.js` - Environment variable loading and validation
 
 **Session Configuration:**
-- Session secret currently hardcoded in server.js:22
-- For production, use environment variable and enable `secure: true` for HTTPS
+- Session middleware configured in `src/middleware/session.middleware.js`
+- For production, use environment variable for secret and enable `secure: true` for HTTPS
 
 ## Common Patterns
 
@@ -510,10 +563,37 @@ The application provides **built-in test data** for users awaiting approval:
 
 ### Adding New Routes
 
-1. Choose appropriate auth middleware: `requireAuth`, `requireApproved`, or `requireAdmin`
-2. For file operations, use session-scoped paths: `path.join('uploads', req.session.id)`
-3. Log activity via `activityLogger.logActivity(req.session.user.username, action, details)`
-4. Return consistent JSON: `{ success: true/false, ... }`
+**For new route groups:**
+1. Create a new route file in `src/routes/` (e.g., `myfeature.routes.js`)
+2. Export a factory function that takes dependencies and returns a router
+3. Register the router in `src/app.js` with appropriate path prefix
+
+**For routes within existing groups:**
+1. Find the appropriate route file in `src/routes/`
+2. Add route handler using the injected dependencies
+3. Choose appropriate auth middleware: `requireAuth`, `requireApproved`, or `requireAdmin`
+4. For file operations, use session-scoped paths: `path.join('uploads', req.session.id)`
+5. Log activity via `activityLogger.logActivity(req.session.user.username, action, details)`
+6. Return consistent JSON: `{ success: true/false, ... }`
+
+**Route file pattern:**
+```javascript
+// src/routes/myfeature.routes.js
+const express = require('express');
+const { requireAuth } = require('../middleware/auth.middleware');
+
+function createMyFeatureRoutes({ myService, logger }) {
+  const router = express.Router();
+
+  router.get('/my-endpoint', requireAuth, async (req, res) => {
+    // Route implementation
+  });
+
+  return router;
+}
+
+module.exports = createMyFeatureRoutes;
+```
 
 ### File Cleanup
 
@@ -551,7 +631,7 @@ The admin dashboard (`/admin/active-sessions`) returns ALL sessions, not just ac
 
 **Files to Edit:**
 - `/public/classic/*` - All classic app files
-- `/server.js` - Existing routes (non-workspace)
+- `/src/routes/*` - Route handlers (shared by both versions)
 - `/python/*` - ML scripts (shared by both)
 
 **Testing:**
@@ -564,12 +644,23 @@ The admin dashboard (`/admin/active-sessions`) returns ALL sessions, not just ac
 - `/public/workspace/*` - Workspace-specific files
 - `/public/workspace/js/core/*` - Core systems (StateManager, ModuleLoader, etc.)
 - `/public/workspace/js/modules/*` - Module implementations
-- `/server.js` - Add new workspace API routes under `/api/workspace/*`
+- `/src/routes/workspace.routes.js` - Workspace API routes
 
 **Testing:**
 - Navigate to `http://localhost:3000/workspace`
 - Use browser console to inspect state: `workspace.state.logState()`
 - Check module loading: `workspace.moduleLoader.getAllModules()`
+
+### When Working on Backend
+
+**Modular Structure:**
+- `/server.js` - Only modify for startup changes, new services, or graceful shutdown
+- `/src/app.js` - Modify for new middleware or route registration
+- `/src/routes/*` - Add or modify HTTP endpoints
+- `/src/services/*` - Add or modify business logic
+- `/src/middleware/*` - Add or modify middleware
+- `/src/helpers/*` - Add or modify utility functions
+- `/src/sockets/*` - Modify Socket.IO handlers
 
 ### Adding a New Module (Phase 2+)
 
@@ -692,4 +783,4 @@ workspace.state.get('workspace')  // View workspace state
 - Check Network tab in DevTools
 - Verify authentication (should redirect to /login if not authenticated)
 - Check server logs for backend errors
-- Verify endpoint exists in server.js
+- Verify endpoint exists in `src/routes/` directory

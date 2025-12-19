@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Updated:** 2025-11-27
+**Last Updated:** 2025-12-19
 **Status:** ✅ Complete
 **Target Audience:** Developers, architects, technical stakeholders
 
@@ -59,13 +59,15 @@ The system follows a **client-server architecture** with real-time communication
           └──────────────┬───────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────────┐
-│                    BACKEND (Node.js)                        │
+│                BACKEND (Node.js - Modular)                  │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │                    Express Server                     │  │
-│  │  - Authentication (session-based)                     │  │
-│  │  - API Endpoints (29 routes)                          │  │
-│  │  - File Upload/Download                               │  │
-│  │  - Static File Serving                                │  │
+│  │  server.js (entry) → src/app.js (config)              │  │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐      │  │
+│  │  │ src/routes/ │ │src/services/│ │src/helpers/ │      │  │
+│  │  │ - auth      │ │ - Auth      │ │- pythonRunner│     │  │
+│  │  │ - ml        │ │ - Training  │ │- validation  │     │  │
+│  │  │ - workspace │ │ - Inference │ │              │     │  │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘      │  │
 │  └─────────────┬─────────────────────────────────────────┘  │
 │                │                                             │
 │  ┌─────────────▼─────────────┐  ┌────────────────────────┐  │
@@ -120,7 +122,7 @@ The application exists in **two parallel versions** serving different use cases:
 - Best for: Complex multi-module workflows
 
 **Shared Components:**
-- Express backend (server.js)
+- Express backend (modular architecture in `/src/`)
 - Python ML pipeline
 - Session management
 - File storage system
@@ -187,27 +189,48 @@ See [Authentication Architecture](AUTHENTICATION.md) for details.
 
 ## Core Components
 
-### 1. Web Server (`server.js`)
+### 1. Web Server (Modular Backend)
 
 **Purpose:** Central backend server handling all HTTP requests, WebSocket connections, and Python process management.
+
+**Architecture:** The backend has been refactored from a monolithic ~3000-line server.js into a modular architecture:
+
+```
+server.js (~160 lines)     → Entry point, service creation, startup
+└── src/
+    ├── app.js (~307 lines)      → Express app configuration
+    ├── routes/                  → HTTP endpoint handlers
+    │   ├── static.routes.js
+    │   ├── auth.routes.js
+    │   ├── folders.routes.js
+    │   ├── files.routes.js
+    │   ├── workspace.routes.js
+    │   └── ml.routes.js
+    ├── services/                → Business logic
+    │   ├── AuthService.js
+    │   ├── WorkspaceService.js
+    │   ├── FileService.js
+    │   ├── TrainingService.js
+    │   ├── InferenceService.js
+    │   └── SessionTracker.js
+    ├── middleware/              → Express middleware
+    │   ├── auth.middleware.js
+    │   ├── session.middleware.js
+    │   ├── upload.middleware.js
+    │   └── error.middleware.js
+    ├── helpers/                 → Utility functions
+    │   └── pythonRunner.js (~520 lines)
+    └── sockets/                 → Socket.IO handlers
+        └── index.js
+```
 
 **Responsibilities:**
 - Serve static files (both frontend versions)
 - Handle authentication and sessions
-- Provide REST API (29 endpoints)
+- Provide REST API (29 endpoints across route modules)
 - Manage Socket.IO rooms for real-time updates
-- Spawn and monitor Python processes
+- Spawn and monitor Python processes (via pythonRunner.js)
 - File upload/download handling
-
-**Size:** ~2,135 lines
-
-**Key Sections:**
-- Lines 1-100: Dependencies and configuration
-- Lines 101-300: Authentication middleware
-- Lines 301-900: API endpoints
-- Lines 901-1300: Training and inference handlers
-- Lines 1301-2000: Socket.IO event handlers
-- Lines 2001-2135: Server initialization
 
 See [API Endpoints](../reference/API_ENDPOINTS.md) for complete endpoint documentation.
 
@@ -819,11 +842,12 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 
 | File | Purpose | Size |
 |------|---------|------|
-| `server.js` | Backend server | ~2,135 lines |
+| `server.js` | Entry point, startup | ~160 lines |
+| `src/app.js` | Express app config | ~307 lines |
+| `src/helpers/pythonRunner.js` | Python spawning | ~520 lines |
 | `public/classic/js/app.js` | Classic main controller | ~800 lines |
 | `public/workspace/js/workspace.js` | Workspace controller | ~400 lines |
 | `public/workspace/js/core/StateManager.js` | State management | ~200 lines |
-| `public/workspace/js/core/ModuleLoader.js` | Module system | ~150 lines |
 | `python/train_model.py` | U-Net training | ~300 lines |
 | `python/run_inference.py` | Inference | ~250 lines |
 
@@ -831,6 +855,7 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 
 | Directory | Purpose |
 |-----------|---------|
+| `/src/` | Modular backend (routes, services, middleware) |
 | `/public/classic/` | Classic frontend |
 | `/public/workspace/` | Workspace frontend |
 | `/python/` | ML scripts |
@@ -847,5 +872,5 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 ---
 
 **Document Status:** ✅ Complete
-**Last Updated:** 2025-11-27
+**Last Updated:** 2025-12-19
 **Maintained By:** Development Team
