@@ -771,25 +771,27 @@ class FileBrowser {
         return;
       }
 
-      // File action buttons
-      if (e.target.classList.contains('fb-btn-icon')) {
-        e.stopPropagation();
-        const action = e.target.dataset.action;
-        const fileEl = e.target.closest('.fb-file');
-        if (!fileEl) return;
+      // File action buttons - use closest() to handle clicks on button or its children
+      const actionBtn = e.target.closest('.fb-btn-icon');
+      if (actionBtn) {
+        // Make sure this button is inside a file row (tree or search result)
+        const fileEl = actionBtn.closest('.fb-file, .fb-search-result');
+        if (fileEl) {
+          e.stopPropagation();
+          const action = actionBtn.dataset.action;
+          const fileId = fileEl.dataset.fileId;
 
-        const fileId = fileEl.dataset.fileId;
-
-        switch (action) {
-          case 'download':
-            this.downloadFile(fileId);
-            break;
-          case 'rename':
-            this.renameFile(fileId);
-            break;
-          case 'delete':
-            this.deleteFile(fileId);
-            break;
+          switch (action) {
+            case 'download':
+              this.downloadFile(fileId);
+              break;
+            case 'rename':
+              this.renameFile(fileId);
+              break;
+            case 'delete':
+              this.deleteFile(fileId);
+              break;
+          }
         }
       }
     });

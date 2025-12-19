@@ -134,7 +134,15 @@ class WorkspaceAPI {
    * @param {string} fileId - File ID to download
    */
   downloadFile(fileId) {
-    window.location.href = `${this.baseURL}/api/workspace/file/${fileId}/download`;
+    // Use hidden iframe to trigger download without page navigation
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `${this.baseURL}/api/workspace/file/${fileId}/download`;
+    document.body.appendChild(iframe);
+    // Clean up iframe after download starts
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+    }, 5000);
   }
 
   /**
@@ -307,7 +315,14 @@ class WorkspaceAPI {
    * @param {string} trainingId - Training ID
    */
   downloadModel(trainingId) {
-    window.location.href = `${this.baseURL}/download-model/${trainingId}`;
+    // Use hidden iframe to trigger download without page navigation
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `${this.baseURL}/download-model/${trainingId}`;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+    }, 5000);
   }
 
   /**
@@ -315,7 +330,14 @@ class WorkspaceAPI {
    * @param {string} inferenceId - Inference ID
    */
   downloadInferenceResults(inferenceId) {
-    window.location.href = `${this.baseURL}/download-inference-results/${inferenceId}`;
+    // Use hidden iframe to trigger download without page navigation
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `${this.baseURL}/download-inference-results/${inferenceId}`;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+    }, 5000);
   }
 
   // ===========================================================================

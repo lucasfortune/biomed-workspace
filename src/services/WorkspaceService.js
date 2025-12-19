@@ -52,13 +52,20 @@ class WorkspaceService {
    * @returns {object} Workspace status with info and metadata
    */
   getWorkspaceStatus(sessionId) {
-    let workspaceInfo = this.workspaceManager.getWorkspaceInfo(sessionId);
-    let metadata = this.workspaceManager.loadMetadata(sessionId);
+    let workspaceInfo;
+    let metadata;
 
-    // Initialize if not exists
-    if (!workspaceInfo) {
-      workspaceInfo = this.workspaceManager.initializeWorkspace(sessionId);
+    try {
+      workspaceInfo = this.workspaceManager.getWorkspaceInfo(sessionId);
       metadata = this.workspaceManager.loadMetadata(sessionId);
+    } catch (error) {
+      // If workspace doesn't exist, initialize it
+      if (error.message.includes('not found')) {
+        workspaceInfo = this.workspaceManager.initializeWorkspace(sessionId);
+        metadata = this.workspaceManager.loadMetadata(sessionId);
+      } else {
+        throw error;
+      }
     }
 
     return {
