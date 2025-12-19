@@ -3,19 +3,17 @@ let stepStates = {
     1: { completed: false, canNavigate: true },
     2: { completed: false, canNavigate: false },
     3: { completed: false, canNavigate: false, trainingStarted: false, trainingCompleted: false },
-    4: { completed: false, canNavigate: false },
-    5: { completed: false, canNavigate: false, initialized: false }
+    4: { completed: false, canNavigate: false }
 };
 
 let processStates = {
     trainingInProgress: false,
-    inferenceInProgress: false,
-    visualizationInitialized: false
+    inferenceInProgress: false
 };
 
 // Central function to handle step changes
 function setStep(stepNumber) {
-    if (stepNumber < 1 || stepNumber > 5) return;
+    if (stepNumber < 1 || stepNumber > 4) return;
     
     // NEW: Check if navigation is allowed
     if (!canNavigateToStep(stepNumber)) {
@@ -56,23 +54,6 @@ function setStep(stepNumber) {
         }
     }
     
-    // REMOVED: Auto-initialization of 3D visualization
-    // NEW: Only initialize if not already done and step allows it
-    if (stepNumber === 5) {
-        console.log('Reached step 5 - 3D visualization step');
-        if (!stepStates[5].initialized && window.inferenceResult) {
-            console.log('Initializing 3D visualization...');
-            // Dynamically import and initialize the visualization module
-            initializeVisualizationModule();
-            stepStates[5].initialized = true;
-            processStates.visualizationInitialized = true;
-        } else if (stepStates[5].initialized) {
-            console.log('3D visualization already initialized');
-        } else {
-            console.log('Cannot initialize 3D visualization - no inference result available');
-        }
-    }
-    
     // Update progress bar and navigation buttons
     updateProgressBar();
     updateNavigationButtons();
@@ -81,7 +62,7 @@ function setStep(stepNumber) {
 }
 
 function nextStep() {
-    if (currentStep < 5) {
+    if (currentStep < 4) {
         // Special handling for Step 2 -> Step 3 transition
         if (currentStep === 2) {
             if (validateConfigurationLocally()) {
@@ -256,16 +237,11 @@ function performCompleteStateReset() {
     if (window.socket) {
         window.socket.disconnect();
     }
-    
-    // Reset 3D visualization if initialized
-    if (window.resetView && typeof window.resetView === 'function') {
-        window.resetView();
-    }
 }
 
 // NEW: State management functions
 function canNavigateToStep(stepNumber) {
-    if (stepNumber < 1 || stepNumber > 5) return false;
+    if (stepNumber < 1 || stepNumber > 4) return false;
     
     // Handle imported model mode
     if (window.importedModelInfo && stepNumber < 4) {
@@ -276,14 +252,14 @@ function canNavigateToStep(stepNumber) {
 }
 
 function markStepCompleted(stepNumber) {
-    if (stepNumber >= 1 && stepNumber <= 5) {
+    if (stepNumber >= 1 && stepNumber <= 4) {
         stepStates[stepNumber].completed = true;
-        
+
         // Enable navigation to next step
-        if (stepNumber < 5) {
+        if (stepNumber < 4) {
             stepStates[stepNumber + 1].canNavigate = true;
         }
-        
+
         // Update visual indicators
         updateStepVisualState(stepNumber);
     }
@@ -301,14 +277,12 @@ function resetStepStates() {
         1: { completed: false, canNavigate: true },
         2: { completed: false, canNavigate: false },
         3: { completed: false, canNavigate: false, trainingStarted: false, trainingCompleted: false },
-        4: { completed: false, canNavigate: false },
-        5: { completed: false, canNavigate: false, initialized: false }
+        4: { completed: false, canNavigate: false }
     };
-    
+
     processStates = {
         trainingInProgress: false,
-        inferenceInProgress: false,
-        visualizationInitialized: false
+        inferenceInProgress: false
     };
     
     // Remove completed classes
@@ -325,10 +299,9 @@ function showNavigationError(stepNumber) {
     const reasons = {
         2: 'Please complete data upload first.',
         3: 'Please configure training parameters first.',
-        4: 'Please complete model training first.',
-        5: 'Please run inference first.'
+        4: 'Please complete model training first.'
     };
-    
+
     const message = reasons[stepNumber] || 'This step is not yet available.';
     showError(message);
 }
@@ -350,12 +323,6 @@ function updateNavigationButtons() {
     
     if (trainingBackBtn) {
         trainingBackBtn.disabled = processStates.trainingInProgress;
-    }
-    
-    // Update inference button
-    const inferenceNextBtn = document.getElementById('inferenceNextBtn');
-    if (inferenceNextBtn) {
-        inferenceNextBtn.disabled = !stepStates[5].canNavigate;
     }
 }
 
@@ -400,49 +367,6 @@ function validateConfigurationLocally() {
 // Make functions available globally for other modules
 window.markStepCompleted = markStepCompleted;
 window.canNavigateToStep = canNavigateToStep;
-/**
- * Dynamically load and initialize the 3D visualization module
- */
-async function initializeVisualizationModule() {
-    try {
-        console.log('[Navigation] Loading visualization module...');
-
-        // Dynamically import the visualization main module
-        const visualizationModule = await import('/workspace/js/modules/segmentation/visualization/main.js');
-
-        console.log('[Navigation] Visualization module loaded successfully');
-
-        // Expose visualization functions globally for SegmentationModule
-        window.resetCameraView = visualizationModule.resetView;
-        window.visualizationModule = visualizationModule;
-
-        // Call the initialization function
-        if (visualizationModule.initialize3DVisualization) {
-            await visualizationModule.initialize3DVisualization();
-            console.log('[Navigation] 3D visualization initialized successfully');
-        } else {
-            console.error('[Navigation] initialize3DVisualization function not found in module');
-        }
-    } catch (error) {
-        console.error('[Navigation] Failed to load visualization module:', error);
-        console.error('Error details:', error.message);
-
-        // Show user-friendly error message
-        const container = document.getElementById('threejsContainer');
-        if (container) {
-            container.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666;">
-                    <div>
-                        <h3>3D Visualization Failed to Load</h3>
-                        <p>${error.message}</p>
-                        <p style="font-size: 12px; color: #999; margin-top: 10px;">Check the browser console for more details.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-}
-
 window.updateNavigationButtons = updateNavigationButtons;
 window.validateConfigurationLocally = validateConfigurationLocally;
 window.stepStates = stepStates;

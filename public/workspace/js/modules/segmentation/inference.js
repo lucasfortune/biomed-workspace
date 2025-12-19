@@ -181,16 +181,16 @@ function updateInferenceProgress(data) {
         console.warn('inferenceProgressPercent element not found');
     }
 
-    // When inference reaches 100%, show loading overlay for sparse data generation
+    // When inference reaches 100%, show finalizing message
     if (progress_percent >= 100) {
-        console.log('Inference complete, generating visualization data...');
+        console.log('Inference complete, finalizing results...');
         const overlay = document.getElementById('moduleLoadingOverlay');
         const loadingText = document.getElementById('moduleLoadingText');
         const loadingDescription = document.getElementById('moduleLoadingDescription');
 
         if (overlay && loadingText && loadingDescription) {
-            loadingText.textContent = 'Generating Visualization Data';
-            loadingDescription.textContent = 'Creating 3D visualization data from segmentation results. This may take a moment...';
+            loadingText.textContent = 'Finalizing Results';
+            loadingDescription.textContent = 'Saving segmentation results...';
             overlay.style.display = 'flex';
         }
     }
@@ -226,25 +226,16 @@ function onInferenceComplete(data) {
     }
 
     if (data.success) {
-        // NEW: Mark step 4 as completed and enable step 5
+        // Mark step 4 as completed
         stepStates[4].completed = true;
-        stepStates[5].canNavigate = true;
         markStepCompleted(4);
 
         // Update process states
         processStates.inferenceInProgress = false;
 
-        document.getElementById('inferenceNextBtn').disabled = false;
-
-        // Store inference result for 3D visualization with detailed logging
+        // Store inference result
         if (data.result) {
             window.inferenceResult = data.result;
-
-            // Normalize visualization_path to ensure it starts with / for proper fetching
-            if (window.inferenceResult.visualization_path && !window.inferenceResult.visualization_path.startsWith('/')) {
-                window.inferenceResult.visualization_path = '/' + window.inferenceResult.visualization_path;
-                console.log('[Inference] Normalized visualization path:', window.inferenceResult.visualization_path);
-            }
         } else {
             console.log('No data.result found, creating fallback result');
 
@@ -259,21 +250,25 @@ function onInferenceComplete(data) {
             window.inferenceResult = {
                 success: true,
                 output_path: `${baseResultPath}/segmented/inference_result.tif`,
-                metadata_path: `${baseResultPath}/segmented/inference_result_metadata.json`,
-                visualization_path: `${baseResultPath}/visualizations/visualization_data.json`,
-                original_data_overlay_path: `${baseResultPath}/visualizations/original_data_overlay.tif`
+                metadata_path: `${baseResultPath}/segmented/inference_result_metadata.json`
             };
         }
-        
-        // Store inference ID for downloads from module instance
+
+        // Store inference ID from module instance
         const inferenceId = window.segmentationModule?.currentInferenceId;
         if (inferenceId) {
             window.inferenceResult.inference_id = inferenceId;
-            console.log('Stored inference ID for downloads:', inferenceId);
+            console.log('Stored inference ID:', inferenceId);
         } else {
             console.warn('No inference ID available for storage');
         }
-        
+
+        // Show completion section with viewer button
+        const completionSection = document.getElementById('inferenceCompletionSection');
+        if (completionSection) {
+            completionSection.style.display = 'block';
+        }
+
         showSuccess('Inference completed successfully! Your segmentation is ready.');
 
         // Update navigation buttons

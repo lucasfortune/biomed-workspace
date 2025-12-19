@@ -30,28 +30,8 @@ class SegmentationModule {
     this.lossChart = null;
     this.diceChart = null;
 
-    // Three.js visualization
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    this.segmentationMesh = null;
-    this.segmentationData = null;
-    this.availableClasses = [];
-    this.visibleClasses = [];
-    this.currentSliceRange = [0, 100];
-    this.classMeshes = {};
-    this.meshGroup = null;
-    this.sliceDirection = 'z';
-
     // Dependencies loaded flag
     this.dependenciesLoaded = false;
-
-    // Visualization initialized flag
-    this.visualizationInitialized = false;
-
-    // Cached visualization data (for fast resume on Step 5)
-    this.cachedVisualizationData = null;
-    this.cachedInferenceResult = null;
 
     // Bind methods
     this.activate = this.activate.bind(this);
@@ -128,18 +108,6 @@ class SegmentationModule {
       if (!window.Chart) {
         await this.loadScript('https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js');
         console.log('[SegmentationModule] Chart.js loaded');
-      }
-
-      // Load Three.js
-      if (!window.THREE) {
-        await this.loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
-        console.log('[SegmentationModule] Three.js loaded');
-      }
-
-      // Load UTIF.js
-      if (!window.UTIF) {
-        await this.loadScript('https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js');
-        console.log('[SegmentationModule] UTIF.js loaded');
       }
 
       this.dependenciesLoaded = true;
@@ -223,10 +191,6 @@ class SegmentationModule {
           <div class="step" data-step="4">
             <div class="step-number">4</div>
             <span>Inference</span>
-          </div>
-          <div class="step" data-step="5">
-            <div class="step-number">5</div>
-            <span>3D Visualization</span>
           </div>
         </div>
 
@@ -381,10 +345,7 @@ class SegmentationModule {
 
             <div class="model-info">
               <h3>Trained Model Ready</h3>
-              <p>Your model has been trained successfully. You can now run inference on new data or download the model.</p>
-              <div style="margin-top: 15px;">
-                <button class="btn" id="downloadModelBtn">Download Model & Config</button>
-              </div>
+              <p>Your model has been trained successfully. Select data below to run segmentation.</p>
             </div>
 
             <div class="inference-section" style="margin-top: 30px;">
@@ -416,47 +377,24 @@ class SegmentationModule {
                 </div>
               </div>
 
-              <!-- Inference Result Display -->
-              <div id="inferenceResult" style="display: none; margin-top: 25px; padding: 20px; background: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;">
-                <h4 style="margin: 0 0 10px 0; font-size: 16px; color: #155724;">✓ Segmentation Completed Successfully</h4>
-                <p style="margin: 0; font-size: 14px; color: #155724;">Your segmentation is ready for visualization. Click "Next: 3D Visualization" to view the results.</p>
+              <!-- Inference Completion Section -->
+              <div id="inferenceCompletionSection" class="completion-section" style="display: none; margin-top: 25px; padding: 25px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; border: 1px solid #28a745; text-align: center;">
+                <div style="font-size: 48px; margin-bottom: 15px;">✓</div>
+                <h4 style="margin: 0 0 10px 0; font-size: 20px; color: #155724;">Segmentation Complete</h4>
+                <p style="margin: 0 0 20px 0; font-size: 14px; color: #155724;">Your segmentation results are ready. View them in the Image Viewer or start a new analysis.</p>
+                <div class="completion-actions" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                  <button class="btn" id="openInViewerBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Open in Image Viewer</button>
+                  <button class="btn secondary" id="resetWorkflowBtn">Start New Analysis</button>
+                </div>
               </div>
             </div>
 
             <div class="navigation-buttons">
               <button class="btn secondary" id="step4Back">Previous</button>
-              <button class="btn" id="inferenceNextBtn" disabled>Next: 3D Visualization</button>
-            </div>
-          </div>
-
-          <!-- Step 5: 3D Visualization -->
-          <div class="step-content" id="step5">
-            <h2>Step 5: 3D Interactive Visualization</h2>
-
-            <div class="visualization-container" id="threejsContainer">
-              <!-- Three.js visualization will be rendered here -->
-            </div>
-
-            <div class="viz-controls-container">
-              <div class="controls-header">
-                <h3 class="controls-title">Class Controls</h3>
-                <button id="resetViewBtn" class="btn btn-reset">Reset View</button>
-              </div>
-              <div id="classControlPanels" class="class-control-panels">
-                <!-- Individual class control panels will be dynamically generated here -->
-              </div>
-            </div>
-
-            <div style="text-align: center; margin-top: 20px;">
-              <button class="btn" id="downloadResultsBtn">Download Segmentation Results</button>
-              <button class="btn secondary" id="resetWorkflowBtn">Start New Analysis</button>
-            </div>
-
-            <div class="navigation-buttons">
-              <button class="btn secondary" id="step5Back">Previous</button>
               <div></div>
             </div>
           </div>
+
         </div>
 
         <!-- Loading Overlay -->
@@ -520,9 +458,7 @@ class SegmentationModule {
     // Initialize FileSelectors after loading regular scripts
     await this.initializeFileSelectors();
 
-    // Load visualization module (ES6 module)
-    // This will be loaded dynamically when Step 5 is reached
-    console.log('[SegmentationModule] Helper scripts loaded, visualization will load on Step 5');
+    console.log('[SegmentationModule] Helper scripts loaded');
   }
 
   /**
@@ -1114,30 +1050,18 @@ class SegmentationModule {
     if (trainingNextBtn) trainingNextBtn.onclick = () => this.goToStep(4);
 
     // Step 4: Inference
-    const downloadModelBtn = document.getElementById('downloadModelBtn');
-    if (downloadModelBtn) {
-      downloadModelBtn.onclick = () => this.downloadModel();
-    }
-
     const runInferenceBtn = document.getElementById('runInferenceBtn');
     if (runInferenceBtn) {
       runInferenceBtn.onclick = () => this.runInference();
     }
 
     const step4Back = document.getElementById('step4Back');
-    const inferenceNextBtn = document.getElementById('inferenceNextBtn');
     if (step4Back) step4Back.onclick = () => this.goToStep(3);
-    if (inferenceNextBtn) inferenceNextBtn.onclick = () => this.goToStep(5);
 
-    // Step 5: Visualization
-    const resetViewBtn = document.getElementById('resetViewBtn');
-    if (resetViewBtn) {
-      resetViewBtn.onclick = () => this.resetView();
-    }
-
-    const downloadResultsBtn = document.getElementById('downloadResultsBtn');
-    if (downloadResultsBtn) {
-      downloadResultsBtn.onclick = () => this.downloadResults();
+    // Step 4 Completion: Image Viewer and Reset
+    const openInViewerBtn = document.getElementById('openInViewerBtn');
+    if (openInViewerBtn) {
+      openInViewerBtn.onclick = () => this.openInImageViewer();
     }
 
     const resetWorkflowBtn = document.getElementById('resetWorkflowBtn');
@@ -1145,96 +1069,7 @@ class SegmentationModule {
       resetWorkflowBtn.onclick = () => this.resetWorkflow();
     }
 
-    const step5Back = document.getElementById('step5Back');
-    if (step5Back) step5Back.onclick = () => this.goToStep(4);
-
     console.log('[SegmentationModule] Event listeners set up');
-  }
-
-  /**
-   * Initialize 3D visualization module
-   */
-  async initialize3DVisualization() {
-    // Check if visualization is already initialized with cached data
-    if (this.visualizationInitialized && this.cachedVisualizationData) {
-      console.log('[SegmentationModule] Using cached visualization data');
-
-      // Just show container and re-render with cached data
-      const container = document.getElementById('threejsContainer');
-      if (container) {
-        container.style.display = 'block';
-      }
-
-      // Re-render using cached data (scene will be rebuilt but data won't be fetched)
-      if (window.visualizationModule && window.visualizationModule.initialize3DVisualization) {
-        await window.visualizationModule.initialize3DVisualization();
-      }
-
-      return;
-    }
-
-    // Check if inference result exists
-    if (!window.inferenceResult) {
-      console.warn('[SegmentationModule] No inference result available');
-      this.showVisualizationError('No inference data available');
-      return;
-    }
-
-    if (!window.inferenceResult.visualization_path) {
-      console.error('[SegmentationModule] Missing visualization_path');
-      this.showVisualizationError('Visualization data not found');
-      return;
-    }
-
-    console.log('[SegmentationModule] Initializing 3D visualization...');
-
-    try {
-      // Cache inference result
-      this.cachedInferenceResult = window.inferenceResult;
-
-      // Dynamically import visualization module
-      const visualizationModule = await import('/workspace/js/modules/segmentation/visualization/main.js');
-
-      console.log('[SegmentationModule] Visualization module loaded');
-
-      // Expose globally
-      window.resetCameraView = visualizationModule.resetView;
-      window.visualizationModule = visualizationModule;
-
-      // Initialize visualization (this will fetch and cache data)
-      if (visualizationModule.initialize3DVisualization) {
-        await visualizationModule.initialize3DVisualization();
-
-        // Cache the loaded data for next time
-        if (visualizationModule.segmentationData) {
-          this.cachedVisualizationData = visualizationModule.segmentationData;
-        }
-
-        this.visualizationInitialized = true;
-        console.log('[SegmentationModule] 3D visualization initialized and cached');
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Failed to initialize 3D visualization:', error);
-      this.showVisualizationError(error.message);
-    }
-  }
-
-  /**
-   * Show visualization error message
-   */
-  showVisualizationError(message) {
-    const container = document.getElementById('threejsContainer');
-    if (container) {
-      container.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; color: #666; padding: 20px;">
-          <div>
-            <h3>${message === 'No inference data available' ? 'No Inference Data Available' : '3D Visualization Failed to Load'}</h3>
-            <p style="color: #999; margin-top: 10px;">${message}</p>
-            ${message !== 'No inference data available' ? '<p style="font-size: 12px; color: #999; margin-top: 10px;">Check the browser console for more details.</p>' : '<p style="color: #999; margin-top: 10px;">Please complete inference in Step 4 first.</p>'}
-          </div>
-        </div>
-      `;
-    }
   }
 
   /**
@@ -1287,26 +1122,11 @@ class SegmentationModule {
           runInferenceBtn.disabled = false;
         }
       }
-      if (this.currentInferenceId) {
-        const inferenceNextBtn = document.getElementById('inferenceNextBtn');
-        if (inferenceNextBtn) {
-          inferenceNextBtn.disabled = false;
-        }
-      }
-    } else if (stepNumber === 5 && window.inferenceResult) {
-      // Only initialize visualization if not already initialized
-      if (!this.visualizationInitialized) {
-        console.log('[SegmentationModule] Reached step 5 for first time, initializing 3D visualization...');
-        // Use setTimeout to allow UI to update first
-        setTimeout(() => {
-          this.initialize3DVisualization();
-        }, 100);
-      } else {
-        console.log('[SegmentationModule] Returned to step 5, visualization already initialized');
-        // Visualization is already there, just make sure container is visible
-        const container = document.getElementById('threejsContainer');
-        if (container) {
-          container.style.display = 'block';
+      // Show completion section if inference was completed
+      if (this.currentInferenceId && window.inferenceResult) {
+        const completionSection = document.getElementById('inferenceCompletionSection');
+        if (completionSection) {
+          completionSection.style.display = 'block';
         }
       }
     }
@@ -1330,7 +1150,7 @@ class SegmentationModule {
   updateProgressBar() {
     const progressBar = document.getElementById('overallProgress');
     if (progressBar) {
-      const progress = (this.currentStep / 5) * 100;
+      const progress = (this.currentStep / 4) * 100;
       progressBar.style.width = `${progress}%`;
     }
   }
@@ -1415,15 +1235,6 @@ class SegmentationModule {
     } catch (error) {
       console.error('[SegmentationModule] Training start error:', error);
       this.state.notify('error', `Failed to start training: ${error.message}`);
-    }
-  }
-
-  /**
-   * Download trained model
-   */
-  downloadModel() {
-    if (this.currentTrainingId) {
-      window.location.href = `/download-model/${this.currentTrainingId}`;
     }
   }
 
@@ -1514,21 +1325,22 @@ class SegmentationModule {
   }
 
   /**
-   * Download inference results
+   * Open results in Image Viewer module
    */
-  downloadResults() {
-    if (this.currentInferenceId) {
-      window.location.href = `/download-inference-results/${this.currentInferenceId}`;
-    }
-  }
+  openInImageViewer() {
+    // Store inference result in StateManager for Image Viewer to consume
+    const inferenceData = {
+      type: 'segmentation_result',
+      inferenceId: this.currentInferenceId,
+      outputPath: window.inferenceResult?.output_path,
+      metadataPath: window.inferenceResult?.metadata_path,
+      timestamp: Date.now()
+    };
 
-  /**
-   * Reset 3D view
-   */
-  resetView() {
-    if (typeof resetCameraView === 'function') {
-      resetCameraView();
-    }
+    this.state.update('modules.segmentation.inferenceResults', inferenceData);
+
+    // Navigate to Image Viewer module
+    window.workspace.loadModule('imageviewer');
   }
 
   /**
@@ -1547,34 +1359,9 @@ class SegmentationModule {
         const result = await response.json();
 
         if (result.success) {
-          // Clear visualization cache
-          this.cachedVisualizationData = null;
-          this.cachedInferenceResult = null;
-          this.visualizationInitialized = false;
-
           // Clear global inference result
           if (typeof window.inferenceResult !== 'undefined') {
             window.inferenceResult = null;
-          }
-
-          // Clear global visualization module
-          if (typeof window.visualizationModule !== 'undefined') {
-            window.visualizationModule = null;
-          }
-          if (typeof window.resetCameraView !== 'undefined') {
-            window.resetCameraView = null;
-          }
-
-          // Clear visualization container DOM
-          const vizContainer = document.getElementById('threejsContainer');
-          if (vizContainer) {
-            vizContainer.innerHTML = '';
-          }
-
-          // Clear class controls container
-          const classControlPanels = document.getElementById('classControlPanels');
-          if (classControlPanels) {
-            classControlPanels.innerHTML = '';
           }
 
           // Destroy existing charts before reinitializing
@@ -1920,44 +1707,18 @@ class SegmentationModule {
       this.diceChart = null;
     }
 
-    // Clean up Three.js (but keep cached data)
-    if (this.renderer) {
-      this.renderer.dispose();
-      this.renderer = null;
-    }
-
-    if (this.scene) {
-      // Dispose geometries and materials
-      this.scene.traverse((object) => {
-        if (object.geometry) {
-          object.geometry.dispose();
-        }
-        if (object.material) {
-          if (Array.isArray(object.material)) {
-            object.material.forEach(material => material.dispose());
-          } else {
-            object.material.dispose();
-          }
-        }
-      });
-      this.scene = null;
-    }
-
     // Clear intervals
     if (this.trainingPollInterval) {
       clearInterval(this.trainingPollInterval);
       this.trainingPollInterval = null;
     }
 
-    // DON'T reset visualizationInitialized - keep it for fast resume
-    // DON'T clear cachedVisualizationData - keep it for fast resume
-
     // Clear container
     if (this.container) {
       this.container.innerHTML = '';
     }
 
-    console.log('[SegmentationModule] Deactivation complete (cached data preserved)');
+    console.log('[SegmentationModule] Deactivation complete');
   }
 
   /**
