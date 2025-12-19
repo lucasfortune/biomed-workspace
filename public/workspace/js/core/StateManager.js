@@ -16,7 +16,14 @@ class StateManager {
         segmentation: {
           active: false,
           currentTask: null,
-          history: []
+          history: [],
+          inferenceResults: null  // For passing results to imageviewer
+        },
+        imageviewer: {
+          active: false,
+          currentFile: null,
+          viewMode: 'gallery',
+          currentSlice: 0
         },
         denoising: {
           active: false,
