@@ -1,18 +1,55 @@
 /**
  * SegmentationModule - Complete U-Net Segmentation Pipeline
- * Phase 2: Full integration of classic segmentation workflow
+ * Extends BaseModule for consistent lifecycle and step navigation.
  */
-class SegmentationModule {
+
+import BaseModule from '/workspace/js/core/BaseModule.js';
+
+class SegmentationModule extends BaseModule {
   constructor(stateManager) {
-    this.state = stateManager;
-    this.container = null;
+    // Define module configuration with 4 steps
+    const config = {
+      id: 'segmentation',
+      name: 'U-Net Segmentation Pipeline',
+      cssPath: '/workspace/js/modules/segmentation/css/segmentation-modern.css',
+      steps: [
+        {
+          id: 'upload',
+          name: 'Data Upload',
+          canNavigate: true  // Always accessible
+        },
+        {
+          id: 'config',
+          name: 'Configuration',
+          canNavigate: (module) => module.filesValidated  // Requires files validated
+        },
+        {
+          id: 'training',
+          name: 'Training',
+          canNavigate: (module) => module.configSaved,  // Requires config saved
+          shouldSkip: (module) => module.hasImportedModel  // Skip if imported model
+        },
+        {
+          id: 'inference',
+          name: 'Inference',
+          canNavigate: (module) => module.trainingComplete || module.hasImportedModel
+        }
+      ]
+    };
+
+    super(stateManager, config);
 
     // Module-specific state (replaces global variables from classic app)
-    this.currentStep = 1;
     this.socket = null;
     this.currentTrainingId = null;
     this.currentInferenceId = null;
     this.trainingPollInterval = null;
+
+    // State flags for step navigation
+    this.filesValidated = false;
+    this.configSaved = false;
+    this.trainingComplete = false;
+    this.hasImportedModel = false;
 
     // File uploads
     this.uploadedFiles = {
@@ -30,17 +67,13 @@ class SegmentationModule {
     this.lossChart = null;
     this.diceChart = null;
 
-    // Dependencies loaded flag
-    this.dependenciesLoaded = false;
-
-    // Bind methods
-    this.activate = this.activate.bind(this);
-    this.deactivate = this.deactivate.bind(this);
+    // Bind methods (additional ones not in BaseModule)
     this.loadDependencies = this.loadDependencies.bind(this);
   }
 
   /**
-   * Activate the module
+   * Activate the module - overrides BaseModule.activate()
+   * Custom implementation to handle Socket.IO and Chart.js dependencies
    */
   async activate() {
     console.log('[SegmentationModule] Activating...');
@@ -56,14 +89,16 @@ class SegmentationModule {
         throw new Error('Module container not found');
       }
 
-      // Show loading
-      this.state.update('ui.loading', true);
+      // Show loading using BaseModule's method
+      this.showLoading('Loading Module', 'Preparing Segmentation Pipeline...');
 
-      // Load dependencies (Socket.IO, Chart.js, Three.js, UTIF)
+      // Load CSS using BaseModule's method (uses config.cssPath)
+      if (this.config.cssPath) {
+        await this.loadCSS(this.config.cssPath, `${this.config.id}-module-css`);
+      }
+
+      // Load dependencies (Socket.IO, Chart.js)
       await this.loadDependencies();
-
-      // Load CSS
-      await this.loadCSS();
 
       // Render UI
       this.render();
@@ -72,7 +107,7 @@ class SegmentationModule {
       await this.initialize();
 
       // Hide loading
-      this.state.update('ui.loading', false);
+      this.hideLoading();
 
       // Check for resume
       await this.checkForResume();
@@ -82,7 +117,7 @@ class SegmentationModule {
     } catch (error) {
       console.error('[SegmentationModule] Activation error:', error);
       this.state.notify('error', `Failed to activate segmentation module: ${error.message}`);
-      this.state.update('ui.loading', false);
+      this.hideLoading();
     }
   }
 
@@ -117,24 +152,6 @@ class SegmentationModule {
       console.error('[SegmentationModule] Error loading dependencies:', error);
       throw new Error(`Failed to load dependencies: ${error.message}`);
     }
-  }
-
-  /**
-   * Load CSS dynamically
-   */
-  async loadCSS() {
-    // Check if already loaded
-    if (document.getElementById('segmentation-module-css')) {
-      return;
-    }
-
-    // Load modern CSS
-    // Load segmentation module CSS (self-contained, no classic CSS dependencies)
-    const link = document.createElement('link');
-    link.id = 'segmentation-module-css';
-    link.rel = 'stylesheet';
-    link.href = '/workspace/js/modules/segmentation/css/segmentation-modern.css';
-    document.head.appendChild(link);
   }
 
   /**
@@ -604,6 +621,9 @@ class SegmentationModule {
         // Show validation results
         this.displayValidationResults(result.validation);
 
+        // Mark files as validated for step navigation
+        this.filesValidated = true;
+
         // Enable next button
         const step1Next = document.getElementById('step1Next');
         if (step1Next) {
@@ -661,6 +681,9 @@ class SegmentationModule {
 
         // Show validation results
         this.displayValidationResults(result.validation);
+
+        // Mark files as validated for step navigation
+        this.filesValidated = true;
 
         // Enable next button
         const step1Next = document.getElementById('step1Next');
@@ -903,6 +926,10 @@ class SegmentationModule {
     // Training complete
     this.socket.on('training-complete', (data) => {
       console.log('[SegmentationModule] Training complete:', data);
+
+      // Mark training as complete for step navigation
+      this.trainingComplete = true;
+
       if (typeof onTrainingComplete === 'function') {
         onTrainingComplete(data);
       }
@@ -1181,6 +1208,9 @@ class SegmentationModule {
       const result = await response.json();
 
       if (result.success) {
+        // Mark config as saved for step navigation
+        this.configSaved = true;
+
         this.state.notify('success', 'Configuration saved successfully');
         this.goToStep(3);
       } else {
@@ -1381,6 +1411,12 @@ class SegmentationModule {
             inference_data: null
           };
 
+          // Reset step condition flags
+          this.filesValidated = false;
+          this.configSaved = false;
+          this.trainingComplete = false;
+          this.hasImportedModel = false;
+
           // Reset IDs
           this.currentTrainingId = null;
           this.currentInferenceId = null;
@@ -1513,7 +1549,12 @@ class SegmentationModule {
       uploadedFiles: this.uploadedFiles,
       currentTrainingId: this.currentTrainingId,
       currentInferenceId: this.currentInferenceId,
-      currentTask: null
+      currentTask: null,
+      // Step condition flags
+      filesValidated: this.filesValidated,
+      configSaved: this.configSaved,
+      trainingComplete: this.trainingComplete,
+      hasImportedModel: this.hasImportedModel
     };
 
     // Preserve currentTask if it exists
@@ -1528,6 +1569,11 @@ class SegmentationModule {
     this.state.update('modules.segmentation.uploadedFiles', this.uploadedFiles);
     this.state.update('modules.segmentation.currentTrainingId', this.currentTrainingId);
     this.state.update('modules.segmentation.currentInferenceId', this.currentInferenceId);
+    // Persist step condition flags
+    this.state.update('modules.segmentation.filesValidated', this.filesValidated);
+    this.state.update('modules.segmentation.configSaved', this.configSaved);
+    this.state.update('modules.segmentation.trainingComplete', this.trainingComplete);
+    this.state.update('modules.segmentation.hasImportedModel', this.hasImportedModel);
     if (state.currentTask) {
       this.state.update('modules.segmentation.currentTask', state.currentTask);
     }
@@ -1553,6 +1599,26 @@ class SegmentationModule {
       this.uploadedFiles = segmentationState.uploadedFiles;
       console.log('[SegmentationModule] Restored uploaded files:', this.uploadedFiles);
     }
+
+    // Restore step condition flags
+    if (segmentationState.filesValidated !== undefined) {
+      this.filesValidated = segmentationState.filesValidated;
+    }
+    if (segmentationState.configSaved !== undefined) {
+      this.configSaved = segmentationState.configSaved;
+    }
+    if (segmentationState.trainingComplete !== undefined) {
+      this.trainingComplete = segmentationState.trainingComplete;
+    }
+    if (segmentationState.hasImportedModel !== undefined) {
+      this.hasImportedModel = segmentationState.hasImportedModel;
+    }
+    console.log('[SegmentationModule] Restored step flags:', {
+      filesValidated: this.filesValidated,
+      configSaved: this.configSaved,
+      trainingComplete: this.trainingComplete,
+      hasImportedModel: this.hasImportedModel
+    });
 
     // Restore training/inference IDs
     if (segmentationState.currentTrainingId) {
