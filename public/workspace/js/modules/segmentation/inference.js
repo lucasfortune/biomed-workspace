@@ -184,15 +184,7 @@ function updateInferenceProgress(data) {
     // When inference reaches 100%, show finalizing message
     if (progress_percent >= 100) {
         console.log('Inference complete, finalizing results...');
-        const overlay = document.getElementById('moduleLoadingOverlay');
-        const loadingText = document.getElementById('moduleLoadingText');
-        const loadingDescription = document.getElementById('moduleLoadingDescription');
-
-        if (overlay && loadingText && loadingDescription) {
-            loadingText.textContent = 'Finalizing Results';
-            loadingDescription.textContent = 'Saving segmentation results...';
-            overlay.style.display = 'flex';
-        }
+        showLoading('Finalizing Results', 'Saving segmentation results...');
     }
 
     // If elements don't exist, try to recreate the UI
@@ -212,12 +204,6 @@ function updateInferenceProgress(data) {
 function onInferenceComplete(data) {
 
     hideLoading();
-
-    // Hide the module loading overlay (used for sparse data generation)
-    const overlay = document.getElementById('moduleLoadingOverlay');
-    if (overlay) {
-        overlay.style.display = 'none';
-    }
 
     // Hide progress container
     const progressContainer = document.getElementById('inferenceProgressContainer');

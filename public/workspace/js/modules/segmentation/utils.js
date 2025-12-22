@@ -1,33 +1,63 @@
 // Utility functions
+
+/**
+ * Show loading overlay using the module's BaseModule method
+ * @param {string} title - Loading title
+ * @param {string} description - Loading description
+ */
 function showLoading(title, description) {
-    // Try module-specific IDs first, then fall back to generic IDs
-    const overlay = document.getElementById('moduleLoadingOverlay') || document.getElementById('loadingOverlay');
-    const text = document.getElementById('moduleLoadingText') || document.getElementById('loadingText');
-    const desc = document.getElementById('moduleLoadingDescription') || document.getElementById('loadingDescription');
+    // Use the module's showLoading if available (from BaseModule)
+    if (window.segmentationModule && window.segmentationModule.showLoading) {
+        window.segmentationModule.showLoading(title, description);
+        return;
+    }
+
+    // Fallback: Try to find and use existing overlay element
+    const overlay = document.getElementById('loadingOverlay');
+    const text = document.getElementById('loadingText');
+    const desc = document.getElementById('loadingDescription');
 
     if (overlay && text && desc) {
         text.textContent = title;
         desc.textContent = description;
         overlay.style.display = 'flex';
     } else {
-        console.log('[Loading] Elements not found. Title:', title, 'Description:', description);
-        console.log('[Loading] Overlay:', !!overlay, 'Text:', !!text, 'Desc:', !!desc);
+        console.log('[Loading] No overlay available. Title:', title, 'Description:', description);
     }
 }
 
+/**
+ * Hide loading overlay using the module's BaseModule method
+ */
 function hideLoading() {
-    // Try module-specific ID first, then fall back to generic ID
-    const overlay = document.getElementById('moduleLoadingOverlay') || document.getElementById('loadingOverlay');
+    // Use the module's hideLoading if available (from BaseModule)
+    if (window.segmentationModule && window.segmentationModule.hideLoading) {
+        window.segmentationModule.hideLoading();
+        return;
+    }
+
+    // Fallback: Try to find and hide existing overlay element
+    const overlay = document.getElementById('loadingOverlay');
     if (overlay) {
         overlay.style.display = 'none';
     }
 }
 
-// Helper function to update loading message without hiding/showing overlay
+/**
+ * Update loading message without hiding/showing overlay
+ * @param {string} title - New title
+ * @param {string} description - New description
+ */
 function updateLoadingMessage(title, description) {
-    // Try module-specific IDs first, then fall back to generic IDs
-    const text = document.getElementById('moduleLoadingText') || document.getElementById('loadingText');
-    const desc = document.getElementById('moduleLoadingDescription') || document.getElementById('loadingDescription');
+    // Use the module's showLoading to update (it updates existing overlay)
+    if (window.segmentationModule && window.segmentationModule.showLoading) {
+        window.segmentationModule.showLoading(title, description);
+        return;
+    }
+
+    // Fallback: Try to update existing overlay elements
+    const text = document.getElementById('loadingText');
+    const desc = document.getElementById('loadingDescription');
 
     if (text && desc) {
         text.textContent = title;

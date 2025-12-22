@@ -391,15 +391,6 @@ class SegmentationModule extends BaseModule {
           </div>
 
         </div>
-
-        <!-- Loading Overlay -->
-        <div class="loading-overlay" id="moduleLoadingOverlay" style="display: none;">
-          <div class="loading-content">
-            <div class="spinner"></div>
-            <h3 id="moduleLoadingText">Processing...</h3>
-            <p id="moduleLoadingDescription">Please wait while we process your request.</p>
-          </div>
-        </div>
       </div>
     `;
   }
