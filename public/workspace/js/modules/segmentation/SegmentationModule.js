@@ -4,7 +4,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator } from '/workspace/js/core/components/index.js';
+import { StepNavigator, FileSelector } from '/workspace/js/core/components/index.js';
 
 class SegmentationModule extends BaseModule {
   constructor(stateManager) {
@@ -449,9 +449,9 @@ class SegmentationModule extends BaseModule {
    */
   async loadHelperScripts() {
     // Regular scripts (non-module)
+    // Note: FileSelector is now imported from core/components as ES6 module
     const regularScripts = [
       '/workspace/js/modules/segmentation/SegmentationAPI.js',
-      '/workspace/js/modules/segmentation/components/FileSelector.js',
       '/workspace/js/modules/segmentation/utils.js',
       '/workspace/js/modules/segmentation/navigation.js',
       '/workspace/js/modules/segmentation/training.js',
@@ -474,14 +474,44 @@ class SegmentationModule extends BaseModule {
 
   /**
    * Initialize FileSelector components
+   * Uses FileSelector from core/components with config-based API
    */
   async initializeFileSelectors() {
     console.log('[SegmentationModule] Initializing FileSelectors...');
 
-    // Create FileSelector instances
-    this.rawImageSelector = new FileSelector('raw_images', 'Raw Images', '📁', this);
-    this.annotationsSelector = new FileSelector('annotations', 'Annotations', '🏷️', this);
-    this.inferenceSelector = new FileSelector('inference_data', 'Inference Data', '📁', this);
+    // Create FileSelector instances with core component API
+    this.rawImageSelector = new FileSelector({
+      id: 'raw_images',
+      fileType: 'raw_images',
+      title: 'Raw Images',
+      icon: '📁',
+      showTestData: true,
+      stateManager: this.state,
+      onSelect: (fileInfo) => this.onFileSelected('raw_images', fileInfo),
+      onUpload: (file, uploadedInfo) => this.onFileUploaded('raw_images', file, uploadedInfo)
+    });
+
+    this.annotationsSelector = new FileSelector({
+      id: 'annotations',
+      fileType: 'annotations',
+      title: 'Annotations',
+      icon: '🏷️',
+      showTestData: true,
+      stateManager: this.state,
+      onSelect: (fileInfo) => this.onFileSelected('annotations', fileInfo),
+      onUpload: (file, uploadedInfo) => this.onFileUploaded('annotations', file, uploadedInfo)
+    });
+
+    this.inferenceSelector = new FileSelector({
+      id: 'inference_data',
+      fileType: 'inference_data',
+      title: 'Inference Data',
+      icon: '📁',
+      showTestData: true,
+      stateManager: this.state,
+      onSelect: (fileInfo) => this.onFileSelected('inference_data', fileInfo),
+      onUpload: (file, uploadedInfo) => this.onFileUploaded('inference_data', file, uploadedInfo)
+    });
 
     // Insert into containers
     const rawContainer = document.getElementById('rawImagesSelectorContainer');
@@ -515,7 +545,7 @@ class SegmentationModule extends BaseModule {
     // Update uploadedFiles
     this.uploadedFiles[type] = fileInfo;
 
-    // Handle test data vs. custom files
+    // Handle based on file type
     if (type === 'raw_images' || type === 'annotations') {
       // Check if both are test data
       const bothTestData =
@@ -525,11 +555,45 @@ class SegmentationModule extends BaseModule {
       if (bothTestData) {
         // Both are test data - trigger test data loading
         await this.loadTestData();
+      } else if (this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
+        // Both files are selected (workspace files or mix)
+        // Enable the Next button and mark as validated
+        this.filesValidated = true;
+        const step1Next = document.getElementById('step1Next');
+        if (step1Next) {
+          step1Next.disabled = false;
+        }
+
+        // Show simple validation message for workspace files
+        const validationDiv = document.getElementById('validationResult');
+        if (validationDiv) {
+          validationDiv.className = 'success';
+          validationDiv.innerHTML = `
+            <h4>✅ Files Selected</h4>
+            <div class="validation-details">
+              <p><strong>Raw Images:</strong> ${this.uploadedFiles.raw_images.name || 'Selected'}</p>
+              <p><strong>Annotations:</strong> ${this.uploadedFiles.annotations.name || 'Selected'}</p>
+            </div>
+          `;
+          validationDiv.style.display = 'block';
+        }
+
+        // Save state
+        this.saveState();
       }
     } else if (type === 'inference_data') {
       if (fileInfo.isTestData) {
         // Test inference data
         await this.loadTestInferenceData();
+      } else if (fileInfo) {
+        // Workspace file selected - enable Run Segmentation button
+        const runInferenceBtn = document.getElementById('runInferenceBtn');
+        if (runInferenceBtn) {
+          runInferenceBtn.disabled = false;
+        }
+
+        // Save state
+        this.saveState();
       }
     }
   }
@@ -734,7 +798,12 @@ class SegmentationModule extends BaseModule {
       const result = await response.json();
 
       if (result.success) {
-        this.uploadedFiles.inference_data = { path: result.file_path, isTestData: true };
+        console.log('[SegmentationModule] Test inference data response:', result);
+        // Use inference_data_path (relative to workspace) instead of file_path
+        // The server's /run-inference expects a path relative to workspace
+        const dataPath = result.inference_data_path || result.file_path;
+        this.uploadedFiles.inference_data = { path: dataPath, isTestData: true };
+        console.log('[SegmentationModule] Stored inference path:', this.uploadedFiles.inference_data.path);
 
         // Enable run inference button
         const runInferenceBtn = document.getElementById('runInferenceBtn');
@@ -1257,6 +1326,7 @@ class SegmentationModule extends BaseModule {
    */
   async runInference() {
     console.log('[SegmentationModule] Running inference...');
+    console.log('[SegmentationModule] uploadedFiles.inference_data:', this.uploadedFiles.inference_data);
 
     try {
       // Prepare request body
@@ -1264,6 +1334,11 @@ class SegmentationModule extends BaseModule {
 
       // Add data path (required)
       if (this.uploadedFiles.inference_data && this.uploadedFiles.inference_data.path) {
+        // Check if path is the placeholder 'test_data' which means loadTestInferenceData didn't complete
+        if (this.uploadedFiles.inference_data.path === 'test_data') {
+          console.warn('[SegmentationModule] Path is still "test_data" - loading not complete, retrying...');
+          await this.loadTestInferenceData();
+        }
         requestBody.data_path = this.uploadedFiles.inference_data.path;
         console.log('[SegmentationModule] Using data path:', requestBody.data_path);
       } else {
