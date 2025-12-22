@@ -19,6 +19,15 @@
   background: var(--module-bg);
   color: var(--module-text-primary);
   font-family: var(--module-font-family);
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure no gap between header, progress bar, and step nav */
+.template-module > .module-header,
+.template-module > .progress-bar,
+.template-module > .step-nav {
+  flex-shrink: 0;
 }
 
 /* ============================================

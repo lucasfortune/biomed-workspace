@@ -25,6 +25,15 @@ class SessionTracker {
      *          progress, currentSlice, totalSlices, usingImportedModel, result, error }
      */
     this.inferenceSessions = new Map();
+
+    /**
+     * Map of mesh generation sessions
+     * Key: meshId
+     * Value: { sessionId, username, status, startTime, endTime,
+     *          progress, currentClass, totalClasses, sourcePath, outputDir,
+     *          outputFormats, result, error }
+     */
+    this.meshSessions = new Map();
   }
 
   // ============================================================================
@@ -198,18 +207,105 @@ class SessionTracker {
   }
 
   // ============================================================================
+  // MESH SESSION METHODS
+  // ============================================================================
+
+  /**
+   * Create a new mesh generation session
+   * @param {string} meshId - Unique mesh ID
+   * @param {object} data - Mesh session data
+   * @returns {object} The created mesh session
+   */
+  createMeshSession(meshId, data) {
+    const session = {
+      sessionId: data.sessionId,
+      username: data.username,
+      status: data.status || 'initializing',
+      startTime: data.startTime || new Date(),
+      endTime: null,
+      progress: 0,
+      currentClass: 0,
+      totalClasses: 0,
+      sourcePath: data.sourcePath || null,
+      outputDir: data.outputDir || null,
+      outputFormats: data.outputFormats || ['json', 'obj'],
+      result: null,
+      error: null
+    };
+
+    this.meshSessions.set(meshId, session);
+    return session;
+  }
+
+  /**
+   * Get a mesh session by ID
+   * @param {string} meshId - Mesh ID
+   * @returns {object|undefined} Mesh session or undefined
+   */
+  getMeshSession(meshId) {
+    return this.meshSessions.get(meshId);
+  }
+
+  /**
+   * Update a mesh session
+   * @param {string} meshId - Mesh ID
+   * @param {object} updates - Fields to update
+   * @returns {object|null} Updated session or null if not found
+   */
+  updateMeshSession(meshId, updates) {
+    const session = this.meshSessions.get(meshId);
+    if (!session) return null;
+
+    Object.assign(session, updates);
+    return session;
+  }
+
+  /**
+   * Delete a mesh session
+   * @param {string} meshId - Mesh ID
+   * @returns {boolean} True if deleted
+   */
+  deleteMeshSession(meshId) {
+    return this.meshSessions.delete(meshId);
+  }
+
+  /**
+   * Get all mesh sessions for a specific user session
+   * @param {string} sessionId - User session ID
+   * @returns {Array<[string, object]>} Array of [meshId, session] pairs
+   */
+  getMeshSessionsBySessionId(sessionId) {
+    const sessions = [];
+    for (const [meshId, mesh] of this.meshSessions.entries()) {
+      if (mesh.sessionId === sessionId) {
+        sessions.push([meshId, mesh]);
+      }
+    }
+    return sessions;
+  }
+
+  /**
+   * Get all mesh sessions
+   * @returns {Map} All mesh sessions
+   */
+  getAllMeshSessions() {
+    return this.meshSessions;
+  }
+
+  // ============================================================================
   // CLEANUP METHODS
   // ============================================================================
 
   /**
    * Clean up all sessions for a specific user session ID
    * @param {string} sessionId - User session ID
-   * @returns {object} Cleanup results { trainingIds: [], inferenceIds: [] }
+   * @returns {object} Cleanup results { trainingIds: [], inferenceIds: [], meshIds: [] }
    */
   cleanupSessionById(sessionId) {
     const result = {
       trainingIds: [],
-      inferenceIds: []
+      inferenceIds: [],
+      meshIds: []
     };
 
     // Clean up training sessions
@@ -225,6 +321,14 @@ class SessionTracker {
       if (inference.sessionId === sessionId) {
         result.inferenceIds.push(inferenceId);
         this.inferenceSessions.delete(inferenceId);
+      }
+    }
+
+    // Clean up mesh sessions
+    for (const [meshId, mesh] of this.meshSessions.entries()) {
+      if (mesh.sessionId === sessionId) {
+        result.meshIds.push(meshId);
+        this.meshSessions.delete(meshId);
       }
     }
 
@@ -250,6 +354,13 @@ class SessionTracker {
       failed: 0
     };
 
+    const meshStats = {
+      total: this.meshSessions.size,
+      active: 0,
+      completed: 0,
+      failed: 0
+    };
+
     for (const training of this.trainingSessions.values()) {
       if (training.status === 'training' || training.status === 'initializing') {
         trainingStats.active++;
@@ -270,9 +381,20 @@ class SessionTracker {
       }
     }
 
+    for (const mesh of this.meshSessions.values()) {
+      if (mesh.status === 'processing' || mesh.status === 'starting') {
+        meshStats.active++;
+      } else if (mesh.status === 'completed') {
+        meshStats.completed++;
+      } else if (mesh.status === 'failed') {
+        meshStats.failed++;
+      }
+    }
+
     return {
       training: trainingStats,
-      inference: inferenceStats
+      inference: inferenceStats,
+      mesh: meshStats
     };
   }
 }

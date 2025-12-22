@@ -6,6 +6,7 @@
 
 const { registerTrainingHandlers, emitTrainingProgress, emitTrainingComplete } = require('./training.socket');
 const { registerInferenceHandlers, emitInferenceProgress, emitInferenceComplete } = require('./inference.socket');
+const { registerMeshHandlers, emitMeshProgress, emitMeshComplete, emitMeshError } = require('./mesh.socket');
 
 /**
  * Initialize Socket.IO connection handlers
@@ -21,6 +22,9 @@ function initializeSocketHandlers(io, logger) {
 
     // Register inference event handlers
     registerInferenceHandlers(socket, logger);
+
+    // Register mesh event handlers
+    registerMeshHandlers(socket, logger);
 
     // Handle disconnection
     socket.on('disconnect', () => {
@@ -47,6 +51,11 @@ function createSocketEmitter(io) {
     inferenceProgress: (inferenceId, progress) => emitInferenceProgress(io, inferenceId, progress),
     inferenceComplete: (inferenceId, result) => emitInferenceComplete(io, inferenceId, result),
 
+    // Mesh events
+    meshProgress: (meshId, progress) => emitMeshProgress(io, meshId, progress),
+    meshComplete: (meshId, result) => emitMeshComplete(io, meshId, result),
+    meshError: (meshId, error) => emitMeshError(io, meshId, error),
+
     // Direct access to io for custom emissions
     io: io
   };
@@ -59,5 +68,8 @@ module.exports = {
   emitTrainingProgress,
   emitTrainingComplete,
   emitInferenceProgress,
-  emitInferenceComplete
+  emitInferenceComplete,
+  emitMeshProgress,
+  emitMeshComplete,
+  emitMeshError
 };

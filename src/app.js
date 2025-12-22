@@ -25,6 +25,7 @@ const createFoldersRoutes = require('./routes/folders.routes');
 const createFilesRoutes = require('./routes/files.routes');
 const createWorkspaceRoutes = require('./routes/workspace.routes');
 const createMLRoutes = require('./routes/ml.routes');
+const createMeshRoutes = require('./routes/mesh.routes');
 
 // Python runner wrappers
 const {
@@ -295,6 +296,16 @@ function configureApp(app, dependencies) {
     validateTrainingConfig,
     startTrainingProcess,
     startInferenceProcess
+  }));
+
+  // Mesh generation routes
+  app.use('/api/mesh', createMeshRoutes({
+    workspaceManager,
+    sessionTracker,
+    activityLogger,
+    logger,
+    io,
+    upload
   }));
 
   // Ensure directories exist

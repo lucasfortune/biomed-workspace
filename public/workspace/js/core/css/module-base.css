@@ -102,6 +102,13 @@
   box-shadow: none;
 }
 
+/* Ensure no gap between header, progress bar, and step nav */
+.module-container > .module-header,
+.module-container > .progress-bar,
+.module-container > .step-nav {
+  flex-shrink: 0;
+}
+
 /* ============================================
    MODULE HEADER
    ============================================ */

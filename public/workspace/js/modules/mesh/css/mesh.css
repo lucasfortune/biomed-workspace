@@ -1,0 +1,392 @@
+/**
+ * Mesh Module Styles
+ *
+ * Styles for the Surface Mesh Generation module.
+ * Imports shared module-base.css for consistent design tokens.
+ */
+
+/* Import shared base styles */
+@import url('/workspace/js/core/css/module-base.css');
+
+/* ============================================
+   MODULE CONTAINER
+   ============================================ */
+
+.mesh-module {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  font-family: var(--module-font-family);
+}
+
+/* ============================================
+   STEP CONTENT
+   ============================================ */
+
+.mesh-module .step-contents {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--module-spacing-md) var(--module-spacing-md);
+}
+
+.mesh-module .step-content {
+  display: none;
+}
+
+.mesh-module .step-content.active {
+  display: block;
+}
+
+.mesh-module .step-inner {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.mesh-module .step-description {
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+/* ============================================
+   DATA INFO CARD
+   ============================================ */
+
+.mesh-module .data-info-card {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin: var(--module-spacing-lg) 0;
+}
+
+.mesh-module .data-info-card h4 {
+  margin: 0 0 var(--module-spacing-md) 0;
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-primary);
+}
+
+.mesh-module .info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.mesh-module .info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mesh-module .info-item .label {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mesh-module .info-item .value {
+  font-size: var(--module-font-size-md);
+  font-weight: 500;
+  color: var(--module-text-primary);
+}
+
+/* ============================================
+   PREVIEW CONTAINER
+   ============================================ */
+
+.mesh-module .preview-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--module-spacing-md);
+  background: var(--module-bg);
+  border-radius: var(--module-radius-md);
+  border: 1px solid var(--module-border);
+}
+
+.mesh-module .preview-container img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: var(--module-radius-sm);
+  object-fit: contain;
+  background: #000;
+}
+
+.mesh-module .preview-container span {
+  margin-top: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+/* ============================================
+   DATA SUMMARY (Step 2)
+   ============================================ */
+
+.mesh-module .data-summary {
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.mesh-module .summary-card {
+  background: var(--module-info-bg);
+  border: 1px solid var(--module-info-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-md);
+}
+
+.mesh-module .summary-card h4 {
+  margin: 0 0 var(--module-spacing-sm) 0;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-info-text);
+}
+
+.mesh-module .summary-with-preview {
+  display: flex;
+  gap: var(--module-spacing-lg);
+  align-items: flex-start;
+}
+
+.mesh-module .summary-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--module-spacing-xs);
+  flex: 1;
+}
+
+.mesh-module .summary-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--module-spacing-sm);
+  background: var(--module-bg);
+  border-radius: var(--module-radius-md);
+  border: 1px solid var(--module-border);
+  flex-shrink: 0;
+}
+
+.mesh-module .summary-preview img {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: var(--module-radius-sm);
+  object-fit: contain;
+  background: #000;
+}
+
+.mesh-module .summary-preview .preview-label {
+  margin-top: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.mesh-module .detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--module-font-size-sm);
+}
+
+.mesh-module .detail-row span:first-child {
+  color: var(--module-text-secondary);
+}
+
+.mesh-module .detail-row span:last-child {
+  color: var(--module-text-primary);
+  font-weight: 500;
+}
+
+/* ============================================
+   GENERATION OPTIONS
+   ============================================ */
+
+.mesh-module .generation-options {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.mesh-module .generation-options h4 {
+  margin: 0 0 var(--module-spacing-md) 0;
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-primary);
+}
+
+.mesh-module .form-field {
+  margin-bottom: var(--module-spacing-md);
+}
+
+.mesh-module .form-field:last-of-type {
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.mesh-module .form-field > label {
+  display: block;
+  margin-bottom: var(--module-spacing-xs);
+  font-weight: 500;
+  color: var(--module-text-primary);
+}
+
+.mesh-module .checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--module-spacing-sm);
+}
+
+.mesh-module .checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+  font-weight: normal;
+  color: var(--module-text-primary);
+  cursor: pointer;
+}
+
+.mesh-module .checkbox-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.mesh-module .form-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  font-size: var(--module-font-size-sm);
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  transition: var(--module-transition-fast);
+}
+
+.mesh-module .form-field select:focus {
+  outline: none;
+  border-color: var(--module-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ============================================
+   PROGRESS SECTION
+   ============================================ */
+
+.mesh-module .progress-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.mesh-module .progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--module-spacing-sm);
+  font-weight: 500;
+}
+
+.mesh-module .progress-bar-container {
+  height: 8px;
+  background: var(--module-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.mesh-module .progress-fill {
+  height: 100%;
+  background: var(--module-gradient);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.mesh-module #progressStatus {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+}
+
+/* ============================================
+   RESULTS SECTION
+   ============================================ */
+
+.mesh-module .results-section {
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.mesh-module .download-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--module-spacing-sm);
+  margin-top: var(--module-spacing-lg);
+}
+
+.mesh-module .result-actions {
+  display: flex;
+  gap: var(--module-spacing-md);
+  margin-top: var(--module-spacing-lg);
+  padding-top: var(--module-spacing-lg);
+  border-top: 1px solid var(--module-border);
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+.mesh-module .btn-primary {
+  background: var(--module-gradient);
+  color: white;
+  font-weight: 500;
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--module-radius-md);
+  cursor: pointer;
+  transition: var(--module-transition-normal);
+}
+
+.mesh-module .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--module-shadow-md);
+}
+
+.mesh-module .btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .mesh-module .step-inner {
+    padding: 0 var(--module-spacing-sm);
+  }
+
+  .mesh-module .info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mesh-module .summary-with-preview {
+    flex-direction: column;
+  }
+
+  .mesh-module .summary-preview {
+    width: 100%;
+  }
+
+  .mesh-module .summary-preview img {
+    max-width: 100%;
+    max-height: 200px;
+  }
+
+  .mesh-module .result-actions {
+    flex-direction: column;
+  }
+
+  .mesh-module .download-buttons {
+    flex-direction: column;
+  }
+
+  .mesh-module .download-buttons .btn {
+    width: 100%;
+  }
+}
