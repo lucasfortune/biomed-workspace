@@ -14,27 +14,35 @@ let processStates = {
 // Central function to handle step changes
 function setStep(stepNumber) {
     if (stepNumber < 1 || stepNumber > 4) return;
-    
+
+    // If SegmentationModule is available, delegate to its goToStep method
+    // This ensures the StepNavigator component is updated properly
+    if (window.segmentationModule && window.segmentationModule.goToStep) {
+        window.segmentationModule.goToStep(stepNumber);
+        return;
+    }
+
+    // Fallback: Direct DOM manipulation (for cases without module)
     // NEW: Check if navigation is allowed
     if (!canNavigateToStep(stepNumber)) {
         console.warn(`Navigation to step ${stepNumber} is not allowed`);
         showNavigationError(stepNumber);
         return;
     }
-    
+
     // Handle import mode navigation
     if (window.importedModelInfo && stepNumber < 4) {
         stepNumber = 4;
     }
-    
+
     // Hide current step
     document.querySelector(`.step-content.active`)?.classList.remove('active');
     document.querySelector(`.step.active`)?.classList.remove('active');
-    
+
     // Show new step
     document.querySelector(`[data-step="${stepNumber}"]`)?.classList.add('active');
     document.querySelector(`#step${stepNumber}`)?.classList.add('active');
-    
+
     // Update global variable
     currentStep = stepNumber;
 
@@ -42,7 +50,7 @@ function setStep(stepNumber) {
     if (stepNumber === 3) {
         const trainingAction = document.getElementById('trainingAction');
         const startTrainingBtn = document.getElementById('startTrainingBtn');
-        
+
         if (stepStates[3].trainingStarted) {
             // Training has started, hide the action button
             if (trainingAction) trainingAction.style.display = 'none';
@@ -53,7 +61,7 @@ function setStep(stepNumber) {
             if (startTrainingBtn) startTrainingBtn.disabled = false;
         }
     }
-    
+
     // Update progress bar and navigation buttons
     updateProgressBar();
     updateNavigationButtons();

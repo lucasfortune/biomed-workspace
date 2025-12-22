@@ -4,6 +4,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
+import { StepNavigator } from '/workspace/js/core/components/index.js';
 
 class SegmentationModule extends BaseModule {
   constructor(stateManager) {
@@ -66,6 +67,9 @@ class SegmentationModule extends BaseModule {
     // Charts
     this.lossChart = null;
     this.diceChart = null;
+
+    // Components
+    this.stepNavigator = null;
 
     // Bind methods (additional ones not in BaseModule)
     this.loadDependencies = this.loadDependencies.bind(this);
@@ -178,38 +182,11 @@ class SegmentationModule extends BaseModule {
   render() {
     this.container.innerHTML = `
       <div class="segmentation-module">
-        <!-- Module Header with Back Button -->
-        <div class="module-header">
-          <button class="btn-back" onclick="workspace.returnToHub()">← Back to Hub</button>
-          <div class="header-content">
-            <h1>U-Net Segmentation Pipeline</h1>
-          </div>
-        </div>
+        <!-- Module Header (using BaseModule helper) -->
+        ${this.renderHeader()}
 
-        <!-- Progress Bar -->
-        <div class="progress-bar">
-          <div class="progress-fill" id="overallProgress"></div>
-        </div>
-
-        <!-- Step Navigation -->
-        <div class="step-nav">
-          <div class="step active" data-step="1">
-            <div class="step-number">1</div>
-            <span>Data Upload</span>
-          </div>
-          <div class="step" data-step="2">
-            <div class="step-number">2</div>
-            <span>Configuration</span>
-          </div>
-          <div class="step" data-step="3">
-            <div class="step-number">3</div>
-            <span>Training</span>
-          </div>
-          <div class="step" data-step="4">
-            <div class="step-number">4</div>
-            <span>Inference</span>
-          </div>
-        </div>
+        <!-- Step Navigation (using BaseModule helper) -->
+        ${this.renderStepNav()}
 
         <!-- Main Content Area -->
         <div class="main-content">
@@ -432,6 +409,21 @@ class SegmentationModule extends BaseModule {
   async initialize() {
     console.log('[SegmentationModule] Initializing components...');
 
+    // Initialize StepNavigator component
+    this.stepNavigator = new StepNavigator({
+      steps: this.config.steps,
+      currentStep: this.currentStep,
+      onStepClick: (stepNum) => this.goToStep(stepNum),
+      canNavigate: (stepNum) => this.canNavigateToStep(stepNum)
+    });
+    this.stepNavigator.init(this.container);
+
+    // Set up back button handler
+    const backButton = document.getElementById('backToHub');
+    if (backButton) {
+      backButton.addEventListener('click', () => workspace.returnToHub());
+    }
+
     // Initialize Socket.IO
     this.initializeSocketConnection();
 
@@ -444,8 +436,10 @@ class SegmentationModule extends BaseModule {
     // Load helper scripts
     await this.loadHelperScripts();
 
-    // Update progress bar
-    this.updateProgressBar();
+    // Update progress bar (using StepNavigator)
+    if (this.stepNavigator) {
+      this.stepNavigator.update(this.currentStep);
+    }
 
     console.log('[SegmentationModule] Initialization complete');
   }
@@ -1105,17 +1099,12 @@ class SegmentationModule extends BaseModule {
   goToStep(stepNumber) {
     this.currentStep = stepNumber;
 
-    // Update step navigation
-    const steps = document.querySelectorAll('.step');
-    steps.forEach((step, index) => {
-      if (index + 1 <= stepNumber) {
-        step.classList.add('active');
-      } else {
-        step.classList.remove('active');
-      }
-    });
+    // Update StepNavigator component (handles step classes and progress bar)
+    if (this.stepNavigator) {
+      this.stepNavigator.update(stepNumber);
+    }
 
-    // Update step content
+    // Update step content visibility
     const stepContents = document.querySelectorAll('.step-content');
     stepContents.forEach((content, index) => {
       if (index + 1 === stepNumber) {
@@ -1158,9 +1147,6 @@ class SegmentationModule extends BaseModule {
       }
     }
 
-    // Update progress bar
-    this.updateProgressBar();
-
     // Scroll main-content container to top when changing steps
     const mainContent = document.querySelector('.segmentation-module .main-content');
     if (mainContent) {
@@ -1172,13 +1158,11 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
-   * Update progress bar
+   * Update progress bar (delegates to StepNavigator if available)
    */
   updateProgressBar() {
-    const progressBar = document.getElementById('overallProgress');
-    if (progressBar) {
-      const progress = (this.currentStep / 4) * 100;
-      progressBar.style.width = `${progress}%`;
+    if (this.stepNavigator) {
+      this.stepNavigator.update(this.currentStep);
     }
   }
 
