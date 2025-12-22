@@ -582,6 +582,8 @@
   background: var(--module-success-bg);
   border: 1px solid var(--module-success-border);
   color: var(--module-success-text);
+  padding: var(--module-spacing-sm);
+  border-radius: var(--module-radius-md);
 }
 
 .validation-result.error,
@@ -590,6 +592,8 @@
   background: var(--module-error-bg);
   border: 1px solid var(--module-error-border);
   color: var(--module-error-text);
+  padding: var(--module-spacing-sm);
+  border-radius: var(--module-radius-md);
 }
 
 .validation-result.info,
@@ -598,6 +602,8 @@
   background: var(--module-info-bg);
   border: 1px solid var(--module-info-border);
   color: var(--module-info-text);
+  padding: var(--module-spacing-sm);
+  border-radius: var(--module-radius-md);
 }
 
 .validation-result.warning,
@@ -606,6 +612,8 @@
   background: var(--module-warning-bg);
   border: 1px solid var(--module-warning-border);
   color: var(--module-warning-text);
+  padding: var(--module-spacing-sm);
+  border-radius: var(--module-radius-md);
 }
 
 .validation-header {
