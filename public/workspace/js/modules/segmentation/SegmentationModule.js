@@ -4,7 +4,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator, FileSelector } from '/workspace/js/core/components/index.js';
+import { StepNavigator, FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
 
 class SegmentationModule extends BaseModule {
   constructor(stateManager) {
@@ -70,6 +70,7 @@ class SegmentationModule extends BaseModule {
 
     // Components
     this.stepNavigator = null;
+    this.validationDisplay = null;
 
     // Bind methods (additional ones not in BaseModule)
     this.loadDependencies = this.loadDependencies.bind(this);
@@ -418,6 +419,9 @@ class SegmentationModule extends BaseModule {
     });
     this.stepNavigator.init(this.container);
 
+    // Initialize ValidationDisplay component
+    this.validationDisplay = new ValidationDisplay('validationResult');
+
     // Set up back button handler
     const backButton = document.getElementById('backToHub');
     if (backButton) {
@@ -564,19 +568,14 @@ class SegmentationModule extends BaseModule {
           step1Next.disabled = false;
         }
 
-        // Show simple validation message for workspace files
-        const validationDiv = document.getElementById('validationResult');
-        if (validationDiv) {
-          validationDiv.className = 'success';
-          validationDiv.innerHTML = `
-            <h4>✅ Files Selected</h4>
-            <div class="validation-details">
-              <p><strong>Raw Images:</strong> ${this.uploadedFiles.raw_images.name || 'Selected'}</p>
-              <p><strong>Annotations:</strong> ${this.uploadedFiles.annotations.name || 'Selected'}</p>
-            </div>
-          `;
-          validationDiv.style.display = 'block';
+        // Show validation message using ValidationDisplay component
+        if (!this.validationDisplay) {
+          this.validationDisplay = new ValidationDisplay('validationResult');
         }
+        this.validationDisplay.showSuccess('Files Selected', [
+          { label: 'Raw Images', value: this.uploadedFiles.raw_images.name || 'Selected' },
+          { label: 'Annotations', value: this.uploadedFiles.annotations.name || 'Selected' }
+        ]);
 
         // Save state
         this.saveState();
@@ -881,49 +880,51 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
-   * Display validation results
+   * Display validation results using ValidationDisplay component
    */
   displayValidationResults(validation) {
-    const validationDiv = document.getElementById('validationResult');
-
-    if (!validationDiv) return;
-
-    if (validation && validation.success !== false) {
-      validationDiv.className = 'success';
-      validationDiv.innerHTML = `
-        <h4>✅ Validation Successful</h4>
-        <div class="validation-details">
-          ${validation.raw_dims ? `<p><strong>Raw Images:</strong> ${validation.raw_dims} (${validation.raw_slices} slices)</p>` : ''}
-          ${validation.ann_dims ? `<p><strong>Annotations:</strong> ${validation.ann_dims} (${validation.ann_slices} slices)</p>` : ''}
-          ${validation.classes ? `<p><strong>Classes detected:</strong> ${validation.classes.join(', ')}</p>` : ''}
-          ${validation.warnings ? `<p class="warning">⚠️ ${validation.warnings}</p>` : ''}
-        </div>
-      `;
-    } else {
-      validationDiv.className = 'error';
-      validationDiv.innerHTML = `
-        <h4>❌ Validation Failed</h4>
-        <p>${validation?.error || 'Unknown error'}</p>
-      `;
+    if (!this.validationDisplay) {
+      this.validationDisplay = new ValidationDisplay('validationResult');
     }
 
-    validationDiv.style.display = 'block';
+    if (validation && validation.success !== false) {
+      // Build details array for the component
+      const details = [];
+      if (validation.raw_dims) {
+        details.push({ label: 'Raw Images', value: `${validation.raw_dims} (${validation.raw_slices} slices)` });
+      }
+      if (validation.ann_dims) {
+        details.push({ label: 'Annotations', value: `${validation.ann_dims} (${validation.ann_slices} slices)` });
+      }
+      if (validation.classes) {
+        details.push({ label: 'Classes detected', value: validation.classes.join(', ') });
+      }
+
+      this.validationDisplay.showSuccess('Validation Successful', details);
+
+      // Show warning separately if present
+      if (validation.warnings) {
+        const container = this.validationDisplay.getContainer();
+        if (container) {
+          const warningDiv = document.createElement('p');
+          warningDiv.className = 'warning';
+          warningDiv.innerHTML = `⚠️ ${validation.warnings}`;
+          container.querySelector('.validation-success')?.appendChild(warningDiv);
+        }
+      }
+    } else {
+      this.validationDisplay.showError('Validation Failed', validation?.error || 'Unknown error');
+    }
   }
 
   /**
-   * Display validation error
+   * Display validation error using ValidationDisplay component
    */
   displayValidationError(errorMessage) {
-    const validationDiv = document.getElementById('validationResult');
-
-    if (!validationDiv) return;
-
-    validationDiv.className = 'error';
-    validationDiv.innerHTML = `
-      <h4>❌ Validation Failed</h4>
-      <p>${errorMessage}</p>
-    `;
-    validationDiv.style.display = 'block';
+    if (!this.validationDisplay) {
+      this.validationDisplay = new ValidationDisplay('validationResult');
+    }
+    this.validationDisplay.showError('Validation Failed', errorMessage);
   }
 
   /**
@@ -937,13 +938,11 @@ class SegmentationModule extends BaseModule {
         step1Next.disabled = false;
       }
 
-      // Show validation success
-      const validationResult = document.getElementById('validationResult');
-      if (validationResult) {
-        validationResult.className = 'success';
-        validationResult.innerHTML = '✅ Both files selected and ready for training';
-        validationResult.style.display = 'block';
+      // Show validation success using ValidationDisplay
+      if (!this.validationDisplay) {
+        this.validationDisplay = new ValidationDisplay('validationResult');
       }
+      this.validationDisplay.showSuccess('Files Ready', 'Both files selected and ready for training');
     } else {
       if (step1Next) {
         step1Next.disabled = true;
@@ -1486,11 +1485,9 @@ class SegmentationModule extends BaseModule {
           // Reset inference UI state
           this.resetInferenceUIState();
 
-          // Clear validation result div on Step 1
-          const validationResult = document.getElementById('validationResult');
-          if (validationResult) {
-            validationResult.style.display = 'none';
-            validationResult.innerHTML = '';
+          // Clear validation display on Step 1
+          if (this.validationDisplay) {
+            this.validationDisplay.hide();
           }
 
           this.state.notify('success', 'Session reset successfully');
@@ -1737,18 +1734,14 @@ class SegmentationModule extends BaseModule {
         step1Next.disabled = false;
       }
 
-      const validationResult = document.getElementById('validationResult');
-      if (validationResult) {
-        validationResult.className = 'success';
-        validationResult.innerHTML = `
-          <h4>✅ Files Loaded</h4>
-          <div class="validation-details">
-            <p><strong>Raw Images:</strong> ${this.uploadedFiles.raw_images.isTestData ? 'Test Dataset' : 'Custom Upload'}</p>
-            <p><strong>Annotations:</strong> ${this.uploadedFiles.annotations.isTestData ? 'Test Dataset' : 'Custom Upload'}</p>
-            <p style="color: #666; font-size: 13px;">Files are ready. Click Next to configure training.</p>
-          </div>
-        `;
-        validationResult.style.display = 'block';
+      // Show validation success using ValidationDisplay component
+      if (this.validationDisplay) {
+        const details = [
+          { label: 'Raw Images', value: this.uploadedFiles.raw_images.isTestData ? 'Test Dataset' : 'Custom Upload' },
+          { label: 'Annotations', value: this.uploadedFiles.annotations.isTestData ? 'Test Dataset' : 'Custom Upload' },
+          { label: 'Status', value: 'Files are ready. Click Next to configure training.' }
+        ];
+        this.validationDisplay.showSuccess('Files Loaded', details);
       }
 
       // Update FileSelector UI to show selected files
