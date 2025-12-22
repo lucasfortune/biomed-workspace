@@ -70,6 +70,10 @@ class MeshModule extends BaseModule {
     this.meshResult = null;
     this.socket = null;
 
+    // Timer for elapsed time
+    this.generationStartTime = null;
+    this.elapsedTimeInterval = null;
+
     // Generation options
     this.generationOptions = {
       outputFormats: ['json', 'obj'],
@@ -175,14 +179,23 @@ class MeshModule extends BaseModule {
 
               <!-- Progress Section (shown during generation) -->
               <div id="generationProgress" class="progress-section" style="display: none;">
+                <div class="progress-header">
+                  <span class="progress-title">
+                    <span class="spinner"></span>
+                    Generating Surface Mesh
+                  </span>
+                  <span id="elapsedTime" class="elapsed-time">00:00</span>
+                </div>
                 <div class="progress-info">
-                  <span>Generating mesh...</span>
+                  <span id="progressStatus">Initializing...</span>
                   <span id="progressPercent">0%</span>
                 </div>
                 <div class="progress-bar-container">
                   <div id="progressBar" class="progress-fill" style="width: 0%"></div>
                 </div>
-                <p id="progressStatus">Initializing...</p>
+                <div class="progress-details">
+                  <span id="progressClassInfo">Preparing data...</span>
+                </div>
               </div>
 
               <!-- Results Section (shown after generation) -->
@@ -369,10 +382,10 @@ class MeshModule extends BaseModule {
     this.selectedFile = fileInfo;
 
     // Show loading state
-    this.validationDisplay.showLoading('Loading data info...');
+    this.validationDisplay.showLoading('Validating file...');
 
     try {
-      // Fetch data info from backend
+      // Fetch data info from backend (includes validation)
       const infoResult = await this.api.getInfo(fileInfo.id || fileInfo.path);
 
       if (infoResult.success) {
@@ -391,25 +404,77 @@ class MeshModule extends BaseModule {
 
         this.saveState();
       } else {
-        this.validationDisplay.showError('Failed to load data info', infoResult.error);
+        // Validation failed
+        await this.handleValidationFailure(fileInfo, infoResult.error);
       }
     } catch (error) {
       console.error('[MeshModule] Error loading data info:', error);
-      this.validationDisplay.showError('Error', error.message);
+      await this.handleValidationFailure(fileInfo, error.message);
     }
+  }
+
+  async handleValidationFailure(fileInfo, errorMessage) {
+    let fileWasDeleted = false;
+
+    // If the file was just uploaded, delete it to prevent it from
+    // appearing in the file dropdown later
+    if (fileInfo.isUploaded && fileInfo.id) {
+      console.log('[MeshModule] Deleting invalid uploaded file:', fileInfo.id);
+      try {
+        const deleteResult = await this.api.deleteFile(fileInfo.id);
+        if (deleteResult.success) {
+          console.log('[MeshModule] Invalid file deleted successfully');
+          fileWasDeleted = true;
+
+          // Notify user that file was removed
+          this.state.notify('warning', 'Invalid file was not saved to workspace');
+        } else {
+          console.error('[MeshModule] Failed to delete invalid file:', deleteResult.error);
+        }
+      } catch (deleteError) {
+        console.error('[MeshModule] Failed to delete invalid file:', deleteError);
+      }
+
+      // Refresh the file selector to remove the deleted file from dropdown
+      if (this.fileSelector) {
+        await this.fileSelector.refresh();
+      }
+    }
+
+    // Clear selection state
+    this.selectedFile = null;
+    this.dataInfo = null;
+    this.dataValidated = false;
+
+    // Clear file selector selection
+    if (this.fileSelector) {
+      this.fileSelector.clearSelection();
+    }
+
+    // Disable next button
+    const step1Next = document.getElementById('step1Next');
+    if (step1Next) step1Next.disabled = true;
+
+    // Show error with helpful message
+    // Add note about file not being saved if it was an upload
+    const fullErrorMessage = fileWasDeleted
+      ? `${errorMessage}\n\nThe file was not saved to your workspace.`
+      : errorMessage;
+    this.validationDisplay.showError('Invalid File', fullErrorMessage);
   }
 
   async onFileUploaded(file, uploadResult) {
     console.log('[MeshModule] File uploaded:', uploadResult);
 
+    // uploadResult is the file entry from workspace with id, name, path, etc.
     this.selectedFile = {
-      name: file.name,
-      path: uploadResult.file_path,
-      id: uploadResult.file_id,
-      isUploaded: true
+      name: uploadResult.name || file.name,
+      path: uploadResult.path,
+      id: uploadResult.id,
+      isUploaded: true  // Mark as uploaded so we can delete if validation fails
     };
 
-    // Trigger the same flow as file selection
+    // Trigger validation flow
     await this.onFileSelected(this.selectedFile);
   }
 
@@ -552,6 +617,12 @@ class MeshModule extends BaseModule {
     document.getElementById('generationOptions').style.display = 'none';
     document.getElementById('generationProgress').style.display = 'block';
 
+    // Reset and start elapsed time timer
+    this.startElapsedTimer();
+
+    // Reset progress UI
+    this.updateProgressUI(0, 'Initializing...', 'Starting mesh generation...');
+
     try {
       const result = await this.api.generateMesh(
         this.selectedFile.path || this.selectedFile.id,
@@ -585,21 +656,31 @@ class MeshModule extends BaseModule {
 
     if (data.mesh_id !== this.currentMeshId) return;
 
+    const statusText = data.status || 'Processing...';
+    const classInfo = `Processing class ${data.class} of ${data.total_classes}`;
+
+    this.updateProgressUI(data.progress_percent, statusText, classInfo);
+  }
+
+  updateProgressUI(percent, status, classInfo) {
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
     const progressStatus = document.getElementById('progressStatus');
+    const progressClassInfo = document.getElementById('progressClassInfo');
 
-    if (progressBar) progressBar.style.width = `${data.progress_percent}%`;
-    if (progressPercent) progressPercent.textContent = `${Math.round(data.progress_percent)}%`;
-    if (progressStatus) {
-      progressStatus.textContent = `Processing class ${data.class} of ${data.total_classes}...`;
-    }
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (progressPercent) progressPercent.textContent = `${Math.round(percent)}%`;
+    if (progressStatus) progressStatus.textContent = status;
+    if (progressClassInfo) progressClassInfo.textContent = classInfo;
   }
 
   onGenerationComplete(data) {
     console.log('[MeshModule] Generation complete:', data);
 
     if (data.mesh_id !== this.currentMeshId) return;
+
+    // Stop timer
+    this.stopElapsedTimer();
 
     this.meshResult = data;
     this.generationComplete = true;
@@ -608,8 +689,9 @@ class MeshModule extends BaseModule {
     document.getElementById('generationProgress').style.display = 'none';
     document.getElementById('generationResults').style.display = 'block';
 
-    // Display results
-    this.showGenerationResults(data);
+    // Display results with elapsed time
+    const elapsedTime = this.getElapsedTime();
+    this.showGenerationResults(data, elapsedTime);
 
     this.saveState();
     this.state.notify('success', 'Mesh generation complete!');
@@ -618,6 +700,9 @@ class MeshModule extends BaseModule {
   onGenerationError(error) {
     console.error('[MeshModule] Generation error:', error);
 
+    // Stop timer
+    this.stopElapsedTimer();
+
     // Show options again
     document.getElementById('generationProgress').style.display = 'none';
     document.getElementById('generationOptions').style.display = 'block';
@@ -625,9 +710,63 @@ class MeshModule extends BaseModule {
     this.state.notify('error', `Mesh generation failed: ${error}`);
   }
 
-  showGenerationResults(data) {
+  // ===========================================================================
+  // ELAPSED TIME TRACKING
+  // ===========================================================================
+
+  startElapsedTimer() {
+    this.generationStartTime = Date.now();
+
+    // Clear any existing interval
+    if (this.elapsedTimeInterval) {
+      clearInterval(this.elapsedTimeInterval);
+    }
+
+    // Update every second
+    this.elapsedTimeInterval = setInterval(() => {
+      this.updateElapsedTimeDisplay();
+    }, 1000);
+
+    // Initial update
+    this.updateElapsedTimeDisplay();
+  }
+
+  stopElapsedTimer() {
+    if (this.elapsedTimeInterval) {
+      clearInterval(this.elapsedTimeInterval);
+      this.elapsedTimeInterval = null;
+    }
+  }
+
+  getElapsedTime() {
+    if (!this.generationStartTime) return '00:00';
+    const elapsed = Date.now() - this.generationStartTime;
+    return this.formatElapsedTime(elapsed);
+  }
+
+  formatElapsedTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  updateElapsedTimeDisplay() {
+    const elapsedTimeEl = document.getElementById('elapsedTime');
+    if (elapsedTimeEl) {
+      elapsedTimeEl.textContent = this.getElapsedTime();
+    }
+  }
+
+  showGenerationResults(data, elapsedTime = null) {
     const details = document.getElementById('resultsDetails');
     const downloadBtns = document.getElementById('downloadButtons');
+
+    // Format output directory to show relative path
+    let outputDirDisplay = data.output_dir || 'N/A';
+    if (outputDirDisplay.includes('/results/meshes/')) {
+      outputDirDisplay = outputDirDisplay.split('/results/meshes/').pop();
+    }
 
     if (details) {
       details.innerHTML = `
@@ -644,16 +783,23 @@ class MeshModule extends BaseModule {
           <span>${data.statistics?.classesProcessed || 'N/A'}</span>
         </div>
         <div class="detail-row">
-          <span>Output Directory:</span>
-          <span>${data.output_dir || 'N/A'}</span>
+          <span>Output Formats:</span>
+          <span>${data.formats?.map(f => f.toUpperCase()).join(', ') || 'N/A'}</span>
         </div>
+        ${elapsedTime ? `
+        <div class="detail-row">
+          <span>Generation Time:</span>
+          <span>${elapsedTime}</span>
+        </div>
+        ` : ''}
       `;
     }
 
     if (downloadBtns && data.formats) {
+      const formatIcons = { json: '📊', obj: '📐', stl: '🖨️' };
       downloadBtns.innerHTML = data.formats.map(format => `
-        <button class="btn secondary" onclick="meshModule.downloadMesh('${format}')">
-          Download ${format.toUpperCase()}
+        <button class="btn secondary download-btn" onclick="meshModule.downloadMesh('${format}')">
+          ${formatIcons[format] || '📁'} Download ${format.toUpperCase()}
         </button>
       `).join('');
     }
@@ -698,6 +844,9 @@ class MeshModule extends BaseModule {
   reset() {
     console.log('[MeshModule] Resetting module...');
 
+    // Stop any running timer
+    this.stopElapsedTimer();
+
     // Reset state flags
     this.dataValidated = false;
     this.generationComplete = false;
@@ -705,15 +854,17 @@ class MeshModule extends BaseModule {
     this.dataInfo = null;
     this.currentMeshId = null;
     this.meshResult = null;
+    this.generationStartTime = null;
 
     // Reset UI
     document.getElementById('generationOptions').style.display = 'block';
     document.getElementById('generationProgress').style.display = 'none';
     document.getElementById('generationResults').style.display = 'none';
 
-    // Reset progress
-    const progressBar = document.getElementById('progressBar');
-    if (progressBar) progressBar.style.width = '0%';
+    // Reset progress UI
+    this.updateProgressUI(0, 'Initializing...', 'Preparing data...');
+    const elapsedTimeEl = document.getElementById('elapsedTime');
+    if (elapsedTimeEl) elapsedTimeEl.textContent = '00:00';
 
     // Reset step 1
     const step1Next = document.getElementById('step1Next');
@@ -769,6 +920,9 @@ class MeshModule extends BaseModule {
     }
     if (meshState.currentMeshId) {
       this.currentMeshId = meshState.currentMeshId;
+
+      // Check if generation is still in progress
+      await this.checkGenerationStatus(meshState.currentMeshId);
     }
     if (meshState.generationComplete) {
       this.generationComplete = true;
@@ -780,6 +934,60 @@ class MeshModule extends BaseModule {
     }
   }
 
+  async checkGenerationStatus(meshId) {
+    try {
+      const status = await this.api.getStatus(meshId);
+
+      if (status.success) {
+        if (status.status === 'processing' || status.status === 'starting') {
+          // Generation is still in progress - show progress UI and rejoin room
+          console.log('[MeshModule] Resuming in-progress generation:', meshId);
+
+          document.getElementById('generationOptions').style.display = 'none';
+          document.getElementById('generationProgress').style.display = 'block';
+
+          // Rejoin Socket.IO room
+          if (this.socket) {
+            this.socket.emit('join-mesh-generation', meshId);
+          }
+
+          // Update progress display
+          this.updateProgressUI(
+            status.progress || 0,
+            'Resuming...',
+            status.currentClass ? `Processing class ${status.currentClass} of ${status.totalClasses}` : 'Processing...'
+          );
+
+          // Note: We can't accurately resume the timer, so show elapsed time as unknown
+          const elapsedTimeEl = document.getElementById('elapsedTime');
+          if (elapsedTimeEl) elapsedTimeEl.textContent = '--:--';
+
+          this.state.notify('info', 'Resuming mesh generation in progress...');
+
+        } else if (status.status === 'completed' && status.result) {
+          // Generation completed while we were away - show results
+          console.log('[MeshModule] Generation completed while away:', meshId);
+          this.meshResult = status.result;
+          this.generationComplete = true;
+
+          document.getElementById('generationOptions').style.display = 'none';
+          document.getElementById('generationProgress').style.display = 'none';
+          document.getElementById('generationResults').style.display = 'block';
+
+          this.showGenerationResults(status.result);
+
+        } else if (status.status === 'failed') {
+          // Generation failed - reset to options
+          console.log('[MeshModule] Generation failed:', status.error);
+          this.currentMeshId = null;
+          this.state.notify('error', `Previous generation failed: ${status.error}`);
+        }
+      }
+    } catch (error) {
+      console.error('[MeshModule] Error checking generation status:', error);
+    }
+  }
+
   // ===========================================================================
   // CLEANUP
   // ===========================================================================
@@ -787,10 +995,14 @@ class MeshModule extends BaseModule {
   async deactivate() {
     console.log('[MeshModule] Deactivating...');
 
-    // Disconnect socket
+    // Stop elapsed time timer
+    this.stopElapsedTimer();
+
+    // Disconnect socket event handlers
     if (this.socket) {
       this.socket.off('mesh-progress', this.onGenerationProgress);
       this.socket.off('mesh-complete', this.onGenerationComplete);
+      this.socket.off('mesh-error');
       // Don't disconnect - other modules may need it
     }
 

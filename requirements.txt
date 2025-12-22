@@ -7,6 +7,7 @@ torchvision>=0.15.0,<0.20.0
 tifffile>=2023.7.10
 numpy>=1.21.0,<2.0.0
 Pillow>=9.0.0,<11.0.0
+scikit-image>=0.21.0  # For marching cubes mesh generation
 
 # Scientific computing (often required for some PyTorch operations)
 scipy>=1.9.0,<2.0.0

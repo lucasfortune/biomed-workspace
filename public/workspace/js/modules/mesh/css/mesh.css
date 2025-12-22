@@ -19,6 +19,15 @@
   background: var(--module-bg);
   color: var(--module-text-primary);
   font-family: var(--module-font-family);
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure no gap between header, progress bar, and step nav */
+.mesh-module > .module-header,
+.mesh-module > .progress-bar,
+.mesh-module > .step-nav {
+  flex-shrink: 0;
 }
 
 /* ============================================
@@ -278,11 +287,60 @@
   margin-bottom: var(--module-spacing-lg);
 }
 
+.mesh-module .progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--module-spacing-md);
+}
+
+.mesh-module .progress-title {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  font-weight: 600;
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-primary);
+}
+
+.mesh-module .spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--module-border);
+  border-top-color: var(--module-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.mesh-module .elapsed-time {
+  font-family: monospace;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+  background: var(--module-bg);
+  padding: 4px 10px;
+  border-radius: var(--module-radius-sm);
+  border: 1px solid var(--module-border);
+}
+
 .mesh-module .progress-info {
   display: flex;
   justify-content: space-between;
   margin-bottom: var(--module-spacing-sm);
   font-weight: 500;
+  font-size: var(--module-font-size-sm);
+}
+
+.mesh-module .progress-info #progressStatus {
+  color: var(--module-text-primary);
+}
+
+.mesh-module .progress-info #progressPercent {
+  color: var(--module-primary);
+  font-weight: 600;
 }
 
 .mesh-module .progress-bar-container {
@@ -300,9 +358,10 @@
   transition: width 0.3s ease;
 }
 
-.mesh-module #progressStatus {
+.mesh-module .progress-details {
+  font-size: var(--module-font-size-xs);
   color: var(--module-text-secondary);
-  font-size: var(--module-font-size-sm);
+  margin-top: var(--module-spacing-xs);
 }
 
 /* ============================================
@@ -318,6 +377,14 @@
   flex-wrap: wrap;
   gap: var(--module-spacing-sm);
   margin-top: var(--module-spacing-lg);
+}
+
+.mesh-module .download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: var(--module-font-size-sm);
 }
 
 .mesh-module .result-actions {

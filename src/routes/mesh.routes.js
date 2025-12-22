@@ -173,62 +173,96 @@ function createMeshRoutes(dependencies) {
           try {
             // Parse output - look for INFO: prefix
             const jsonMatch = output.match(/INFO:(.*)/);
+            let info;
+
             if (jsonMatch) {
-              const info = JSON.parse(jsonMatch[1]);
-
-              // extract_slice.py returns: sliceCount, width, height, dtype
-              // We construct dimensions array and add placeholder classes
-              // Full class detection will be added in Phase 3
-              const sliceCount = info.sliceCount || 1;
-              const width = info.width || 0;
-              const height = info.height || 0;
-
-              res.json({
-                success: true,
-                info: {
-                  dimensions: [sliceCount, height, width],
-                  sliceCount: sliceCount,
-                  width: width,
-                  height: height,
-                  classes: info.classes || [0, 1, 2], // Placeholder until Phase 3
-                  classCounts: info.class_counts || {},
-                  dtype: info.dtype || 'uint8',
-                  totalVoxels: sliceCount * width * height
-                }
-              });
+              info = JSON.parse(jsonMatch[1]);
             } else {
               // Try parsing entire output as JSON
-              const info = JSON.parse(output.trim());
-              const sliceCount = info.sliceCount || 1;
-              const width = info.width || 0;
-              const height = info.height || 0;
+              info = JSON.parse(output.trim());
+            }
 
-              res.json({
-                success: true,
-                info: {
-                  dimensions: [sliceCount, height, width],
-                  sliceCount: sliceCount,
-                  width: width,
-                  height: height,
-                  classes: info.classes || [0, 1, 2],
-                  classCounts: info.class_counts || {},
-                  dtype: info.dtype || 'uint8',
-                  totalVoxels: sliceCount * width * height
-                }
+            const sliceCount = info.sliceCount || 1;
+            const width = info.width || 0;
+            const height = info.height || 0;
+            const classes = info.classes || [];
+            const dtype = info.dtype || 'unknown';
+
+            // Validate this is a segmentation/annotation file
+            // Must have discrete integer classes (at least background + 1 object)
+            const nonBackgroundClasses = classes.filter(c => c > 0);
+
+            if (classes.length === 0) {
+              return res.status(400).json({
+                success: false,
+                error: 'Invalid file: Could not detect class labels. This file does not appear to be a segmentation or annotation file.',
+                validationError: 'no_classes'
               });
             }
+
+            if (nonBackgroundClasses.length === 0) {
+              return res.status(400).json({
+                success: false,
+                error: 'Invalid file: No object classes found (only background detected). Segmentation files must contain at least one labeled region.',
+                validationError: 'only_background'
+              });
+            }
+
+            // Check if this looks like continuous data rather than discrete labels
+            // Segmentation files typically have few unique values (< 20)
+            if (classes.length > 50) {
+              return res.status(400).json({
+                success: false,
+                error: 'Invalid file: Too many unique values detected (' + classes.length + '). This appears to be raw image data rather than a segmentation file. Segmentation files should contain discrete class labels.',
+                validationError: 'too_many_classes'
+              });
+            }
+
+            // Check dtype - segmentation files are typically uint8 or uint16 integers
+            const validDtypes = ['uint8', 'uint16', 'int8', 'int16', 'int32', 'uint32'];
+            if (!validDtypes.some(d => dtype.toLowerCase().includes(d))) {
+              return res.status(400).json({
+                success: false,
+                error: `Invalid file: Data type "${dtype}" is not typical for segmentation files. Expected integer type (uint8, uint16, etc.). This may be raw image data.`,
+                validationError: 'invalid_dtype'
+              });
+            }
+
+            res.json({
+              success: true,
+              info: {
+                dimensions: [sliceCount, height, width],
+                sliceCount: sliceCount,
+                width: width,
+                height: height,
+                classes: classes,
+                classCounts: info.class_counts || {},
+                dtype: dtype,
+                totalVoxels: sliceCount * width * height
+              }
+            });
+
           } catch (parseError) {
             if (logger) logger.error('Error parsing TIFF info:', parseError, output);
-            res.status(500).json({
+            res.status(400).json({
               success: false,
-              error: 'Failed to parse TIFF info'
+              error: 'Failed to read file. This may not be a valid TIFF image file.',
+              validationError: 'parse_error'
             });
           }
         } else {
           if (logger) logger.error('TIFF info error:', errorOutput);
-          res.status(500).json({
+          // Provide more helpful error message
+          let errorMessage = 'Failed to read file.';
+          if (errorOutput.includes('not a valid TIFF') || errorOutput.includes('TiffFileError')) {
+            errorMessage = 'Invalid file format. Please select a TIFF (.tif/.tiff) image file.';
+          } else if (errorOutput.includes('Permission denied')) {
+            errorMessage = 'Permission denied reading file.';
+          }
+          res.status(400).json({
             success: false,
-            error: errorOutput || 'Failed to get TIFF info'
+            error: errorMessage,
+            validationError: 'read_error'
           });
         }
       });

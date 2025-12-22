@@ -294,6 +294,13 @@
   font-weight: 600;
 }
 
+.step-content h3 {
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-xl);
+  margin: 0 0 10px 0;
+  font-weight: 600;
+}
+
 .step-content > p {
   color: var(--module-text-secondary);
   font-size: var(--module-font-size-md);

@@ -24,15 +24,16 @@ from PIL import Image
 import tifffile
 
 
-def get_tiff_info(input_path):
+def get_tiff_info(input_path, detect_classes=True):
     """
-    Get TIFF metadata without loading full image data.
+    Get TIFF metadata, optionally detecting unique classes.
 
     Args:
         input_path: Path to input TIFF file
+        detect_classes: If True, load data to detect unique class values
 
     Returns:
-        dict with sliceCount, width, height, dtype
+        dict with sliceCount, width, height, dtype, and optionally classes
     """
     with tifffile.TiffFile(input_path) as tif:
         # Get shape from first page or series
@@ -48,7 +49,7 @@ def get_tiff_info(input_path):
         # Handle different dimensionalities
         if len(shape) == 2:
             # 2D image
-            return {
+            info = {
                 "sliceCount": 1,
                 "width": int(shape[1]),
                 "height": int(shape[0]),
@@ -56,7 +57,7 @@ def get_tiff_info(input_path):
             }
         elif len(shape) == 3:
             # 3D stack
-            return {
+            info = {
                 "sliceCount": int(shape[0]),
                 "width": int(shape[2]),
                 "height": int(shape[1]),
@@ -64,6 +65,25 @@ def get_tiff_info(input_path):
             }
         else:
             raise ValueError(f"Unexpected image shape: {shape}")
+
+    # Detect unique classes if requested
+    if detect_classes:
+        try:
+            data = tifffile.imread(input_path)
+            unique_values = np.unique(data)
+            # Convert to Python ints and include all values (including 0 for background)
+            info["classes"] = [int(v) for v in unique_values]
+            # Also provide class counts
+            class_counts = {}
+            for val in unique_values:
+                class_counts[str(int(val))] = int(np.sum(data == val))
+            info["class_counts"] = class_counts
+        except Exception as e:
+            # Fall back to default if class detection fails
+            info["classes"] = [0, 1]
+            info["class_counts"] = {}
+
+    return info
 
 
 def extract_slice(input_path, slice_index, output_path, size=512):

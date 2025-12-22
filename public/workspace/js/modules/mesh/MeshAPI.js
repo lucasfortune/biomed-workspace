@@ -119,6 +119,24 @@ class MeshAPI {
   }
 
   /**
+   * Delete a file from workspace (used for cleanup after failed validation)
+   * @param {string} fileId - File ID to delete
+   * @returns {Promise<{success: boolean}>}
+   */
+  async deleteFile(fileId) {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/workspace/file/${fileId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('[MeshAPI] deleteFile error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Upload annotation file for mesh generation
    * @param {File} file - File to upload
    * @param {function} onProgress - Progress callback (0-100)
