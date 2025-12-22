@@ -970,6 +970,194 @@ function createMLRoutes(dependencies) {
     }
   });
 
+  /**
+   * Convert web path to file system path
+   * Web path: /workspaces/sessionId/results/...
+   * File path: workspaces/sessionId/results/...
+   */
+  function webPathToFilePath(webPath) {
+    if (!webPath) return webPath;
+    // Remove leading slash to convert from web path to file system path
+    return webPath.startsWith('/') ? webPath.substring(1) : webPath;
+  }
+
+  /**
+   * Get TIFF info for inference result
+   * GET /results/:inferenceId/tiff-info
+   */
+  router.get('/results/:inferenceId/tiff-info', requireAuth, (req, res) => {
+    const { spawn } = require('child_process');
+    const inferenceId = req.params.inferenceId;
+    const inference = inferenceSessions.get(inferenceId);
+
+    if (!inference || !inference.result) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inference session not found or incomplete',
+        inferenceId: inferenceId
+      });
+    }
+
+    // Convert web path back to file system path
+    const webOutputPath = inference.result.output_path;
+    const outputPath = webPathToFilePath(webOutputPath);
+
+    if (!fs.existsSync(outputPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Result file not found',
+        path: outputPath,
+        webPath: webOutputPath
+      });
+    }
+
+    // Spawn Python script to get info
+    const pythonProcess = spawn(PYTHON_PATH, [
+      'python/extract_slice.py',
+      outputPath,
+      '--info'
+    ]);
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0 && output.includes('INFO:')) {
+        const jsonStr = output.replace('INFO:', '').trim();
+        try {
+          const info = JSON.parse(jsonStr);
+          res.json({
+            success: true,
+            inferenceId: inferenceId,
+            fileName: path.basename(outputPath),
+            ...info
+          });
+        } catch (parseError) {
+          res.status(500).json({
+            success: false,
+            error: 'Failed to parse TIFF info'
+          });
+        }
+      } else {
+        const errorMsg = output.includes('ERROR:')
+          ? output.replace('ERROR:', '').trim()
+          : errorOutput || 'Unknown error';
+        res.status(500).json({
+          success: false,
+          error: errorMsg
+        });
+      }
+    });
+  });
+
+  /**
+   * Extract and serve a slice from inference result as JPEG
+   * GET /results/:inferenceId/slice/:sliceIndex
+   * Query params:
+   *   - size: 'icon' (128px), 'gallery' (512px), or number (default: 512)
+   */
+  router.get('/results/:inferenceId/slice/:sliceIndex', requireAuth, (req, res) => {
+    const { spawn } = require('child_process');
+    const { inferenceId, sliceIndex } = req.params;
+    const size = req.query.size || 'gallery';
+
+    // Validate slice index
+    const sliceNum = parseInt(sliceIndex, 10);
+    if (isNaN(sliceNum) || sliceNum < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid slice index'
+      });
+    }
+
+    const inference = inferenceSessions.get(inferenceId);
+
+    if (!inference || !inference.result) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inference session not found or incomplete'
+      });
+    }
+
+    // Convert web path back to file system path
+    const outputPath = webPathToFilePath(inference.result.output_path);
+
+    if (!fs.existsSync(outputPath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Result file not found',
+        path: outputPath
+      });
+    }
+
+    // Create cache directory for result slices
+    const resultsDir = path.dirname(outputPath);
+    const slicesDir = path.join(resultsDir, '.slices');
+    if (!fs.existsSync(slicesDir)) {
+      fs.mkdirSync(slicesDir, { recursive: true });
+    }
+
+    // Generate cache filename
+    const cacheFilename = `${inferenceId}_${sliceIndex}_${size}.jpg`;
+    const cachePath = path.join(slicesDir, cacheFilename);
+
+    // Check cache first
+    if (fs.existsSync(cachePath)) {
+      return res.sendFile(path.resolve(cachePath));
+    }
+
+    // Spawn Python script to extract slice
+    const pythonProcess = spawn(PYTHON_PATH, [
+      'python/extract_slice.py',
+      outputPath,
+      sliceIndex.toString(),
+      cachePath,
+      '--size',
+      size
+    ]);
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0 && output.includes('SUCCESS:')) {
+        res.sendFile(path.resolve(cachePath));
+      } else {
+        const errorMsg = output.includes('ERROR:')
+          ? output.replace('ERROR:', '').trim()
+          : errorOutput || 'Unknown error';
+
+        if (errorMsg.includes('out of range')) {
+          res.status(400).json({
+            success: false,
+            error: errorMsg
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            error: errorMsg
+          });
+        }
+      }
+    });
+  });
+
   // ===========================================================================
   // SESSION RESET
   // ===========================================================================

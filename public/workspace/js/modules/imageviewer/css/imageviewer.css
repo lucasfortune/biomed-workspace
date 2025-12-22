@@ -62,56 +62,84 @@
 }
 
 /* ============================================
-   STEP NAVIGATION
+   STEP NAVIGATION (matches segmentation module)
    ============================================ */
 
-.imageviewer-module .step-navigation {
+.imageviewer-module .step-nav {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  gap: 10px;
+  justify-content: space-between;
+  background: #2d2d2d;
+  padding: 0;
+  border-bottom: 1px solid #404040;
+  overflow-x: auto;
 }
 
 .imageviewer-module .step {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: #2d2d2d;
-  border-radius: 8px;
+  padding: 16px 10px;
   cursor: pointer;
   transition: all 0.2s;
-  opacity: 0.6;
+  position: relative;
+  min-width: 120px;
 }
 
-.imageviewer-module .step.active {
-  opacity: 1;
+.imageviewer-module .step::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.imageviewer-module .step.active::after {
+  background: #17A2B8;
+}
+
+.imageviewer-module .step:hover {
+  background: #363636;
+}
+
+.imageviewer-module .step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #404040;
+  color: #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+
+.imageviewer-module .step.active .step-number {
   background: #17A2B8;
   color: white;
+  transform: scale(1.1);
 }
 
-.imageviewer-module .step.completed {
-  opacity: 1;
+.imageviewer-module .step.completed .step-number {
   background: #28a745;
   color: white;
 }
 
-.imageviewer-module .step-number {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
+.imageviewer-module .step span {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
 }
 
-.imageviewer-module .step-connector {
-  width: 40px;
-  height: 2px;
-  background: #404040;
+.imageviewer-module .step.active span {
+  color: #e0e0e0;
+  font-weight: 500;
 }
 
 /* ============================================
@@ -620,11 +648,113 @@
 }
 
 /* ============================================
+   VALIDATION RESULTS
+   ============================================ */
+
+#validationResult {
+  margin: 20px 0;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.validation-loading {
+  color: #888;
+  text-align: center;
+  padding: 16px;
+}
+
+.validation-success {
+  background: rgba(40, 167, 69, 0.15);
+  border: 1px solid #28a745;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.validation-success .validation-header {
+  color: #28a745;
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.validation-success .validation-details {
+  display: grid;
+  gap: 8px;
+}
+
+.validation-success .detail-row {
+  display: flex;
+  gap: 8px;
+}
+
+.validation-success .detail-row span:first-child {
+  color: #888;
+  min-width: 100px;
+}
+
+.validation-success .detail-row span:last-child {
+  color: #e0e0e0;
+}
+
+.validation-error {
+  background: rgba(220, 53, 69, 0.15);
+  border: 1px solid #dc3545;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.validation-error .validation-header {
+  color: #dc3545;
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.validation-error .validation-message {
+  color: #f8d7da;
+}
+
+/* ============================================
+   NAVIGATION BUTTONS
+   ============================================ */
+
+.navigation-buttons {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  margin-top: 20px;
+  border-top: 1px solid #404040;
+}
+
+.navigation-buttons .btn {
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  background: #17A2B8;
+  color: white;
+}
+
+.navigation-buttons .btn:hover:not(:disabled) {
+  background: #138496;
+}
+
+.navigation-buttons .btn:disabled {
+  background: #555;
+  color: #888;
+  cursor: not-allowed;
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
 
 @media (max-width: 768px) {
-  .imageviewer-module .step-navigation {
+  .imageviewer-module .step-nav {
     flex-wrap: wrap;
   }
 

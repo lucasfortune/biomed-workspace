@@ -1,16 +1,29 @@
 /**
  * FileSelector Component
  * Modern dropdown-based file selector with upload capability
+ *
+ * Configuration options:
+ * - showTestData: boolean (default: true) - Show test data optgroup
+ * - showRecentResults: boolean (default: false) - Show recent results optgroup
+ * - acceptAllTiff: boolean (default: false) - Accept any TIFF file regardless of category
  */
 class FileSelector {
-  constructor(type, title, icon, moduleInstance) {
-    this.type = type; // 'raw_images', 'annotations', 'inference_data'
+  constructor(type, title, icon, moduleInstance, config = {}) {
+    this.type = type; // 'raw_images', 'annotations', 'inference_data', 'image_stack'
     this.title = title; // Display title
     this.icon = icon; // Emoji icon
     this.module = moduleInstance;
     this.selectedFile = null;
     this.availableFiles = [];
+    this.recentResults = []; // For recent results optgroup
     this.containerId = `file-selector-${type}`;
+
+    // Configuration options
+    this.config = {
+      showTestData: config.showTestData !== false, // Default: true
+      showRecentResults: config.showRecentResults === true, // Default: false
+      acceptAllTiff: config.acceptAllTiff === true // Default: false
+    };
   }
 
   /**
@@ -76,8 +89,28 @@ class FileSelector {
       const data = await response.json();
 
       if (data.success) {
-        // Filter files by type
-        this.availableFiles = this.filterFilesByType(data.files);
+        // Categories that are considered "results" (from processing modules)
+        const resultCategories = ['segmentations', 'denoised', 'processed'];
+
+        // If showRecentResults is enabled, separate results from regular files
+        if (this.config.showRecentResults) {
+          const allFiles = data.files || [];
+
+          // Filter TIFF files into results and regular files
+          this.recentResults = allFiles.filter(file => {
+            const isTiff = file.name?.toLowerCase().endsWith('.tif') || file.name?.toLowerCase().endsWith('.tiff');
+            return isTiff && resultCategories.includes(file.category);
+          });
+
+          // Regular files exclude result categories
+          this.availableFiles = this.filterFilesByType(
+            allFiles.filter(file => !resultCategories.includes(file.category))
+          );
+        } else {
+          // Standard behavior - filter files by type
+          this.availableFiles = this.filterFilesByType(data.files);
+        }
+
         this.populateDropdown();
       }
     } catch (error) {
@@ -99,12 +132,20 @@ class FileSelector {
     return files.filter(file => {
       const isTiff = file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff');
 
+      // If acceptAllTiff is enabled, accept any TIFF file
+      if (this.config.acceptAllTiff) {
+        return isTiff;
+      }
+
       if (this.type === 'raw_images') {
         return isTiff && file.category === 'raw_images';
       } else if (this.type === 'annotations') {
         return isTiff && file.category === 'annotations';
       } else if (this.type === 'inference_data') {
         return isTiff && file.category === 'inference_data';
+      } else if (this.type === 'image_stack') {
+        // For image_stack type, accept any TIFF file
+        return isTiff;
       }
 
       return false;
@@ -118,15 +159,23 @@ class FileSelector {
     const dropdown = document.getElementById(`${this.type}Select`);
 
     if (!dropdown) {
-      console.error(`[FileSelector] Dropdown not found for ${this.type}`);
+      // Dropdown not found - this is expected when the module is not active
+      // (e.g., user navigated away but subscription is still listening)
       return;
     }
 
     // Clear existing options (except the first placeholder)
     dropdown.innerHTML = '<option value="">-- Select a file --</option>';
 
-    // Add test data option
-    this.addTestDataOption(dropdown);
+    // Add test data option (if configured)
+    if (this.config.showTestData) {
+      this.addTestDataOption(dropdown);
+    }
+
+    // Add recent results optgroup (if configured)
+    if (this.config.showRecentResults) {
+      this.addRecentResultsOption(dropdown);
+    }
 
     // Add workspace files
     if (this.availableFiles.length > 0) {
@@ -144,8 +193,8 @@ class FileSelector {
       dropdown.appendChild(workspaceGroup);
     }
 
-    // Add help text if no files
-    if (this.availableFiles.length === 0) {
+    // Add help text if no files and no test data
+    if (this.availableFiles.length === 0 && !this.config.showTestData) {
       const helpOption = document.createElement('option');
       helpOption.value = '';
       helpOption.textContent = '📤 No files available - upload one above';
@@ -182,6 +231,48 @@ class FileSelector {
     }
 
     dropdown.appendChild(testDataGroup);
+  }
+
+  /**
+   * Add recent results optgroup to dropdown
+   * Shows results from segmentation, denoising, etc.
+   */
+  addRecentResultsOption(dropdown) {
+    const resultsGroup = document.createElement('optgroup');
+    resultsGroup.label = 'Recent Results';
+
+    if (this.recentResults.length > 0) {
+      this.recentResults.forEach(result => {
+        const option = document.createElement('option');
+        option.value = result.path || result.id;
+
+        // Format display name based on category
+        let displayName = result.name || `Result (${result.id})`;
+        const categoryLabels = {
+          'segmentations': 'Segmentation',
+          'denoised': 'Denoised',
+          'processed': 'Processed'
+        };
+        const categoryLabel = categoryLabels[result.category] || 'Result';
+
+        // Add size info if available
+        const sizeInfo = result.size ? ` (${this.formatFileSize(result.size)})` : '';
+        option.textContent = `${categoryLabel}: ${displayName}${sizeInfo}`;
+
+        option.dataset.fileInfo = JSON.stringify(result);
+        option.dataset.isResult = 'true';
+        resultsGroup.appendChild(option);
+      });
+    } else {
+      // Placeholder when no results available
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'No recent results';
+      placeholder.disabled = true;
+      resultsGroup.appendChild(placeholder);
+    }
+
+    dropdown.appendChild(resultsGroup);
   }
 
   /**
