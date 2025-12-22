@@ -37,7 +37,7 @@
 .mesh-module .step-contents {
   flex: 1;
   overflow-y: auto;
-  padding: 0 var(--module-spacing-md) var(--module-spacing-md);
+  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
 }
 
 .mesh-module .step-content {

@@ -21,8 +21,8 @@ body {
   background-image: none !important;
 }
 
-/* Standardize loading overlay with workspace style */
-.loading-overlay {
+/* Standardize loading overlay with workspace dark theme */
+.module-loading-overlay {
   z-index: 2000 !important;
   background: rgba(30, 30, 30, 0.9) !important;
 }

@@ -483,9 +483,9 @@ class BaseModule {
       return;
     }
 
-    // Create new overlay
+    // Create new overlay (uses module-loading-overlay to avoid conflict with workspace.css)
     overlay = document.createElement('div');
-    overlay.className = 'module-loading-overlay loading-overlay';
+    overlay.className = 'module-loading-overlay';
     overlay.innerHTML = `
       <div class="loading-content">
         <div class="spinner"></div>

@@ -271,6 +271,13 @@
   padding: var(--module-spacing-xl);
 }
 
+/* Step contents container - wrapper for all step-content divs */
+.step-contents {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
+}
+
 .step-content {
   display: none;
   max-width: 900px;
@@ -793,7 +800,9 @@
   to { transform: rotate(360deg); }
 }
 
-.loading-overlay {
+/* Module-specific loading overlay - uses .module-loading-overlay to avoid
+   conflicts with workspace.css .loading-overlay (which uses dark theme) */
+.module-loading-overlay {
   position: fixed;
   top: 0;
   left: 0;
