@@ -1,8 +1,9 @@
 # Surface Mesh Generation Module - Implementation Plan
 
 **Created:** 2025-12-22
-**Status:** Ready for Implementation
+**Status:** Complete
 **Estimated Phases:** 5
+**Completed:** 2025-12-22
 
 ---
 
@@ -18,7 +19,7 @@ Create a Surface Mesh Generation Module that converts segmented TIFF image stack
 
 ---
 
-## Phase 1: Module Foundation
+## Phase 1: Module Foundation (COMPLETE)
 
 ### 1.1 Create Module Directory Structure
 
@@ -51,6 +52,7 @@ Methods:
 - `generateMesh(sourceFile, options)` - Start mesh generation
 - `getStatus(meshId)` - Check generation status
 - `getDownloadUrl(meshId, format)` - Get download URL
+- `deleteFile(fileId)` - Delete invalid uploaded files
 
 ### 1.4 Create mesh.css
 
@@ -79,7 +81,7 @@ Methods:
 
 ---
 
-## Phase 2: Backend API Endpoints
+## Phase 2: Backend API Endpoints (COMPLETE)
 
 ### 2.1 Create Mesh Routes
 
@@ -90,7 +92,7 @@ Methods:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/mesh/sources` | List segmentation results + annotation files |
-| GET | `/api/mesh/info/:fileId` | Get TIFF metadata (dimensions, classes) |
+| GET | `/api/mesh/info/:fileId` | Get TIFF metadata (dimensions, classes) + validation |
 | GET | `/api/mesh/preview/:fileId/:sliceIndex` | Get slice preview image |
 | POST | `/api/mesh/generate` | Start mesh generation |
 | GET | `/api/mesh/status/:meshId` | Check generation status |
@@ -100,7 +102,7 @@ Methods:
 
 **File:** `src/app.js`
 
-- Import and register mesh routes
+- Import and register mesh routes at `/api/mesh`
 - Add mesh session tracking
 
 ### 2.3 Add Session Tracking
@@ -108,56 +110,67 @@ Methods:
 **File:** `src/services/SessionTracker.js`
 
 - Add `meshSessions` Map for tracking mesh generation jobs
+- CRUD methods: `createMeshSession`, `getMeshSession`, `updateMeshSession`, `deleteMeshSession`
+- `getMeshSessionsBySessionId` for user-specific queries
+- Updated `cleanupSessionById` and `getStats` to include mesh
 
 ### 2.4 Socket.IO Events
+
+**File:** `src/sockets/mesh.socket.js`
 
 **Room:** `mesh-{meshId}`
 
 **Events:**
+- `join-mesh-generation` - Join room for progress updates
 - `mesh-progress` - Real-time progress updates
 - `mesh-complete` - Generation finished
 - `mesh-error` - Generation failed
 
 ---
 
-## Phase 3: Python Mesh Generation Script
+## Phase 3: Python Mesh Generation Script (COMPLETE)
 
 ### 3.1 Create generate_mesh.py
 
 **File:** `python/generate_mesh.py`
 
-**Algorithm (adapted from meshCreation.js):**
-1. Load segmented TIFF stack
-2. For each class (excluding background):
-   - Create dense 3D volume
-   - Extract surface faces using 6-connectivity
-   - For each voxel: check neighbors, add face if different
-3. Center and scale geometry (target max dimension = 8)
+**Algorithm:**
+1. Load segmented TIFF stack using tifffile
+2. Detect unique classes (excluding background)
+3. For each class:
+   - Create binary mask
+   - Apply marching cubes algorithm (scikit-image)
+   - Extract surface mesh with normals
 4. Export to requested formats
+5. Generate metadata
 
 **Progress Protocol:**
 ```
-MESH_PROGRESS:{"class":1,"total_classes":3,"vertices_processed":1000,"progress_percent":33.3}
-MESH_RESULT:{"success":true,"output_dir":"/results/meshes/abc123","formats":["json","obj","stl"]}
+MESH_PROGRESS:{"class":1,"total_classes":3,"progress_percent":33,"status":"processing"}
+MESH_RESULT:{"success":true,"output_dir":"/results/meshes/abc123","formats":["json","obj","stl"],"statistics":{...}}
 ```
 
 ### 3.2 Output Formats
 
-**Three.js JSON:**
+**Three.js JSON (`mesh_data.json`):**
 ```json
 {
-  "format": "threejs_mesh",
-  "version": "1.0",
-  "shape": [depth, height, width],
-  "classes": {
-    "1": { "vertices": [...], "normals": [...], "color": [0.2, 0.9, 0.2] }
-  },
-  "metadata": { "totalVertices": 125432, "totalFaces": 41810 }
+  "metadata": { "version": "1.0", "type": "BufferGeometry", "mesh_id": "..." },
+  "meshes": {
+    "1": {
+      "attributes": {
+        "position": { "itemSize": 3, "array": [...] },
+        "normal": { "itemSize": 3, "array": [...] }
+      },
+      "index": { "array": [...] },
+      "statistics": { "vertices": 1234, "faces": 5678 }
+    }
+  }
 }
 ```
 
-**OBJ:** Standard Wavefront with materials file
-**STL:** Binary STL for 3D printing
+**OBJ:** Standard Wavefront with materials file (`.mtl`)
+**STL:** Binary STL format
 
 ### 3.3 Output Directory
 
@@ -170,9 +183,20 @@ results/meshes/{meshId}/
 └── metadata.json        # Generation metadata
 ```
 
+### 3.4 Dependencies Added
+
+**File:** `requirements.txt`
+- Added `scikit-image>=0.21.0` for marching cubes algorithm
+
+### 3.5 Enhanced Class Detection
+
+**File:** `python/extract_slice.py`
+- Updated `get_tiff_info()` to detect unique classes in TIFF data
+- Returns `classes` array and `class_counts` dictionary
+
 ---
 
-## Phase 4: Frontend UI Implementation
+## Phase 4: Frontend UI Implementation (COMPLETE)
 
 ### 4.1 Step 1: Data Selection
 
@@ -181,36 +205,45 @@ results/meshes/{meshId}/
   - "Recent Results" - Segmentation outputs
   - "Workspace Files" - Annotation TIFFs only
 - File upload button (saves to `/uploads/annotations`)
-- On selection: fetch and display data info
-- ValidationDisplay for feedback
+- On selection: fetch and display data info with validation
+- ValidationDisplay for feedback (minimal - just header on success)
 
-**Data Info Card:**
-- Dimensions (width x height x depth)
-- Classes detected (count and labels)
-- Total voxels / file size
-- Preview thumbnail of middle slice
+**File Validation:**
+- Validates uploaded files are segmentation/annotation format
+- Checks for discrete class labels (not continuous data)
+- Validates integer dtype (uint8, uint16, etc.)
+- Deletes invalid files automatically with user notification
 
 ### 4.2 Step 2: Mesh Generation
 
 **Before Generation:**
-- Summary of selected data
+- Summary card with preview image and detailed info
 - Output format checkboxes (JSON, OBJ, STL)
-- Class selection (all or specific)
+- Class selection dropdown (all or specific)
 - "Generate Mesh" button
 
 **During Generation:**
+- Animated spinner
+- Elapsed time counter (MM:SS format)
 - Progress bar with percentage
 - Current class being processed
-- Vertices processed counter
 - Status text
 
 **After Completion:**
 - Success message with statistics
-- Download buttons for each format
+- Generation time displayed
+- Download buttons with format icons (📊 JSON, 📐 OBJ, 🖨️ STL)
 - "Open in 3D Visualization" button (placeholder)
 - "Generate Another" button
 
-### 4.3 Module-to-Module Navigation
+### 4.3 Resume Capability
+
+- Module checks for in-progress generation on load
+- Reconnects to Socket.IO room if generation is running
+- Shows results if generation completed while away
+- Shows error if generation failed
+
+### 4.4 Module-to-Module Navigation
 
 Store result in StateManager:
 ```javascript
@@ -224,15 +257,15 @@ window.workspace.loadModule('visualization'); // placeholder
 
 ---
 
-## Phase 5: Integration & Documentation
+## Phase 5: Integration & Documentation (COMPLETE)
 
 ### 5.1 FileSelector Enhancement
 
-**File:** `public/workspace/js/core/components/FileSelector.js`
-
-May need to add:
+No changes needed - existing FileSelector handles all requirements with:
 - `showRecentResults` option
-- `filterCategories` option to filter by file category
+- `filterCategories` support
+- `onUpload` callback
+- `refresh()` method for reloading
 
 ### 5.2 State Management
 
@@ -240,27 +273,30 @@ Module state path: `modules.mesh.*`
 - `currentStep`
 - `selectedFile`
 - `dataInfo`
+- `dataValidated`
 - `generationComplete`
 - `currentMeshId`
 - `result`
 
 ### 5.3 Testing Checklist
 
-- [ ] File dropdown shows segmentation results
-- [ ] File dropdown shows annotation files only (not raw images)
-- [ ] Upload new annotation file works
-- [ ] Data info displays correctly (classes, dimensions)
-- [ ] Preview thumbnail loads
-- [ ] Generation starts and Socket.IO progress works
-- [ ] All download formats work
-- [ ] Error handling for invalid files
-- [ ] State persistence (resume on return)
-- [ ] Navigation to visualization (placeholder)
+- [x] File dropdown shows segmentation results
+- [x] File dropdown shows annotation files only (not raw images)
+- [x] Upload new annotation file works
+- [x] Invalid file upload shows error and deletes file
+- [x] Data info displays correctly (classes, dimensions)
+- [x] Preview thumbnail loads in Step 2
+- [x] Generation starts and Socket.IO progress works
+- [x] Elapsed time counter works
+- [x] All download formats work
+- [x] Error handling for invalid files
+- [x] State persistence (resume on return)
+- [x] Navigation to visualization (placeholder notification)
 
 ### 5.4 Documentation
 
-- Update `docs/guides/MODULE_CREATION.md` with mesh module example
-- Create `public/workspace/js/modules/mesh/README.md`
+- Updated this plan with completion status
+- Session log created: `docs/sessions/2025-12-22_mesh_module_implementation.md`
 
 ---
 
@@ -268,41 +304,43 @@ Module state path: `modules.mesh.*`
 
 | File | Purpose |
 |------|---------|
-| `public/workspace/js/core/BaseModule.js` | Base class to extend |
-| `public/workspace/js/modules/segmentation/visualization/meshCreation.js` | Reference mesh algorithm |
-| `public/workspace/js/core/components/FileSelector.js` | File selection component |
-| `src/routes/ml.routes.js` | Pattern for backend routes |
-| `src/helpers/pythonRunner.js` | Python process spawning |
+| `public/workspace/js/modules/mesh/MeshModule.js` | Main module class |
+| `public/workspace/js/modules/mesh/MeshAPI.js` | API client |
+| `public/workspace/js/modules/mesh/css/mesh.css` | Module styling |
+| `python/generate_mesh.py` | Python mesh generation script |
+| `src/routes/mesh.routes.js` | Backend API routes |
+| `src/sockets/mesh.socket.js` | Socket.IO handlers |
+| `src/services/SessionTracker.js` | Session tracking (includes mesh) |
 
 ---
 
 ## Task Summary by Phase
 
-### Phase 1: Foundation (5 tasks)
-- [ ] Create module directory structure
-- [ ] Create MeshModule.js skeleton
-- [ ] Create MeshAPI.js
-- [ ] Create mesh.css with base imports
-- [ ] Register module in registry.js
+### Phase 1: Foundation (5 tasks) - COMPLETE
+- [x] Create module directory structure
+- [x] Create MeshModule.js skeleton
+- [x] Create MeshAPI.js
+- [x] Create mesh.css with base imports
+- [x] Register module in registry.js
 
-### Phase 2: Backend (4 tasks)
-- [ ] Create mesh.routes.js with all endpoints
-- [ ] Register routes in app.js
-- [ ] Add mesh session tracking
-- [ ] Add Socket.IO mesh events
+### Phase 2: Backend (4 tasks) - COMPLETE
+- [x] Create mesh.routes.js with all endpoints
+- [x] Register routes in app.js
+- [x] Add mesh session tracking
+- [x] Add Socket.IO mesh events
 
-### Phase 3: Python Script (3 tasks)
-- [ ] Create generate_mesh.py with surface extraction
-- [ ] Implement Three.js JSON export
-- [ ] Implement OBJ and STL export
+### Phase 3: Python Script (3 tasks) - COMPLETE
+- [x] Create generate_mesh.py with marching cubes algorithm
+- [x] Implement Three.js JSON export
+- [x] Implement OBJ and STL export
 
-### Phase 4: Frontend UI (4 tasks)
-- [ ] Implement Step 1 (file selection + data info)
-- [ ] Implement Step 2 (generation UI + progress)
-- [ ] Add Socket.IO progress handling
-- [ ] Implement completion UI with downloads
+### Phase 4: Frontend UI (4 tasks) - COMPLETE
+- [x] Implement Step 1 (file selection + validation)
+- [x] Implement Step 2 (generation UI + progress + elapsed time)
+- [x] Add Socket.IO progress handling with resume capability
+- [x] Implement completion UI with downloads
 
-### Phase 5: Integration (3 tasks)
-- [ ] Enhance FileSelector if needed
-- [ ] Test full workflow
-- [ ] Create documentation
+### Phase 5: Integration (3 tasks) - COMPLETE
+- [x] File validation with auto-cleanup of invalid uploads
+- [x] Test full workflow
+- [x] Create documentation
