@@ -42,6 +42,7 @@ class StepNavigator {
 
   /**
    * Render the step navigator HTML
+   * Progress bar is above step indicators, each step has bottom border indicator
    * @returns {string} HTML string
    */
   render() {
@@ -62,16 +63,17 @@ class StepNavigator {
       `;
     }).join('');
 
-    const progress = this.steps.length > 0
+    // Progress fills based on current step
+    const progressPercent = this.steps.length > 0
       ? (this.currentStep / this.steps.length) * 100
       : 0;
 
     return `
-      <div class="step-nav" data-component="step-navigator">
-        ${stepsHtml}
+      <div class="progress-bar" data-component="step-navigator">
+        <div class="progress-fill" style="width: ${progressPercent}%"></div>
       </div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: ${progress}%"></div>
+      <div class="step-nav">
+        ${stepsHtml}
       </div>
     `;
   }
@@ -140,10 +142,10 @@ class StepNavigator {
     // Update progress bar
     const progressFill = this.container.querySelector('.progress-fill');
     if (progressFill) {
-      const progress = this.steps.length > 0
+      const progressPercent = this.steps.length > 0
         ? (this.currentStep / this.steps.length) * 100
         : 0;
-      progressFill.style.width = `${progress}%`;
+      progressFill.style.width = `${progressPercent}%`;
     }
   }
 
@@ -174,7 +176,7 @@ class StepNavigator {
   }
 
   /**
-   * Get the current progress percentage
+   * Get the current progress percentage (0-100)
    * @returns {number}
    */
   get progressPercent() {

@@ -997,7 +997,8 @@ body {
 }
 
 /* Generic module header - only applies to modules without their own styling */
-#module-view:not(:has(.segmentation-module)) .module-header {
+/* Exclude modules that have their own CSS: segmentation-module, imageviewer-module, etc. */
+#module-view:not(:has(.segmentation-module)):not(:has(.imageviewer-module)) .module-header {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1006,7 +1007,7 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
-#module-view:not(:has(.segmentation-module)) .btn-back {
+#module-view:not(:has(.segmentation-module)):not(:has(.imageviewer-module)) .btn-back {
   padding: 8px 16px;
   background-color: var(--sidebar-bg);
   color: var(--text-primary);
@@ -1017,13 +1018,13 @@ body {
   transition: all 0.2s;
 }
 
-#module-view:not(:has(.segmentation-module)) .btn-back:hover {
+#module-view:not(:has(.segmentation-module)):not(:has(.imageviewer-module)) .btn-back:hover {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
   color: var(--text-on-primary);
 }
 
-#module-view:not(:has(.segmentation-module)) .module-header h2 {
+#module-view:not(:has(.segmentation-module)):not(:has(.imageviewer-module)) .module-header h2 {
   font-size: 24px;
   color: var(--text-on-primary);
 }

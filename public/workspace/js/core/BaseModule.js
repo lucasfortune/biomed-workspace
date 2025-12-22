@@ -516,20 +516,18 @@ class BaseModule {
 
   /**
    * Render the common module header HTML
-   * @param {string} title - Module title
+   * @param {string} [title] - Module title (defaults to config.name)
    * @param {string} [subtitle] - Optional subtitle
    * @returns {string} HTML string
    */
-  renderHeader(title, subtitle = '') {
+  renderHeader(title = null, subtitle = '') {
+    const displayTitle = title || this.config.name;
     return `
       <div class="module-header">
-        <button class="btn-back" onclick="workspace.returnToHub()">
+        <button class="btn-back" id="backToHub">
           <span class="back-arrow">&larr;</span> Back to Hub
         </button>
-        <div class="header-content">
-          <h1>${title}</h1>
-          ${subtitle ? `<p>${subtitle}</p>` : ''}
-        </div>
+        <h2>${displayTitle}</h2>
         <div class="header-spacer"></div>
       </div>
     `;
@@ -537,26 +535,37 @@ class BaseModule {
 
   /**
    * Render the step navigation bar HTML
+   * Progress bar is positioned above the step indicators,
+   * and each step has a bottom border indicator.
    * @returns {string} HTML string
    */
   renderStepNav() {
     const stepsHtml = this.config.steps.map((step, index) => {
       const stepNumber = index + 1;
       const isActive = stepNumber === this.currentStep;
+      const isCompleted = stepNumber < this.currentStep;
+
+      let classes = 'step';
+      if (isActive) classes += ' active';
+      if (isCompleted) classes += ' completed';
+
       return `
-        <div class="step ${isActive ? 'active' : ''}" data-step="${stepNumber}">
+        <div class="${classes}" data-step="${stepNumber}">
           <div class="step-number">${stepNumber}</div>
           <span>${step.name}</span>
         </div>
       `;
     }).join('');
 
+    // Progress fills based on current step
+    const progressPercent = (this.currentStep / this.totalSteps) * 100;
+
     return `
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: ${progressPercent}%"></div>
+      </div>
       <div class="step-nav">
         ${stepsHtml}
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: ${(this.currentStep / this.totalSteps) * 100}%"></div>
       </div>
     `;
   }

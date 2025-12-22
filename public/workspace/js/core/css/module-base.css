@@ -110,28 +110,24 @@
   background: var(--module-gradient);
   color: white;
   padding: var(--module-spacing-md) var(--module-spacing-xl);
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.module-header .header-content h1 {
+.module-header h1,
+.module-header h2 {
   margin: 0;
   font-size: var(--module-font-size-xl);
   font-weight: 600;
+  flex: 1;
+  text-align: center;
 }
 
-.module-header .header-content h2 {
-  margin: 0;
-  font-size: var(--module-font-size-xl);
-  font-weight: 600;
-}
-
-.module-header .header-content p {
-  margin: 5px 0 0 0;
-  opacity: 0.9;
-  font-size: var(--module-font-size-sm);
+.module-header .header-spacer {
+  width: 120px; /* Match button width for centering */
 }
 
 .module-header .btn-back {
@@ -154,11 +150,15 @@
    PROGRESS BAR
    ============================================ */
 
+/* Progress bar sits directly below header with no gap */
+.module-header + .progress-bar,
 .progress-bar {
   height: 4px;
   background: var(--module-border);
   position: relative;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
 }
 
 .progress-fill {
@@ -176,6 +176,7 @@
   justify-content: space-between;
   background: var(--module-card-bg);
   padding: 0;
+  margin: 0;
   border-bottom: 1px solid var(--module-border);
   overflow-x: auto;
 }
@@ -192,6 +193,7 @@
   min-width: 120px;
 }
 
+/* Bottom border indicator - only shows on current/active step */
 .step::after {
   content: '';
   position: absolute;
@@ -246,6 +248,10 @@
 .step.active span {
   color: var(--module-text-primary);
   font-weight: 500;
+}
+
+.step.completed span {
+  color: var(--module-success-text);
 }
 
 /* ============================================

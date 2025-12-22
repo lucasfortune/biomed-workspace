@@ -20,6 +20,15 @@
   background: var(--module-bg);
   color: var(--module-text-primary);
   font-family: var(--module-font-family);
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure no gap between header and progress bar */
+.imageviewer-module > .module-header,
+.imageviewer-module > .progress-bar,
+.imageviewer-module > .step-nav {
+  flex-shrink: 0;
 }
 
 /* ============================================
