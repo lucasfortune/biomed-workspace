@@ -4,15 +4,42 @@
  * A 2-step module for viewing TIFF image stacks:
  * - Step 1: File Selection (workspace files or segmentation results)
  * - Step 2: Image Viewing (Gallery mode or Icon grid mode)
+ *
+ * Extends BaseModule for consistent UI and lifecycle management.
  */
 
-class ImageViewerModule {
-  constructor(stateManager) {
-    this.state = stateManager;
-    this.container = null;
+import BaseModule from '/workspace/js/core/BaseModule.js';
+import {
+  StepNavigator,
+  NavigationButtons,
+  ValidationDisplay,
+  FileSelector
+} from '/workspace/js/core/components/index.js';
 
-    // Module state
-    this.currentStep = 1;
+class ImageViewerModule extends BaseModule {
+  constructor(stateManager) {
+    // Define module configuration
+    const config = {
+      id: 'imageviewer',
+      name: 'Image Viewer',
+      cssPath: '/workspace/js/modules/imageviewer/css/imageviewer.css',
+      steps: [
+        {
+          id: 'selection',
+          name: 'Image Selection',
+          canNavigate: true
+        },
+        {
+          id: 'viewer',
+          name: 'View Image',
+          canNavigate: (module) => module.selectedFile !== null
+        }
+      ]
+    };
+
+    super(stateManager, config);
+
+    // Module-specific state
     this.selectedFile = null;
     this.tiffInfo = null;
     this.currentSlice = 0;
@@ -24,122 +51,88 @@ class ImageViewerModule {
     this.isDragging = false;
     this.dragStart = { x: 0, y: 0 };
 
-    // View components
-    this.galleryView = null;
-    this.iconGridView = null;
-
-    // FileSelector component
+    // Components
+    this.stepNavigator = null;
+    this.navigationButtons = null;
+    this.validationDisplay = null;
     this.imageSelector = null;
 
     // Cache for loaded slices
     this.sliceCache = new Map();
 
-    // Dependencies loaded flag
-    this.dependenciesLoaded = false;
-
     // Bind methods
-    this.activate = this.activate.bind(this);
-    this.deactivate = this.deactivate.bind(this);
+    this.onFileSelect = this.onFileSelect.bind(this);
   }
 
   /**
-   * Activate the module
+   * Initialize module after render
    */
-  async activate() {
-    console.log('[ImageViewerModule] Activating...');
-
+  async initialize() {
     // Make module instance globally accessible
     window.imageViewerModule = this;
 
-    try {
-      // Get container
-      this.container = document.getElementById('module-view');
+    // Initialize components
+    this.initializeComponents();
 
-      if (!this.container) {
-        throw new Error('Module container not found');
-      }
+    // Check for incoming data from segmentation module
+    const hasIncoming = this.checkForIncomingData();
 
-      // Show loading
-      this.state.update('ui.loading', true);
+    // Setup event listeners
+    this.setupEventListeners();
 
-      // Load CSS
-      await this.loadCSS();
-
-      // Load required scripts (FileSelector component)
-      await this.loadDependencies();
-
-      // Check for incoming data from segmentation module
-      const hasIncoming = this.checkForIncomingData();
-
-      // Render UI
-      this.render();
-
-      // Initialize FileSelector
-      await this.initializeFileSelector();
-
-      // Setup event listeners
-      this.setupEventListeners();
-
-      // Hide loading
-      this.state.update('ui.loading', false);
-
-      // If we have incoming data, automatically proceed to step 2
-      if (hasIncoming) {
-        await this.handleIncomingData();
-      }
-
-      console.log('[ImageViewerModule] Activation complete');
-
-    } catch (error) {
-      console.error('[ImageViewerModule] Activation error:', error);
-      this.state.notify('error', `Failed to activate image viewer: ${error.message}`);
-      this.state.update('ui.loading', false);
+    // If we have incoming data, automatically proceed to step 2
+    if (hasIncoming) {
+      await this.handleIncomingData();
     }
   }
 
   /**
-   * Load required script dependencies
+   * Initialize UI components
    */
-  async loadDependencies() {
-    // Load FileSelector component if not already loaded
-    const fileSelectorPath = '/workspace/js/modules/segmentation/components/FileSelector.js';
-    if (!document.querySelector(`script[src="${fileSelectorPath}"]`) && typeof FileSelector === 'undefined') {
-      await this.loadScript(fileSelectorPath);
-    }
-  }
-
-  /**
-   * Load a script dynamically
-   */
-  loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-      document.head.appendChild(script);
+  initializeComponents() {
+    // Initialize StepNavigator
+    this.stepNavigator = new StepNavigator({
+      steps: this.config.steps,
+      currentStep: this.currentStep,
+      onStepClick: (stepNum) => this.goToStep(stepNum),
+      canNavigate: (stepNum) => this.canNavigateToStep(stepNum)
     });
-  }
+    this.stepNavigator.init(this.container);
 
-  /**
-   * Load module CSS
-   */
-  async loadCSS() {
-    const cssPath = '/workspace/js/modules/imageviewer/css/imageviewer.css';
+    // Initialize ValidationDisplay
+    this.validationDisplay = new ValidationDisplay('validationResult');
 
-    // Check if already loaded
-    if (document.querySelector(`link[href="${cssPath}"]`)) {
-      return;
-    }
-
-    return new Promise((resolve, reject) => {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = cssPath;
-      link.onload = resolve;
-      link.onerror = () => reject(new Error('Failed to load CSS'));
-      document.head.appendChild(link);
+    // Initialize NavigationButtons for step 1
+    this.navigationButtons = new NavigationButtons({
+      onPrevious: null,
+      onNext: () => this.proceedToViewer(),
+      previousLabel: '',
+      nextLabel: 'Next: View Image',
+      showPrevious: false,
+      nextDisabled: true,
+      nextId: 'step1Next'
     });
+    this.navigationButtons.init(this.container);
+
+    // Initialize FileSelector
+    this.imageSelector = new FileSelector({
+      id: 'image-selector',
+      title: 'Image Stack',
+      icon: '🖼️',
+      fileType: 'image_stack',
+      showTestData: false,
+      showRecentResults: true,
+      acceptAllTiff: true,
+      onSelect: this.onFileSelect,
+      stateManager: this.state
+    });
+
+    // Render FileSelector into container
+    const selectorContainer = document.getElementById('imageSelectorContainer');
+    if (selectorContainer) {
+      selectorContainer.innerHTML = this.imageSelector.render();
+      this.imageSelector.init();
+    }
   }
 
   /**
@@ -183,31 +176,10 @@ class ImageViewerModule {
   render() {
     this.container.innerHTML = `
       <div class="imageviewer-module">
-        <!-- Header -->
-        <div class="module-header">
-          <button class="btn-back" id="backToHub">
-            <span class="back-arrow">←</span> Back to Hub
-          </button>
-          <h2>Image Viewer</h2>
-          <div class="header-spacer"></div>
-        </div>
+        ${this.renderHeader()}
 
-        <!-- Step Navigation -->
-        <div class="step-nav">
-          <div class="step active" data-step="1">
-            <div class="step-number">1</div>
-            <span>Image Selection</span>
-          </div>
-          <div class="step" data-step="2">
-            <div class="step-number">2</div>
-            <span>View Image</span>
-          </div>
-        </div>
-
-        <!-- Progress Bar -->
-        <div class="progress-container">
-          <div class="progress-bar" id="overallProgress" style="width: 50%"></div>
-        </div>
+        <!-- Step Navigation (rendered by StepNavigator) -->
+        ${this.renderStepNav()}
 
         <!-- Step Content -->
         <div class="step-contents">
@@ -236,132 +208,15 @@ class ImageViewerModule {
       <!-- FileSelector will be inserted here -->
       <div id="imageSelectorContainer"></div>
 
-      <div id="validationResult"></div>
+      <!-- Validation Result (rendered by ValidationDisplay) -->
+      ${ValidationDisplay.renderContainer('validationResult')}
 
+      <!-- Navigation Buttons -->
       <div class="navigation-buttons">
         <div></div>
         <button class="btn" id="step1Next" disabled>Next: View Image</button>
       </div>
     `;
-  }
-
-  /**
-   * Initialize FileSelector component
-   */
-  async initializeFileSelector() {
-    console.log('[ImageViewerModule] Initializing FileSelector...');
-
-    // Create FileSelector instance with configuration:
-    // - No test data options
-    // - Show recent results optgroup (from segmentation, denoising, etc.)
-    // - Accept any TIFF file regardless of category
-    this.imageSelector = new FileSelector('image_stack', 'Image Stack', '🖼️', this, {
-      showTestData: false,
-      showRecentResults: true,
-      acceptAllTiff: true
-    });
-
-    // Render into container
-    const container = document.getElementById('imageSelectorContainer');
-    if (container) {
-      container.innerHTML = this.imageSelector.render();
-      await this.imageSelector.init();
-    }
-
-    console.log('[ImageViewerModule] FileSelector initialized');
-  }
-
-  /**
-   * FileSelector callback: called when user selects a file from dropdown
-   */
-  async onFileSelected(type, fileInfo) {
-    console.log(`[ImageViewerModule] File selected:`, fileInfo);
-    this.selectedFile = fileInfo;
-
-    // Validate the file
-    await this.validateTiffFile(fileInfo.id);
-  }
-
-  /**
-   * FileSelector callback: called when user uploads a new file
-   */
-  async onFileUploaded(type, file, uploadedFileInfo) {
-    console.log(`[ImageViewerModule] File uploaded:`, uploadedFileInfo);
-    this.selectedFile = uploadedFileInfo;
-
-    // Validate the file
-    await this.validateTiffFile(uploadedFileInfo.id);
-
-    return true; // Indicates validation was triggered
-  }
-
-  /**
-   * Validate TIFF file and display results
-   */
-  async validateTiffFile(fileId) {
-    const validationResult = document.getElementById('validationResult');
-    if (!validationResult) return;
-
-    validationResult.innerHTML = '<div class="validation-loading">Validating file...</div>';
-
-    try {
-      const response = await fetch(`/api/workspace/tiff-info/${fileId}`);
-      const data = await response.json();
-
-      if (data.success) {
-        this.tiffInfo = {
-          sliceCount: data.sliceCount,
-          width: data.width,
-          height: data.height,
-          dtype: data.dtype
-        };
-
-        this.displayValidationResults({
-          success: true,
-          sliceCount: data.sliceCount,
-          width: data.width,
-          height: data.height,
-          dtype: data.dtype
-        });
-
-        // Enable next button
-        const nextBtn = document.getElementById('step1Next');
-        if (nextBtn) nextBtn.disabled = false;
-      } else {
-        this.displayValidationResults({ success: false, error: data.error || 'Unknown error' });
-      }
-    } catch (error) {
-      console.error('[ImageViewerModule] Validation error:', error);
-      this.displayValidationResults({ success: false, error: error.message });
-    }
-  }
-
-  /**
-   * Display validation results
-   */
-  displayValidationResults(results) {
-    const container = document.getElementById('validationResult');
-    if (!container) return;
-
-    if (results.success) {
-      container.innerHTML = `
-        <div class="validation-success">
-          <div class="validation-header">✓ Valid TIFF File</div>
-          <div class="validation-details">
-            <div class="detail-row"><span>Dimensions:</span> ${results.width} × ${results.height}</div>
-            <div class="detail-row"><span>Slices:</span> ${results.sliceCount}</div>
-            <div class="detail-row"><span>Data Type:</span> ${results.dtype}</div>
-          </div>
-        </div>
-      `;
-    } else {
-      container.innerHTML = `
-        <div class="validation-error">
-          <div class="validation-header">✗ Validation Failed</div>
-          <div class="validation-message">${results.error}</div>
-        </div>
-      `;
-    }
   }
 
   /**
@@ -401,6 +256,60 @@ class ImageViewerModule {
   }
 
   /**
+   * FileSelector callback: called when user selects a file
+   */
+  async onFileSelect(fileInfo) {
+    console.log(`[ImageViewerModule] File selected:`, fileInfo);
+    this.selectedFile = fileInfo;
+
+    if (fileInfo && !fileInfo.isTestData) {
+      // Validate the file
+      await this.validateTiffFile(fileInfo.id || fileInfo.path);
+    } else if (fileInfo?.isTestData) {
+      // Test data selected (shouldn't happen as showTestData=false)
+      this.validationDisplay.showInfo('Test Data', 'Test data selected');
+      this.navigationButtons.setNextEnabled(true);
+    }
+  }
+
+  /**
+   * Validate TIFF file and display results
+   */
+  async validateTiffFile(fileId) {
+    this.validationDisplay.showLoading('Validating file...');
+
+    try {
+      const response = await fetch(`/api/workspace/tiff-info/${fileId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        this.tiffInfo = {
+          sliceCount: data.sliceCount,
+          width: data.width,
+          height: data.height,
+          dtype: data.dtype
+        };
+
+        this.validationDisplay.showSuccess('Valid TIFF File', [
+          { label: 'Dimensions', value: `${data.width} x ${data.height}` },
+          { label: 'Slices', value: data.sliceCount },
+          { label: 'Data Type', value: data.dtype }
+        ]);
+
+        // Enable next button
+        this.navigationButtons.setNextEnabled(true);
+      } else {
+        this.validationDisplay.showError('Validation Failed', data.error || 'Unknown error');
+        this.navigationButtons.setNextEnabled(false);
+      }
+    } catch (error) {
+      console.error('[ImageViewerModule] Validation error:', error);
+      this.validationDisplay.showError('Validation Error', error.message);
+      this.navigationButtons.setNextEnabled(false);
+    }
+  }
+
+  /**
    * Setup event listeners
    */
   setupEventListeners() {
@@ -410,22 +319,6 @@ class ImageViewerModule {
       backBtn.addEventListener('click', () => {
         window.workspace.returnToHub();
       });
-    }
-
-    // Step navigation
-    document.querySelectorAll('.step[data-step]').forEach(step => {
-      step.addEventListener('click', () => {
-        const stepNum = parseInt(step.dataset.step);
-        if (this.canNavigateToStep(stepNum)) {
-          this.goToStep(stepNum);
-        }
-      });
-    });
-
-    // Next button (Step 1 -> Step 2)
-    const nextBtn = document.getElementById('step1Next');
-    if (nextBtn) {
-      nextBtn.addEventListener('click', () => this.proceedToViewer());
     }
 
     // Back to step 1
@@ -447,40 +340,15 @@ class ImageViewerModule {
   }
 
   /**
-   * Check if navigation to step is allowed
-   */
-  canNavigateToStep(stepNum) {
-    if (stepNum === 1) return true;
-    if (stepNum === 2) return this.selectedFile !== null;
-    return false;
-  }
-
-  /**
-   * Navigate to step
+   * Override goToStep to add step-specific logic
    */
   goToStep(stepNum) {
-    if (stepNum < 1 || stepNum > 2) return;
+    // Call parent implementation
+    super.goToStep(stepNum);
 
-    this.currentStep = stepNum;
-
-    // Update step indicators
-    document.querySelectorAll('.step[data-step]').forEach(step => {
-      const num = parseInt(step.dataset.step);
-      step.classList.toggle('active', num === stepNum);
-      step.classList.toggle('completed', num < stepNum);
-    });
-
-    // Update step content
-    document.querySelectorAll('.step-content').forEach(content => {
-      content.classList.remove('active');
-    });
-    document.getElementById(`step${stepNum}`)?.classList.add('active');
-
-    // Update progress bar
-    const progress = (stepNum / 2) * 100;
-    const progressBar = document.getElementById('overallProgress');
-    if (progressBar) {
-      progressBar.style.width = `${progress}%`;
+    // Update StepNavigator
+    if (this.stepNavigator) {
+      this.stepNavigator.update(stepNum);
     }
 
     // Step-specific initialization
@@ -496,7 +364,7 @@ class ImageViewerModule {
     if (!this.selectedFile) return;
 
     try {
-      this.state.update('ui.loading', true);
+      this.showLoading('Loading image information...');
 
       // Load TIFF info if not already loaded by validation
       if (!this.tiffInfo) {
@@ -504,11 +372,11 @@ class ImageViewerModule {
       }
 
       this.goToStep(2);
-      this.state.update('ui.loading', false);
+      this.hideLoading();
     } catch (error) {
       console.error('[ImageViewerModule] Error loading file:', error);
       this.state.notify('error', 'Failed to load file information');
-      this.state.update('ui.loading', false);
+      this.hideLoading();
     }
   }
 
@@ -521,10 +389,8 @@ class ImageViewerModule {
     try {
       let url;
       if (this.selectedFile.source === 'segmentation') {
-        // Use results endpoint for segmentation outputs
         url = `/results/${this.selectedFile.inferenceId}/tiff-info`;
       } else {
-        // Use workspace endpoint for regular files
         url = `/api/workspace/tiff-info/${this.selectedFile.id}`;
       }
 
@@ -705,17 +571,13 @@ class ImageViewerModule {
     if (img) img.style.display = 'none';
 
     try {
-      // Build URL based on file source
       let url;
       if (this.selectedFile.source === 'segmentation') {
-        // Use results endpoint for segmentation outputs
         url = `/results/${this.selectedFile.inferenceId}/slice/${sliceIndex}?size=gallery`;
       } else {
-        // Use workspace endpoint for regular files
         url = `/api/workspace/slice/${this.selectedFile.id}/${sliceIndex}?size=gallery`;
       }
 
-      // Create new image to preload
       const newImg = new Image();
       newImg.onload = () => {
         if (img) {
@@ -942,13 +804,10 @@ class ImageViewerModule {
     if (!this.selectedFile) return;
 
     try {
-      // Build URL based on file source
       let url;
       if (this.selectedFile.source === 'segmentation') {
-        // Use results endpoint for segmentation outputs
         url = `/results/${this.selectedFile.inferenceId}/slice/${sliceIndex}?size=icon`;
       } else {
-        // Use workspace endpoint for regular files
         url = `/api/workspace/slice/${this.selectedFile.id}/${sliceIndex}?size=icon`;
       }
 
@@ -968,22 +827,7 @@ class ImageViewerModule {
   }
 
   /**
-   * Format file size
-   */
-  formatFileSize(bytes) {
-    if (!bytes) return '';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let size = bytes;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-    return `${size.toFixed(1)} ${units[unitIndex]}`;
-  }
-
-  /**
-   * Deactivate the module
+   * Override deactivate for cleanup
    */
   async deactivate() {
     console.log('[ImageViewerModule] Deactivating...');
@@ -991,23 +835,13 @@ class ImageViewerModule {
     // Clear cache
     this.sliceCache.clear();
 
-    // Clear container
-    if (this.container) {
-      this.container.innerHTML = '';
-    }
-
     // Clear global reference
     window.imageViewerModule = null;
 
-    console.log('[ImageViewerModule] Deactivation complete');
-  }
+    // Call parent deactivate
+    await super.deactivate();
 
-  /**
-   * Cleanup resources
-   */
-  cleanup() {
-    console.log('[ImageViewerModule] Cleaning up...');
-    this.deactivate();
+    console.log('[ImageViewerModule] Deactivation complete');
   }
 }
 

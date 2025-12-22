@@ -487,59 +487,18 @@
 }
 
 /* ============================================
-   VALIDATION RESULTS (uses base styles)
+   MODULE OVERRIDES
+   Validation and Navigation use base styles from module-base.css
    ============================================ */
 
-.imageviewer-module .validation-loading {
-  color: var(--module-text-secondary);
-  text-align: center;
-  padding: var(--module-spacing-sm);
-}
-
-.imageviewer-module .validation-success {
-  background: var(--module-success-bg);
-  border: 1px solid var(--module-success-border);
-  color: var(--module-success-text);
-  border-radius: var(--module-radius-md);
-  padding: var(--module-spacing-sm);
-}
-
-.imageviewer-module .validation-success .validation-header {
-  color: var(--module-success-text);
-  font-weight: 600;
-  font-size: var(--module-font-size-md);
-  margin-bottom: 12px;
-}
-
-.imageviewer-module .validation-success .detail-row span:first-child {
+/* Additional detail row styling for validation display */
+.imageviewer-module .validation-details .detail-row span:first-child {
   color: var(--module-text-secondary);
 }
 
-.imageviewer-module .validation-success .detail-row span:last-child {
+.imageviewer-module .validation-details .detail-row span:last-child {
   color: var(--module-text-primary);
-}
-
-.imageviewer-module .validation-error {
-  background: var(--module-error-bg);
-  border: 1px solid var(--module-error-border);
-  color: var(--module-error-text);
-  border-radius: var(--module-radius-md);
-  padding: var(--module-spacing-sm);
-}
-
-.imageviewer-module .validation-error .validation-header {
-  color: var(--module-error-text);
-  font-weight: 600;
-  font-size: var(--module-font-size-md);
-  margin-bottom: var(--module-spacing-xs);
-}
-
-/* ============================================
-   NAVIGATION BUTTONS
-   ============================================ */
-
-.imageviewer-module .navigation-buttons {
-  border-top-color: var(--module-border);
+  font-weight: 500;
 }
 
 /* ============================================
