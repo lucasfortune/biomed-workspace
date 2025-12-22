@@ -1,9 +1,54 @@
 # Module Creation Guide
 
-**Last Updated:** 2025-11-27
-**Estimated Time:** 2-3 hours for first module
+**Last Updated:** 2025-12-22
+**Estimated Time:** 1-2 hours for first module (using framework)
 **Difficulty:** Intermediate
 **Target Audience:** Developers adding new processing modules to the Workspace version
+
+---
+
+> **New: Module Framework Available!**
+>
+> We now have a **BaseModule framework** with reusable components that significantly
+> simplifies module creation. New modules should use this framework.
+>
+> **Quick Links:**
+> - [Module Framework Documentation](MODULE_FRAMEWORK.md) - API reference and guides
+> - [Template Module](/public/workspace/js/modules/template/) - Copy and customize
+>
+> The example below shows the traditional approach. For the recommended approach
+> using the framework, see the [Using the Framework](#using-the-framework) section.
+
+---
+
+## Using the Framework
+
+### Recommended Approach for New Modules
+
+1. **Copy the template module:**
+   ```bash
+   cd public/workspace/js/modules
+   cp -r template yourmodule
+   ```
+
+2. **Customize for your needs:**
+   - Rename `TemplateModule.js` to `YourModule.js`
+   - Update the class name and configuration
+   - Implement your processing logic
+
+3. **Register in `registry.js`**
+
+4. **See the template's README** for the full checklist
+
+### Framework Benefits
+
+- **BaseModule** handles lifecycle, step navigation, CSS loading
+- **StepNavigator** component for consistent step UI
+- **FileSelector** component for file selection with test data support
+- **ValidationDisplay** component for success/error messages
+- **Shared CSS variables** for consistent styling
+
+For full documentation, see [Module Framework](MODULE_FRAMEWORK.md).
 
 ---
 

@@ -1,0 +1,181 @@
+/**
+ * Template Module Styles
+ *
+ * This file imports the shared module-base.css and adds
+ * template-specific styles. Copy and customize for your module.
+ */
+
+/* Import shared base styles - ALWAYS include this */
+@import url('/workspace/js/core/css/module-base.css');
+
+/* ============================================
+   MODULE CONTAINER
+   ============================================ */
+
+.template-module {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  font-family: var(--module-font-family);
+}
+
+/* ============================================
+   STEP CONTENT
+   ============================================ */
+
+.template-module .step-contents {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--module-spacing-md) var(--module-spacing-md);
+}
+
+.template-module .step-content {
+  display: none;
+}
+
+.template-module .step-content.active {
+  display: block;
+}
+
+.template-module .step-inner {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.template-module .step-description {
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+/* ============================================
+   CONFIGURATION FORM
+   ============================================ */
+
+.template-module .config-form {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.template-module .form-field {
+  margin-bottom: var(--module-spacing-md);
+}
+
+.template-module .form-field:last-child {
+  margin-bottom: 0;
+}
+
+.template-module .form-field label {
+  display: block;
+  margin-bottom: var(--module-spacing-xs);
+  font-weight: 500;
+  color: var(--module-text-primary);
+}
+
+.template-module .form-field input[type="number"],
+.template-module .form-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  font-size: var(--module-font-size-sm);
+  transition: var(--module-transition-fast);
+}
+
+.template-module .form-field input:focus,
+.template-module .form-field select:focus {
+  outline: none;
+  border-color: var(--module-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.template-module .field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+/* ============================================
+   ACTION SECTION
+   ============================================ */
+
+.template-module .action-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-xl);
+  text-align: center;
+  margin-bottom: var(--module-spacing-lg);
+}
+
+/* ============================================
+   PROGRESS SECTION
+   ============================================ */
+
+.template-module .progress-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.template-module .progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--module-spacing-sm);
+  font-weight: 500;
+}
+
+.template-module .progress-bar-container {
+  height: 8px;
+  background: var(--module-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.template-module .progress-fill {
+  height: 100%;
+  background: var(--module-gradient);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.template-module #progressStatus {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+}
+
+/* ============================================
+   RESULTS SECTION
+   ============================================ */
+
+.template-module .results-section {
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.template-module .result-actions {
+  display: flex;
+  gap: var(--module-spacing-md);
+  margin-top: var(--module-spacing-lg);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .template-module .step-inner {
+    padding: 0 var(--module-spacing-sm);
+  }
+
+  .template-module .result-actions {
+    flex-direction: column;
+  }
+}
