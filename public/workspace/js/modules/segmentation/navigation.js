@@ -1,3 +1,17 @@
+/**
+ * Navigation and Step State Management
+ *
+ * This module manages step navigation and state for the segmentation workflow.
+ * When SegmentationModule is available, navigation functions delegate to it.
+ * The fallback code handles cases where the module hasn't initialized yet.
+ *
+ * Key responsibilities:
+ * - Step state tracking (completed, canNavigate, trainingStarted, etc.)
+ * - Process state tracking (trainingInProgress, inferenceInProgress)
+ * - Reset workflow with download options
+ * - Global function exports for other modules
+ */
+
 // Step state management system
 let stepStates = {
     1: { completed: false, canNavigate: true },
@@ -11,7 +25,11 @@ let processStates = {
     inferenceInProgress: false
 };
 
-// Central function to handle step changes
+/**
+ * Central function to handle step changes
+ * Delegates to SegmentationModule when available
+ * @param {number} stepNumber - The step to navigate to (1-4)
+ */
 function setStep(stepNumber) {
     if (stepNumber < 1 || stepNumber > 4) return;
 
@@ -69,7 +87,18 @@ function setStep(stepNumber) {
     window.scrollTo(0, 0);
 }
 
+/**
+ * Navigate to the next step
+ * Delegates to SegmentationModule when available
+ */
 function nextStep() {
+    // Delegate to module if available
+    if (window.segmentationModule && window.segmentationModule.nextStep) {
+        window.segmentationModule.nextStep();
+        return;
+    }
+
+    // Fallback: Direct navigation
     if (currentStep < 4) {
         // Special handling for Step 2 -> Step 3 transition
         if (currentStep === 2) {
@@ -87,17 +116,34 @@ function nextStep() {
     }
 }
 
+/**
+ * Navigate to the previous step
+ * Delegates to SegmentationModule when available
+ */
 function previousStep() {
+    // Delegate to module if available
+    if (window.segmentationModule && window.segmentationModule.previousStep) {
+        window.segmentationModule.previousStep();
+        return;
+    }
+
+    // Fallback: Direct navigation
     if (currentStep > 1) {
         setStep(currentStep - 1);
     }
 }
 
+/**
+ * Initiate workflow reset - shows warning modal first
+ */
 function resetWorkflow() {
     // Show warning modal instead of immediately resetting
     showResetWarning();
 }
 
+/**
+ * Display reset warning modal with download options
+ */
 function showResetWarning() {
     // Populate download actions based on available data
     populateDownloadActions();
@@ -107,6 +153,10 @@ function showResetWarning() {
     warningOverlay.style.display = 'flex';
 }
 
+/**
+ * Populate download actions in the reset warning modal
+ * Shows available downloads (trained model, inference results) based on current state
+ */
 function populateDownloadActions() {
     const downloadActionsDiv = document.getElementById('downloadActions');
     let downloadButtons = [];
@@ -143,17 +193,28 @@ function populateDownloadActions() {
     }
 }
 
+/**
+ * Track downloads before reset (for analytics)
+ * @param {string} type - Type of download ('model' or 'results')
+ */
 function trackDownload(type) {
     // Optional: Track which downloads were used
     console.log(`User downloaded ${type} before reset`);
 }
 
+/**
+ * Cancel the reset operation and hide the warning modal
+ */
 function cancelReset() {
     // Hide the warning overlay
     const warningOverlay = document.getElementById('resetWarningOverlay');
     warningOverlay.style.display = 'none';
 }
 
+/**
+ * Execute the reset operation
+ * Calls server to clear session data and redirects to welcome page
+ */
 async function proceedWithReset() {
     // Hide warning modal
     const warningOverlay = document.getElementById('resetWarningOverlay');
@@ -194,6 +255,10 @@ async function proceedWithReset() {
     }
 }
 
+/**
+ * Perform complete frontend state reset
+ * Clears all state variables, charts, and UI elements
+ */
 function performCompleteStateReset() {
     // Reset all global state variables
     currentStep = 1;
@@ -247,7 +312,15 @@ function performCompleteStateReset() {
     }
 }
 
-// NEW: State management functions
+// ============================================
+// State Management Functions
+// ============================================
+
+/**
+ * Check if navigation to a step is allowed
+ * @param {number} stepNumber - The step to check (1-4)
+ * @returns {boolean} True if navigation is allowed
+ */
 function canNavigateToStep(stepNumber) {
     if (stepNumber < 1 || stepNumber > 4) return false;
     
@@ -259,6 +332,10 @@ function canNavigateToStep(stepNumber) {
     return stepStates[stepNumber].canNavigate;
 }
 
+/**
+ * Mark a step as completed and enable navigation to the next step
+ * @param {number} stepNumber - The step to mark as completed (1-4)
+ */
 function markStepCompleted(stepNumber) {
     if (stepNumber >= 1 && stepNumber <= 4) {
         stepStates[stepNumber].completed = true;
@@ -273,6 +350,10 @@ function markStepCompleted(stepNumber) {
     }
 }
 
+/**
+ * Update the visual state of a step element (add completed class)
+ * @param {number} stepNumber - The step to update
+ */
 function updateStepVisualState(stepNumber) {
     const stepElement = document.querySelector(`[data-step="${stepNumber}"]`);
     if (stepElement && stepStates[stepNumber].completed) {
@@ -280,6 +361,9 @@ function updateStepVisualState(stepNumber) {
     }
 }
 
+/**
+ * Reset all step and process states to initial values
+ */
 function resetStepStates() {
     stepStates = {
         1: { completed: false, canNavigate: true },
@@ -299,10 +383,18 @@ function resetStepStates() {
     });
 }
 
+/**
+ * Get the current step completion status
+ * @returns {object} The stepStates object
+ */
 function getStepCompletionStatus() {
     return stepStates;
 }
 
+/**
+ * Display an error message explaining why navigation is blocked
+ * @param {number} stepNumber - The step that was blocked
+ */
 function showNavigationError(stepNumber) {
     const reasons = {
         2: 'Please complete data upload first.',
@@ -314,6 +406,9 @@ function showNavigationError(stepNumber) {
     showError(message);
 }
 
+/**
+ * Update navigation button states based on current step states
+ */
 function updateNavigationButtons() {
     // Update step 1 next button
     const step1Next = document.getElementById('step1Next');
@@ -334,6 +429,10 @@ function updateNavigationButtons() {
     }
 }
 
+/**
+ * Validate training configuration fields locally (client-side)
+ * @returns {boolean} True if all required fields are valid
+ */
 function validateConfigurationLocally() {
     // Check all required configuration fields
     const requiredFields = [
@@ -372,7 +471,11 @@ function validateConfigurationLocally() {
     return true;
 }
 
+// ============================================
+// Global Exports
 // Make functions available globally for other modules
+// ============================================
+
 window.markStepCompleted = markStepCompleted;
 window.canNavigateToStep = canNavigateToStep;
 window.updateNavigationButtons = updateNavigationButtons;
