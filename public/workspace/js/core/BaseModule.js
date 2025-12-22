@@ -91,8 +91,8 @@ class BaseModule {
         throw new Error('Module container not found');
       }
 
-      // Show loading
-      this.showLoading('Loading Module', `Preparing ${this.config.name}...`);
+      // Note: Loading overlay is handled by ModuleLoader via ui.loading state
+      // No need to call showLoading() here - it would create a duplicate overlay
 
       // Load CSS if specified
       if (this.config.cssPath) {
@@ -108,14 +108,10 @@ class BaseModule {
       // Initialize after render (optional override in subclass)
       await this.initialize();
 
-      // Hide loading
-      this.hideLoading();
-
       console.log(`[${this.config.name}] Activation complete`);
 
     } catch (error) {
       console.error(`[${this.config.name}] Activation error:`, error);
-      this.hideLoading();
       if (this.state?.notify) {
         this.state.notify('error', `Failed to activate ${this.config.name}: ${error.message}`);
       }

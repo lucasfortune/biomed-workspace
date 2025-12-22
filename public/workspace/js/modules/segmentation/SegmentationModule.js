@@ -94,8 +94,8 @@ class SegmentationModule extends BaseModule {
         throw new Error('Module container not found');
       }
 
-      // Show loading using BaseModule's method
-      this.showLoading('Loading Module', 'Preparing Segmentation Pipeline...');
+      // Note: Loading overlay is handled by ModuleLoader via ui.loading state
+      // No need to call this.showLoading() here - it would create a duplicate
 
       // Load CSS using BaseModule's method (uses config.cssPath)
       if (this.config.cssPath) {
@@ -111,9 +111,6 @@ class SegmentationModule extends BaseModule {
       // Initialize components
       await this.initialize();
 
-      // Hide loading
-      this.hideLoading();
-
       // Check for resume
       await this.checkForResume();
 
@@ -122,7 +119,6 @@ class SegmentationModule extends BaseModule {
     } catch (error) {
       console.error('[SegmentationModule] Activation error:', error);
       this.state.notify('error', `Failed to activate segmentation module: ${error.message}`);
-      this.hideLoading();
     }
   }
 
