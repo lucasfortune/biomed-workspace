@@ -1,0 +1,412 @@
+/**
+ * Visualization Module Styles
+ *
+ * Styles for the 3D Visualization module.
+ * Imports shared module-base.css for consistent design tokens.
+ */
+
+/* Import shared base styles */
+@import url('/workspace/js/core/css/module-base.css');
+
+/* ============================================
+   MODULE CONTAINER
+   ============================================ */
+
+.viz-module {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  font-family: var(--module-font-family);
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure no gap between header, progress bar, and step nav */
+.viz-module > .module-header,
+.viz-module > .progress-bar,
+.viz-module > .step-nav {
+  flex-shrink: 0;
+}
+
+/* ============================================
+   STEP CONTENT
+   ============================================ */
+
+.viz-module .step-contents {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
+}
+
+.viz-module .step-content {
+  display: none;
+}
+
+.viz-module .step-content.active {
+  display: block;
+}
+
+.viz-module .step-inner {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.viz-module .step-description {
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+/* Step 2 needs full width for the viewer */
+.viz-module .viz-step-2 {
+  max-width: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   VISUALIZATION LAYOUT (Step 2)
+   ============================================ */
+
+.viz-module .viz-layout {
+  display: flex;
+  gap: var(--module-spacing-md);
+  flex: 1;
+  min-height: 0; /* Allow flex children to shrink */
+}
+
+.viz-module .viz-viewer-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Allow flex children to shrink */
+}
+
+.viz-module .viz-controls-section {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-md);
+  overflow-y: auto;
+}
+
+.viz-module .viz-controls-section h4 {
+  margin: 0 0 var(--module-spacing-md) 0;
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-primary);
+  border-bottom: 1px solid var(--module-border);
+  padding-bottom: var(--module-spacing-sm);
+}
+
+/* ============================================
+   THREE.JS CONTAINER
+   ============================================ */
+
+.viz-module .threejs-container {
+  flex: 1;
+  background: #1a1a2e;
+  border-radius: var(--module-radius-lg);
+  overflow: hidden;
+  position: relative;
+  min-height: 400px;
+}
+
+.viz-module .viewer-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  color: var(--module-text-secondary);
+}
+
+.viz-module .placeholder-icon {
+  font-size: 48px;
+}
+
+.viz-module .placeholder-text {
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-secondary);
+}
+
+.viz-module .placeholder-subtext {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-muted);
+}
+
+.viz-module .viewer-toolbar {
+  display: flex;
+  gap: var(--module-spacing-sm);
+  padding: var(--module-spacing-sm) 0;
+}
+
+/* ============================================
+   ORIGINAL DATA INFO
+   ============================================ */
+
+.viz-module .original-data-info {
+  margin-top: var(--module-spacing-md);
+}
+
+.viz-module .info-card {
+  display: flex;
+  gap: var(--module-spacing-md);
+  padding: var(--module-spacing-md);
+  border-radius: var(--module-radius-md);
+  align-items: flex-start;
+}
+
+.viz-module .info-card.success {
+  background: var(--module-success-bg);
+  border: 1px solid var(--module-success-border);
+}
+
+.viz-module .info-card.neutral {
+  background: var(--module-info-bg);
+  border: 1px solid var(--module-info-border);
+}
+
+.viz-module .info-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.viz-module .info-content {
+  flex: 1;
+}
+
+.viz-module .info-content strong {
+  display: block;
+  color: var(--module-text-primary);
+  margin-bottom: 4px;
+}
+
+.viz-module .info-content p {
+  margin: 0;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+.viz-module .info-note {
+  margin-top: 4px !important;
+  font-style: italic;
+  color: var(--module-text-muted) !important;
+}
+
+/* ============================================
+   CLASS CONTROL PANELS
+   ============================================ */
+
+.viz-module .class-control-panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--module-spacing-sm);
+}
+
+.viz-module .controls-placeholder {
+  color: var(--module-text-muted);
+  font-size: var(--module-font-size-sm);
+  text-align: center;
+  padding: var(--module-spacing-lg);
+}
+
+.viz-module .class-control-panel {
+  background: var(--module-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  padding: var(--module-spacing-sm);
+}
+
+.viz-module .class-control-panel.original-data-panel {
+  background: var(--module-info-bg);
+  border-color: var(--module-info-border);
+}
+
+.viz-module .class-checkbox-section {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  margin-bottom: var(--module-spacing-xs);
+}
+
+.viz-module .class-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.viz-module .class-label {
+  font-weight: 600;
+  font-size: var(--module-font-size-sm);
+}
+
+.viz-module .class-opacity-section,
+.viz-module .class-range-section {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+  margin-top: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+}
+
+.viz-module .class-opacity-label,
+.viz-module .class-range-label {
+  color: var(--module-text-secondary);
+  min-width: 50px;
+}
+
+.viz-module .class-opacity-slider {
+  flex: 1;
+  height: 4px;
+  cursor: pointer;
+}
+
+.viz-module .class-opacity-value,
+.viz-module .class-range-value {
+  min-width: 45px;
+  text-align: right;
+  color: var(--module-text-primary);
+  font-family: monospace;
+}
+
+/* ============================================
+   DUAL RANGE SLIDER
+   ============================================ */
+
+.viz-module .dual-range-container {
+  position: relative;
+  flex: 1;
+  height: 20px;
+}
+
+.viz-module .dual-range-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--module-border);
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+
+.viz-module .dual-range-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  background: var(--module-primary);
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+
+.viz-module .dual-range-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  margin: 0;
+}
+
+.viz-module .dual-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--module-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.viz-module .dual-range-input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--module-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+.viz-module .btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--module-radius-md);
+  font-size: var(--module-font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--module-transition-fast);
+  background: var(--module-gradient);
+  color: white;
+}
+
+.viz-module .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--module-shadow-md);
+}
+
+.viz-module .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.viz-module .btn.secondary {
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-border);
+}
+
+.viz-module .btn.secondary:hover:not(:disabled) {
+  background: var(--module-bg);
+  border-color: var(--module-primary);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 900px) {
+  .viz-module .viz-layout {
+    flex-direction: column;
+  }
+
+  .viz-module .viz-controls-section {
+    width: 100%;
+    max-height: 250px;
+  }
+
+  .viz-module .threejs-container {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 600px) {
+  .viz-module .step-inner {
+    padding: 0 var(--module-spacing-sm);
+  }
+
+  .viz-module .viz-controls-section {
+    padding: var(--module-spacing-sm);
+  }
+}

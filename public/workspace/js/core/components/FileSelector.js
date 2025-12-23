@@ -37,11 +37,14 @@ class FileSelector {
    * @param {boolean} [config.showTestData=true] - Show test data optgroup
    * @param {boolean} [config.showRecentResults=false] - Show recent results optgroup
    * @param {boolean} [config.acceptAllTiff=false] - Accept any TIFF regardless of category
+   * @param {Array} [config.resultCategories] - Categories to show in Recent Results (default: segmentations, denoised, processed)
+   * @param {Object} [config.resultCategoryLabels] - Labels for result categories (e.g., { meshes: 'Mesh' })
    * @param {Array} [config.testDataOptions] - Custom test data options
    * @param {Function} [config.onSelect] - Callback when file is selected (file) => {}
    * @param {Function} [config.onUpload] - Callback when file is uploaded (file, uploadedInfo) => {}
    * @param {Function} [config.onValidate] - Callback for file validation (file) => Promise<boolean>
    * @param {Function} [config.filterFiles] - Custom file filter function (files) => files
+   * @param {Function} [config.filterRecentResults] - Custom filter for recent results (results) => results
    * @param {string} [config.uploadEndpoint='/api/workspace/upload'] - Upload endpoint
    * @param {Object} [config.stateManager] - Optional StateManager for notifications
    */
@@ -57,11 +60,21 @@ class FileSelector {
     this.testDataOptions = config.testDataOptions || null;
     this.uploadEndpoint = config.uploadEndpoint || '/api/workspace/upload';
 
+    // Configurable result categories (default to TIFF-based results)
+    this.resultCategories = config.resultCategories || ['segmentations', 'denoised', 'processed'];
+    this.resultCategoryLabels = config.resultCategoryLabels || {
+      'segmentations': 'Segmentation',
+      'denoised': 'Denoised',
+      'processed': 'Processed',
+      'meshes': 'Mesh'
+    };
+
     // Callbacks
     this.onSelect = config.onSelect || null;
     this.onUpload = config.onUpload || null;
     this.onValidate = config.onValidate || null;
     this.filterFiles = config.filterFiles || null;
+    this.filterRecentResults = config.filterRecentResults || null;
     this.stateManager = config.stateManager || null;
 
     // State
@@ -130,19 +143,23 @@ class FileSelector {
       const data = await response.json();
 
       if (data.success) {
-        const resultCategories = ['segmentations', 'denoised', 'processed'];
         const allFiles = data.files || [];
 
         if (this.showRecentResults) {
-          // Separate results from regular files
+          // Separate results from regular files using configurable categories
           this.recentResults = allFiles.filter(file => {
-            const isTiff = this.isTiffFile(file.name);
-            return isTiff && resultCategories.includes(file.category);
+            const isAccepted = this.isAcceptedFile(file.name);
+            return isAccepted && this.resultCategories.includes(file.category);
           });
+
+          // Apply custom filter to recent results if provided
+          if (this.filterRecentResults) {
+            this.recentResults = this.filterRecentResults(this.recentResults);
+          }
 
           // Regular files exclude result categories
           this.availableFiles = this.filterFilesByType(
-            allFiles.filter(file => !resultCategories.includes(file.category))
+            allFiles.filter(file => !this.resultCategories.includes(file.category))
           );
         } else {
           this.availableFiles = this.filterFilesByType(allFiles);
@@ -173,6 +190,18 @@ class FileSelector {
   }
 
   /**
+   * Check if a filename matches the accepted file extensions
+   * @param {string} name - Filename
+   * @returns {boolean}
+   */
+  isAcceptedFile(name) {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    const acceptedExtensions = this.accept.split(',').map(ext => ext.trim().toLowerCase());
+    return acceptedExtensions.some(ext => lower.endsWith(ext));
+  }
+
+  /**
    * Filter files by type
    * @param {Array} files - Files to filter
    * @returns {Array}
@@ -183,18 +212,19 @@ class FileSelector {
     }
 
     return files.filter(file => {
-      const isTiff = this.isTiffFile(file.name);
+      const isAccepted = this.isAcceptedFile(file.name);
 
       if (this.acceptAllTiff) {
-        return isTiff;
+        // Legacy: acceptAllTiff means accept any TIFF
+        return this.isTiffFile(file.name);
       }
 
       // Match by category if fileType is specified
       if (this.fileType && file.category) {
-        return isTiff && file.category === this.fileType;
+        return isAccepted && file.category === this.fileType;
       }
 
-      return isTiff;
+      return isAccepted;
     });
   }
 
@@ -296,12 +326,8 @@ class FileSelector {
         const option = document.createElement('option');
         option.value = result.path || result.id;
 
-        const categoryLabels = {
-          'segmentations': 'Segmentation',
-          'denoised': 'Denoised',
-          'processed': 'Processed'
-        };
-        const categoryLabel = categoryLabels[result.category] || 'Result';
+        // Use configurable category labels
+        const categoryLabel = this.resultCategoryLabels[result.category] || 'Result';
         const displayName = result.name || `Result (${result.id})`;
         const sizeInfo = result.size ? ` (${this.formatFileSize(result.size)})` : '';
 

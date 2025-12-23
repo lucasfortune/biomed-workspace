@@ -60,13 +60,13 @@ const moduleRegistry = [
   {
     id: 'visualization',
     name: '3D Visualization',
-    description: 'Interactive 3D viewer for segmentation results with per-class controls and slicing',
+    description: 'Interactive 3D viewer for mesh data with per-class controls and slicing',
     icon: '👁️',
     path: '/workspace/js/modules/visualization/VisualizationModule.js',
-    inputs: ['segmented_stack', 'volume_data'],
-    outputs: ['screenshot', 'export'],
+    inputs: ['mesh_file'],
+    outputs: [],
     color: '#E67E22',
-    status: 'coming_soon'
+    status: 'available'
   }
 ];
 
