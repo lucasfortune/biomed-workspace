@@ -576,8 +576,13 @@ class VisualizationModule extends BaseModule {
       return;
     }
 
-    // Clear placeholder
-    container.innerHTML = '';
+    // Show loading state
+    container.innerHTML = `
+      <div class="viewer-placeholder">
+        <span class="placeholder-icon">⏳</span>
+        <span class="placeholder-text">Loading mesh data...</span>
+      </div>
+    `;
 
     try {
       // Load Three.js
@@ -585,6 +590,9 @@ class VisualizationModule extends BaseModule {
 
       // Dynamically import visualization modules
       const vizModule = await import('./visualization/index.js');
+
+      // Clear loading placeholder
+      container.innerHTML = '';
 
       // Initialize the scene
       const sceneResult = vizModule.initializeScene(container);
@@ -599,57 +607,140 @@ class VisualizationModule extends BaseModule {
       this.handleResizeBound = () => vizModule.handleResize(container);
       window.addEventListener('resize', this.handleResizeBound);
 
-      // Create a placeholder mesh group (actual mesh loading in Phase 3)
-      this.meshGroup = new THREE.Group();
-      this.scene.add(this.meshGroup);
+      // Load the actual mesh data
+      if (this.selectedFile && (this.selectedFile.id || this.selectedFile.path)) {
+        const fileId = this.selectedFile.id || this.selectedFile.path;
+        console.log('[VisualizationModule] Fetching mesh data:', fileId);
 
-      // Create a simple placeholder cube to show the scene is working
-      const geometry = new THREE.BoxGeometry(2, 2, 2);
-      const material = new THREE.MeshPhongMaterial({
-        color: 0x4CAF50,
-        transparent: true,
-        opacity: 0.8
-      });
-      const placeholderMesh = new THREE.Mesh(geometry, material);
-      this.meshGroup.add(placeholderMesh);
+        const meshResult = await this.api.getMeshData(fileId);
 
-      // Position camera
-      vizModule.positionCameraForMesh(this.meshGroup);
+        if (meshResult.success && meshResult.data) {
+          // Load mesh from JSON
+          const loadResult = vizModule.loadMeshFromJSON(meshResult.data, this.scene);
 
-      // Set up mouse/keyboard controls
-      vizModule.setupEnhancedControls(this.renderer, this.meshGroup, this.camera);
+          this.meshGroup = loadResult.meshGroup;
+          this.classMeshes = loadResult.classMeshes;
+          this.availableClasses = loadResult.availableClasses;
 
-      // Set up double-click reset
-      vizModule.setupDoubleClickReset(this.renderer.domElement, () => this.resetView());
+          // Center the mesh
+          vizModule.centerMeshGroup(this.meshGroup);
 
-      // Update controls placeholder
-      const controlsPanel = document.getElementById('classControlPanels');
-      if (controlsPanel) {
-        controlsPanel.innerHTML = `
-          <p class="controls-placeholder">
-            Scene initialized successfully!<br><br>
-            <strong>Selected:</strong> ${this.selectedFile?.name || 'Unknown'}<br>
-            <strong>Classes:</strong> ${this.meshInfo?.classCount || 'N/A'}<br><br>
-            <em>Mesh loading will be implemented in Phase 3.<br>
-            Controls will appear after mesh loads.</em>
-          </p>
-        `;
+          // Position camera for mesh
+          vizModule.positionCameraForMesh(this.meshGroup);
+
+          // Set up mouse/keyboard controls
+          vizModule.setupEnhancedControls(this.renderer, this.meshGroup, this.camera);
+
+          // Set up double-click reset
+          vizModule.setupDoubleClickReset(this.renderer.domElement, () => this.resetView());
+
+          // Update control panel with class controls
+          this.renderClassControls();
+
+          this.visualizationReady = true;
+          console.log(`[VisualizationModule] Mesh loaded: ${this.availableClasses.length} classes`);
+          this.state.notify('success', `Loaded ${this.availableClasses.length} class meshes`);
+
+        } else {
+          throw new Error(meshResult.error || 'Failed to load mesh data');
+        }
+      } else {
+        throw new Error('No file selected');
       }
-
-      this.visualizationReady = true;
-      console.log('[VisualizationModule] 3D visualization initialized');
-      this.state.notify('success', 'Scene initialized - mesh loading in Phase 3');
 
     } catch (error) {
       console.error('[VisualizationModule] Initialization error:', error);
       container.innerHTML = `
         <div class="viewer-placeholder error">
           <span class="placeholder-icon">❌</span>
-          <span class="placeholder-text">Failed to initialize 3D viewer</span>
+          <span class="placeholder-text">Failed to load mesh</span>
           <span class="placeholder-subtext">${error.message}</span>
         </div>
       `;
-      this.state.notify('error', 'Failed to initialize 3D viewer');
+      this.state.notify('error', `Failed to load mesh: ${error.message}`);
+    }
+  }
+
+  /**
+   * Render class control panels
+   */
+  renderClassControls() {
+    const controlsPanel = document.getElementById('classControlPanels');
+    if (!controlsPanel) return;
+
+    if (!this.availableClasses || this.availableClasses.length === 0) {
+      controlsPanel.innerHTML = '<p class="controls-placeholder">No class data available</p>';
+      return;
+    }
+
+    // Import utils for colors
+    import('./visualization/utils.js').then(utils => {
+      let html = '';
+
+      for (const classId of this.availableClasses) {
+        const mesh = this.classMeshes[classId];
+        const stats = mesh?.userData?.statistics || {};
+        const colorCss = utils.getClassColor(classId);
+
+        html += `
+          <div class="class-control-panel" data-class-id="${classId}">
+            <div class="class-checkbox-section">
+              <input type="checkbox"
+                     id="classVisible${classId}"
+                     class="class-checkbox"
+                     checked
+                     onchange="vizModule.toggleClassVisibility(${classId}, this.checked)">
+              <label for="classVisible${classId}" class="class-label" style="color: ${colorCss}">
+                Class ${classId}
+              </label>
+            </div>
+            <div class="class-opacity-section">
+              <span class="class-opacity-label">Opacity</span>
+              <input type="range"
+                     id="classOpacity${classId}"
+                     class="class-opacity-slider"
+                     min="10" max="100" value="80"
+                     onchange="vizModule.setClassOpacity(${classId}, this.value / 100)">
+              <span id="classOpacityValue${classId}" class="class-opacity-value">80%</span>
+            </div>
+            ${stats.vertices ? `
+              <div class="class-stats" style="font-size: 11px; color: var(--module-text-muted); margin-top: 4px;">
+                ${utils.formatNumber(stats.vertices)} vertices, ${utils.formatNumber(stats.faces)} faces
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      controlsPanel.innerHTML = html;
+    });
+  }
+
+  /**
+   * Toggle class visibility
+   */
+  toggleClassVisibility(classId, visible) {
+    const mesh = this.classMeshes[classId];
+    if (mesh) {
+      mesh.visible = visible;
+    }
+  }
+
+  /**
+   * Set class opacity
+   */
+  setClassOpacity(classId, opacity) {
+    const mesh = this.classMeshes[classId];
+    if (mesh && mesh.material) {
+      mesh.material.opacity = opacity;
+      mesh.material.transparent = opacity < 1;
+      mesh.material.needsUpdate = true;
+
+      // Update display value
+      const valueSpan = document.getElementById(`classOpacityValue${classId}`);
+      if (valueSpan) {
+        valueSpan.textContent = `${Math.round(opacity * 100)}%`;
+      }
     }
   }
 

@@ -19,6 +19,16 @@ export {
     renderer
 } from './scene.js';
 
+// Mesh loading
+export {
+    loadMeshFromJSON,
+    disposeMeshes,
+    setMeshVisibility,
+    setMeshOpacity,
+    getMeshBoundingBox,
+    centerMeshGroup
+} from './meshLoader.js';
+
 // User interactions (mouse, keyboard, touch)
 export {
     setupEnhancedControls,
