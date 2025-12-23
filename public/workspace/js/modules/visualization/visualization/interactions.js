@@ -94,18 +94,19 @@ function setupZoomControls(canvas, camera) {
 
         if (!camera) return;
 
-        const zoomSpeed = 0.05;
+        const zoomSpeed = 0.1;
         const delta = e.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
 
         // Scale camera position to zoom in/out
         camera.position.multiplyScalar(delta);
 
         // Prevent camera from getting too close or too far
+        // Use very generous limits to handle meshes of any size
         const distance = camera.position.length();
         if (distance < 1) {
             camera.position.normalize().multiplyScalar(1);
-        } else if (distance > 100) {
-            camera.position.normalize().multiplyScalar(100);
+        } else if (distance > 10000) {
+            camera.position.normalize().multiplyScalar(10000);
         }
     }, { passive: false });
 }

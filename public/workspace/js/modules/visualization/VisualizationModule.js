@@ -700,14 +700,9 @@ class VisualizationModule extends BaseModule {
                      id="classOpacity${classId}"
                      class="class-opacity-slider"
                      min="10" max="100" value="80"
-                     onchange="vizModule.setClassOpacity(${classId}, this.value / 100)">
+                     oninput="vizModule.setClassOpacity(${classId}, this.value / 100)">
               <span id="classOpacityValue${classId}" class="class-opacity-value">80%</span>
             </div>
-            ${stats.vertices ? `
-              <div class="class-stats" style="font-size: 11px; color: var(--module-text-muted); margin-top: 4px;">
-                ${utils.formatNumber(stats.vertices)} vertices, ${utils.formatNumber(stats.faces)} faces
-              </div>
-            ` : ''}
           </div>
         `;
       }

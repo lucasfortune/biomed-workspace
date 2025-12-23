@@ -17,7 +17,8 @@ export function initializeScene(container) {
 
     // Initialize Three.js scene with better settings
     scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x222222, 1, 20); // Add atmospheric fog
+    // Fog will be adjusted when mesh loads based on mesh size
+    scene.fog = null;
 
     camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
 
@@ -147,36 +148,36 @@ export function positionCameraForMesh(meshGroup) {
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
 
-    // Calculate optimal camera distance
+    // Calculate optimal camera distance based on mesh size
     const maxDim = Math.max(size.x, size.y, size.z);
 
-    // Position camera at a reasonable distance (for small scaled meshes)
-    let distance;
-    if (maxDim < 2) {
-        distance = 8;  // Close for very small meshes
-    } else if (maxDim < 5) {
-        distance = maxDim * 1.5;  // Medium distance for small meshes
-    } else if (maxDim < 10) {
-        distance = maxDim * 1.2;    // Standard distance for medium meshes
-    } else {
-        distance = maxDim * 1.0;  // Closer for large meshes
-    }
+    // Use a multiplier that ensures the whole mesh is visible
+    // Account for the camera's field of view (75 degrees)
+    const fov = camera.fov * (Math.PI / 180);
+    const distance = (maxDim / 2) / Math.tan(fov / 2) * 1.5; // 1.5x for padding
 
     // Ensure minimum distance
-    distance = Math.max(distance, 3);
+    const finalDistance = Math.max(distance, 5);
+
+    console.log(`[Scene] Mesh size: ${maxDim.toFixed(1)}, camera distance: ${finalDistance.toFixed(1)}`);
 
     // Position camera in a nice viewing angle
-    const cameraX = distance * 0.7;  // 70% to the right
-    const cameraY = distance * 0.5;  // 50% up
-    const cameraZ = distance * 0.7;  // 70% forward
+    const cameraX = finalDistance * 0.7;  // 70% to the right
+    const cameraY = finalDistance * 0.5;  // 50% up
+    const cameraZ = finalDistance * 0.7;  // 70% forward
 
     camera.position.set(cameraX, cameraY, cameraZ);
     camera.lookAt(center);
 
     // Adjust camera near/far planes for the mesh size
-    camera.near = distance * 0.01;  // Very close
-    camera.far = distance * 10;     // Far enough
+    camera.near = finalDistance * 0.01;
+    camera.far = finalDistance * 20;
     camera.updateProjectionMatrix();
+
+    // Update fog based on mesh size (optional atmospheric effect)
+    if (scene) {
+        scene.fog = new THREE.Fog(0x222222, finalDistance * 2, finalDistance * 10);
+    }
 }
 
 /**
