@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2025-12-23 (Data Lineage Tracking)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2025-12-23 | [Data Lineage Tracking](2025-12-23_data_lineage_tracking.md) | ✨ Feature | ~3 hrs | ✅ Complete |
+
 ### 2025-12-22 (Mesh Module & Module Framework)
 
 | Date | Session | Type | Duration | Status |
@@ -122,7 +128,9 @@ This index provides a chronological record of all development sessions. Sessions
 - [Workspace Path Consistency](2025-12-11_workspace_path_consistency.md) - Directory structure consistency
 - [Phase 3.1 Backend Infrastructure](2025-12-04_phase3_1_backend_infrastructure.md) - Backend infrastructure for file browser
 
-### ✨ Features (3)
+### ✨ Features (5)
+- [Data Lineage Tracking](2025-12-23_data_lineage_tracking.md) - Processing history tracking
+- [Mesh Module Implementation](2025-12-22_mesh_module_implementation.md) - Surface mesh generation
 - [Original Data Range Sliders](2025-12-03_original_data_range_sliders.md) - 3D visualization enhancement
 - [Phase 2 Completion](2025-11-26_phase2_completion.md) - Module system
 - [Phase 1 Completion](2025-11-20_phase1_completion.md) - Foundation
@@ -142,21 +150,33 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 16 |
-| **Total Development Time** | ~88.5 hours |
-| **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Module Framework complete |
+| **Total Sessions** | 17 |
+| **Total Development Time** | ~91.5 hours |
+| **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Module Framework complete, Data Lineage complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
 | **Bugs Fixed** | 30+ issues |
-| **Lines Added** | ~20,000+ (code) + ~37,000 (docs) |
+| **Lines Added** | ~21,000+ (code) + ~37,000 (docs) |
 | **Lines Removed** | ~800+ (cleanup) |
-| **Files Created** | 65+ |
-| **Files Modified** | 50+ |
+| **Files Created** | 67+ |
+| **Files Modified** | 55+ |
 
 ---
 
 ## 📝 Recent Activity Summary
 
 ### What Was Accomplished (Latest First)
+
+**2025-12-23 - Data Lineage Tracking** ⭐ **LINEAGE TRACKING COMPLETE**
+- Implemented comprehensive data lineage/provenance tracking system
+- Created lineageHelpers.js with utility functions (createLineage, findRootFiles, getLineageChain)
+- Updated segmentation pipeline to track input file IDs through processing
+- Updated mesh generation to track source file IDs
+- Added /api/workspace/lineage/:fileId endpoint for querying lineage
+- Added lineage display to FileBrowser "See Info" panel (shows "Segmentation → Mesh Generation")
+- Fixed /upload-inference to track custom uploads and return file_id
+- Fixed FileBrowser DOM timing for lineage display
+- Updated MODULE_CREATION.md with lineage tracking section
+- 15 files changed, 933 insertions(+), 36 deletions(-)
 
 **2025-12-22 - Reusable Module Framework** ⭐ **MODULE FRAMEWORK COMPLETE**
 - Completed Phases 5a-5e: Migrated SegmentationModule to use BaseModule framework
@@ -315,6 +335,7 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Topic | Relevant Sessions |
 |-------|-------------------|
+| **Data Lineage** | Data Lineage Tracking |
 | **Module System** | Phase 2 Completion, Cleanup |
 | **State Management** | Phase 1 Completion, Original Data Range Sliders |
 | **Bug Fixes** | Workspace Path Consistency, UI & Navigation Fixes, Custom Upload Fix, Bug Fixes, Overlay Debug |
@@ -330,7 +351,8 @@ This index provides a chronological record of all development sessions. Sessions
 
 | File | Modified In |
 |------|-------------|
-| FileBrowser.js | Phase 3.2 |
+| lineageHelpers.js | Data Lineage Tracking |
+| FileBrowser.js | Data Lineage Tracking, Phase 3.2 |
 | WorkspaceManager.js | Phase 3.2, Phase 3.1 |
 | server.js | Phase 3.2, Workspace Path Consistency, Phase 3.1, Phase 1, Custom Upload Fix, Overlay Debug |
 | SegmentationModule.js | UI & Navigation Fixes, Custom Upload Fix, Phase 2, Cleanup, Bug Fixes |
@@ -425,5 +447,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2025-12-22
-**Total Sessions Documented:** 16
+**Last Updated:** 2025-12-23
+**Total Sessions Documented:** 17
