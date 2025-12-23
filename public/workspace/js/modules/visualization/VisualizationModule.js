@@ -76,12 +76,42 @@ class VisualizationModule extends BaseModule {
     this.classMeshes = {};
     this.availableClasses = [];
 
+    // Resize handler reference for cleanup
+    this.handleResizeBound = null;
+
+    // Fullscreen state
+    this.isFullscreen = false;
+    this.controlsVisible = true;
+
     // =========================================================================
     // BIND METHODS
     // =========================================================================
 
     this.onFileSelected = this.onFileSelected.bind(this);
     this.onFileUploaded = this.onFileUploaded.bind(this);
+    this.handleResize = this.handleResize.bind(this);
+    this.toggleExpanded = this.toggleExpanded.bind(this);
+    this.hideControls = this.hideControls.bind(this);
+    this.showControls = this.showControls.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+  }
+
+  // ===========================================================================
+  // DEPENDENCY LOADING
+  // ===========================================================================
+
+  /**
+   * Load Three.js and other required dependencies
+   */
+  async loadDependencies() {
+    // Load Three.js if not already loaded
+    if (typeof THREE === 'undefined') {
+      console.log('[VisualizationModule] Loading Three.js...');
+      await this.loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
+      console.log('[VisualizationModule] Three.js loaded');
+    }
+
+    // UTIF.js will be loaded in Phase 5 for original data overlay
   }
 
   // ===========================================================================
@@ -148,16 +178,27 @@ class VisualizationModule extends BaseModule {
                     <button id="resetViewBtn" class="btn secondary">
                       Reset View
                     </button>
+                    <button id="expandBtn" class="btn">
+                      Expand
+                    </button>
                   </div>
                 </div>
 
-                <!-- Right: Control Panel -->
+                <!-- Right: Control Panel (floats in expanded mode) -->
                 <div class="viz-controls-section">
-                  <h4>Visualization Controls</h4>
+                  <div class="controls-header">
+                    <h4>Visualization Controls</h4>
+                    <button id="collapseControlsBtn" class="collapse-controls-btn" title="Hide controls">×</button>
+                  </div>
                   <div id="classControlPanels" class="class-control-panels">
                     <p class="controls-placeholder">Controls will appear after mesh loads...</p>
                   </div>
                 </div>
+
+                <!-- Show controls button (only visible when controls are hidden in expanded mode) -->
+                <button id="showControlsBtn" class="show-controls-btn">
+                  ⚙ Controls
+                </button>
               </div>
 
               <!-- Navigation Buttons -->
@@ -297,6 +338,27 @@ class VisualizationModule extends BaseModule {
     if (resetViewBtn) {
       resetViewBtn.addEventListener('click', () => this.resetView());
     }
+
+    // Expand button
+    const expandBtn = document.getElementById('expandBtn');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', () => this.toggleExpanded());
+    }
+
+    // Collapse controls button (in expanded mode)
+    const collapseControlsBtn = document.getElementById('collapseControlsBtn');
+    if (collapseControlsBtn) {
+      collapseControlsBtn.addEventListener('click', () => this.hideControls());
+    }
+
+    // Show controls button (in expanded mode when controls hidden)
+    const showControlsBtn = document.getElementById('showControlsBtn');
+    if (showControlsBtn) {
+      showControlsBtn.addEventListener('click', () => this.showControls());
+    }
+
+    // Keyboard listener for Escape key (exits expanded mode)
+    document.addEventListener('keydown', this.handleKeyDown);
   }
 
   // ===========================================================================
@@ -481,8 +543,14 @@ class VisualizationModule extends BaseModule {
     }
 
     // Initialize visualization when entering step 2
+    // Use requestAnimationFrame to ensure the layout has been calculated
+    // after the step becomes visible (display: block)
     if (stepNumber === 2 && !this.visualizationReady) {
-      this.initializeVisualization();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.initializeVisualization();
+        });
+      });
     }
   }
 
@@ -496,36 +564,243 @@ class VisualizationModule extends BaseModule {
   }
 
   // ===========================================================================
-  // VISUALIZATION (Placeholder for Phase 2+)
+  // VISUALIZATION
   // ===========================================================================
 
   async initializeVisualization() {
     console.log('[VisualizationModule] Initializing 3D visualization...');
 
-    // Placeholder for Phase 2
-    // This will be implemented to:
-    // 1. Load Three.js
-    // 2. Initialize scene
-    // 3. Load mesh data
-    // 4. Set up controls
-
-    const placeholder = document.querySelector('.viewer-placeholder');
-    if (placeholder) {
-      placeholder.innerHTML = `
-        <span class="placeholder-icon">🚧</span>
-        <span class="placeholder-text">3D viewer will be implemented in Phase 2</span>
-        <span class="placeholder-subtext">Selected: ${this.selectedFile?.name || 'Unknown'}</span>
-      `;
+    const container = document.getElementById('threejsContainer');
+    if (!container) {
+      console.error('[VisualizationModule] Container not found');
+      return;
     }
 
-    this.visualizationReady = true;
-    console.log('[VisualizationModule] Visualization placeholder ready');
+    // Clear placeholder
+    container.innerHTML = '';
+
+    try {
+      // Load Three.js
+      await this.loadDependencies();
+
+      // Dynamically import visualization modules
+      const vizModule = await import('./visualization/index.js');
+
+      // Initialize the scene
+      const sceneResult = vizModule.initializeScene(container);
+      this.scene = sceneResult.scene;
+      this.camera = sceneResult.camera;
+      this.renderer = sceneResult.renderer;
+
+      // Start render loop
+      vizModule.startRenderLoop();
+
+      // Set up window resize handling
+      this.handleResizeBound = () => vizModule.handleResize(container);
+      window.addEventListener('resize', this.handleResizeBound);
+
+      // Create a placeholder mesh group (actual mesh loading in Phase 3)
+      this.meshGroup = new THREE.Group();
+      this.scene.add(this.meshGroup);
+
+      // Create a simple placeholder cube to show the scene is working
+      const geometry = new THREE.BoxGeometry(2, 2, 2);
+      const material = new THREE.MeshPhongMaterial({
+        color: 0x4CAF50,
+        transparent: true,
+        opacity: 0.8
+      });
+      const placeholderMesh = new THREE.Mesh(geometry, material);
+      this.meshGroup.add(placeholderMesh);
+
+      // Position camera
+      vizModule.positionCameraForMesh(this.meshGroup);
+
+      // Set up mouse/keyboard controls
+      vizModule.setupEnhancedControls(this.renderer, this.meshGroup, this.camera);
+
+      // Set up double-click reset
+      vizModule.setupDoubleClickReset(this.renderer.domElement, () => this.resetView());
+
+      // Update controls placeholder
+      const controlsPanel = document.getElementById('classControlPanels');
+      if (controlsPanel) {
+        controlsPanel.innerHTML = `
+          <p class="controls-placeholder">
+            Scene initialized successfully!<br><br>
+            <strong>Selected:</strong> ${this.selectedFile?.name || 'Unknown'}<br>
+            <strong>Classes:</strong> ${this.meshInfo?.classCount || 'N/A'}<br><br>
+            <em>Mesh loading will be implemented in Phase 3.<br>
+            Controls will appear after mesh loads.</em>
+          </p>
+        `;
+      }
+
+      this.visualizationReady = true;
+      console.log('[VisualizationModule] 3D visualization initialized');
+      this.state.notify('success', 'Scene initialized - mesh loading in Phase 3');
+
+    } catch (error) {
+      console.error('[VisualizationModule] Initialization error:', error);
+      container.innerHTML = `
+        <div class="viewer-placeholder error">
+          <span class="placeholder-icon">❌</span>
+          <span class="placeholder-text">Failed to initialize 3D viewer</span>
+          <span class="placeholder-subtext">${error.message}</span>
+        </div>
+      `;
+      this.state.notify('error', 'Failed to initialize 3D viewer');
+    }
   }
 
+  /**
+   * Handle window resize
+   */
+  handleResize() {
+    if (!this.camera || !this.renderer) return;
+
+    const container = document.getElementById('threejsContainer');
+    if (!container) return;
+
+    this.camera.aspect = container.clientWidth / container.clientHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(container.clientWidth, container.clientHeight);
+  }
+
+  /**
+   * Reset the view to default state
+   */
   resetView() {
     console.log('[VisualizationModule] Resetting view...');
-    // Placeholder for Phase 2+
-    this.state.notify('info', 'Reset view will be implemented in Phase 2');
+
+    if (this.meshGroup) {
+      // Reset rotation
+      this.meshGroup.rotation.set(0, 0, 0);
+    }
+
+    if (this.camera && this.meshGroup) {
+      // Re-position camera
+      import('./visualization/index.js').then(vizModule => {
+        vizModule.positionCameraForMesh(this.meshGroup);
+      });
+    }
+
+    this.state.notify('info', 'View reset');
+  }
+
+  // ===========================================================================
+  // EXPANDED MODE
+  // ===========================================================================
+
+  /**
+   * Toggle between normal and expanded mode
+   */
+  toggleExpanded() {
+    this.isFullscreen = !this.isFullscreen;
+
+    const moduleContainer = this.container.querySelector('.viz-module');
+    const expandBtn = document.getElementById('expandBtn');
+
+    if (this.isFullscreen) {
+      console.log('[VisualizationModule] Entering expanded mode');
+      moduleContainer.classList.add('expanded-mode');
+
+      // Update button text
+      if (expandBtn) {
+        expandBtn.textContent = 'Collapse';
+      }
+
+      // Show controls by default in expanded mode
+      this.controlsVisible = true;
+      const controlsSection = document.querySelector('.viz-controls-section');
+      if (controlsSection) {
+        controlsSection.classList.remove('hidden');
+      }
+    } else {
+      console.log('[VisualizationModule] Exiting expanded mode');
+      moduleContainer.classList.remove('expanded-mode');
+
+      // Update button text
+      if (expandBtn) {
+        expandBtn.textContent = 'Expand';
+      }
+
+      // Ensure controls are visible in normal mode
+      this.controlsVisible = true;
+      const controlsSection = document.querySelector('.viz-controls-section');
+      if (controlsSection) {
+        controlsSection.classList.remove('hidden');
+      }
+    }
+
+    // Trigger resize to adjust canvas
+    setTimeout(() => {
+      this.handleResize();
+      if (this.handleResizeBound) {
+        this.handleResizeBound();
+      }
+    }, 50);
+  }
+
+  /**
+   * Hide controls panel (only in expanded mode)
+   */
+  hideControls() {
+    if (!this.isFullscreen) return;
+
+    this.controlsVisible = false;
+    const controlsSection = document.querySelector('.viz-controls-section');
+    const showControlsBtn = document.getElementById('showControlsBtn');
+
+    if (controlsSection) {
+      controlsSection.classList.add('hidden');
+    }
+    if (showControlsBtn) {
+      showControlsBtn.classList.add('visible');
+    }
+
+    // Trigger resize
+    setTimeout(() => {
+      this.handleResize();
+      if (this.handleResizeBound) {
+        this.handleResizeBound();
+      }
+    }, 50);
+  }
+
+  /**
+   * Show controls panel (only in expanded mode)
+   */
+  showControls() {
+    if (!this.isFullscreen) return;
+
+    this.controlsVisible = true;
+    const controlsSection = document.querySelector('.viz-controls-section');
+    const showControlsBtn = document.getElementById('showControlsBtn');
+
+    if (controlsSection) {
+      controlsSection.classList.remove('hidden');
+    }
+    if (showControlsBtn) {
+      showControlsBtn.classList.remove('visible');
+    }
+
+    // Trigger resize
+    setTimeout(() => {
+      this.handleResize();
+      if (this.handleResizeBound) {
+        this.handleResizeBound();
+      }
+    }, 50);
+  }
+
+  /**
+   * Handle keyboard events (Escape to exit expanded mode)
+   */
+  handleKeyDown(event) {
+    if (event.key === 'Escape' && this.isFullscreen) {
+      this.toggleExpanded();
+    }
   }
 
   // ===========================================================================
@@ -613,8 +888,50 @@ class VisualizationModule extends BaseModule {
   async deactivate() {
     console.log('[VisualizationModule] Deactivating...');
 
-    // Clean up Three.js resources (Phase 2+)
-    // This will dispose geometries, materials, textures
+    // Exit expanded mode if active
+    if (this.isFullscreen) {
+      this.toggleExpanded();
+    }
+
+    // Remove keyboard listener
+    document.removeEventListener('keydown', this.handleKeyDown);
+
+    // Remove resize listener
+    if (this.handleResizeBound) {
+      window.removeEventListener('resize', this.handleResizeBound);
+      this.handleResizeBound = null;
+    }
+
+    // Clean up Three.js resources
+    if (this.meshGroup) {
+      this.meshGroup.traverse((object) => {
+        if (object.geometry) {
+          object.geometry.dispose();
+        }
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(m => m.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
+    }
+
+    // Dispose scene
+    try {
+      const vizModule = await import('./visualization/index.js');
+      vizModule.disposeScene();
+    } catch (e) {
+      console.warn('[VisualizationModule] Could not dispose scene:', e);
+    }
+
+    // Clear references
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.meshGroup = null;
+    this.classMeshes = {};
 
     // Clean up global references
     delete window.vizModule;

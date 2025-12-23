@@ -36,8 +36,11 @@
 
 .viz-module .step-contents {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
+  padding: var(--module-spacing-sm) var(--module-spacing-sm) var(--module-spacing-sm);
+  min-height: 0;
 }
 
 .viz-module .step-content {
@@ -46,6 +49,15 @@
 
 .viz-module .step-content.active {
   display: block;
+}
+
+/* Step 2 (viewer) needs flex layout to fill space */
+.viz-module #step2.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .viz-module .step-inner {
@@ -58,10 +70,13 @@
   margin-bottom: var(--module-spacing-lg);
 }
 
-/* Step 2 needs full width for the viewer */
-.viz-module .viz-step-2 {
-  max-width: none;
-  height: 100%;
+/* Step 2 needs full width for the viewer - override .step-inner centering */
+.viz-module .step-inner.viz-step-2 {
+  max-width: none !important;
+  width: 100% !important;
+  flex: 1;
+  min-height: 0;
+  margin: 0 !important;
   display: flex;
   flex-direction: column;
 }
@@ -74,35 +89,41 @@
   display: flex;
   gap: var(--module-spacing-md);
   flex: 1;
-  min-height: 0; /* Allow flex children to shrink */
+  min-height: 0;
+  width: 100%;
 }
 
 .viz-module .viz-viewer-section {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* Allow flex children to shrink */
+  min-width: 0;
+  min-height: 0;
 }
 
 .viz-module .viz-controls-section {
-  width: 280px;
+  width: 240px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--module-card-bg);
   border: 1px solid var(--module-border);
   border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-md);
+  padding: var(--module-spacing-sm);
   overflow-y: auto;
+  transition: width 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
 }
 
-.viz-module .viz-controls-section h4 {
-  margin: 0 0 var(--module-spacing-md) 0;
-  font-size: var(--module-font-size-md);
-  color: var(--module-text-primary);
-  border-bottom: 1px solid var(--module-border);
-  padding-bottom: var(--module-spacing-sm);
+/* Collapsed controls state */
+.viz-module .viz-controls-section.collapsed {
+  width: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
+  border: none;
 }
+
+/* h4 styling moved to .controls-header */
 
 /* ============================================
    THREE.JS CONTAINER
@@ -110,11 +131,12 @@
 
 .viz-module .threejs-container {
   flex: 1;
+  width: 100%;
   background: #1a1a2e;
   border-radius: var(--module-radius-lg);
   overflow: hidden;
   position: relative;
-  min-height: 400px;
+  min-height: 300px; /* Reduced from 500px to fit in normal mode */
 }
 
 .viz-module .viewer-placeholder {
@@ -409,4 +431,158 @@
   .viz-module .viz-controls-section {
     padding: var(--module-spacing-sm);
   }
+}
+
+/* ============================================
+   CONTROLS HEADER (for collapse button)
+   ============================================ */
+
+.viz-module .controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--module-spacing-md);
+  border-bottom: 1px solid var(--module-border);
+  padding-bottom: var(--module-spacing-sm);
+}
+
+.viz-module .controls-header h4 {
+  margin: 0;
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-primary);
+}
+
+/* Collapse button - hidden in normal mode */
+.viz-module .collapse-controls-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--module-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.viz-module .collapse-controls-btn:hover {
+  color: var(--module-text-primary);
+}
+
+/* Show controls button - hidden by default */
+.viz-module .show-controls-btn {
+  display: none;
+  position: absolute;
+  top: var(--module-spacing-md);
+  right: var(--module-spacing-md);
+  background: rgba(30, 30, 46, 0.95);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-border);
+  padding: 8px 12px;
+  border-radius: var(--module-radius-md);
+  cursor: pointer;
+  font-size: var(--module-font-size-sm);
+  z-index: 101;
+  backdrop-filter: blur(10px);
+}
+
+.viz-module .show-controls-btn:hover {
+  background: rgba(40, 40, 60, 0.95);
+  border-color: var(--module-primary);
+}
+
+.viz-module .show-controls-btn.visible {
+  display: block;
+}
+
+/* ============================================
+   EXPANDED MODE
+   ============================================ */
+
+/* Expanded mode - remove padding from step contents */
+.viz-module.expanded-mode .step-contents {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Expanded mode - override module-base.css constraints for full width */
+.viz-module.expanded-mode #step2.active {
+  max-width: none !important;
+  margin: 0 !important;
+  width: 100%;
+}
+
+/* Expanded mode - step content fills available space */
+.viz-module.expanded-mode .step-content.active {
+  flex: 1;
+}
+
+/* Expanded mode - viz-step-2 fills parent */
+.viz-module.expanded-mode .viz-step-2 {
+  flex: 1;
+  height: auto;
+}
+
+/* Expanded mode - layout uses relative positioning for floating elements */
+.viz-module.expanded-mode .viz-layout {
+  flex: 1;
+  position: relative;
+}
+
+/* Expanded mode - viewer section fills the layout */
+.viz-module.expanded-mode .viz-viewer-section {
+  flex: 1 1 100%;
+  width: 100%;
+  position: relative;
+}
+
+/* Expanded mode - canvas fills viewer section */
+.viz-module.expanded-mode .threejs-container {
+  flex: 1;
+  min-height: 0;
+  border-radius: 0;
+}
+
+/* Expanded mode - floating controls panel */
+.viz-module.expanded-mode .viz-controls-section {
+  position: absolute;
+  top: var(--module-spacing-md);
+  right: var(--module-spacing-md);
+  width: 260px;
+  max-height: calc(100% - 100px);
+  background: rgba(30, 30, 46, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: var(--module-radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  overflow-y: auto;
+}
+
+/* Show collapse button in expanded mode */
+.viz-module.expanded-mode .collapse-controls-btn {
+  display: block;
+}
+
+/* Hidden controls in expanded mode */
+.viz-module.expanded-mode .viz-controls-section.hidden {
+  display: none;
+}
+
+/* Expanded mode - floating toolbar at bottom */
+.viz-module.expanded-mode .viewer-toolbar {
+  position: absolute;
+  bottom: var(--module-spacing-md);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 30, 46, 0.95);
+  backdrop-filter: blur(10px);
+  padding: var(--module-spacing-sm) var(--module-spacing-md);
+  border-radius: var(--module-radius-lg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+
+/* Hide navigation buttons in expanded mode */
+.viz-module.expanded-mode .navigation-buttons {
+  display: none;
 }
