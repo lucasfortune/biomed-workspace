@@ -350,6 +350,53 @@ class WorkspaceAPI {
   async resetSession() {
     return this.post('/reset-session', {});
   }
+
+  // ===========================================================================
+  // Lineage Tracking
+  // ===========================================================================
+
+  /**
+   * Get lineage chain for a file
+   * @param {string} fileId - File ID
+   * @returns {Promise<object>} Lineage data including chain, roots, and processing history
+   */
+  async getFileLineage(fileId) {
+    return this.get(`/api/workspace/lineage/${fileId}`);
+  }
+
+  /**
+   * Find original data file for overlay purposes
+   * Traverses lineage to find the root file with category 'raw_images' or 'inference_data'
+   * @param {string} fileId - Result file ID (e.g., mesh or segmentation result)
+   * @returns {Promise<object|null>} Original data file or null if not found
+   */
+  async findOriginalDataFile(fileId) {
+    try {
+      const lineage = await this.getFileLineage(fileId);
+      if (lineage.success && lineage.originalDataFile) {
+        return lineage.originalDataFile;
+      }
+      return null;
+    } catch (error) {
+      console.error('[WorkspaceAPI] Error finding original data file:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get processing history string for a file
+   * @param {string} fileId - File ID
+   * @returns {Promise<string>} Processing history like "Denoising → Segmentation → Mesh Generation"
+   */
+  async getProcessingHistory(fileId) {
+    try {
+      const lineage = await this.getFileLineage(fileId);
+      return lineage.success ? lineage.processingHistory : '';
+    } catch (error) {
+      console.error('[WorkspaceAPI] Error getting processing history:', error);
+      return '';
+    }
+  }
 }
 
 // Export for use in other modules

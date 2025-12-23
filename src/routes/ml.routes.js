@@ -519,9 +519,20 @@ function createMLRoutes(dependencies) {
 
       // Track file in metadata
       let inferenceFileEntry;
+      const inferenceRelPath = path.relative(workspacePath, inferenceFile.path);
 
-      if (!skipUpload && isTestData) {
-        const inferenceRelPath = path.relative(workspacePath, inferenceFile.path);
+      if (skipUpload) {
+        // File already exists in workspace - look it up by path to get the ID
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        if (metadata && metadata.files) {
+          inferenceFileEntry = metadata.files.find(f => f.path === inferenceRelPath);
+        }
+        // If not found in metadata, create a basic entry (file exists but wasn't tracked)
+        if (!inferenceFileEntry) {
+          inferenceFileEntry = { path: inferenceRelPath };
+        }
+      } else {
+        // New upload (test data or custom) - track in metadata
         inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: inferenceFile.filename || inferenceFile.originalname,
           path: inferenceRelPath,
@@ -529,8 +540,6 @@ function createMLRoutes(dependencies) {
           size: inferenceFile.size,
           folderId: null
         });
-      } else if (skipUpload) {
-        inferenceFileEntry = { path: path.relative(workspacePath, inferenceFile.path) };
       }
 
       res.json({
@@ -541,7 +550,8 @@ function createMLRoutes(dependencies) {
             ? 'Test inference data loaded successfully'
             : 'Inference data uploaded successfully'),
         file_path: inferenceFile.path,
-        inference_data_path: inferenceFileEntry ? inferenceFileEntry.path : path.relative(workspacePath, inferenceFile.path),
+        inference_data_path: inferenceFileEntry ? inferenceFileEntry.path : inferenceRelPath,
+        file_id: inferenceFileEntry ? inferenceFileEntry.id : null,
         validation: validationResult,
         isTestData: isTestData
       });
@@ -675,7 +685,7 @@ function createMLRoutes(dependencies) {
    */
   router.post('/run-inference', async (req, res) => {
     try {
-      const { model_path, data_path, output_path, training_id } = req.body;
+      const { model_path, data_path, output_path, training_id, inputFileIds } = req.body;
 
       if (logger) logger.info('Inference request received:', { model_path, data_path, output_path, training_id });
 
@@ -774,7 +784,9 @@ function createMLRoutes(dependencies) {
         progress: 0,
         currentSlice: 0,
         totalSlices: 0,
-        usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated)
+        usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated),
+        // Lineage tracking: store input file IDs for provenance
+        inputFileIds: inputFileIds || []
       });
 
       if (activityLogger) {

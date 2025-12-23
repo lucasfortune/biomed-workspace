@@ -233,7 +233,9 @@ class WorkspaceManager {
       size: fileInfo.size,
       uploadedAt: new Date().toISOString(),
       folderId: fileInfo.folderId || null,
-      thumbnailPath: null
+      thumbnailPath: null,
+      // Lineage - only added for processed files (not original uploads)
+      ...(fileInfo.lineage && { lineage: fileInfo.lineage })
     };
 
     metadata.files.push(fileEntry);

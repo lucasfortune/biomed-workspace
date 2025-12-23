@@ -1124,7 +1124,7 @@ class FileBrowser {
    * Show file info modal with metadata
    * @param {string} fileId - File ID
    */
-  showFileInfo(fileId) {
+  async showFileInfo(fileId) {
     const file = this.state.get('workspace.files').find(f => f.id === fileId);
     if (!file) return;
 
@@ -1171,13 +1171,20 @@ class FileBrowser {
               <span class="file-info-label">ID:</span>
               <span class="file-info-value file-info-mono">${this.escapeHtml(file.id)}</span>
             </div>
+            <div class="file-info-row file-info-lineage" id="lineage-row-${file.id}">
+              <span class="file-info-label">Processing History:</span>
+              <span class="file-info-value file-info-lineage-value">Loading...</span>
+            </div>
           </div>
         </div>
       </div>
     `;
 
-    // Add to document
+    // Add to document first (so DOM elements exist for lineage lookup)
     document.body.appendChild(modal);
+
+    // Fetch and display lineage information
+    this.fetchAndDisplayLineage(file.id);
 
     // Close handlers
     const closeModal = () => {
@@ -1206,6 +1213,43 @@ class FileBrowser {
       }
     };
     document.addEventListener('keydown', handleEscape);
+  }
+
+  /**
+   * Fetch and display lineage information for a file
+   * @param {string} fileId - File ID
+   */
+  async fetchAndDisplayLineage(fileId) {
+    const lineageRow = document.getElementById(`lineage-row-${fileId}`);
+    if (!lineageRow) return;
+
+    const valueElement = lineageRow.querySelector('.file-info-lineage-value');
+    if (!valueElement) return;
+
+    try {
+      const response = await fetch(`/api/workspace/lineage/${fileId}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.hasLineage && data.processingHistory) {
+          // Show processing history (e.g., "Denoising -> Segmentation -> Mesh Generation")
+          valueElement.textContent = data.processingHistory;
+          lineageRow.style.display = 'flex';
+        } else {
+          // No lineage - this is an original upload
+          valueElement.textContent = 'Original Upload';
+          lineageRow.style.display = 'flex';
+        }
+      } else {
+        // Hide the row if there was an error
+        lineageRow.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('[FileBrowser] Error fetching lineage:', error);
+      lineageRow.style.display = 'none';
+    }
   }
 
   /**

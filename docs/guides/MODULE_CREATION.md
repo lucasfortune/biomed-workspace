@@ -1244,6 +1244,159 @@ uploadBtn.addEventListener('click', () => this.handleUpload());
 
 ---
 
+## Lineage Tracking
+
+### Overview
+
+When your module processes files and creates outputs, you should track the **lineage** (provenance) of those files. This enables:
+- Tracking the full processing history of any file
+- Displaying processing chain in the file browser's "See Info" panel
+- Future: Auto-detecting original data for visualization overlays
+
+### Lineage Data Structure
+
+Each processed file can have a `lineage` property in the workspace metadata:
+
+```json
+{
+  "id": "file_xxx",
+  "name": "denoised_result.tif",
+  "category": "denoised",
+  "lineage": {
+    "processType": "denoising",
+    "processedAt": "2025-12-23T10:30:00.000Z",
+    "inputs": ["file_yyy"],
+    "processId": "denoise_123"
+  }
+}
+```
+
+- **Uploaded files** - No `lineage` property (they are root files)
+- **Processed files** - Have `lineage` with `inputs` pointing to source file IDs
+
+### Frontend: Sending Input File IDs
+
+When starting a processing operation, include the source file ID(s) in your API request:
+
+```javascript
+// In your module's start/process method
+async startProcessing() {
+  const requestBody = {
+    filePath: this.uploadedFile.path,
+    modelType: this.options.modelType
+  };
+
+  // IMPORTANT: Include input file IDs for lineage tracking
+  if (this.uploadedFile && this.uploadedFile.id) {
+    requestBody.inputFileIds = [this.uploadedFile.id];
+    console.log('[MyModule] Including inputFileIds for lineage:', requestBody.inputFileIds);
+  }
+
+  const response = await fetch('/api/mymodule/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
+  // ...
+}
+```
+
+For operations with multiple inputs (e.g., training uses images + annotations):
+
+```javascript
+requestBody.inputFileIds = [rawImagesFileId, annotationsFileId];
+```
+
+### Backend: Storing Lineage in Metadata
+
+Use the `createLineage` helper and pass it when tracking output files:
+
+```javascript
+// In your route handler or service
+const { createLineage } = require('../helpers/lineageHelpers');
+
+// When processing completes, build lineage and track files
+const lineage = inputFileIds && inputFileIds.length > 0
+  ? createLineage('denoising', inputFileIds, taskId)
+  : null;
+
+// Track output file with lineage
+workspaceManager.addFileToMetadata(sessionId, {
+  name: 'denoised_result.tif',
+  path: relativePath,
+  category: 'denoised',
+  size: fileSize,
+  folderId: null,
+  // Include lineage if available
+  ...(lineage && { lineage })
+});
+```
+
+### Process Types
+
+Use consistent process type names across modules:
+
+| Module | processType |
+|--------|-------------|
+| Segmentation/Inference | `segmentation` |
+| Denoising | `denoising` |
+| Mesh Generation | `meshGeneration` |
+| Annotation | `annotation` |
+
+### Backend Route Pattern
+
+Complete example for a module route that tracks lineage:
+
+```javascript
+// In src/routes/mymodule.routes.js
+const { createLineage } = require('../helpers/lineageHelpers');
+
+router.post('/start', requireAuth, async (req, res) => {
+  const { filePath, inputFileIds, options } = req.body;
+  const sessionId = req.session.id;
+
+  // Generate task ID
+  const taskId = `mymodule_${Date.now()}`;
+
+  // Store in session for tracking
+  myModuleSessions.set(taskId, {
+    sessionId,
+    inputFileIds: inputFileIds || [],  // Store for lineage
+    // ... other session data
+  });
+
+  // ... start processing ...
+});
+
+// When processing completes:
+async function onProcessingComplete(taskId, result) {
+  const session = myModuleSessions.get(taskId);
+
+  // Build lineage from stored input file IDs
+  const lineage = session.inputFileIds && session.inputFileIds.length > 0
+    ? createLineage('myProcessType', session.inputFileIds, taskId)
+    : null;
+
+  // Track output files with lineage
+  workspaceManager.addFileToMetadata(session.sessionId, {
+    name: result.outputFileName,
+    path: result.outputPath,
+    category: 'mymodule_output',
+    size: result.fileSize,
+    ...(lineage && { lineage })
+  });
+}
+```
+
+### Lineage Display
+
+When users right-click a file and select "See Info", the file browser automatically:
+1. Fetches lineage from `/api/workspace/lineage/:fileId`
+2. Displays processing history like: "Denoising → Segmentation → Mesh Generation"
+3. Shows "Original Upload" for files without lineage
+
+---
+
 ## Next Steps
 
 ### After Creating Your Module

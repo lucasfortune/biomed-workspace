@@ -76,8 +76,9 @@ class FileService {
    * @param {string} inferenceId - Inference ID
    * @param {string} sessionId - Session ID
    * @param {string} source - Source identifier for logging
+   * @param {object} [lineage=null] - Optional lineage object for provenance tracking
    */
-  async trackInferenceResults(result, inferenceId, sessionId, source) {
+  async trackInferenceResults(result, inferenceId, sessionId, source, lineage = null) {
     if (!result || !result.success) {
       if (this.logger) {
         this.logger.debug(`[TRACKING] Skipping tracking - result not successful (source: ${source})`);
@@ -87,6 +88,9 @@ class FileService {
 
     if (this.logger) {
       this.logger.debug(`[TRACKING] Tracking inference results from ${source} for inference ${inferenceId}`);
+      if (lineage) {
+        this.logger.debug(`[TRACKING] Including lineage: ${JSON.stringify(lineage)}`);
+      }
     }
 
     const filesToTrack = [
@@ -97,7 +101,8 @@ class FileService {
 
     for (const file of filesToTrack) {
       if (file.path && fs.existsSync(file.path)) {
-        await this.trackModuleOutput(sessionId, file.path, file.category);
+        // Pass lineage as part of metadata
+        await this.trackModuleOutput(sessionId, file.path, file.category, { lineage });
         if (this.logger) {
           this.logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
         }

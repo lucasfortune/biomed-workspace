@@ -788,7 +788,11 @@ class SegmentationModule extends BaseModule {
         // Use inference_data_path (relative to workspace) instead of file_path
         // The server's /run-inference expects a path relative to workspace
         const dataPath = result.inference_data_path || result.file_path;
-        this.uploadedFiles.inference_data = { path: dataPath, isTestData: true };
+        this.uploadedFiles.inference_data = {
+          path: dataPath,
+          isTestData: true,
+          id: result.file_id || null  // Capture file ID for lineage tracking
+        };
         console.log('[SegmentationModule] Stored inference path:', this.uploadedFiles.inference_data.path);
 
         // Enable run inference button
@@ -837,7 +841,8 @@ class SegmentationModule extends BaseModule {
       if (result.success) {
         this.uploadedFiles.inference_data = {
           path: result.inference_data_path,
-          name: file?.name || 'Inference Data'
+          name: file?.name || 'Inference Data',
+          id: result.file_id || null  // Capture file ID for lineage tracking
         };
 
         // Enable run inference button
@@ -1337,6 +1342,12 @@ class SegmentationModule extends BaseModule {
       if (trainingId) {
         requestBody.training_id = trainingId;
         console.log('[SegmentationModule] Using training ID:', trainingId);
+      }
+
+      // Lineage tracking: include input file IDs if available
+      if (this.uploadedFiles.inference_data && this.uploadedFiles.inference_data.id) {
+        requestBody.inputFileIds = [this.uploadedFiles.inference_data.id];
+        console.log('[SegmentationModule] Including inputFileIds for lineage:', requestBody.inputFileIds);
       }
 
       const response = await fetch('/run-inference', {

@@ -624,12 +624,21 @@ class MeshModule extends BaseModule {
     this.updateProgressUI(0, 'Initializing...', 'Starting mesh generation...');
 
     try {
+      // Build options including sourceFileId for lineage tracking
+      const generateOptions = {
+        outputFormats: this.generationOptions.outputFormats,
+        targetClasses: this.generationOptions.targetClasses
+      };
+
+      // Include sourceFileId for lineage tracking if available
+      if (this.selectedFile && this.selectedFile.id) {
+        generateOptions.sourceFileId = this.selectedFile.id;
+        console.log('[MeshModule] Including sourceFileId for lineage:', this.selectedFile.id);
+      }
+
       const result = await this.api.generateMesh(
         this.selectedFile.path || this.selectedFile.id,
-        {
-          outputFormats: this.generationOptions.outputFormats,
-          targetClasses: this.generationOptions.targetClasses
-        }
+        generateOptions
       );
 
       if (result.success) {

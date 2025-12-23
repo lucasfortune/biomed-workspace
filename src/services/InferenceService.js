@@ -18,6 +18,7 @@ const {
   createInferenceErrorHandler
 } = require('../../utils/processErrorHandler');
 const { convertResultPathsForWeb } = require('../helpers/pathHelpers');
+const { createLineage } = require('../helpers/lineageHelpers');
 
 class InferenceService {
   /**
@@ -408,13 +409,17 @@ class InferenceService {
       inference.endTime = new Date();
     }
 
-    // STEP 4: Track files ONCE (single tracking point)
+    // STEP 4: Track files ONCE (single tracking point) with lineage
     if (inference && result && this.fileService) {
+      // Build lineage from inference session's input file IDs
+      const lineage = this.buildInferenceLineage(inference, inferenceId);
+
       await this.fileService.trackInferenceResults(
         result,
         inferenceId,
         inference.sessionId,
-        resultSource
+        resultSource,
+        lineage
       );
     }
 
@@ -546,6 +551,39 @@ class InferenceService {
         }
       });
     });
+  }
+
+  // ===========================================================================
+  // LINEAGE TRACKING
+  // ===========================================================================
+
+  /**
+   * Build lineage object from inference session data
+   * @param {object} inference - Inference session object
+   * @param {string} inferenceId - Inference ID
+   * @returns {object|null} Lineage object or null if no input file IDs
+   */
+  buildInferenceLineage(inference, inferenceId) {
+    // Check if inference session has input file IDs
+    if (!inference || !inference.inputFileIds || inference.inputFileIds.length === 0) {
+      if (this.logger) {
+        this.logger.debug('[INFERENCE] No inputFileIds found for lineage tracking');
+      }
+      return null;
+    }
+
+    try {
+      const lineage = createLineage('segmentation', inference.inputFileIds, inferenceId);
+      if (this.logger) {
+        this.logger.debug('[INFERENCE] Built lineage:', lineage);
+      }
+      return lineage;
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('[INFERENCE] Failed to build lineage:', error.message);
+      }
+      return null;
+    }
   }
 
   /**

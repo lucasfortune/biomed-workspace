@@ -15,6 +15,7 @@ const fs = require('fs');
 const uuid = require('uuid');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
+const { createLineage } = require('../helpers/lineageHelpers');
 
 /**
  * Create mesh routes router
@@ -386,7 +387,7 @@ function createMeshRoutes(dependencies) {
     const { spawn } = require('child_process');
 
     try {
-      const { sourceFile, outputFormats = ['json', 'obj'], targetClasses = 'all' } = req.body;
+      const { sourceFile, sourceFileId, outputFormats = ['json', 'obj'], targetClasses = 'all' } = req.body;
       const sessionId = req.session.id;
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
@@ -440,7 +441,9 @@ function createMeshRoutes(dependencies) {
         outputDir: outputDir,
         outputFormats: outputFormats,
         result: null,
-        error: null
+        error: null,
+        // Lineage tracking: store source file ID for provenance
+        sourceFileId: sourceFileId || null
       });
 
       if (activityLogger) {
@@ -533,8 +536,8 @@ function createMeshRoutes(dependencies) {
               meshSession.endTime = new Date();
               meshSession.result = result;
 
-              // Track output files in workspace metadata
-              trackMeshOutputs(meshSession.sessionId, outputDir, result);
+              // Track output files in workspace metadata with lineage
+              trackMeshOutputs(meshSession.sessionId, outputDir, result, meshSession.sourceFileId, meshId);
 
               // Emit completion
               io.to(`mesh-${meshId}`).emit('mesh-complete', {
@@ -587,11 +590,27 @@ function createMeshRoutes(dependencies) {
   }
 
   /**
-   * Track mesh output files in workspace metadata
+   * Track mesh output files in workspace metadata with lineage
+   * @param {string} sessionId - Session ID
+   * @param {string} outputDir - Output directory path
+   * @param {object} result - Mesh generation result
+   * @param {string|null} sourceFileId - Source file ID for lineage tracking
+   * @param {string} meshId - Mesh generation ID
    */
-  async function trackMeshOutputs(sessionId, outputDir, result) {
+  async function trackMeshOutputs(sessionId, outputDir, result, sourceFileId, meshId) {
     try {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Build lineage if source file ID is provided
+      let lineage = null;
+      if (sourceFileId) {
+        try {
+          lineage = createLineage('meshGeneration', [sourceFileId], meshId);
+          if (logger) logger.debug('[Mesh] Built lineage:', lineage);
+        } catch (e) {
+          if (logger) logger.error('[Mesh] Failed to build lineage:', e.message);
+        }
+      }
 
       // Track each output file
       const filesToTrack = ['mesh_data.json', 'mesh.obj', 'mesh.mtl', 'mesh.stl', 'metadata.json'];
@@ -607,7 +626,9 @@ function createMeshRoutes(dependencies) {
             path: relativePath,
             category: 'meshes',
             size: stats.size,
-            folderId: null
+            folderId: null,
+            // Include lineage if available
+            ...(lineage && { lineage })
           });
         }
       }

@@ -68,21 +68,29 @@ class MeshAPI {
    * @param {object} options - Generation options
    * @param {string[]} options.outputFormats - Output formats ['json', 'obj', 'stl']
    * @param {string|number[]} options.targetClasses - 'all' or array of class IDs
+   * @param {string} options.sourceFileId - Source file ID for lineage tracking
    * @returns {Promise<{success: boolean, meshId: string}>}
    */
   async generateMesh(sourceFile, options = {}) {
     try {
+      const requestBody = {
+        sourceFile,
+        outputFormats: options.outputFormats || ['json', 'obj'],
+        targetClasses: options.targetClasses || 'all'
+      };
+
+      // Include sourceFileId for lineage tracking if provided
+      if (options.sourceFileId) {
+        requestBody.sourceFileId = options.sourceFileId;
+      }
+
       const response = await fetch(`${this.baseUrl}/api/mesh/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({
-          sourceFile,
-          outputFormats: options.outputFormats || ['json', 'obj'],
-          targetClasses: options.targetClasses || 'all'
-        })
+        body: JSON.stringify(requestBody)
       });
       return await response.json();
     } catch (error) {

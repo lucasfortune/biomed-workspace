@@ -40,6 +40,9 @@ const {
 // Session tracker
 const sessionTracker = require('./services/SessionTracker');
 
+// Lineage helpers
+const { createLineage } = require('./helpers/lineageHelpers');
+
 /**
  * Configure an Express application with all middleware and routes
  * @param {Express} app - Express application instance to configure
@@ -115,7 +118,14 @@ function configureApp(app, dependencies) {
       logger,
       onSuccess: async (result, resultSource, inf) => {
         if (inf && result) {
-          await trackInferenceResults(result, inferenceId, inf.sessionId, resultSource);
+          // Build lineage from inference session's input file IDs
+          let lineage = null;
+          if (inf.inputFileIds && inf.inputFileIds.length > 0) {
+            lineage = createLineage('segmentation', inf.inputFileIds, inferenceId);
+            logger.debug(`[INFERENCE] Built lineage for inference ${inferenceId}:`, lineage);
+          }
+
+          await trackInferenceResults(result, inferenceId, inf.sessionId, resultSource, lineage);
           const workspacePath = workspaceManager.getWorkspacePath(inf.sessionId);
           const convertedResult = convertResultPathsForWeb(result, inf.sessionId, workspacePath);
           inf.result = convertedResult;
@@ -161,7 +171,8 @@ function configureApp(app, dependencies) {
         path: relativePath,
         category: category,
         size: fileSize,
-        folderId: null
+        folderId: null,
+        ...metadata  // Spread metadata to include lineage if provided
       });
 
       logger.debug(`Tracked ${category} output:`, fileName);
@@ -214,13 +225,16 @@ function configureApp(app, dependencies) {
     return convertedResult;
   }
 
-  async function trackInferenceResults(result, inferenceId, sessionId, source) {
+  async function trackInferenceResults(result, inferenceId, sessionId, source, lineage = null) {
     if (!result || !result.success) {
       logger.debug(`[TRACKING] Skipping tracking - result not successful (source: ${source})`);
       return;
     }
 
     logger.debug(`[TRACKING] Tracking inference results from ${source} for inference ${inferenceId}`);
+    if (lineage) {
+      logger.debug(`[TRACKING] Including lineage: ${JSON.stringify(lineage)}`);
+    }
 
     const filesToTrack = [
       { path: result.output_path, category: 'segmentations' },
@@ -230,7 +244,8 @@ function configureApp(app, dependencies) {
 
     for (const file of filesToTrack) {
       if (file.path && fs.existsSync(file.path)) {
-        await trackModuleOutput(sessionId, file.path, file.category);
+        // Pass lineage as part of metadata
+        await trackModuleOutput(sessionId, file.path, file.category, { lineage });
         logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
       }
     }

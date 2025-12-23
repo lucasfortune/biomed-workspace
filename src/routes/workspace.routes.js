@@ -11,6 +11,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
+const { findRootFiles, getLineageChain, getProcessingHistoryString, findOriginalDataFile } = require('../helpers/lineageHelpers');
 
 /**
  * Create workspace routes router
@@ -489,6 +490,73 @@ function createWorkspaceRoutes(dependencies) {
         logger.error('Slice extraction error:', error);
       }
       res.status(error.message.includes('not found') ? 404 : 500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // ===========================================================================
+  // LINEAGE TRACKING
+  // ===========================================================================
+
+  /**
+   * Get lineage chain for a file
+   * GET /api/workspace/lineage/:fileId
+   *
+   * Returns the processing history chain from root file(s) to the specified file.
+   */
+  router.get('/lineage/:fileId', requireAuth, (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const sessionId = req.session.id;
+      const metadata = workspaceManager.loadMetadata(sessionId);
+
+      if (!metadata || !metadata.files) {
+        return res.status(404).json({
+          success: false,
+          error: 'Workspace metadata not found'
+        });
+      }
+
+      // Find the file
+      const file = metadata.files.find(f => f.id === fileId);
+      if (!file) {
+        return res.status(404).json({
+          success: false,
+          error: 'File not found',
+          fileId
+        });
+      }
+
+      // Get lineage information
+      const chain = getLineageChain(fileId, metadata.files);
+      const roots = findRootFiles(fileId, metadata.files);
+      const processingHistory = getProcessingHistoryString(fileId, metadata.files);
+      const originalDataFile = findOriginalDataFile(fileId, metadata.files);
+
+      res.json({
+        success: true,
+        fileId,
+        fileName: file.name,
+        hasLineage: !!file.lineage,
+        processingHistory,
+        chain,
+        rootIds: roots.rootIds,
+        originalDataFile: originalDataFile ? {
+          id: originalDataFile.id,
+          name: originalDataFile.name,
+          path: originalDataFile.path,
+          category: originalDataFile.category
+        } : null,
+        hasErrors: roots.hasErrors,
+        errors: roots.errors
+      });
+    } catch (error) {
+      if (logger) {
+        logger.error('Lineage query error:', error);
+      }
+      res.status(500).json({
         success: false,
         error: error.message
       });
