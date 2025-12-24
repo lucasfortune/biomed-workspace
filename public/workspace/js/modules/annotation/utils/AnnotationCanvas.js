@@ -130,7 +130,9 @@ class AnnotationCanvas {
       image-rendering: pixelated;
       user-select: none;
       -webkit-user-drag: none;
+      pointer-events: none;
     `;
+    this.sourceImage.draggable = false;
 
     // Create annotation canvas (for painted annotations)
     this.annotationCanvas = document.createElement('canvas');
@@ -154,6 +156,18 @@ class AnnotationCanvas {
       pointer-events: none;
     `;
 
+    // Create interaction layer (transparent layer for mouse events)
+    this.interactionLayer = document.createElement('div');
+    this.interactionLayer.className = 'annotation-interaction';
+    this.interactionLayer.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    `;
+
     // Get contexts
     this.annotationCtx = this.annotationCanvas.getContext('2d');
     this.previewCtx = this.previewCanvas.getContext('2d');
@@ -162,6 +176,7 @@ class AnnotationCanvas {
     this.transformContainer.appendChild(this.sourceImage);
     this.transformContainer.appendChild(this.annotationCanvas);
     this.transformContainer.appendChild(this.previewCanvas);
+    this.transformContainer.appendChild(this.interactionLayer);
     this.viewport.appendChild(this.transformContainer);
     this.container.appendChild(this.viewport);
   }
@@ -260,6 +275,10 @@ class AnnotationCanvas {
     this.annotationCanvas.height = height;
     this.previewCanvas.width = width;
     this.previewCanvas.height = height;
+
+    // Resize interaction layer to match image
+    this.interactionLayer.style.width = `${width}px`;
+    this.interactionLayer.style.height = `${height}px`;
 
     // Reset transform for crisp rendering
     this.annotationCtx.imageSmoothingEnabled = false;
@@ -618,6 +637,22 @@ class AnnotationCanvas {
    */
   getCurrentSliceIndex() {
     return this.currentSliceIndex;
+  }
+
+  /**
+   * Get current slice (alias for BrushEngine compatibility)
+   * @returns {number}
+   */
+  get currentSlice() {
+    return this.currentSliceIndex;
+  }
+
+  /**
+   * Get the canvas area element (for event listeners)
+   * @returns {HTMLElement}
+   */
+  get canvasArea() {
+    return this.interactionLayer;
   }
 
   // ===========================================================================

@@ -1,0 +1,810 @@
+/**
+ * BrushEngine - Painting engine for annotation canvas
+ *
+ * Handles brush and eraser tools for painting annotations on the canvas.
+ * Works with AnnotationCanvas for coordinate transformation and rendering.
+ *
+ * Features:
+ * - Brush and eraser tools
+ * - Configurable brush size
+ * - Smooth stroke interpolation
+ * - Multi-class painting support
+ * - Preview cursor display
+ *
+ * @module BrushEngine
+ */
+
+// =============================================================================
+// CLASS DEFINITION
+// =============================================================================
+
+class BrushEngine {
+
+  // ===========================================================================
+  // CONSTRUCTOR
+  // ===========================================================================
+
+  /**
+   * Create a BrushEngine instance
+   * @param {AnnotationCanvas} annotationCanvas - The annotation canvas instance
+   * @param {object} options - Configuration options
+   */
+  constructor(annotationCanvas, options = {}) {
+    this.canvas = annotationCanvas;
+    this.options = {
+      minBrushSize: 1,
+      maxBrushSize: 100,
+      defaultBrushSize: 10,
+      ...options
+    };
+
+    // =========================================================================
+    // STATE
+    // =========================================================================
+
+    this.tool = 'brush';           // 'brush' | 'eraser'
+    this.brushSize = this.options.defaultBrushSize;
+    this.activeClassId = 1;        // Current class ID for painting
+    this.isDrawing = false;        // Whether currently in a stroke
+    this.lastPoint = null;         // Last point for line interpolation
+
+    // =========================================================================
+    // ANNOTATION DATA STORAGE
+    // Per-slice annotation data as Uint8Array (width * height)
+    // Values: 0 = background, 1-N = class IDs
+    // =========================================================================
+
+    this.sliceAnnotations = new Map();  // Map<sliceIndex, Uint8Array>
+    this.imageWidth = 0;
+    this.imageHeight = 0;
+
+    // =========================================================================
+    // CLASS DEFINITIONS
+    // =========================================================================
+
+    this.classes = [
+      { id: 1, name: 'Class 1', color: '#FF6B6B', visible: true }
+    ];
+    this.nextClassId = 2;
+
+    // Color generation settings for maximum distinction
+    this.colorSettings = {
+      saturation: 70,  // Percentage (0-100)
+      lightness: 55    // Percentage (0-100)
+    };
+
+    // =========================================================================
+    // CALLBACKS
+    // =========================================================================
+
+    this.onStrokeStart = null;     // Called when stroke starts
+    this.onStrokeEnd = null;       // Called when stroke ends
+    this.onAnnotationChange = null; // Called when annotation data changes
+
+    // =========================================================================
+    // BIND METHODS
+    // =========================================================================
+
+    this.handleMouseDown = this.handleMouseDown.bind(this);
+    this.handleMouseMove = this.handleMouseMove.bind(this);
+    this.handleMouseUp = this.handleMouseUp.bind(this);
+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
+  }
+
+  // ===========================================================================
+  // INITIALIZATION
+  // ===========================================================================
+
+  /**
+   * Initialize the brush engine with image dimensions
+   * @param {number} width - Image width in pixels
+   * @param {number} height - Image height in pixels
+   */
+  initialize(width, height) {
+    this.imageWidth = width;
+    this.imageHeight = height;
+
+    // Set up mouse event listeners on the canvas area
+    this.attachEventListeners();
+
+    console.log(`[BrushEngine] Initialized with dimensions ${width}x${height}`);
+  }
+
+  /**
+   * Attach mouse event listeners to the canvas
+   */
+  attachEventListeners() {
+    const canvasArea = this.canvas.canvasArea;
+    if (!canvasArea) {
+      console.warn('[BrushEngine] Canvas area not available for event listeners');
+      return;
+    }
+
+    // Mouse down on canvas area starts stroke
+    canvasArea.addEventListener('mousedown', this.handleMouseDown);
+
+    // Mouse move and up are global to handle dragging outside canvas
+    window.addEventListener('mousemove', this.handleMouseMove);
+    window.addEventListener('mouseup', this.handleMouseUp);
+
+    // Mouse leave clears preview
+    canvasArea.addEventListener('mouseleave', this.handleMouseLeave);
+
+    console.log('[BrushEngine] Event listeners attached');
+  }
+
+  /**
+   * Detach mouse event listeners
+   */
+  detachEventListeners() {
+    const canvasArea = this.canvas.canvasArea;
+
+    if (canvasArea) {
+      canvasArea.removeEventListener('mousedown', this.handleMouseDown);
+      canvasArea.removeEventListener('mouseleave', this.handleMouseLeave);
+    }
+
+    window.removeEventListener('mousemove', this.handleMouseMove);
+    window.removeEventListener('mouseup', this.handleMouseUp);
+  }
+
+  // ===========================================================================
+  // TOOL MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Set the active tool
+   * @param {'brush' | 'eraser'} tool - Tool to activate
+   */
+  setTool(tool) {
+    if (tool === 'brush' || tool === 'eraser') {
+      this.tool = tool;
+      this.updateCursor();
+      console.log(`[BrushEngine] Tool set to: ${tool}`);
+    }
+  }
+
+  /**
+   * Set the brush size
+   * @param {number} size - Brush size in pixels
+   */
+  setBrushSize(size) {
+    this.brushSize = Math.max(
+      this.options.minBrushSize,
+      Math.min(this.options.maxBrushSize, size)
+    );
+    this.updatePreview();
+    console.log(`[BrushEngine] Brush size set to: ${this.brushSize}`);
+  }
+
+  /**
+   * Get current brush size
+   * @returns {number} Current brush size
+   */
+  getBrushSize() {
+    return this.brushSize;
+  }
+
+  /**
+   * Set the active class for painting
+   * @param {number} classId - Class ID to paint with
+   */
+  setActiveClass(classId) {
+    const classExists = this.classes.some(c => c.id === classId);
+    if (classExists) {
+      this.activeClassId = classId;
+      this.updatePreview();
+      console.log(`[BrushEngine] Active class set to: ${classId}`);
+    }
+  }
+
+  /**
+   * Update cursor style based on current tool
+   */
+  updateCursor() {
+    const canvasArea = this.canvas.canvasArea;
+    if (!canvasArea) return;
+
+    if (this.tool === 'eraser') {
+      canvasArea.style.cursor = 'crosshair';
+    } else {
+      canvasArea.style.cursor = 'crosshair';
+    }
+  }
+
+  // ===========================================================================
+  // MOUSE EVENT HANDLERS
+  // ===========================================================================
+
+  /**
+   * Handle mouse down - start stroke
+   * @param {MouseEvent} e - Mouse event
+   */
+  handleMouseDown(e) {
+    // Only handle left-click for painting
+    // Right-click and middle-click are for pan (handled by AnnotationCanvas)
+    if (e.button !== 0) return;
+
+    // Don't paint if space is held (pan mode)
+    if (this.canvas.isPanning || this.canvas.spacePressed) return;
+
+    const source = this.canvas.screenToSource(e.clientX, e.clientY);
+    const inBounds = this.canvas.isInBounds(source.x, source.y);
+    if (!inBounds) return;
+
+    // Only prevent default for actual painting (not pan)
+    e.preventDefault();
+
+    this.startStroke(source.x, source.y);
+  }
+
+  /**
+   * Handle mouse move - continue stroke or update preview
+   * @param {MouseEvent} e - Mouse event
+   */
+  handleMouseMove(e) {
+    // Skip if canvas not ready
+    if (!this.canvas || !this.imageWidth) return;
+
+    const source = this.canvas.screenToSource(e.clientX, e.clientY);
+    const inBounds = this.canvas.isInBounds(source.x, source.y);
+
+    // Continue stroke if drawing (even outside bounds for smooth edges)
+    if (this.isDrawing) {
+      if (inBounds) {
+        this.continueStroke(source.x, source.y);
+      }
+    }
+
+    // Only update preview when mouse is over canvas
+    if (inBounds) {
+      const coords = { source, inBounds };
+      this.updatePreview(coords);
+    } else {
+      this.clearPreview();
+    }
+  }
+
+  /**
+   * Handle mouse up - end stroke
+   * @param {MouseEvent} e - Mouse event
+   */
+  handleMouseUp(e) {
+    if (e.button !== 0) return;
+
+    if (this.isDrawing) {
+      this.endStroke();
+    }
+  }
+
+  /**
+   * Handle mouse leave - end stroke if active
+   * @param {MouseEvent} e - Mouse event
+   */
+  handleMouseLeave(e) {
+    // Clear preview
+    this.clearPreview();
+
+    // End stroke if active
+    if (this.isDrawing) {
+      this.endStroke();
+    }
+  }
+
+  // ===========================================================================
+  // STROKE MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Start a new stroke
+   * @param {number} x - X coordinate in source pixels
+   * @param {number} y - Y coordinate in source pixels
+   */
+  startStroke(x, y) {
+    console.log(`[BrushEngine] Starting stroke at (${x.toFixed(1)}, ${y.toFixed(1)}) with ${this.tool}, size ${this.brushSize}`);
+
+    this.isDrawing = true;
+    this.lastPoint = { x, y };
+
+    // Notify stroke start (for history management)
+    if (this.onStrokeStart) {
+      this.onStrokeStart();
+    }
+
+    // Draw initial point
+    this.drawCircle(x, y);
+    this.renderAnnotations();
+  }
+
+  /**
+   * Continue the current stroke
+   * @param {number} x - X coordinate in source pixels
+   * @param {number} y - Y coordinate in source pixels
+   */
+  continueStroke(x, y) {
+    if (!this.isDrawing || !this.lastPoint) return;
+
+    // Draw line from last point to current point
+    this.drawLine(this.lastPoint.x, this.lastPoint.y, x, y);
+    this.lastPoint = { x, y };
+
+    // Render updated annotations
+    this.renderAnnotations();
+  }
+
+  /**
+   * End the current stroke
+   */
+  endStroke() {
+    if (!this.isDrawing) return;
+
+    this.isDrawing = false;
+    this.lastPoint = null;
+
+    // Notify stroke end (for history management)
+    if (this.onStrokeEnd) {
+      this.onStrokeEnd();
+    }
+
+    // Notify annotation change
+    if (this.onAnnotationChange) {
+      this.onAnnotationChange();
+    }
+
+    console.log('[BrushEngine] Stroke ended');
+  }
+
+  // ===========================================================================
+  // DRAWING ALGORITHMS
+  // ===========================================================================
+
+  /**
+   * Draw a filled circle at the given position
+   * @param {number} cx - Center X in source pixels
+   * @param {number} cy - Center Y in source pixels
+   */
+  drawCircle(cx, cy) {
+    const data = this.getAnnotationData();
+    if (!data) return;
+
+    const radius = Math.floor(this.brushSize / 2);
+    const value = this.tool === 'eraser' ? 0 : this.activeClassId;
+
+    // Iterate over bounding box of circle
+    const minX = Math.max(0, Math.floor(cx - radius));
+    const maxX = Math.min(this.imageWidth - 1, Math.ceil(cx + radius));
+    const minY = Math.max(0, Math.floor(cy - radius));
+    const maxY = Math.min(this.imageHeight - 1, Math.ceil(cy + radius));
+
+    const radiusSq = radius * radius;
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        // Check if point is inside circle
+        const dx = x - cx;
+        const dy = y - cy;
+        if (dx * dx + dy * dy <= radiusSq) {
+          const index = y * this.imageWidth + x;
+          data[index] = value;
+        }
+      }
+    }
+  }
+
+  /**
+   * Draw a line between two points with the brush
+   * Uses linear interpolation to ensure smooth strokes
+   * @param {number} x0 - Start X
+   * @param {number} y0 - Start Y
+   * @param {number} x1 - End X
+   * @param {number} y1 - End Y
+   */
+  drawLine(x0, y0, x1, y1) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Number of steps based on distance (at least 1)
+    // Use smaller step size for smoother lines
+    const stepSize = Math.max(1, this.brushSize / 4);
+    const steps = Math.max(1, Math.ceil(distance / stepSize));
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = x0 + dx * t;
+      const y = y0 + dy * t;
+      this.drawCircle(x, y);
+    }
+  }
+
+  // ===========================================================================
+  // ANNOTATION DATA MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Get annotation data for the current slice
+   * Creates new data if it doesn't exist
+   * @returns {Uint8Array} Annotation data array
+   */
+  getAnnotationData() {
+    const sliceIndex = this.canvas.currentSlice || 0;
+
+    if (!this.sliceAnnotations.has(sliceIndex)) {
+      // Create new empty annotation data
+      const size = this.imageWidth * this.imageHeight;
+      if (size <= 0) return null;
+
+      this.sliceAnnotations.set(sliceIndex, new Uint8Array(size));
+    }
+
+    return this.sliceAnnotations.get(sliceIndex);
+  }
+
+  /**
+   * Set annotation data for a specific slice
+   * @param {number} sliceIndex - Slice index
+   * @param {Uint8Array} data - Annotation data
+   */
+  setAnnotationData(sliceIndex, data) {
+    this.sliceAnnotations.set(sliceIndex, data);
+  }
+
+  /**
+   * Get all slice annotations
+   * @returns {Map<number, Uint8Array>} Map of slice index to annotation data
+   */
+  getAllAnnotations() {
+    return this.sliceAnnotations;
+  }
+
+  /**
+   * Clear annotation data for a specific slice
+   * @param {number} sliceIndex - Slice index to clear
+   */
+  clearSliceAnnotations(sliceIndex) {
+    this.sliceAnnotations.delete(sliceIndex);
+  }
+
+  /**
+   * Clear all annotation data
+   */
+  clearAllAnnotations() {
+    this.sliceAnnotations.clear();
+  }
+
+  /**
+   * Check if a slice has any annotations
+   * @param {number} sliceIndex - Slice index to check
+   * @returns {boolean} True if slice has annotations
+   */
+  hasAnnotations(sliceIndex) {
+    const data = this.sliceAnnotations.get(sliceIndex);
+    if (!data) return false;
+
+    // Check if any non-zero values exist
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] !== 0) return true;
+    }
+    return false;
+  }
+
+  // ===========================================================================
+  // CANVAS RENDERING
+  // ===========================================================================
+
+  /**
+   * Render annotations to the annotation canvas
+   * Maps class IDs to colors and handles visibility
+   */
+  renderAnnotations() {
+    const ctx = this.canvas.annotationCtx;
+    if (!ctx) return;
+
+    const data = this.getAnnotationData();
+    if (!data) return;
+
+    const width = this.imageWidth;
+    const height = this.imageHeight;
+
+    // Create ImageData for efficient pixel manipulation
+    const imageData = ctx.createImageData(width, height);
+    const pixels = imageData.data;
+
+    // Build color lookup table
+    const colorLUT = this.buildColorLUT();
+
+    // Fill pixel data
+    for (let i = 0; i < data.length; i++) {
+      const classId = data[i];
+      const pixelIndex = i * 4;
+
+      if (classId === 0) {
+        // Background - transparent
+        pixels[pixelIndex] = 0;
+        pixels[pixelIndex + 1] = 0;
+        pixels[pixelIndex + 2] = 0;
+        pixels[pixelIndex + 3] = 0;
+      } else {
+        // Class color with semi-transparency
+        const color = colorLUT[classId];
+        if (color && color.visible) {
+          pixels[pixelIndex] = color.r;
+          pixels[pixelIndex + 1] = color.g;
+          pixels[pixelIndex + 2] = color.b;
+          pixels[pixelIndex + 3] = 180;  // Semi-transparent
+        } else {
+          // Class hidden or not found
+          pixels[pixelIndex + 3] = 0;
+        }
+      }
+    }
+
+    // Clear and draw
+    ctx.clearRect(0, 0, width, height);
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  /**
+   * Build color lookup table from class definitions
+   * @returns {object} LUT mapping class ID to RGB values
+   */
+  buildColorLUT() {
+    const lut = {};
+
+    for (const cls of this.classes) {
+      const rgb = this.hexToRgb(cls.color);
+      lut[cls.id] = {
+        r: rgb.r,
+        g: rgb.g,
+        b: rgb.b,
+        visible: cls.visible
+      };
+    }
+
+    return lut;
+  }
+
+  /**
+   * Convert hex color to RGB
+   * @param {string} hex - Hex color string
+   * @returns {object} RGB values
+   */
+  hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 255, g: 0, b: 0 };  // Default to red
+  }
+
+  // ===========================================================================
+  // BRUSH PREVIEW
+  // ===========================================================================
+
+  /**
+   * Update the brush preview cursor
+   * @param {object} coords - Coordinate info from AnnotationCanvas
+   */
+  updatePreview(coords = null) {
+    const ctx = this.canvas.previewCtx;
+    if (!ctx) return;
+
+    // Clear previous preview
+    ctx.clearRect(0, 0, this.imageWidth, this.imageHeight);
+
+    if (!coords || !coords.inBounds) return;
+
+    const x = coords.source.x;
+    const y = coords.source.y;
+    const radius = this.brushSize / 2;
+
+    // Get color for preview
+    let strokeColor, fillColor;
+    if (this.tool === 'eraser') {
+      strokeColor = '#ffffff';
+      fillColor = 'rgba(255, 255, 255, 0.3)';
+    } else {
+      const activeClass = this.classes.find(c => c.id === this.activeClassId);
+      strokeColor = activeClass ? activeClass.color : '#FF6B6B';
+      fillColor = activeClass ? `${activeClass.color}4D` : 'rgba(255, 107, 107, 0.3)';
+    }
+
+    // Draw preview circle
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Draw crosshair for precision
+    if (radius > 5) {
+      ctx.beginPath();
+      ctx.moveTo(x - 3, y);
+      ctx.lineTo(x + 3, y);
+      ctx.moveTo(x, y - 3);
+      ctx.lineTo(x, y + 3);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  /**
+   * Clear the brush preview
+   */
+  clearPreview() {
+    const ctx = this.canvas.previewCtx;
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, this.imageWidth, this.imageHeight);
+  }
+
+  // ===========================================================================
+  // CLASS MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Add a new class
+   * @param {string} name - Optional class name
+   * @param {string} color - Optional color
+   * @returns {object} The new class
+   */
+  addClass(name = null, color = null) {
+    const id = this.nextClassId++;
+    const newClass = {
+      id,
+      name: name || `Class ${id}`,
+      color: color || this.getNextColor(),
+      visible: true
+    };
+
+    this.classes.push(newClass);
+    this.activeClassId = id;
+
+    console.log(`[BrushEngine] Added class: ${newClass.name}`);
+    return newClass;
+  }
+
+  /**
+   * Delete a class
+   * @param {number} classId - Class ID to delete
+   * @returns {boolean} True if deleted
+   */
+  deleteClass(classId) {
+    const index = this.classes.findIndex(c => c.id === classId);
+    if (index === -1) return false;
+
+    // Remove class
+    this.classes.splice(index, 1);
+
+    // Clear all pixels with this class ID
+    for (const [sliceIndex, data] of this.sliceAnnotations) {
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] === classId) {
+          data[i] = 0;
+        }
+      }
+    }
+
+    // Update active class if needed
+    if (this.activeClassId === classId) {
+      this.activeClassId = this.classes.length > 0 ? this.classes[0].id : 0;
+    }
+
+    // Re-render
+    this.renderAnnotations();
+
+    console.log(`[BrushEngine] Deleted class ID: ${classId}`);
+    return true;
+  }
+
+  /**
+   * Toggle class visibility
+   * @param {number} classId - Class ID to toggle
+   */
+  toggleClassVisibility(classId) {
+    const cls = this.classes.find(c => c.id === classId);
+    if (cls) {
+      cls.visible = !cls.visible;
+      this.renderAnnotations();
+      console.log(`[BrushEngine] Class ${classId} visibility: ${cls.visible}`);
+    }
+  }
+
+  /**
+   * Generate a color with maximum distinction from existing colors
+   * Uses HSL color space with evenly distributed hues
+   * @returns {string} Hex color
+   */
+  getNextColor() {
+    const numClasses = this.classes.length;
+
+    // Use golden angle approximation for optimal hue distribution
+    // This ensures colors are well-separated even when adding many classes
+    const goldenAngle = 137.508; // degrees
+    const hue = (numClasses * goldenAngle) % 360;
+
+    const { saturation, lightness } = this.colorSettings;
+    return this.hslToHex(hue, saturation, lightness);
+  }
+
+  /**
+   * Convert HSL to Hex color
+   * @param {number} h - Hue (0-360)
+   * @param {number} s - Saturation (0-100)
+   * @param {number} l - Lightness (0-100)
+   * @returns {string} Hex color
+   */
+  hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+
+    let r = 0, g = 0, b = 0;
+
+    if (h >= 0 && h < 60) {
+      r = c; g = x; b = 0;
+    } else if (h >= 60 && h < 120) {
+      r = x; g = c; b = 0;
+    } else if (h >= 120 && h < 180) {
+      r = 0; g = c; b = x;
+    } else if (h >= 180 && h < 240) {
+      r = 0; g = x; b = c;
+    } else if (h >= 240 && h < 300) {
+      r = x; g = 0; b = c;
+    } else {
+      r = c; g = 0; b = x;
+    }
+
+    const toHex = (n) => {
+      const hex = Math.round((n + m) * 255).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    };
+
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
+  /**
+   * Get all classes
+   * @returns {Array} Array of class definitions
+   */
+  getClasses() {
+    return [...this.classes];
+  }
+
+  /**
+   * Get active class
+   * @returns {object|null} Active class or null
+   */
+  getActiveClass() {
+    return this.classes.find(c => c.id === this.activeClassId) || null;
+  }
+
+  // ===========================================================================
+  // CLEANUP
+  // ===========================================================================
+
+  /**
+   * Destroy the brush engine and clean up resources
+   */
+  destroy() {
+    this.detachEventListeners();
+    this.sliceAnnotations.clear();
+    this.classes = [];
+    this.canvas = null;
+
+    console.log('[BrushEngine] Destroyed');
+  }
+}
+
+// =============================================================================
+// EXPORT
+// =============================================================================
+
+export default BrushEngine;

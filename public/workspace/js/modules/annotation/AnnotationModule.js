@@ -22,6 +22,7 @@ import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import AnnotationAPI from './AnnotationAPI.js';
 import AnnotationCanvas from './utils/AnnotationCanvas.js';
+import BrushEngine from './utils/BrushEngine.js';
 
 // =============================================================================
 // MODULE CLASS
@@ -59,6 +60,7 @@ class AnnotationModule extends BaseModule {
     this.fileSelector = null;
     this.api = null;
     this.canvas = null;
+    this.brushEngine = null;
 
     // =========================================================================
     // MODULE STATE
@@ -200,30 +202,56 @@ class AnnotationModule extends BaseModule {
                   </div>
                 </div>
 
-                <!-- Toolbar (placeholder for Phase 5-7) -->
+                <!-- Toolbar -->
                 <div id="toolbar" class="annotation-toolbar">
+                  <!-- Tools Section -->
                   <div class="toolbar-section">
                     <h4>Tools</h4>
-                    <div class="placeholder-content">
-                      <p>Brush, Eraser</p>
+                    <div class="tool-buttons">
+                      <button id="toolBrush" class="tool-btn active" title="Brush (B)">
+                        <span class="tool-icon">🖌️</span>
+                        <span class="tool-label">Brush</span>
+                      </button>
+                      <button id="toolEraser" class="tool-btn" title="Eraser (E)">
+                        <span class="tool-icon">🧹</span>
+                        <span class="tool-label">Eraser</span>
+                      </button>
                     </div>
                   </div>
+
+                  <!-- Brush Size Section -->
                   <div class="toolbar-section">
                     <h4>Brush Size</h4>
-                    <div class="placeholder-content">
-                      <p>Size slider</p>
+                    <div class="brush-size-control">
+                      <input type="range" id="brushSizeSlider" min="1" max="50" value="10"
+                             class="brush-slider" title="Brush size">
+                      <span id="brushSizeValue" class="brush-size-value">10px</span>
                     </div>
                   </div>
+
+                  <!-- History Section (placeholder for Phase 6) -->
                   <div class="toolbar-section">
                     <h4>History</h4>
-                    <div class="placeholder-content">
-                      <p>Undo/Redo</p>
+                    <div class="history-buttons">
+                      <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)" disabled>
+                        <span class="tool-icon">↶</span>
+                        <span class="tool-label">Undo</span>
+                      </button>
+                      <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)" disabled>
+                        <span class="tool-icon">↷</span>
+                        <span class="tool-label">Redo</span>
+                      </button>
                     </div>
                   </div>
-                  <div class="toolbar-section">
-                    <h4>Classes</h4>
-                    <div class="placeholder-content">
-                      <p>Class list</p>
+
+                  <!-- Classes Section -->
+                  <div class="toolbar-section classes-section">
+                    <div class="classes-header">
+                      <h4>Classes</h4>
+                      <button id="addClassBtn" class="btn-add-class" title="Add class">+</button>
+                    </div>
+                    <div id="classList" class="class-list">
+                      <!-- Classes will be rendered dynamically -->
                     </div>
                   </div>
                 </div>
@@ -399,17 +427,57 @@ class AnnotationModule extends BaseModule {
       zoomReset.addEventListener('click', () => this.canvas?.resetZoom());
     }
 
-    // Keyboard shortcuts for slice navigation
+    // Keyboard shortcuts for slice navigation and tools
     document.addEventListener('keydown', (e) => {
       // Only handle if Step 2 is active
       if (this.currentStep !== 2) return;
+
+      // Don't handle if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       if (e.key === 'ArrowLeft') {
         this.goToSlice(this.currentSlice - 1);
       } else if (e.key === 'ArrowRight') {
         this.goToSlice(this.currentSlice + 1);
+      } else if (e.key === 'b' || e.key === 'B') {
+        this.setTool('brush');
+      } else if (e.key === 'e' || e.key === 'E') {
+        this.setTool('eraser');
+      } else if (e.key === '[') {
+        this.adjustBrushSize(-5);
+      } else if (e.key === ']') {
+        this.adjustBrushSize(5);
       }
     });
+
+    // =========================================================================
+    // Toolbar Controls
+    // =========================================================================
+
+    // Tool buttons
+    const toolBrush = this.container.querySelector('#toolBrush');
+    const toolEraser = this.container.querySelector('#toolEraser');
+
+    if (toolBrush) {
+      toolBrush.addEventListener('click', () => this.setTool('brush'));
+    }
+    if (toolEraser) {
+      toolEraser.addEventListener('click', () => this.setTool('eraser'));
+    }
+
+    // Brush size slider
+    const brushSizeSlider = this.container.querySelector('#brushSizeSlider');
+    if (brushSizeSlider) {
+      brushSizeSlider.addEventListener('input', (e) => {
+        this.setBrushSize(parseInt(e.target.value, 10));
+      });
+    }
+
+    // Add class button
+    const addClassBtn = this.container.querySelector('#addClassBtn');
+    if (addClassBtn) {
+      addClassBtn.addEventListener('click', () => this.addClass());
+    }
   }
 
   // ===========================================================================
@@ -491,11 +559,37 @@ class AnnotationModule extends BaseModule {
 
         this.canvas.onMouseMove = (coords) => {
           this.updateCoordsDisplay(coords);
+          // Update brush preview
+          if (this.brushEngine) {
+            this.brushEngine.updatePreview(coords);
+          }
         };
 
         this.canvas.onSliceLoaded = (info) => {
           this.updateDimensionsDisplay(info.width, info.height);
+          // Initialize brush engine with image dimensions
+          if (this.brushEngine) {
+            this.brushEngine.initialize(info.width, info.height);
+            this.brushEngine.renderAnnotations();
+          }
         };
+      }
+
+      // Create brush engine if not exists
+      if (!this.brushEngine) {
+        this.brushEngine = new BrushEngine(this.canvas);
+
+        // Set up brush engine callbacks
+        this.brushEngine.onStrokeEnd = () => {
+          // Could save history state here (Phase 6)
+        };
+
+        this.brushEngine.onAnnotationChange = () => {
+          // Mark as dirty for unsaved changes warning (Phase 9)
+        };
+
+        // Render initial class list
+        this.renderClassList();
       }
 
       // Get file ID and slice count
@@ -550,6 +644,11 @@ class AnnotationModule extends BaseModule {
       this.currentSlice = index;
       this.updateSliceIndicator();
       this.updateSliceButtons();
+
+      // Re-render annotations for the new slice
+      if (this.brushEngine) {
+        this.brushEngine.renderAnnotations();
+      }
     } catch (error) {
       console.error('[AnnotationModule] Error loading slice:', error);
       if (this.state?.notify) {
@@ -632,6 +731,167 @@ class AnnotationModule extends BaseModule {
     if (loading) {
       loading.style.display = show ? 'flex' : 'none';
     }
+  }
+
+  // ===========================================================================
+  // TOOL MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Set the active tool
+   * @param {'brush' | 'eraser'} tool - Tool to activate
+   */
+  setTool(tool) {
+    if (!this.brushEngine) return;
+
+    this.brushEngine.setTool(tool);
+
+    // Update UI
+    const toolBrush = this.container.querySelector('#toolBrush');
+    const toolEraser = this.container.querySelector('#toolEraser');
+
+    if (toolBrush && toolEraser) {
+      toolBrush.classList.toggle('active', tool === 'brush');
+      toolEraser.classList.toggle('active', tool === 'eraser');
+    }
+  }
+
+  /**
+   * Set the brush size
+   * @param {number} size - Brush size in pixels
+   */
+  setBrushSize(size) {
+    if (!this.brushEngine) return;
+
+    this.brushEngine.setBrushSize(size);
+
+    // Update UI
+    const slider = this.container.querySelector('#brushSizeSlider');
+    const value = this.container.querySelector('#brushSizeValue');
+
+    if (slider) slider.value = this.brushEngine.getBrushSize();
+    if (value) value.textContent = `${this.brushEngine.getBrushSize()}px`;
+  }
+
+  /**
+   * Adjust brush size by delta
+   * @param {number} delta - Amount to add/subtract
+   */
+  adjustBrushSize(delta) {
+    if (!this.brushEngine) return;
+
+    const currentSize = this.brushEngine.getBrushSize();
+    this.setBrushSize(currentSize + delta);
+  }
+
+  // ===========================================================================
+  // CLASS MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Add a new class
+   */
+  addClass() {
+    if (!this.brushEngine) return;
+
+    this.brushEngine.addClass();
+    this.renderClassList();
+  }
+
+  /**
+   * Delete a class
+   * @param {number} classId - Class ID to delete
+   */
+  deleteClass(classId) {
+    if (!this.brushEngine) return;
+
+    // Confirm deletion
+    if (!confirm('Delete this class? All annotations with this class will be removed.')) {
+      return;
+    }
+
+    this.brushEngine.deleteClass(classId);
+    this.renderClassList();
+  }
+
+  /**
+   * Select a class as active
+   * @param {number} classId - Class ID to select
+   */
+  selectClass(classId) {
+    if (!this.brushEngine) return;
+
+    this.brushEngine.setActiveClass(classId);
+    this.renderClassList();
+  }
+
+  /**
+   * Toggle class visibility
+   * @param {number} classId - Class ID to toggle
+   */
+  toggleClassVisibility(classId) {
+    if (!this.brushEngine) return;
+
+    this.brushEngine.toggleClassVisibility(classId);
+    this.renderClassList();
+  }
+
+  /**
+   * Render the class list UI
+   */
+  renderClassList() {
+    const classList = this.container.querySelector('#classList');
+    if (!classList || !this.brushEngine) return;
+
+    const classes = this.brushEngine.getClasses();
+    const activeClass = this.brushEngine.getActiveClass();
+
+    classList.innerHTML = classes.map(cls => `
+      <div class="class-item ${cls.id === activeClass?.id ? 'active' : ''}"
+           data-class-id="${cls.id}">
+        <span class="class-color" style="background: ${cls.color};"></span>
+        <span class="class-name">${cls.name}</span>
+        <button class="class-visibility ${cls.visible ? 'is-visible' : 'is-hidden'}"
+                title="${cls.visible ? 'Hide class' : 'Show class'}" data-action="visibility">
+          ${cls.visible ? '👁️' : '👁️‍🗨️'}
+        </button>
+        <button class="class-delete" title="Delete class" data-action="delete">×</button>
+      </div>
+    `).join('');
+
+    // Attach event listeners to class items
+    classList.querySelectorAll('.class-item').forEach(item => {
+      const classId = parseInt(item.dataset.classId, 10);
+
+      // Visibility toggle button
+      const visibilityBtn = item.querySelector('[data-action="visibility"]');
+      if (visibilityBtn) {
+        visibilityBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.toggleClassVisibility(classId);
+        });
+      }
+
+      // Delete button
+      const deleteBtn = item.querySelector('[data-action="delete"]');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.deleteClass(classId);
+        });
+      }
+
+      // Click anywhere on the item to select (except action buttons)
+      item.addEventListener('click', (e) => {
+        // Don't select if clicking on visibility or delete buttons
+        if (e.target.closest('.class-visibility') || e.target.closest('.class-delete')) {
+          return;
+        }
+        this.selectClass(classId);
+      });
+    });
   }
 
   // ===========================================================================
@@ -818,6 +1078,12 @@ class AnnotationModule extends BaseModule {
   // ===========================================================================
 
   async deactivate() {
+    // Clean up brush engine
+    if (this.brushEngine) {
+      this.brushEngine.destroy();
+      this.brushEngine = null;
+    }
+
     // Clean up canvas
     if (this.canvas) {
       this.canvas.destroy();
