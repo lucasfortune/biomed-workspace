@@ -379,20 +379,16 @@ class AnnotationModule extends BaseModule {
       });
     }
 
-    // Save Progress button (placeholder)
+    // Save Progress button
     const saveProgressBtn = this.container.querySelector('#saveProgressBtn');
     if (saveProgressBtn) {
-      saveProgressBtn.addEventListener('click', () => {
-        console.log('[AnnotationModule] Save progress clicked (not implemented yet)');
-      });
+      saveProgressBtn.addEventListener('click', () => this.saveProgress());
     }
 
-    // Create Annotation button (placeholder)
+    // Create Annotation button
     const createAnnotationBtn = this.container.querySelector('#createAnnotationBtn');
     if (createAnnotationBtn) {
-      createAnnotationBtn.addEventListener('click', () => {
-        console.log('[AnnotationModule] Create annotation clicked (not implemented yet)');
-      });
+      createAnnotationBtn.addEventListener('click', () => this.createAnnotation());
     }
 
     // =========================================================================
@@ -633,7 +629,10 @@ class AnnotationModule extends BaseModule {
         };
 
         this.brushEngine.onAnnotationChange = () => {
-          // Mark as dirty for unsaved changes warning (Phase 9)
+          // Mark as dirty for unsaved changes warning
+          this.isDirty = true;
+          // Update save button states
+          this.updateSaveButtonState();
         };
 
         // Render initial class list
@@ -1027,6 +1026,216 @@ class AnnotationModule extends BaseModule {
     }
     if (redoBtn) {
       redoBtn.disabled = !this.historyManager.canRedo(sliceIndex);
+    }
+  }
+
+  // ===========================================================================
+  // SAVE / EXPORT METHODS
+  // ===========================================================================
+
+  /**
+   * Prepare annotation data for saving
+   * Converts slice annotations to base64-encoded format
+   * @returns {object} Data ready for API
+   */
+  prepareAnnotationData() {
+    if (!this.brushEngine || !this.tiffInfo) {
+      return null;
+    }
+
+    const sliceAnnotations = this.brushEngine.getAllAnnotations();
+    const sliceData = {};
+
+    // Convert each annotated slice to base64
+    for (const [sliceIndex, data] of sliceAnnotations) {
+      // Only include slices that have non-zero pixels
+      let hasContent = false;
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] !== 0) {
+          hasContent = true;
+          break;
+        }
+      }
+
+      if (hasContent) {
+        // Convert Uint8Array to base64
+        const base64 = this.uint8ArrayToBase64(data);
+        sliceData[sliceIndex.toString()] = base64;
+      }
+    }
+
+    return {
+      sourceFileId: this.sourceFile?.id || this.sourceFile?.path || 'unknown',
+      sourceFileName: this.sourceFile?.name || 'unknown',
+      width: this.tiffInfo.width,
+      height: this.tiffInfo.height,
+      slices: this.tiffInfo.sliceCount,
+      sliceData,
+      classes: this.brushEngine.getClasses()
+    };
+  }
+
+  /**
+   * Convert Uint8Array to base64 string
+   * @param {Uint8Array} uint8Array - The array to convert
+   * @returns {string} Base64-encoded string
+   */
+  uint8ArrayToBase64(uint8Array) {
+    let binary = '';
+    const chunkSize = 0x8000; // Process in chunks to avoid stack overflow
+
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+
+    return btoa(binary);
+  }
+
+  /**
+   * Save annotation progress (unfinished)
+   */
+  async saveProgress() {
+    if (!this.brushEngine || !this.api) {
+      console.error('[AnnotationModule] Cannot save: module not initialized');
+      return;
+    }
+
+    // Prepare data
+    const data = this.prepareAnnotationData();
+    if (!data) {
+      if (this.state?.notify) {
+        this.state.notify('error', 'Cannot save: no source file loaded');
+      }
+      return;
+    }
+
+    // Check if there's anything to save
+    if (Object.keys(data.sliceData).length === 0) {
+      if (this.state?.notify) {
+        this.state.notify('warning', 'Nothing to save: no annotations have been made');
+      }
+      return;
+    }
+
+    // Disable button and show loading
+    const saveBtn = this.container?.querySelector('#saveProgressBtn');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+    }
+
+    try {
+      const result = await this.api.saveProgress(data);
+
+      if (result.success) {
+        if (this.state?.notify) {
+          this.state.notify('success', 'Annotation progress saved');
+        }
+        console.log('[AnnotationModule] Progress saved:', result);
+
+        // Mark as not dirty (for future unsaved changes warning)
+        this.isDirty = false;
+      } else {
+        throw new Error(result.error || 'Failed to save progress');
+      }
+    } catch (error) {
+      console.error('[AnnotationModule] Save error:', error);
+      if (this.state?.notify) {
+        this.state.notify('error', `Failed to save: ${error.message}`);
+      }
+    } finally {
+      // Re-enable button
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Progress';
+      }
+    }
+  }
+
+  /**
+   * Create final annotation
+   */
+  async createAnnotation() {
+    if (!this.brushEngine || !this.api) {
+      console.error('[AnnotationModule] Cannot create: module not initialized');
+      return;
+    }
+
+    // Prepare data
+    const data = this.prepareAnnotationData();
+    if (!data) {
+      if (this.state?.notify) {
+        this.state.notify('error', 'Cannot create: no source file loaded');
+      }
+      return;
+    }
+
+    // Check if there's anything to save
+    if (Object.keys(data.sliceData).length === 0) {
+      const confirmed = confirm(
+        'No annotations have been made. Create an empty annotation anyway?'
+      );
+      if (!confirmed) return;
+    }
+
+    // Validate classes
+    if (!data.classes || data.classes.length === 0) {
+      if (this.state?.notify) {
+        this.state.notify('error', 'At least one class is required');
+      }
+      return;
+    }
+
+    // Disable button and show loading
+    const createBtn = this.container?.querySelector('#createAnnotationBtn');
+    if (createBtn) {
+      createBtn.disabled = true;
+      createBtn.textContent = 'Creating...';
+    }
+
+    try {
+      const result = await this.api.createAnnotation(data);
+
+      if (result.success) {
+        if (this.state?.notify) {
+          this.state.notify('success', 'Annotation created successfully');
+        }
+        console.log('[AnnotationModule] Annotation created:', result);
+
+        // Mark as not dirty
+        this.isDirty = false;
+      } else {
+        throw new Error(result.error || 'Failed to create annotation');
+      }
+    } catch (error) {
+      console.error('[AnnotationModule] Create error:', error);
+      if (this.state?.notify) {
+        this.state.notify('error', `Failed to create: ${error.message}`);
+      }
+    } finally {
+      // Re-enable button
+      if (createBtn) {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Create Annotation';
+      }
+    }
+  }
+
+  /**
+   * Update save button state based on annotations
+   */
+  updateSaveButtonState() {
+    const saveBtn = this.container?.querySelector('#saveProgressBtn');
+    const createBtn = this.container?.querySelector('#createAnnotationBtn');
+
+    const hasAnnotations = this.brushEngine && this.brushEngine.getAllAnnotations().size > 0;
+
+    if (saveBtn) {
+      saveBtn.disabled = !hasAnnotations;
+    }
+    if (createBtn) {
+      createBtn.disabled = !hasAnnotations;
     }
   }
 
