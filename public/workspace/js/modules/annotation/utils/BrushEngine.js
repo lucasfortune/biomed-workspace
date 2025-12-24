@@ -367,28 +367,65 @@ class BrushEngine {
     const data = this.getAnnotationData();
     if (!data) return;
 
-    const radius = Math.floor(this.brushSize / 2);
     const value = this.tool === 'eraser' ? 0 : this.activeClassId;
 
-    // Iterate over bounding box of circle
-    const minX = Math.max(0, Math.floor(cx - radius));
-    const maxX = Math.min(this.imageWidth - 1, Math.ceil(cx + radius));
-    const minY = Math.max(0, Math.floor(cy - radius));
-    const maxY = Math.min(this.imageHeight - 1, Math.ceil(cy + radius));
+    // Get the pixels that would be painted
+    const pixels = this.getBrushPixels(cx, cy);
 
-    const radiusSq = radius * radius;
+    for (const { x, y } of pixels) {
+      if (x >= 0 && x < this.imageWidth && y >= 0 && y < this.imageHeight) {
+        const index = y * this.imageWidth + x;
+        data[index] = value;
+      }
+    }
+  }
 
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        // Check if point is inside circle
-        const dx = x - cx;
-        const dy = y - cy;
-        if (dx * dx + dy * dy <= radiusSq) {
-          const index = y * this.imageWidth + x;
-          data[index] = value;
+  /**
+   * Get the list of pixel coordinates that the brush would paint
+   * This is used both for painting and for the preview to ensure they match exactly
+   * @param {number} cx - Center X in source pixels
+   * @param {number} cy - Center Y in source pixels
+   * @returns {Array<{x: number, y: number}>} Array of pixel coordinates
+   */
+  getBrushPixels(cx, cy) {
+    const pixels = [];
+    const centerX = Math.floor(cx);
+    const centerY = Math.floor(cy);
+
+    if (this.brushSize <= 1) {
+      // Single pixel brush
+      pixels.push({ x: centerX, y: centerY });
+    } else if (this.brushSize <= 2) {
+      // 2x2 block for size 2
+      pixels.push({ x: centerX, y: centerY });
+      pixels.push({ x: centerX + 1, y: centerY });
+      pixels.push({ x: centerX, y: centerY + 1 });
+      pixels.push({ x: centerX + 1, y: centerY + 1 });
+    } else {
+      // Circle for larger brushes
+      // Use the brush size as diameter, radius = size / 2
+      const radius = this.brushSize / 2;
+      const radiusSq = radius * radius;
+
+      // Calculate bounding box
+      const minX = Math.floor(cx - radius);
+      const maxX = Math.ceil(cx + radius);
+      const minY = Math.floor(cy - radius);
+      const maxY = Math.ceil(cy + radius);
+
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          // Check distance from pixel center to brush center
+          const dx = (x + 0.5) - cx;
+          const dy = (y + 0.5) - cy;
+          if (dx * dx + dy * dy <= radiusSq) {
+            pixels.push({ x, y });
+          }
         }
       }
     }
+
+    return pixels;
   }
 
   /**
@@ -584,6 +621,7 @@ class BrushEngine {
 
   /**
    * Update the brush preview cursor
+   * Shows exactly which pixels will be painted
    * @param {object} coords - Coordinate info from AnnotationCanvas
    */
   updatePreview(coords = null) {
@@ -597,39 +635,56 @@ class BrushEngine {
 
     const x = coords.source.x;
     const y = coords.source.y;
-    const radius = this.brushSize / 2;
 
     // Get color for preview
     let strokeColor, fillColor;
     if (this.tool === 'eraser') {
       strokeColor = '#ffffff';
-      fillColor = 'rgba(255, 255, 255, 0.3)';
+      fillColor = 'rgba(255, 255, 255, 0.5)';
     } else {
       const activeClass = this.classes.find(c => c.id === this.activeClassId);
       strokeColor = activeClass ? activeClass.color : '#FF6B6B';
-      fillColor = activeClass ? `${activeClass.color}4D` : 'rgba(255, 107, 107, 0.3)';
+      // Parse hex color and create semi-transparent version
+      const rgb = this.hexToRgb(strokeColor);
+      fillColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`;
     }
 
-    // Draw preview circle
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    // Get the exact pixels that would be painted
+    const pixels = this.getBrushPixels(x, y);
+
+    // Draw each pixel as a filled square with border
     ctx.fillStyle = fillColor;
-    ctx.fill();
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 1;
-    ctx.stroke();
 
-    // Draw crosshair for precision
-    if (radius > 5) {
-      ctx.beginPath();
-      ctx.moveTo(x - 3, y);
-      ctx.lineTo(x + 3, y);
-      ctx.moveTo(x, y - 3);
-      ctx.lineTo(x, y + 3);
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1;
-      ctx.stroke();
+    for (const { x: px, y: py } of pixels) {
+      // Only show pixels within bounds
+      if (px >= 0 && px < this.imageWidth && py >= 0 && py < this.imageHeight) {
+        ctx.fillRect(px, py, 1, 1);
+      }
     }
+
+    // Draw outline around the brush area for visibility
+    if (pixels.length > 0) {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 0.5;
+
+      for (const { x: px, y: py } of pixels) {
+        if (px >= 0 && px < this.imageWidth && py >= 0 && py < this.imageHeight) {
+          ctx.strokeRect(px, py, 1, 1);
+        }
+      }
+    }
+
+    // Draw crosshair at cursor position for precision
+    ctx.beginPath();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 0.5;
+    ctx.moveTo(x - 2, y);
+    ctx.lineTo(x + 2, y);
+    ctx.moveTo(x, y - 2);
+    ctx.lineTo(x, y + 2);
+    ctx.stroke();
   }
 
   /**
