@@ -80,6 +80,9 @@ class AnnotationModule extends BaseModule {
     this.currentSlice = 0;
     this.totalSlices = 1;
 
+    // Dirty state tracking
+    this.isDirty = false;
+
     // =========================================================================
     // BIND METHODS
     // =========================================================================
@@ -357,6 +360,12 @@ class AnnotationModule extends BaseModule {
     const backButton = document.getElementById('backToHub');
     if (backButton) {
       backButton.addEventListener('click', () => {
+        if (this.isDirty) {
+          const confirmed = confirm(
+            'You have unsaved annotations. Are you sure you want to leave?'
+          );
+          if (!confirmed) return;
+        }
         window.workspace.returnToHub();
       });
     }
@@ -502,6 +511,16 @@ class AnnotationModule extends BaseModule {
     if (redoBtn) {
       redoBtn.addEventListener('click', () => this.redo());
     }
+
+    // Beforeunload warning for unsaved changes
+    this.beforeUnloadHandler = (e) => {
+      if (this.isDirty) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved annotations. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', this.beforeUnloadHandler);
   }
 
   // ===========================================================================
@@ -639,19 +658,24 @@ class AnnotationModule extends BaseModule {
         this.renderClassList();
       }
 
-      // Get file ID and slice count
-      const fileId = this.sourceFile?.id || this.sourceFile?.path;
-      this.totalSlices = this.tiffInfo?.sliceCount || 1;
-      this.currentSlice = 0;
+      // Handle resume/edit workflow
+      if (this.isResuming && this.annotationFile) {
+        await this.loadExistingAnnotation();
+      } else {
+        // New annotation - get file ID and slice count from source file
+        const fileId = this.sourceFile?.id || this.sourceFile?.path;
+        this.totalSlices = this.tiffInfo?.sliceCount || 1;
+        this.currentSlice = 0;
 
-      // Update UI
-      this.updateSliceIndicator();
-      this.updateSliceButtons();
+        // Update UI
+        this.updateSliceIndicator();
+        this.updateSliceButtons();
 
-      // Load first slice
-      if (fileId) {
-        await this.canvas.loadSlice(fileId, this.currentSlice);
-        this.updateZoomIndicator(this.canvas.getZoom());
+        // Load first slice
+        if (fileId) {
+          await this.canvas.loadSlice(fileId, this.currentSlice);
+          this.updateZoomIndicator(this.canvas.getZoom());
+        }
       }
 
     } catch (error) {
@@ -1093,6 +1117,119 @@ class AnnotationModule extends BaseModule {
   }
 
   /**
+   * Convert base64 string to Uint8Array
+   * @param {string} base64 - Base64-encoded string
+   * @returns {Uint8Array} The decoded array
+   */
+  base64ToUint8Array(base64) {
+    const binary = atob(base64);
+    const length = binary.length;
+    const array = new Uint8Array(length);
+
+    for (let i = 0; i < length; i++) {
+      array[i] = binary.charCodeAt(i);
+    }
+
+    return array;
+  }
+
+  /**
+   * Restore annotation data from loaded annotation
+   * @param {object} annotationData - Data from load endpoint
+   */
+  async restoreAnnotation(annotationData) {
+    if (!this.brushEngine || !annotationData) {
+      return;
+    }
+
+    // Restore classes
+    if (annotationData.classes && annotationData.classes.length > 0) {
+      this.brushEngine.classes = annotationData.classes;
+      this.brushEngine.nextClassId = Math.max(...annotationData.classes.map(c => c.id)) + 1;
+      this.brushEngine.activeClassId = annotationData.classes[0].id;
+    }
+
+    // Restore slice annotations
+    if (annotationData.sliceData) {
+      for (const [sliceIndexStr, base64Data] of Object.entries(annotationData.sliceData)) {
+        const sliceIndex = parseInt(sliceIndexStr, 10);
+        const uint8Array = this.base64ToUint8Array(base64Data);
+        this.brushEngine.setAnnotationData(sliceIndex, uint8Array);
+      }
+    }
+
+    // Re-render
+    this.renderClassList();
+    this.brushEngine.renderAnnotations();
+    this.updateSaveButtonState();
+
+    console.log(`[AnnotationModule] Restored annotation with ${annotationData.annotatedSlices || 0} slices`);
+  }
+
+  /**
+   * Load existing annotation for resume/edit
+   */
+  async loadExistingAnnotation() {
+    if (!this.annotationFile || !this.api) {
+      console.error('[AnnotationModule] Cannot load: no annotation file or API');
+      return;
+    }
+
+    const annotationFileId = this.annotationFile.id || this.annotationFile.path;
+
+    try {
+      // Load annotation data from API
+      const result = await this.api.loadAnnotation(annotationFileId);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load annotation');
+      }
+
+      // Store source file info from sidecar
+      if (result.sourceFileId) {
+        this.sourceFile = {
+          id: result.sourceFileId,
+          name: result.sourceFileName
+        };
+      }
+
+      // Update TIFF info
+      this.tiffInfo = {
+        width: result.width,
+        height: result.height,
+        sliceCount: result.slices
+      };
+
+      this.totalSlices = result.slices;
+      this.currentSlice = 0;
+
+      // Update UI
+      this.updateSliceIndicator();
+      this.updateSliceButtons();
+
+      // Load source image slice
+      const sourceFileId = this.sourceFile?.id;
+      if (sourceFileId) {
+        await this.canvas.loadSlice(sourceFileId, this.currentSlice);
+        this.updateZoomIndicator(this.canvas.getZoom());
+      }
+
+      // Restore annotation data (classes and slice annotations)
+      await this.restoreAnnotation(result);
+
+      if (this.state?.notify) {
+        this.state.notify('success', `Loaded annotation with ${result.annotatedSlices || 0} annotated slices`);
+      }
+
+    } catch (error) {
+      console.error('[AnnotationModule] Load annotation error:', error);
+      if (this.state?.notify) {
+        this.state.notify('error', `Failed to load annotation: ${error.message}`);
+      }
+    }
+  }
+
+  /**
    * Save annotation progress (unfinished)
    */
   async saveProgress() {
@@ -1429,6 +1566,12 @@ class AnnotationModule extends BaseModule {
       this.keydownHandler = null;
     }
 
+    // Remove beforeunload handler
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
+
     // Clean up history manager
     if (this.historyManager) {
       this.historyManager.destroy();
@@ -1460,6 +1603,7 @@ class AnnotationModule extends BaseModule {
     this.sourceFileLoaded = false;
     this.currentSlice = 0;
     this.totalSlices = 1;
+    this.isDirty = false;
 
     await super.deactivate();
     console.log('[AnnotationModule] Deactivated');
