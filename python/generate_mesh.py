@@ -201,6 +201,81 @@ def export_threejs_json(meshes, output_path, mesh_id):
     return output_path
 
 
+def export_voxel_json(data, classes, output_path, mesh_id, slice_count=20, slice_direction='z'):
+    """
+    Export segmentation data as sparse voxel JSON for slice-based visualization.
+
+    This format is designed for the frontend to create slice-based meshes with
+    dynamic endcap generation. Each voxel is stored as {x, y, z, value}.
+
+    Args:
+        data: 3D numpy array of segmentation data
+        classes: List of class IDs to include
+        output_path: Path to output JSON file
+        mesh_id: Mesh ID for metadata
+        slice_count: Number of slices to divide volume into (default 20)
+        slice_direction: Direction to slice ('x', 'y', or 'z')
+    """
+    depth, height, width = data.shape
+
+    # Extract sparse voxel data for specified classes
+    voxel_list = []
+    per_class_counts = {str(c): 0 for c in classes}
+
+    # Use numpy to efficiently find non-zero voxels
+    for class_id in classes:
+        # Find all coordinates where data equals class_id
+        coords = np.argwhere(data == class_id)
+        for z, y, x in coords:
+            voxel_list.append({
+                "x": int(x),
+                "y": int(y),
+                "z": int(z),
+                "value": int(class_id)
+            })
+            per_class_counts[str(class_id)] += 1
+
+    # Calculate slice boundaries
+    slice_boundaries = []
+    if slice_direction == 'z':
+        dim_size = depth
+    elif slice_direction == 'y':
+        dim_size = height
+    else:  # 'x'
+        dim_size = width
+
+    for i in range(slice_count + 1):
+        boundary = int((i * dim_size) / slice_count)
+        slice_boundaries.append(boundary)
+
+    # Build export structure
+    export_data = {
+        "metadata": {
+            "version": "2.0",
+            "type": "VoxelSlices",
+            "generator": "viz_app mesh generator",
+            "mesh_id": mesh_id,
+            "timestamp": datetime.now().isoformat()
+        },
+        "shape": [int(depth), int(height), int(width)],
+        "classes": [int(c) for c in classes],
+        "sliceCount": slice_count,
+        "sliceDirection": slice_direction,
+        "sliceBoundaries": slice_boundaries,
+        "data": voxel_list,
+        "statistics": {
+            "totalVoxels": len(voxel_list),
+            "perClass": per_class_counts
+        }
+    }
+
+    with open(output_path, 'w') as f:
+        json.dump(export_data, f)
+
+    print(f"Exported voxel JSON: {len(voxel_list)} voxels, {len(classes)} classes", flush=True)
+    return output_path
+
+
 def export_obj(meshes, output_path):
     """
     Export meshes to Wavefront OBJ format.
@@ -373,6 +448,12 @@ def main():
     parser.add_argument('--formats', default='json,obj', help='Output formats (comma-separated: json,obj,stl)')
     parser.add_argument('--classes', default=None, help='Classes to process (comma-separated, or "all")')
     parser.add_argument('--spacing', default='1,1,1', help='Voxel spacing z,y,x')
+    parser.add_argument('--json_format', default='voxel_slices',
+                        choices=['marching_cubes', 'voxel_slices'],
+                        help='JSON output format: marching_cubes (smooth surface) or voxel_slices (for slice-based visualization, default)')
+    parser.add_argument('--slice_count', type=int, default=20, help='Number of slices for voxel_slices format (default: 20)')
+    parser.add_argument('--slice_direction', default='z', choices=['x', 'y', 'z'],
+                        help='Slice direction for voxel_slices format (default: z)')
 
     args = parser.parse_args()
 
@@ -409,37 +490,60 @@ def main():
 
         print(f"Processing classes: {target_classes}", flush=True)
 
-        # Generate meshes for each class
+        # Determine if we need marching cubes meshes
+        # Required for: OBJ, STL, or JSON with marching_cubes format
+        need_marching_cubes = ('obj' in formats or 'stl' in formats or
+                               ('json' in formats and args.json_format == 'marching_cubes'))
+
         meshes = {}
         total_classes = len(target_classes)
 
-        for i, class_id in enumerate(target_classes):
-            emit_progress(i + 1, total_classes, f"Processing class {class_id}")
+        # Generate marching cubes meshes if needed
+        if need_marching_cubes:
+            print("Generating marching cubes meshes...", flush=True)
+            for i, class_id in enumerate(target_classes):
+                emit_progress(i + 1, total_classes, f"Processing class {class_id}")
 
-            result = generate_mesh_for_class(data, class_id, spacing)
+                result = generate_mesh_for_class(data, class_id, spacing)
 
-            if result is not None:
-                verts, faces, normals = result
+                if result is not None:
+                    verts, faces, normals = result
 
-                # Compute smooth vertex normals if needed
-                if normals is None or len(normals) != len(verts):
-                    normals = compute_vertex_normals(verts, faces)
+                    # Compute smooth vertex normals if needed
+                    if normals is None or len(normals) != len(verts):
+                        normals = compute_vertex_normals(verts, faces)
 
-                meshes[class_id] = (verts, faces, normals)
-                print(f"Class {class_id}: {len(verts)} vertices, {len(faces)} faces", flush=True)
-            else:
-                print(f"Class {class_id}: No mesh generated (empty or error)", flush=True)
+                    meshes[class_id] = (verts, faces, normals)
+                    print(f"Class {class_id}: {len(verts)} vertices, {len(faces)} faces", flush=True)
+                else:
+                    print(f"Class {class_id}: No mesh generated (empty or error)", flush=True)
 
-        if not meshes:
-            emit_result(False, error="No meshes could be generated from the data")
-            return
+            if not meshes and ('obj' in formats or 'stl' in formats):
+                emit_result(False, error="No meshes could be generated from the data")
+                return
 
         # Export in requested formats
         exported_formats = []
+        total_voxels = 0
 
         if 'json' in formats:
             json_path = os.path.join(args.output_dir, 'mesh_data.json')
-            export_threejs_json(meshes, json_path, args.mesh_id)
+
+            if args.json_format == 'voxel_slices':
+                # Use voxel-based export for slice visualization
+                print(f"Exporting voxel JSON (slice_count={args.slice_count}, direction={args.slice_direction})...", flush=True)
+                emit_progress(1, 1, "Exporting voxel data")
+                export_voxel_json(
+                    data, target_classes, json_path, args.mesh_id,
+                    slice_count=args.slice_count,
+                    slice_direction=args.slice_direction
+                )
+                # Count total voxels for statistics
+                total_voxels = int(sum(np.sum(data == c) for c in target_classes))
+            else:
+                # Use marching cubes export
+                export_threejs_json(meshes, json_path, args.mesh_id)
+
             exported_formats.append('json')
             print(f"Exported: {json_path}", flush=True)
 
@@ -457,25 +561,50 @@ def main():
 
         # Export metadata
         metadata_path = os.path.join(args.output_dir, 'metadata.json')
-        metadata = export_metadata(
-            meshes, metadata_path, args.mesh_id,
-            args.input, data.shape, exported_formats
-        )
+        if meshes:
+            metadata = export_metadata(
+                meshes, metadata_path, args.mesh_id,
+                args.input, data.shape, exported_formats
+            )
+        else:
+            # Create minimal metadata for voxel-only export
+            metadata = {
+                "mesh_id": args.mesh_id,
+                "source_file": os.path.basename(args.input),
+                "source_dimensions": list(data.shape),
+                "generated_at": datetime.now().isoformat(),
+                "formats_exported": exported_formats,
+                "json_format": args.json_format,
+                "statistics": {
+                    "totalVoxels": total_voxels,
+                    "classes_processed": len(target_classes)
+                }
+            }
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
 
-        # Calculate total statistics
-        total_vertices = sum(len(v) for v, _, _ in meshes.values())
-        total_faces = sum(len(f) for _, f, _ in meshes.values())
+        # Calculate statistics for result
+        if meshes:
+            total_vertices = sum(len(v) for v, _, _ in meshes.values())
+            total_faces = sum(len(f) for _, f, _ in meshes.values())
+            stats = {
+                "totalVertices": total_vertices,
+                "totalFaces": total_faces,
+                "classesProcessed": len(meshes)
+            }
+        else:
+            stats = {
+                "totalVoxels": total_voxels,
+                "classesProcessed": len(target_classes),
+                "jsonFormat": args.json_format
+            }
 
         # Emit success result
         emit_result(
             True,
             output_dir=args.output_dir,
             formats=exported_formats,
-            statistics={
-                "totalVertices": total_vertices,
-                "totalFaces": total_faces,
-                "classesProcessed": len(meshes)
-            }
+            statistics=stats
         )
 
     except Exception as e:
