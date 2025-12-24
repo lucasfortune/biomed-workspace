@@ -189,14 +189,27 @@ export function getMeshBoundingBox(meshGroup) {
 }
 
 /**
- * Center mesh group at origin
+ * Center mesh group at origin by translating all geometries
+ * This ensures rotation happens around the center of the mesh
  * @param {THREE.Group} meshGroup - The mesh group to center
  */
 export function centerMeshGroup(meshGroup) {
     if (!meshGroup) return;
 
+    // Calculate the center of the entire mesh group
     const box = new THREE.Box3().setFromObject(meshGroup);
     const center = box.getCenter(new THREE.Vector3());
 
-    meshGroup.position.sub(center);
+    // Translate each child mesh's geometry to center the whole group
+    meshGroup.traverse((child) => {
+        if (child.isMesh && child.geometry) {
+            child.geometry.translate(-center.x, -center.y, -center.z);
+            // Update bounding box/sphere after translation
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+        }
+    });
+
+    // Keep meshGroup position at origin
+    meshGroup.position.set(0, 0, 0);
 }

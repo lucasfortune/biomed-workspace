@@ -246,6 +246,7 @@
   border: 1px solid var(--module-border);
   border-radius: var(--module-radius-md);
   padding: var(--module-spacing-sm);
+  overflow: hidden; /* Prevent content overflow */
 }
 
 .viz-module .class-control-panel.original-data-panel {
@@ -278,16 +279,20 @@
   gap: var(--module-spacing-xs);
   margin-top: var(--module-spacing-xs);
   font-size: var(--module-font-size-xs);
+  min-width: 0; /* Allow shrinking in flex container */
 }
 
 .viz-module .class-opacity-label,
 .viz-module .class-range-label {
   color: var(--module-text-secondary);
-  min-width: 50px;
+  min-width: 45px;
+  flex-shrink: 0;
 }
 
 .viz-module .class-opacity-slider {
   flex: 1;
+  min-width: 0; /* Allow shrinking */
+  max-width: 100px; /* Limit maximum width */
   height: 4px;
   cursor: pointer;
 }
