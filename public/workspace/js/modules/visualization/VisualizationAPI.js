@@ -19,16 +19,40 @@ class VisualizationAPI {
    * Validate a mesh JSON file
    * Checks for BufferGeometry format and extracts metadata
    * @param {string} fileId - File ID or path
+   * @param {object} options - Optional settings
+   * @param {boolean} options.fromMeshModule - If true, use mesh API endpoint
+   * @param {string} options.meshId - Mesh ID for mesh module files
    * @returns {Promise<{success: boolean, info: object, error: string}>}
    */
-  async validateMeshFile(fileId) {
+  async validateMeshFile(fileId, options = {}) {
     try {
-      const encodedId = encodeURIComponent(fileId);
+      let response;
 
-      // First, try to fetch the file and parse it
-      const response = await fetch(`${this.baseUrl}/api/workspace/file/${encodedId}/download`, {
-        credentials: 'include'
-      });
+      // Check if this is a mesh result file (from mesh module)
+      // These are stored in results/ directory and accessed via mesh API
+      if (options.fromMeshModule && options.meshId) {
+        // Use mesh download endpoint
+        response = await fetch(`${this.baseUrl}/api/mesh/download/${options.meshId}/json`, {
+          credentials: 'include'
+        });
+      } else if (fileId && (fileId.includes('results/mesh_') || fileId.startsWith('results/'))) {
+        // Try to extract mesh ID from path like "results/mesh_1234567890/mesh_data.json"
+        const meshIdMatch = fileId.match(/mesh_(\d+)/);
+        if (meshIdMatch) {
+          const meshId = `mesh_${meshIdMatch[1]}`;
+          response = await fetch(`${this.baseUrl}/api/mesh/download/${meshId}/json`, {
+            credentials: 'include'
+          });
+        } else {
+          return { success: false, error: 'Invalid mesh result path' };
+        }
+      } else {
+        // Standard workspace file
+        const encodedId = encodeURIComponent(fileId);
+        response = await fetch(`${this.baseUrl}/api/workspace/file/${encodedId}/download`, {
+          credentials: 'include'
+        });
+      }
 
       if (!response.ok) {
         return { success: false, error: `Failed to fetch file: ${response.statusText}` };
@@ -183,14 +207,37 @@ class VisualizationAPI {
   /**
    * Get mesh file data
    * @param {string} fileId - File ID or path
+   * @param {object} options - Optional settings
+   * @param {boolean} options.fromMeshModule - If true, use mesh API endpoint
+   * @param {string} options.meshId - Mesh ID for mesh module files
    * @returns {Promise<{success: boolean, data: object}>}
    */
-  async getMeshData(fileId) {
+  async getMeshData(fileId, options = {}) {
     try {
-      const encodedId = encodeURIComponent(fileId);
-      const response = await fetch(`${this.baseUrl}/api/workspace/file/${encodedId}/download`, {
-        credentials: 'include'
-      });
+      let response;
+
+      // Check if this is a mesh result file (from mesh module)
+      if (options.fromMeshModule && options.meshId) {
+        response = await fetch(`${this.baseUrl}/api/mesh/download/${options.meshId}/json`, {
+          credentials: 'include'
+        });
+      } else if (fileId && (fileId.includes('results/mesh_') || fileId.startsWith('results/'))) {
+        // Try to extract mesh ID from path
+        const meshIdMatch = fileId.match(/mesh_(\d+)/);
+        if (meshIdMatch) {
+          const meshId = `mesh_${meshIdMatch[1]}`;
+          response = await fetch(`${this.baseUrl}/api/mesh/download/${meshId}/json`, {
+            credentials: 'include'
+          });
+        } else {
+          return { success: false, error: 'Invalid mesh result path' };
+        }
+      } else {
+        const encodedId = encodeURIComponent(fileId);
+        response = await fetch(`${this.baseUrl}/api/workspace/file/${encodedId}/download`, {
+          credentials: 'include'
+        });
+      }
 
       if (!response.ok) {
         return { success: false, error: `Failed to fetch mesh: ${response.statusText}` };

@@ -34,8 +34,34 @@ export function createSliceBasedClassMeshes(data, scene) {
 
     console.log(`[MeshCreation] Shape: ${depth}x${height}x${width}, Classes: ${availableClasses}, Slices: ${sliceCount}`);
 
+    // Check for edge cases
+    if (!voxelData || voxelData.length === 0) {
+        console.warn('[MeshCreation] No voxel data provided');
+        const meshGroup = new THREE.Group();
+        scene.add(meshGroup);
+        return {
+            meshGroup,
+            sliceMeshes: {},
+            availableClasses: [],
+            sliceMetadata: { sliceCount, sliceDirection, sliceBoundaries, shape, scaleFactor: 1 }
+        };
+    }
+
+    // Check for very large datasets (warn but proceed)
+    const volumeSize = depth * height * width;
+    const maxSafeSize = 512 * 512 * 512; // ~134M voxels
+    if (volumeSize > maxSafeSize) {
+        console.warn(`[MeshCreation] Very large dataset: ${volumeSize.toLocaleString()} voxels. This may be slow.`);
+    }
+
     // Convert sparse voxel data to dense 3D volume for efficient lookup
-    const volume = new Uint8Array(depth * height * width);
+    let volume;
+    try {
+        volume = new Uint8Array(depth * height * width);
+    } catch (e) {
+        console.error('[MeshCreation] Failed to allocate volume array (out of memory?):', e);
+        throw new Error(`Dataset too large: ${volumeSize.toLocaleString()} voxels exceeds browser memory limits`);
+    }
     voxelData.forEach(voxel => {
         const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
         volume[index] = voxel.value;
@@ -267,5 +293,253 @@ export function disposeSliceMeshes(meshGroup, sliceMeshes) {
     // Clear the sliceMeshes object
     for (const key in sliceMeshes) {
         delete sliceMeshes[key];
+    }
+}
+
+// ============================================
+// ORIGINAL DATA OVERLAY (TIFF Planes)
+// ============================================
+
+/**
+ * Load and create textured planes from original TIFF data
+ * @param {string} tiffUrl - URL to fetch the TIFF file
+ * @param {Array} shape - Mesh shape [depth, height, width] for alignment
+ * @param {THREE.Group} meshGroup - Mesh group to add planes to (so they rotate together)
+ * @returns {Object|null} - { planeGroup, planes, metadata } or null on failure
+ */
+export async function loadAndCreateOriginalDataPlanes(tiffUrl, shape, meshGroup) {
+    try {
+        console.log('[OriginalData] Loading original data from:', tiffUrl);
+
+        const response = await fetch(tiffUrl);
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                console.warn('[OriginalData] Data not available (404)');
+                return null;
+            }
+            throw new Error(`Failed to load original data: ${response.status}`);
+        }
+
+        // Get the TIFF data as array buffer
+        const arrayBuffer = await response.arrayBuffer();
+        console.log('[OriginalData] ArrayBuffer size:', arrayBuffer.byteLength, 'bytes');
+
+        // Parse TIFF using UTIF.js
+        const tiffData = await parseTiffData(arrayBuffer);
+
+        console.log(`[OriginalData] Loaded: ${tiffData.slices.length} slices, ${tiffData.width}x${tiffData.height}`);
+
+        // Create textured planes for each slice
+        const result = createTexturedPlanes(tiffData, shape);
+
+        // Add to meshGroup so planes rotate with the mesh
+        meshGroup.add(result.group);
+
+        return {
+            planeGroup: result.group,
+            planes: result.planes,
+            metadata: {
+                numSlices: tiffData.slices.length,
+                width: tiffData.width,
+                height: tiffData.height
+            }
+        };
+
+    } catch (error) {
+        console.error('[OriginalData] Failed to load original data overlay:', error);
+        return null;
+    }
+}
+
+/**
+ * Parse TIFF data from array buffer using UTIF.js
+ * @param {ArrayBuffer} arrayBuffer - TIFF file data
+ * @returns {Object} - { slices, width, height }
+ */
+async function parseTiffData(arrayBuffer) {
+    const Tiff = window.UTIF;
+
+    if (!Tiff) {
+        throw new Error('UTIF.js library not loaded');
+    }
+
+    // Decode TIFF
+    const ifds = Tiff.decode(arrayBuffer);
+    console.log('[OriginalData] Decoded', ifds.length, 'image(s) from TIFF');
+
+    const slices = [];
+
+    for (let i = 0; i < ifds.length; i++) {
+        Tiff.decodeImage(arrayBuffer, ifds[i]);
+        const rgba = Tiff.toRGBA8(ifds[i]);
+
+        slices.push({
+            data: rgba,
+            width: ifds[i].width,
+            height: ifds[i].height
+        });
+    }
+
+    return {
+        slices: slices,
+        width: ifds[0].width,
+        height: ifds[0].height
+    };
+}
+
+/**
+ * Create textured planes from TIFF slice data
+ * @param {Object} tiffData - Parsed TIFF data { slices, width, height }
+ * @param {Array} shape - Mesh shape [depth, height, width]
+ * @returns {Object} - { planes, group }
+ */
+function createTexturedPlanes(tiffData, shape) {
+    const group = new THREE.Group();
+    const planes = [];
+
+    const [depth, height, width] = shape;
+
+    // Use same scaling as mesh creation
+    const maxOriginalDim = Math.max(depth, height, width);
+    const targetMaxSize = 8;
+    const scaleFactor = targetMaxSize / maxOriginalDim;
+
+    // Calculate scaled dimensions
+    const scaledWidth = width * scaleFactor;
+    const scaledHeight = height * scaleFactor;
+    const scaledDepth = depth * scaleFactor;
+
+    // Calculate Z spacing
+    const zSpacing = tiffData.slices.length > 1
+        ? scaledDepth / (tiffData.slices.length - 1)
+        : 0;
+
+    console.log(`[OriginalData] Scale factor: ${scaleFactor.toFixed(4)}`);
+    console.log(`[OriginalData] Plane size: ${scaledWidth.toFixed(3)} x ${scaledHeight.toFixed(3)}`);
+    console.log(`[OriginalData] Z spacing: ${zSpacing.toFixed(4)}`);
+
+    // Create a plane for each slice
+    tiffData.slices.forEach((slice, index) => {
+        // Create texture from slice data
+        const texture = new THREE.DataTexture(
+            slice.data,
+            slice.width,
+            slice.height,
+            THREE.RGBAFormat,
+            THREE.UnsignedByteType
+        );
+        texture.needsUpdate = true;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        // Create plane geometry with scaled dimensions
+        const geometry = new THREE.PlaneGeometry(scaledWidth, scaledHeight);
+
+        // Create material with texture
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+
+        // Create mesh
+        const plane = new THREE.Mesh(geometry, material);
+
+        // Position in scaled Z space, centered from -scaledDepth/2 to +scaledDepth/2
+        let zPosition = (index * zSpacing) - (scaledDepth / 2);
+
+        // Anti-z-fighting: offset first and last planes slightly inward
+        const epsilon = 0.01;
+        if (index === 0) {
+            zPosition += epsilon;
+        } else if (index === tiffData.slices.length - 1) {
+            zPosition -= epsilon;
+        }
+
+        plane.position.set(0, 0, zPosition);
+
+        // Store metadata
+        plane.userData.sliceIndex = index;
+        plane.userData.isOriginalDataPlane = true;
+        plane.userData.originalOpacity = 0.3;
+
+        planes.push(plane);
+        group.add(plane);
+    });
+
+    // Initially hide planes (user must enable via controls)
+    group.visible = false;
+
+    console.log(`[OriginalData] Created ${planes.length} textured planes`);
+
+    return { planes, group };
+}
+
+/**
+ * Set visibility for original data planes
+ * @param {THREE.Group} planeGroup - The plane group
+ * @param {boolean} visible - Visibility state
+ */
+export function setOriginalDataVisibility(planeGroup, visible) {
+    if (planeGroup) {
+        planeGroup.visible = visible;
+    }
+}
+
+/**
+ * Set opacity for all original data planes
+ * @param {Array} planes - Array of plane meshes
+ * @param {number} opacity - Opacity value (0-1)
+ */
+export function setOriginalDataOpacity(planes, opacity) {
+    if (!planes) return;
+
+    planes.forEach(plane => {
+        if (plane && plane.material) {
+            plane.material.opacity = opacity;
+            plane.material.needsUpdate = true;
+        }
+    });
+}
+
+/**
+ * Set visibility range for original data planes (show only planes within range)
+ * @param {Array} planes - Array of plane meshes
+ * @param {number} minSlice - Minimum slice index (inclusive)
+ * @param {number} maxSlice - Maximum slice index (inclusive)
+ */
+export function setOriginalDataSliceRange(planes, minSlice, maxSlice) {
+    if (!planes) return;
+
+    planes.forEach((plane, index) => {
+        if (plane) {
+            plane.visible = (index >= minSlice && index <= maxSlice);
+        }
+    });
+}
+
+/**
+ * Dispose of original data planes
+ * @param {THREE.Group} planeGroup - The plane group to dispose
+ * @param {Array} planes - Array of plane meshes
+ */
+export function disposeOriginalDataPlanes(planeGroup, planes) {
+    if (planes) {
+        planes.forEach(plane => {
+            if (plane) {
+                if (plane.geometry) plane.geometry.dispose();
+                if (plane.material) {
+                    if (plane.material.map) plane.material.map.dispose();
+                    plane.material.dispose();
+                }
+            }
+        });
+    }
+
+    if (planeGroup && planeGroup.parent) {
+        planeGroup.parent.remove(planeGroup);
     }
 }

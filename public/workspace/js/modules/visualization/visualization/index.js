@@ -36,7 +36,13 @@ export {
     setClassSliceRange,
     setClassVisibility,
     setClassOpacity,
-    disposeSliceMeshes
+    disposeSliceMeshes,
+    // Original data overlay
+    loadAndCreateOriginalDataPlanes,
+    setOriginalDataVisibility,
+    setOriginalDataOpacity,
+    setOriginalDataSliceRange,
+    disposeOriginalDataPlanes
 } from './meshCreation.js';
 
 // Dynamic endcap generation (clipping)

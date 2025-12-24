@@ -272,13 +272,14 @@ class MeshModule extends BaseModule {
         title: 'Segmentation Data',
         icon: '🧩',
         showTestData: false,
+        showRecentResults: true, // Show segmentation results in "Recent Results" section
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
-        // Custom filter to show only segmentation results and annotations
+        // Custom filter for workspace files (annotations)
+        // Note: segmentations are shown in "Recent Results" section automatically
         filterFiles: (files) => {
           return files.filter(f =>
-            f.category === 'segmentations' ||
             f.category === 'annotations' ||
             f.category === 'segmented_stack'
           );
@@ -831,19 +832,26 @@ class MeshModule extends BaseModule {
       return;
     }
 
+    // Build the JSON file path from the output directory
+    const jsonFilePath = `${this.meshResult.output_dir}/mesh_data.json`;
+
     // Store result in state for visualization module
     this.state.update('modules.mesh.result', {
       meshId: this.currentMeshId,
       outputDir: this.meshResult.output_dir,
       formats: this.meshResult.formats,
+      // Include direct file info so visualization module can use it immediately
+      jsonFile: {
+        path: jsonFilePath,
+        name: 'mesh_data.json',
+        id: jsonFilePath
+      },
       timestamp: Date.now()
     });
 
-    // Navigate to visualization module (placeholder - will show notification for now)
-    this.state.notify('info', 'Visualization module coming soon! Mesh saved to: ' + this.meshResult.output_dir);
-
-    // When visualization module is ready:
-    // window.workspace.loadModule('visualization');
+    // Navigate to visualization module
+    console.log('[MeshModule] Opening visualization module with mesh:', this.currentMeshId, 'file:', jsonFilePath);
+    window.workspace.loadModule('visualization');
   }
 
   // ===========================================================================

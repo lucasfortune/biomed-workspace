@@ -17,49 +17,92 @@ export function setupEnhancedControls(renderer, meshGroup, camera, options = {})
 
     const canvas = renderer.domElement;
     let isDragging = false;
+    let isPanning = false;
     let previousMousePosition = { x: 0, y: 0 };
+
+    // Update cursor based on mode
+    const updateCursor = (dragging, panning) => {
+        if (dragging) {
+            canvas.style.cursor = panning ? 'move' : 'grabbing';
+        } else {
+            canvas.style.cursor = 'grab';
+        }
+    };
 
     // Mouse down event - start dragging
     canvas.addEventListener('mousedown', (e) => {
         isDragging = true;
+        isPanning = e.ctrlKey || e.metaKey; // CTRL or CMD for panning
         previousMousePosition = { x: e.clientX, y: e.clientY };
-        canvas.style.cursor = 'grabbing';
+        updateCursor(true, isPanning);
     });
 
-    // Mouse move event - handle rotation
+    // Mouse move event - handle rotation or panning
     canvas.addEventListener('mousemove', (e) => {
         if (isDragging && meshGroup) {
+            // Check if CTRL state changed during drag
+            const currentlyPanning = e.ctrlKey || e.metaKey;
+            if (currentlyPanning !== isPanning) {
+                isPanning = currentlyPanning;
+                updateCursor(true, isPanning);
+            }
+
             const deltaMove = {
                 x: e.clientX - previousMousePosition.x,
                 y: e.clientY - previousMousePosition.y
             };
 
-            // Rotate the entire mesh group
-            meshGroup.rotation.y += deltaMove.x * 0.01;
-            meshGroup.rotation.x += deltaMove.y * 0.01;
+            if (isPanning) {
+                // Pan mode: move the mesh group in screen space
+                // Scale pan speed based on camera distance for consistent feel
+                const cameraDistance = camera.position.length();
+                const panSpeed = cameraDistance * 0.002;
 
-            // Clamp vertical rotation to prevent flipping
-            meshGroup.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, meshGroup.rotation.x));
+                // Get camera's right and up vectors for screen-space panning
+                const right = new THREE.Vector3();
+                const up = new THREE.Vector3();
+                camera.getWorldDirection(new THREE.Vector3()); // Ensure matrix is updated
+                right.setFromMatrixColumn(camera.matrixWorld, 0); // Camera's right vector
+                up.setFromMatrixColumn(camera.matrixWorld, 1);    // Camera's up vector
+
+                // Move mesh along camera's right and up vectors
+                meshGroup.position.addScaledVector(right, deltaMove.x * panSpeed);
+                meshGroup.position.addScaledVector(up, -deltaMove.y * panSpeed); // Invert Y for natural feel
+
+                // Call pan change callback if provided
+                if (options.onPanChange) {
+                    options.onPanChange(meshGroup.position);
+                }
+            } else {
+                // Rotate mode: rotate the entire mesh group
+                meshGroup.rotation.y += deltaMove.x * 0.01;
+                meshGroup.rotation.x += deltaMove.y * 0.01;
+
+                // Clamp vertical rotation to prevent flipping
+                meshGroup.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, meshGroup.rotation.x));
+
+                // Call rotation change callback if provided
+                if (options.onRotationChange) {
+                    options.onRotationChange(meshGroup.rotation);
+                }
+            }
 
             previousMousePosition = { x: e.clientX, y: e.clientY };
-
-            // Call rotation change callback if provided
-            if (options.onRotationChange) {
-                options.onRotationChange(meshGroup.rotation);
-            }
         }
     });
 
     // Mouse up event - stop dragging
     canvas.addEventListener('mouseup', () => {
         isDragging = false;
-        canvas.style.cursor = 'grab';
+        isPanning = false;
+        updateCursor(false, false);
     });
 
     // Mouse leave event - stop dragging when cursor leaves canvas
     canvas.addEventListener('mouseleave', () => {
         isDragging = false;
-        canvas.style.cursor = 'grab';
+        isPanning = false;
+        updateCursor(false, false);
     });
 
     // Setup zoom controls
@@ -126,39 +169,69 @@ function setupKeyboardControls(meshGroup, options) {
         }
 
         const rotationSpeed = 0.1;
+        const panSpeed = 0.2;
         let rotationChanged = false;
+        let panChanged = false;
+
+        // Check if CTRL/CMD is held for panning
+        const isPanning = event.ctrlKey || event.metaKey;
 
         switch (event.key.toLowerCase()) {
             case 'arrowleft':
-                meshGroup.rotation.y -= rotationSpeed;
-                rotationChanged = true;
+                if (isPanning) {
+                    meshGroup.position.x -= panSpeed;
+                    panChanged = true;
+                } else {
+                    meshGroup.rotation.y -= rotationSpeed;
+                    rotationChanged = true;
+                }
                 event.preventDefault();
                 break;
             case 'arrowright':
-                meshGroup.rotation.y += rotationSpeed;
-                rotationChanged = true;
+                if (isPanning) {
+                    meshGroup.position.x += panSpeed;
+                    panChanged = true;
+                } else {
+                    meshGroup.rotation.y += rotationSpeed;
+                    rotationChanged = true;
+                }
                 event.preventDefault();
                 break;
             case 'arrowup':
-                meshGroup.rotation.x -= rotationSpeed;
-                rotationChanged = true;
+                if (isPanning) {
+                    meshGroup.position.y += panSpeed;
+                    panChanged = true;
+                } else {
+                    meshGroup.rotation.x -= rotationSpeed;
+                    rotationChanged = true;
+                }
                 event.preventDefault();
                 break;
             case 'arrowdown':
-                meshGroup.rotation.x += rotationSpeed;
-                rotationChanged = true;
+                if (isPanning) {
+                    meshGroup.position.y -= panSpeed;
+                    panChanged = true;
+                } else {
+                    meshGroup.rotation.x += rotationSpeed;
+                    rotationChanged = true;
+                }
                 event.preventDefault();
                 break;
             case 'r':
-                // Reset rotation
+                // Reset rotation and position
                 meshGroup.rotation.set(0, 0, 0);
+                meshGroup.position.set(0, 0, 0);
                 rotationChanged = true;
+                panChanged = true;
                 break;
         }
 
-        // If rotation changed, call callback
+        // Call callbacks
         if (rotationChanged && options.onRotationChange) {
             options.onRotationChange(meshGroup.rotation);
+        }
+        if (panChanged && options.onPanChange) {
+            options.onPanChange(meshGroup.position);
         }
     };
 
@@ -181,6 +254,14 @@ function setupTouchControls(canvas, meshGroup, camera, options) {
     let touches = [];
     let lastTouchDistance = 0;
     let lastTouchCenter = { x: 0, y: 0 };
+    let lastTwoFingerCenter = { x: 0, y: 0 };
+    let isPinching = false;
+
+    // Calculate center point between two touches
+    const getTwoFingerCenter = (t1, t2) => ({
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2
+    });
 
     // Touch start
     canvas.addEventListener('touchstart', (e) => {
@@ -191,10 +272,12 @@ function setupTouchControls(canvas, meshGroup, camera, options) {
             // Single touch - rotation
             lastTouchCenter = { x: touches[0].clientX, y: touches[0].clientY };
         } else if (touches.length === 2) {
-            // Two finger touch - zoom
+            // Two finger touch - zoom and pan
             const dx = touches[0].clientX - touches[1].clientX;
             const dy = touches[0].clientY - touches[1].clientY;
             lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
+            lastTwoFingerCenter = getTwoFingerCenter(touches[0], touches[1]);
+            isPinching = false;
         }
     }, { passive: false });
 
@@ -224,27 +307,62 @@ function setupTouchControls(canvas, meshGroup, camera, options) {
                 options.onRotationChange(meshGroup.rotation);
             }
 
-        } else if (touches.length === 2 && camera) {
-            // Two finger zoom
+        } else if (touches.length === 2 && camera && meshGroup) {
+            // Two finger - zoom (pinch) and pan (drag)
             const dx = touches[0].clientX - touches[1].clientX;
             const dy = touches[0].clientY - touches[1].clientY;
             const distance = Math.sqrt(dx * dx + dy * dy);
+            const center = getTwoFingerCenter(touches[0], touches[1]);
 
             if (lastTouchDistance > 0) {
-                const scale = distance / lastTouchDistance;
-                const zoomFactor = scale > 1 ? 0.95 : 1.05;
-                camera.position.multiplyScalar(zoomFactor);
+                // Detect if pinching (distance changing) or panning (center moving)
+                const distanceChange = Math.abs(distance - lastTouchDistance);
+                const centerDelta = {
+                    x: center.x - lastTwoFingerCenter.x,
+                    y: center.y - lastTwoFingerCenter.y
+                };
+                const centerMove = Math.sqrt(centerDelta.x * centerDelta.x + centerDelta.y * centerDelta.y);
 
-                // Prevent camera from getting too close or too far
-                const cameraDistance = camera.position.length();
-                if (cameraDistance < 1) {
-                    camera.position.normalize().multiplyScalar(1);
-                } else if (cameraDistance > 100) {
-                    camera.position.normalize().multiplyScalar(100);
+                // If pinching more than panning, zoom
+                if (distanceChange > centerMove * 0.5 || isPinching) {
+                    isPinching = true;
+                    const scale = distance / lastTouchDistance;
+                    const zoomFactor = scale > 1 ? 0.95 : 1.05;
+                    camera.position.multiplyScalar(zoomFactor);
+
+                    // Prevent camera from getting too close or too far
+                    const cameraDistance = camera.position.length();
+                    if (cameraDistance < 1) {
+                        camera.position.normalize().multiplyScalar(1);
+                    } else if (cameraDistance > 100) {
+                        camera.position.normalize().multiplyScalar(100);
+                    }
+                }
+
+                // Pan based on center movement (always allow some panning)
+                if (centerMove > 2) {
+                    const cameraDistance = camera.position.length();
+                    const panSpeed = cameraDistance * 0.002;
+
+                    // Get camera's right and up vectors for screen-space panning
+                    const right = new THREE.Vector3();
+                    const up = new THREE.Vector3();
+                    camera.getWorldDirection(new THREE.Vector3());
+                    right.setFromMatrixColumn(camera.matrixWorld, 0);
+                    up.setFromMatrixColumn(camera.matrixWorld, 1);
+
+                    // Move mesh along camera's right and up vectors
+                    meshGroup.position.addScaledVector(right, centerDelta.x * panSpeed);
+                    meshGroup.position.addScaledVector(up, -centerDelta.y * panSpeed);
+
+                    if (options.onPanChange) {
+                        options.onPanChange(meshGroup.position);
+                    }
                 }
             }
 
             lastTouchDistance = distance;
+            lastTwoFingerCenter = center;
         }
     }, { passive: false });
 
@@ -255,6 +373,12 @@ function setupTouchControls(canvas, meshGroup, camera, options) {
 
         if (touches.length === 0) {
             lastTouchDistance = 0;
+            isPinching = false;
+        } else if (touches.length === 1) {
+            // Transition from two fingers to one - update single touch position
+            lastTouchCenter = { x: touches[0].clientX, y: touches[0].clientY };
+            lastTouchDistance = 0;
+            isPinching = false;
         }
     }, { passive: false });
 }

@@ -80,12 +80,20 @@ class VisualizationModule extends BaseModule {
     this.volume = null;          // Dense volume data for endcap generation
     this.availableClasses = [];
 
+    // Original data overlay
+    this.originalDataPlanes = null;   // Array of plane meshes
+    this.originalDataGroup = null;    // THREE.Group containing planes
+    this.originalDataMetadata = null; // { numSlices, width, height }
+
     // Resize handler reference for cleanup
     this.handleResizeBound = null;
 
     // Fullscreen state
     this.isFullscreen = false;
     this.controlsVisible = true;
+
+    // Persisted visualization state (survives module deactivation)
+    this.persistedState = null;
 
     // =========================================================================
     // BIND METHODS
@@ -115,7 +123,12 @@ class VisualizationModule extends BaseModule {
       console.log('[VisualizationModule] Three.js loaded');
     }
 
-    // UTIF.js will be loaded in Phase 5 for original data overlay
+    // Load UTIF.js for TIFF parsing (original data overlay)
+    if (typeof UTIF === 'undefined') {
+      console.log('[VisualizationModule] Loading UTIF.js...');
+      await this.loadScript('https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js');
+      console.log('[VisualizationModule] UTIF.js loaded');
+    }
   }
 
   // ===========================================================================
@@ -378,8 +391,18 @@ class VisualizationModule extends BaseModule {
     this.validationDisplay.showLoading('Validating mesh file...');
 
     try {
+      // Build API options for mesh module files
+      const apiOptions = {};
+      if (fileInfo.fromMeshModule) {
+        apiOptions.fromMeshModule = true;
+        apiOptions.meshId = fileInfo.meshId;
+      }
+
       // Fetch and validate the mesh JSON
-      const validationResult = await this.api.validateMeshFile(fileInfo.id || fileInfo.path);
+      const validationResult = await this.api.validateMeshFile(
+        fileInfo.id || fileInfo.path,
+        apiOptions
+      );
 
       if (validationResult.success) {
         this.meshInfo = validationResult.info;
@@ -390,8 +413,10 @@ class VisualizationModule extends BaseModule {
           { label: 'Format', value: validationResult.info.format || 'BufferGeometry' }
         ]);
 
-        // Look up original data via lineage
-        await this.lookupOriginalData(fileInfo.id);
+        // Look up original data via lineage (skip for mesh module files - no lineage yet)
+        if (!fileInfo.fromMeshModule) {
+          await this.lookupOriginalData(fileInfo.id);
+        }
 
         // Enable next button
         this.dataValidated = true;
@@ -580,19 +605,30 @@ class VisualizationModule extends BaseModule {
       return;
     }
 
+    // Helper to update loading status
+    const updateLoadingStatus = (message, subtext = '') => {
+      const textEl = container.querySelector('.placeholder-text');
+      const subtextEl = container.querySelector('.placeholder-subtext');
+      if (textEl) textEl.textContent = message;
+      if (subtextEl) subtextEl.textContent = subtext;
+    };
+
     // Show loading state
     container.innerHTML = `
       <div class="viewer-placeholder">
-        <span class="placeholder-icon">⏳</span>
-        <span class="placeholder-text">Loading mesh data...</span>
+        <div class="loading-spinner"></div>
+        <span class="placeholder-text">Initializing...</span>
+        <span class="placeholder-subtext"></span>
       </div>
     `;
 
     try {
       // Load Three.js
+      updateLoadingStatus('Loading 3D libraries...', 'Please wait');
       await this.loadDependencies();
 
       // Dynamically import visualization modules
+      updateLoadingStatus('Loading visualization modules...');
       const vizModule = await import('./visualization/index.js');
 
       // Clear loading placeholder
@@ -616,9 +652,22 @@ class VisualizationModule extends BaseModule {
         const fileId = this.selectedFile.id || this.selectedFile.path;
         console.log('[VisualizationModule] Fetching mesh data:', fileId);
 
-        const meshResult = await this.api.getMeshData(fileId);
+        // Show loading overlay
+        this.showLoadingOverlay('Fetching mesh data...', 'Please wait');
+
+        // Build API options for mesh module files
+        const apiOptions = {};
+        if (this.selectedFile.fromMeshModule) {
+          apiOptions.fromMeshModule = true;
+          apiOptions.meshId = this.selectedFile.meshId;
+        }
+
+        const meshResult = await this.api.getMeshData(fileId, apiOptions);
 
         if (meshResult.success && meshResult.data) {
+          // Update overlay for mesh generation
+          this.updateLoadingOverlay('Generating 3D meshes...', `${meshResult.data.data?.length?.toLocaleString() || 'Unknown'} voxels`);
+
           // Load mesh from JSON (auto-detects format)
           const loadResult = vizModule.loadMeshFromJSON(meshResult.data, this.scene);
 
@@ -658,10 +707,23 @@ class VisualizationModule extends BaseModule {
           // Set up double-click reset
           vizModule.setupDoubleClickReset(this.renderer.domElement, () => this.resetView());
 
+          // Load original data overlay if available
+          if (this.originalDataFile && loadResult.sliceMetadata?.shape) {
+            this.updateLoadingOverlay('Loading original data overlay...', 'Creating texture planes');
+            await this.loadOriginalDataOverlay(loadResult.sliceMetadata.shape);
+          }
+
+          // Hide loading overlay
+          this.hideLoadingOverlay();
+
           // Update control panel with class controls
           this.renderClassControls();
 
           this.visualizationReady = true;
+
+          // Restore previous state if available (e.g., after navigating back)
+          this.restoreVisualizationState();
+
           const formatLabel = loadResult.format === 'VoxelSlices' ? 'slice meshes' : 'class meshes';
           console.log(`[VisualizationModule] Mesh loaded: ${this.availableClasses.length} classes (${loadResult.format})`);
           this.state.notify('success', `Loaded ${this.availableClasses.length} ${formatLabel}`);
@@ -675,6 +737,7 @@ class VisualizationModule extends BaseModule {
 
     } catch (error) {
       console.error('[VisualizationModule] Initialization error:', error);
+      this.hideLoadingOverlay(); // Ensure overlay is hidden on error
       container.innerHTML = `
         <div class="viewer-placeholder error">
           <span class="placeholder-icon">❌</span>
@@ -704,6 +767,54 @@ class VisualizationModule extends BaseModule {
       const isSliceBased = this.meshFormat === 'VoxelSlices';
       const sliceCount = this.sliceMetadata?.sliceCount || 20;
 
+      // Add Original Data control panel (if original data is available)
+      if (this.originalDataFile) {
+        const numSlices = this.originalDataMetadata?.numSlices || 0;
+        html += `
+          <div class="class-control-panel original-data-panel" data-type="original-data">
+            <div class="class-checkbox-section">
+              <input type="checkbox"
+                     id="originalDataVisible"
+                     class="class-checkbox"
+                     onchange="vizModule.toggleOriginalDataVisibility(this.checked)">
+              <label for="originalDataVisible" class="class-label" style="color: #888">
+                Original Data
+              </label>
+            </div>
+            <div class="class-opacity-section">
+              <span class="class-opacity-label">Opacity</span>
+              <input type="range"
+                     id="originalDataOpacity"
+                     class="class-opacity-slider"
+                     min="5" max="100" value="30"
+                     oninput="vizModule.setOriginalDataOpacityValue(this.value / 100)">
+              <span id="originalDataOpacityValue" class="class-opacity-value">30%</span>
+            </div>
+            ${numSlices > 1 ? `
+            <div class="class-range-section">
+              <span class="class-range-label">Range</span>
+              <div class="dual-range-container" id="rangeContainerOriginal">
+                <div class="dual-range-track"></div>
+                <div class="dual-range-fill" id="rangeFillOriginal"></div>
+                <input type="range"
+                       id="rangeMinOriginal"
+                       class="dual-range-input"
+                       min="0" max="${numSlices - 1}" value="0"
+                       oninput="vizModule.updateOriginalDataSliceRange()">
+                <input type="range"
+                       id="rangeMaxOriginal"
+                       class="dual-range-input"
+                       min="0" max="${numSlices - 1}" value="${numSlices - 1}"
+                       oninput="vizModule.updateOriginalDataSliceRange()">
+              </div>
+              <span id="rangeValueOriginal" class="class-range-value">0-100%</span>
+            </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      // Add class control panels
       for (const classId of this.availableClasses) {
         const colorCss = utils.getClassColor(classId);
 
@@ -759,6 +870,11 @@ class VisualizationModule extends BaseModule {
         for (const classId of this.availableClasses) {
           this.updateRangeFill(classId);
         }
+      }
+
+      // Initialize original data range fill
+      if (this.originalDataFile && this.originalDataMetadata?.numSlices > 1) {
+        this.updateOriginalDataRangeFill();
       }
     });
   }
@@ -857,6 +973,147 @@ class VisualizationModule extends BaseModule {
     }
   }
 
+  // ===========================================================================
+  // ORIGINAL DATA OVERLAY CONTROLS
+  // ===========================================================================
+
+  /**
+   * Toggle original data visibility
+   */
+  toggleOriginalDataVisibility(visible) {
+    if (this.originalDataGroup) {
+      import('./visualization/meshCreation.js').then(meshCreation => {
+        meshCreation.setOriginalDataVisibility(this.originalDataGroup, visible);
+      });
+    }
+  }
+
+  /**
+   * Set original data opacity
+   */
+  setOriginalDataOpacityValue(opacity) {
+    // Update value display
+    const valueSpan = document.getElementById('originalDataOpacityValue');
+    if (valueSpan) {
+      valueSpan.textContent = `${Math.round(opacity * 100)}%`;
+    }
+
+    // Apply opacity
+    if (this.originalDataPlanes) {
+      import('./visualization/meshCreation.js').then(meshCreation => {
+        meshCreation.setOriginalDataOpacity(this.originalDataPlanes, opacity);
+      });
+    }
+  }
+
+  /**
+   * Update original data slice range
+   */
+  updateOriginalDataSliceRange() {
+    const minInput = document.getElementById('rangeMinOriginal');
+    const maxInput = document.getElementById('rangeMaxOriginal');
+    const valueSpan = document.getElementById('rangeValueOriginal');
+
+    if (!minInput || !maxInput) return;
+
+    let min = parseInt(minInput.value);
+    let max = parseInt(maxInput.value);
+    const numSlices = this.originalDataMetadata?.numSlices || 1;
+
+    // Ensure min <= max
+    if (min > max) {
+      if (minInput === document.activeElement) {
+        max = min;
+        maxInput.value = max;
+      } else {
+        min = max;
+        minInput.value = min;
+      }
+    }
+
+    // Update fill visual
+    this.updateOriginalDataRangeFill();
+
+    // Update value display
+    const minPercent = numSlices > 1 ? Math.round((min / (numSlices - 1)) * 100) : 0;
+    const maxPercent = numSlices > 1 ? Math.round((max / (numSlices - 1)) * 100) : 100;
+    if (valueSpan) {
+      valueSpan.textContent = `${minPercent}-${maxPercent}%`;
+    }
+
+    // Apply to planes
+    if (this.originalDataPlanes) {
+      import('./visualization/meshCreation.js').then(meshCreation => {
+        meshCreation.setOriginalDataSliceRange(this.originalDataPlanes, min, max);
+      });
+    }
+  }
+
+  /**
+   * Update range fill visual for original data dual-range slider
+   */
+  updateOriginalDataRangeFill() {
+    const minInput = document.getElementById('rangeMinOriginal');
+    const maxInput = document.getElementById('rangeMaxOriginal');
+    const fill = document.getElementById('rangeFillOriginal');
+
+    if (!minInput || !maxInput || !fill) return;
+
+    const min = parseInt(minInput.value);
+    const max = parseInt(maxInput.value);
+    const numSlices = this.originalDataMetadata?.numSlices || 1;
+
+    if (numSlices <= 1) {
+      fill.style.left = '0%';
+      fill.style.width = '100%';
+      return;
+    }
+
+    const leftPercent = (min / (numSlices - 1)) * 100;
+    const rightPercent = (max / (numSlices - 1)) * 100;
+
+    fill.style.left = `${leftPercent}%`;
+    fill.style.width = `${rightPercent - leftPercent}%`;
+  }
+
+  /**
+   * Load original data overlay from TIFF file
+   * @param {Array} shape - Mesh shape [depth, height, width] for alignment
+   */
+  async loadOriginalDataOverlay(shape) {
+    if (!this.originalDataFile || !this.scene) {
+      console.log('[VisualizationModule] No original data file or scene available');
+      return;
+    }
+
+    try {
+      console.log('[VisualizationModule] Loading original data overlay...');
+
+      // Get the URL for the original data TIFF
+      const tiffUrl = this.api.getOriginalDataUrl(this.originalDataFile.id || this.originalDataFile.path);
+      console.log('[VisualizationModule] Original data URL:', tiffUrl);
+
+      // Import and call the loader - add to meshGroup so planes rotate with mesh
+      const meshCreation = await import('./visualization/meshCreation.js');
+      const result = await meshCreation.loadAndCreateOriginalDataPlanes(tiffUrl, shape, this.meshGroup);
+
+      if (result) {
+        this.originalDataPlanes = result.planes;
+        this.originalDataGroup = result.planeGroup;
+        this.originalDataMetadata = result.metadata;
+
+        console.log(`[VisualizationModule] Original data loaded: ${result.metadata.numSlices} planes`);
+      } else {
+        console.log('[VisualizationModule] Original data not available');
+        // Clear the original data file reference since it's not usable
+        this.originalDataFile = null;
+      }
+    } catch (error) {
+      console.warn('[VisualizationModule] Failed to load original data overlay:', error);
+      this.originalDataFile = null;
+    }
+  }
+
   /**
    * Create dense volume array from sparse voxel data
    * @param {Object} data - VoxelSlices JSON data
@@ -950,6 +1207,50 @@ class VisualizationModule extends BaseModule {
   }
 
   /**
+   * Show loading overlay on canvas
+   */
+  showLoadingOverlay(message = 'Loading...', subtext = '') {
+    const container = document.getElementById('threejsContainer');
+    if (!container) return;
+
+    // Remove existing overlay if present
+    this.hideLoadingOverlay();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'vizLoadingOverlay';
+    overlay.className = 'viz-loading-overlay';
+    overlay.innerHTML = `
+      <div class="loading-spinner"></div>
+      <span class="placeholder-text">${message}</span>
+      <span class="placeholder-subtext">${subtext}</span>
+    `;
+    container.appendChild(overlay);
+  }
+
+  /**
+   * Hide loading overlay
+   */
+  hideLoadingOverlay() {
+    const overlay = document.getElementById('vizLoadingOverlay');
+    if (overlay) {
+      overlay.remove();
+    }
+  }
+
+  /**
+   * Update loading overlay message
+   */
+  updateLoadingOverlay(message, subtext = '') {
+    const overlay = document.getElementById('vizLoadingOverlay');
+    if (overlay) {
+      const textEl = overlay.querySelector('.placeholder-text');
+      const subtextEl = overlay.querySelector('.placeholder-subtext');
+      if (textEl) textEl.textContent = message;
+      if (subtextEl) subtextEl.textContent = subtext;
+    }
+  }
+
+  /**
    * Handle window resize
    */
   handleResize() {
@@ -964,14 +1265,15 @@ class VisualizationModule extends BaseModule {
   }
 
   /**
-   * Reset the view to default state
+   * Reset the view to default state (rotation, position, and all controls)
    */
   resetView() {
     console.log('[VisualizationModule] Resetting view...');
 
     if (this.meshGroup) {
-      // Reset rotation
+      // Reset rotation and position
       this.meshGroup.rotation.set(0, 0, 0);
+      this.meshGroup.position.set(0, 0, 0);
     }
 
     if (this.camera && this.meshGroup) {
@@ -981,7 +1283,244 @@ class VisualizationModule extends BaseModule {
       });
     }
 
+    // Reset all class controls to defaults
+    this.resetAllControls();
+
     this.state.notify('info', 'View reset');
+  }
+
+  /**
+   * Reset all class controls to their default values
+   */
+  resetAllControls() {
+    const isSliceBased = this.meshFormat === 'VoxelSlices';
+
+    // Reset each class
+    this.availableClasses.forEach(classId => {
+      // Reset visibility to true
+      const visCheckbox = document.getElementById(`classVisible${classId}`);
+      if (visCheckbox) {
+        visCheckbox.checked = true;
+        this.toggleClassVisibility(classId, true);
+      }
+
+      // Reset opacity to 80%
+      const opacitySlider = document.getElementById(`classOpacity${classId}`);
+      const opacityValue = document.getElementById(`opacityValue${classId}`);
+      if (opacitySlider) {
+        opacitySlider.value = 80;
+        if (opacityValue) opacityValue.textContent = '80%';
+        this.setClassOpacity(classId, 0.8);
+      }
+
+      // Reset range sliders to full range (for slice-based meshes)
+      if (isSliceBased) {
+        const rangeMin = document.getElementById(`rangeMin${classId}`);
+        const rangeMax = document.getElementById(`rangeMax${classId}`);
+        const rangeValue = document.getElementById(`rangeValue${classId}`);
+
+        if (rangeMin && rangeMax) {
+          rangeMin.value = 0;
+          rangeMax.value = this.sliceMetadata?.sliceCount - 1 || 19;
+          if (rangeValue) rangeValue.textContent = '0-100%';
+          this.updateRangeFill(classId);
+          this.updateSliceRange(classId);
+        }
+      }
+    });
+
+    // Reset original data controls (if present)
+    if (this.originalDataMetadata) {
+      const origVisCheckbox = document.getElementById('originalDataVisible');
+      const origOpacitySlider = document.getElementById('originalDataOpacity');
+      const origOpacityValue = document.getElementById('originalDataOpacityValue');
+      const origRangeMin = document.getElementById('originalDataRangeMin');
+      const origRangeMax = document.getElementById('originalDataRangeMax');
+      const origRangeValue = document.getElementById('originalDataRangeValue');
+
+      // Reset to hidden
+      if (origVisCheckbox) {
+        origVisCheckbox.checked = false;
+        this.toggleOriginalDataVisibility(false);
+      }
+
+      // Reset opacity to 30%
+      if (origOpacitySlider) {
+        origOpacitySlider.value = 30;
+        if (origOpacityValue) origOpacityValue.textContent = '30%';
+        this.setOriginalDataOpacityValue(0.3);
+      }
+
+      // Reset range to full
+      if (origRangeMin && origRangeMax) {
+        const numSlices = this.originalDataMetadata.numSlices;
+        origRangeMin.value = 0;
+        origRangeMax.value = numSlices - 1;
+        if (origRangeValue) origRangeValue.textContent = `0 - ${numSlices - 1}`;
+        this.updateOriginalDataRangeFill();
+        this.updateOriginalDataSliceRange();
+      }
+    }
+
+    console.log('[VisualizationModule] All controls reset to defaults');
+  }
+
+  /**
+   * Save current visualization state for persistence
+   */
+  saveVisualizationState() {
+    if (!this.visualizationReady) return;
+
+    const state = {
+      meshFileId: this.selectedFile?.id,
+      classes: {},
+      originalData: null,
+      camera: null,
+      meshTransform: null
+    };
+
+    // Save class states
+    this.availableClasses.forEach(classId => {
+      const visCheckbox = document.getElementById(`classVisible${classId}`);
+      const opacitySlider = document.getElementById(`classOpacity${classId}`);
+      const rangeMin = document.getElementById(`rangeMin${classId}`);
+      const rangeMax = document.getElementById(`rangeMax${classId}`);
+
+      const defaultMaxSlice = (this.sliceMetadata?.sliceCount || 20) - 1;
+      state.classes[classId] = {
+        visible: visCheckbox?.checked ?? true,
+        opacity: opacitySlider ? parseInt(opacitySlider.value) : 80,
+        rangeMin: rangeMin ? parseInt(rangeMin.value) : 0,
+        rangeMax: rangeMax ? parseInt(rangeMax.value) : defaultMaxSlice
+      };
+    });
+
+    // Save original data state
+    if (this.originalDataMetadata) {
+      const origVisCheckbox = document.getElementById('originalDataVisible');
+      const origOpacitySlider = document.getElementById('originalDataOpacity');
+      const origRangeMin = document.getElementById('originalDataRangeMin');
+      const origRangeMax = document.getElementById('originalDataRangeMax');
+
+      state.originalData = {
+        visible: origVisCheckbox?.checked ?? false,
+        opacity: origOpacitySlider ? parseInt(origOpacitySlider.value) : 30,
+        rangeMin: origRangeMin ? parseInt(origRangeMin.value) : 0,
+        rangeMax: origRangeMax ? parseInt(origRangeMax.value) : (this.originalDataMetadata.numSlices - 1)
+      };
+    }
+
+    // Save camera position
+    if (this.camera) {
+      state.camera = {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z
+      };
+    }
+
+    // Save mesh transform
+    if (this.meshGroup) {
+      state.meshTransform = {
+        position: { x: this.meshGroup.position.x, y: this.meshGroup.position.y, z: this.meshGroup.position.z },
+        rotation: { x: this.meshGroup.rotation.x, y: this.meshGroup.rotation.y, z: this.meshGroup.rotation.z }
+      };
+    }
+
+    this.persistedState = state;
+    console.log('[VisualizationModule] State saved:', state);
+  }
+
+  /**
+   * Restore previously saved visualization state
+   */
+  restoreVisualizationState() {
+    if (!this.persistedState || !this.visualizationReady) return;
+
+    const state = this.persistedState;
+    console.log('[VisualizationModule] Restoring state:', state);
+
+    // Restore class states
+    Object.entries(state.classes).forEach(([classId, classState]) => {
+      // Restore visibility
+      const visCheckbox = document.getElementById(`classVisible${classId}`);
+      if (visCheckbox) {
+        visCheckbox.checked = classState.visible;
+        this.toggleClassVisibility(classId, classState.visible);
+      }
+
+      // Restore opacity
+      const opacitySlider = document.getElementById(`classOpacity${classId}`);
+      const opacityValue = document.getElementById(`opacityValue${classId}`);
+      if (opacitySlider) {
+        opacitySlider.value = classState.opacity;
+        if (opacityValue) opacityValue.textContent = `${classState.opacity}%`;
+        this.setClassOpacity(classId, classState.opacity / 100);
+      }
+
+      // Restore range (for slice-based meshes)
+      if (this.meshFormat === 'VoxelSlices') {
+        const rangeMin = document.getElementById(`rangeMin${classId}`);
+        const rangeMax = document.getElementById(`rangeMax${classId}`);
+
+        if (rangeMin && rangeMax) {
+          rangeMin.value = classState.rangeMin;
+          rangeMax.value = classState.rangeMax;
+          this.updateRangeFill(classId);
+          this.updateSliceRange(classId); // This updates the text display and applies to slices
+        }
+      }
+    });
+
+    // Restore original data state
+    if (state.originalData && this.originalDataMetadata) {
+      const origVisCheckbox = document.getElementById('originalDataVisible');
+      const origOpacitySlider = document.getElementById('originalDataOpacity');
+      const origOpacityValue = document.getElementById('originalDataOpacityValue');
+      const origRangeMin = document.getElementById('originalDataRangeMin');
+      const origRangeMax = document.getElementById('originalDataRangeMax');
+      const origRangeValue = document.getElementById('originalDataRangeValue');
+
+      if (origVisCheckbox) {
+        origVisCheckbox.checked = state.originalData.visible;
+        this.toggleOriginalDataVisibility(state.originalData.visible);
+      }
+
+      if (origOpacitySlider) {
+        origOpacitySlider.value = state.originalData.opacity;
+        if (origOpacityValue) origOpacityValue.textContent = `${state.originalData.opacity}%`;
+        this.setOriginalDataOpacityValue(state.originalData.opacity / 100);
+      }
+
+      if (origRangeMin && origRangeMax) {
+        origRangeMin.value = state.originalData.rangeMin;
+        origRangeMax.value = state.originalData.rangeMax;
+        if (origRangeValue) origRangeValue.textContent = `${state.originalData.rangeMin} - ${state.originalData.rangeMax}`;
+        this.updateOriginalDataRangeFill();
+        this.updateOriginalDataSliceRange();
+      }
+    }
+
+    // Restore camera position
+    if (state.camera && this.camera) {
+      this.camera.position.set(state.camera.x, state.camera.y, state.camera.z);
+    }
+
+    // Restore mesh transform
+    if (state.meshTransform && this.meshGroup) {
+      this.meshGroup.position.set(
+        state.meshTransform.position.x,
+        state.meshTransform.position.y,
+        state.meshTransform.position.z
+      );
+      this.meshGroup.rotation.set(
+        state.meshTransform.rotation.x,
+        state.meshTransform.rotation.y,
+        state.meshTransform.rotation.z
+      );
+    }
+
+    console.log('[VisualizationModule] State restored');
   }
 
   // ===========================================================================
@@ -1106,13 +1645,46 @@ class VisualizationModule extends BaseModule {
   async checkForPreselectedFile() {
     const meshResult = this.state.get('modules.mesh.result');
 
-    if (meshResult && meshResult.meshId) {
+    if (meshResult && meshResult.jsonFile) {
       console.log('[VisualizationModule] Found preselected mesh from MeshModule:', meshResult);
 
       // Clear the preselection so it doesn't trigger again
       this.state.update('modules.mesh.result', null);
 
-      // Try to find the JSON file from the mesh result
+      try {
+        // Use the file info directly from the mesh result
+        this.selectedFile = {
+          id: meshResult.jsonFile.id,
+          path: meshResult.jsonFile.path,
+          name: meshResult.jsonFile.name,
+          fromMeshModule: true,
+          meshId: meshResult.meshId  // Include meshId for API calls
+        };
+
+        console.log('[VisualizationModule] Using preselected file:', this.selectedFile);
+
+        // Update file selector UI to show the selected file
+        if (this.fileSelector) {
+          this.fileSelector.setSelectedFile(this.selectedFile);
+        }
+
+        // Trigger validation
+        await this.onFileSelected(this.selectedFile);
+
+        // Auto-advance to step 2 if validation passed
+        if (this.dataValidated) {
+          this.state.notify('success', 'Mesh loaded from generation result');
+          this.goToStep(2);
+        }
+      } catch (error) {
+        console.warn('[VisualizationModule] Failed to load preselected mesh:', error);
+        this.state.notify('error', 'Failed to load mesh: ' + error.message);
+      }
+    } else if (meshResult && meshResult.meshId) {
+      // Fallback: try to get file info via API (legacy support)
+      console.log('[VisualizationModule] Found preselected mesh (legacy format):', meshResult);
+      this.state.update('modules.mesh.result', null);
+
       try {
         const meshFile = await this.api.getMeshFileFromResult(meshResult.meshId);
 
@@ -1121,13 +1693,17 @@ class VisualizationModule extends BaseModule {
             id: meshFile.fileId,
             path: meshFile.path,
             name: meshFile.name,
-            fromMeshModule: true
+            fromMeshModule: true,
+            meshId: meshResult.meshId  // Include meshId for API calls
           };
 
-          // Trigger validation
+          // Update file selector UI
+          if (this.fileSelector) {
+            this.fileSelector.setSelectedFile(this.selectedFile);
+          }
+
           await this.onFileSelected(this.selectedFile);
 
-          // Auto-advance to step 2 if validation passed
           if (this.dataValidated) {
             this.state.notify('success', 'Mesh loaded from generation result');
             this.goToStep(2);
@@ -1184,6 +1760,9 @@ class VisualizationModule extends BaseModule {
   async deactivate() {
     console.log('[VisualizationModule] Deactivating...');
 
+    // Save visualization state before cleanup
+    this.saveVisualizationState();
+
     // Exit expanded mode if active
     if (this.isFullscreen) {
       this.toggleExpanded();
@@ -1229,6 +1808,13 @@ class VisualizationModule extends BaseModule {
       }).catch(() => {});
     }
 
+    // Clean up original data planes
+    if (this.originalDataPlanes || this.originalDataGroup) {
+      import('./visualization/meshCreation.js').then(meshCreation => {
+        meshCreation.disposeOriginalDataPlanes(this.originalDataGroup, this.originalDataPlanes);
+      }).catch(() => {});
+    }
+
     // Clear references
     this.scene = null;
     this.camera = null;
@@ -1239,6 +1825,9 @@ class VisualizationModule extends BaseModule {
     this.sliceMetadata = null;
     this.meshFormat = null;
     this.volume = null;
+    this.originalDataPlanes = null;
+    this.originalDataGroup = null;
+    this.originalDataMetadata = null;
 
     // Clean up global references
     delete window.vizModule;
