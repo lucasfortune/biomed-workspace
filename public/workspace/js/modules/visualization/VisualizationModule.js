@@ -77,6 +77,7 @@ class VisualizationModule extends BaseModule {
     this.sliceMeshes = {};       // For VoxelSlices format
     this.sliceMetadata = null;   // Slice info for VoxelSlices format
     this.meshFormat = null;      // 'BufferGeometry' or 'VoxelSlices'
+    this.volume = null;          // Dense volume data for endcap generation
     this.availableClasses = [];
 
     // Resize handler reference for cleanup
@@ -631,11 +632,16 @@ class VisualizationModule extends BaseModule {
             this.sliceMeshes = loadResult.sliceMeshes;
             this.sliceMetadata = loadResult.sliceMetadata;
             this.classMeshes = {}; // Not used in this format
+
+            // Store volume data for endcap generation
+            this.volume = this.createVolumeFromData(meshResult.data);
+
             console.log(`[VisualizationModule] VoxelSlices format: ${loadResult.sliceMetadata.sliceCount} slices`);
           } else {
             this.classMeshes = loadResult.classMeshes;
             this.sliceMeshes = {}; // Not used in this format
             this.sliceMetadata = null;
+            this.volume = null;
           }
 
           // Center the mesh (only for BufferGeometry - VoxelSlices is pre-centered)
@@ -818,16 +824,58 @@ class VisualizationModule extends BaseModule {
   }
 
   /**
-   * Set slice range visibility for a class
+   * Set slice range visibility for a class and generate endcaps
    */
   setClassSliceRange(classId, minSlice, maxSlice) {
     if (!this.sliceMeshes[classId]) return;
 
+    // Update slice visibility
     this.sliceMeshes[classId].forEach((mesh, index) => {
       if (mesh) {
         mesh.visible = (index >= minSlice && index <= maxSlice);
       }
     });
+
+    // Generate endcaps if we have volume data
+    if (this.volume && this.sliceMetadata) {
+      const sliceCount = this.sliceMetadata.sliceCount || 20;
+      const minPercent = (minSlice / (sliceCount - 1)) * 100;
+      const maxPercent = (maxSlice / (sliceCount - 1)) * 100;
+
+      // Import and call clipping function
+      import('./visualization/clipping.js').then(clipping => {
+        clipping.updateAccurateCapping(
+          { [classId]: { min: minPercent, max: maxPercent } },
+          {
+            sliceMeshes: this.sliceMeshes,
+            sliceMetadata: this.sliceMetadata,
+            meshGroup: this.meshGroup,
+            volume: this.volume
+          }
+        );
+      });
+    }
+  }
+
+  /**
+   * Create dense volume array from sparse voxel data
+   * @param {Object} data - VoxelSlices JSON data
+   * @returns {Uint8Array} - Dense volume array
+   */
+  createVolumeFromData(data) {
+    if (!data || !data.shape || !data.data) return null;
+
+    const [depth, height, width] = data.shape;
+    const volume = new Uint8Array(depth * height * width);
+
+    // Convert sparse to dense
+    data.data.forEach(voxel => {
+      const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
+      volume[index] = voxel.value;
+    });
+
+    console.log(`[VisualizationModule] Created volume: ${depth}x${height}x${width}`);
+    return volume;
   }
 
   /**
@@ -848,6 +896,11 @@ class VisualizationModule extends BaseModule {
             // Only show if within range AND visibility is on
             mesh.visible = visible && (index >= min && index <= max);
           }
+        });
+
+        // Also toggle capping mesh visibility
+        import('./visualization/clipping.js').then(clipping => {
+          clipping.setCappingVisibility(classId, visible);
         });
       }
     } else {
@@ -872,6 +925,11 @@ class VisualizationModule extends BaseModule {
             mesh.material.transparent = opacity < 1;
             mesh.material.needsUpdate = true;
           }
+        });
+
+        // Also update capping mesh opacity
+        import('./visualization/clipping.js').then(clipping => {
+          clipping.setCappingOpacity(classId, opacity);
         });
       }
     } else {
@@ -1164,6 +1222,13 @@ class VisualizationModule extends BaseModule {
       console.warn('[VisualizationModule] Could not dispose scene:', e);
     }
 
+    // Clean up capping meshes
+    if (this.meshFormat === 'VoxelSlices' && this.meshGroup) {
+      import('./visualization/clipping.js').then(clipping => {
+        clipping.removeAllCappingMeshes(this.meshGroup);
+      }).catch(() => {});
+    }
+
     // Clear references
     this.scene = null;
     this.camera = null;
@@ -1173,6 +1238,7 @@ class VisualizationModule extends BaseModule {
     this.sliceMeshes = {};
     this.sliceMetadata = null;
     this.meshFormat = null;
+    this.volume = null;
 
     // Clean up global references
     delete window.vizModule;

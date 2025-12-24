@@ -39,6 +39,16 @@ export {
     disposeSliceMeshes
 } from './meshCreation.js';
 
+// Dynamic endcap generation (clipping)
+export {
+    updateAccurateCapping,
+    removeCappingMeshesForClass,
+    removeAllCappingMeshes,
+    getCappingMeshesForClass,
+    setCappingOpacity,
+    setCappingVisibility
+} from './clipping.js';
+
 // User interactions (mouse, keyboard, touch)
 export {
     setupEnhancedControls,
