@@ -44,7 +44,7 @@ const moduleRegistry = [
     inputs: ['image_stack'],
     outputs: ['annotations'],
     color: '#FF6B6B',
-    status: 'coming_soon'
+    status: 'available'
   },
   {
     id: 'mesh',

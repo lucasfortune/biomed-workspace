@@ -376,6 +376,10 @@ class FileSelector {
     if (!selectedOption.value) {
       this.hidePreview();
       this.selectedFile = null;
+      // Call onSelect with null to notify of deselection
+      if (this.onSelect) {
+        this.onSelect(null);
+      }
       return;
     }
 

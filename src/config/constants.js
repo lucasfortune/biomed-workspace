@@ -22,7 +22,8 @@ const DIRECTORIES = {
   sessions: 'sessions',
   testData: 'test_data',
   workspaces: 'workspaces',
-  logs: 'logs'
+  logs: 'logs',
+  unfinishedAnnotations: 'unfinished_annotations'
 };
 
 // File upload limits

@@ -26,6 +26,7 @@ const createFilesRoutes = require('./routes/files.routes');
 const createWorkspaceRoutes = require('./routes/workspace.routes');
 const createMLRoutes = require('./routes/ml.routes');
 const createMeshRoutes = require('./routes/mesh.routes');
+const createAnnotationRoutes = require('./routes/annotation.routes');
 
 // Python runner wrappers
 const {
@@ -321,6 +322,15 @@ function configureApp(app, dependencies) {
     logger,
     io,
     upload
+  }));
+
+  // Annotation routes
+  app.use('/api/annotation', createAnnotationRoutes({
+    workspaceManager,
+    sessionTracker,
+    activityLogger,
+    logger,
+    io
   }));
 
   // Ensure directories exist
