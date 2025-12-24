@@ -23,6 +23,7 @@ import { StepNavigator, FileSelector, ValidationDisplay }
 import AnnotationAPI from './AnnotationAPI.js';
 import AnnotationCanvas from './utils/AnnotationCanvas.js';
 import BrushEngine from './utils/BrushEngine.js';
+import HistoryManager from './utils/HistoryManager.js';
 
 // =============================================================================
 // MODULE CLASS
@@ -61,6 +62,7 @@ class AnnotationModule extends BaseModule {
     this.api = null;
     this.canvas = null;
     this.brushEngine = null;
+    this.historyManager = null;
 
     // =========================================================================
     // MODULE STATE
@@ -428,12 +430,26 @@ class AnnotationModule extends BaseModule {
     }
 
     // Keyboard shortcuts for slice navigation and tools
-    document.addEventListener('keydown', (e) => {
+    this.keydownHandler = (e) => {
       // Only handle if Step 2 is active
       if (this.currentStep !== 2) return;
 
       // Don't handle if user is typing in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Undo: Ctrl+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+        return;
+      }
+
+      // Redo: Ctrl+Y or Ctrl+Shift+Z
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey) || (e.key === 'Z' && e.shiftKey))) {
+        e.preventDefault();
+        this.redo();
+        return;
+      }
 
       if (e.key === 'ArrowLeft') {
         this.goToSlice(this.currentSlice - 1);
@@ -448,7 +464,8 @@ class AnnotationModule extends BaseModule {
       } else if (e.key === ']') {
         this.adjustBrushSize(5);
       }
-    });
+    };
+    document.addEventListener('keydown', this.keydownHandler);
 
     // =========================================================================
     // Toolbar Controls
@@ -477,6 +494,17 @@ class AnnotationModule extends BaseModule {
     const addClassBtn = this.container.querySelector('#addClassBtn');
     if (addClassBtn) {
       addClassBtn.addEventListener('click', () => this.addClass());
+    }
+
+    // Undo/Redo buttons
+    const undoBtn = this.container.querySelector('#undoBtn');
+    const redoBtn = this.container.querySelector('#redoBtn');
+
+    if (undoBtn) {
+      undoBtn.addEventListener('click', () => this.undo());
+    }
+    if (redoBtn) {
+      redoBtn.addEventListener('click', () => this.redo());
     }
   }
 
@@ -575,13 +603,33 @@ class AnnotationModule extends BaseModule {
         };
       }
 
+      // Create history manager if not exists
+      if (!this.historyManager) {
+        this.historyManager = new HistoryManager({ maxStatesPerSlice: 20 });
+
+        // Update button states when history changes
+        this.historyManager.onHistoryChange = (info) => {
+          this.updateHistoryButtons();
+        };
+      }
+
       // Create brush engine if not exists
       if (!this.brushEngine) {
         this.brushEngine = new BrushEngine(this.canvas);
 
         // Set up brush engine callbacks
+        this.brushEngine.onStrokeStart = () => {
+          // Save state before the stroke begins (for undo)
+          const sliceIndex = this.canvas.currentSlice || 0;
+          const data = this.brushEngine.getAnnotationData();
+          if (data) {
+            this.historyManager.saveState(sliceIndex, data);
+          }
+        };
+
         this.brushEngine.onStrokeEnd = () => {
-          // Could save history state here (Phase 6)
+          // Update history buttons after stroke
+          this.updateHistoryButtons();
         };
 
         this.brushEngine.onAnnotationChange = () => {
@@ -649,6 +697,9 @@ class AnnotationModule extends BaseModule {
       if (this.brushEngine) {
         this.brushEngine.renderAnnotations();
       }
+
+      // Update history buttons for the new slice
+      this.updateHistoryButtons();
     } catch (error) {
       console.error('[AnnotationModule] Error loading slice:', error);
       if (this.state?.notify) {
@@ -895,6 +946,91 @@ class AnnotationModule extends BaseModule {
   }
 
   // ===========================================================================
+  // HISTORY MANAGEMENT (UNDO/REDO)
+  // ===========================================================================
+
+  /**
+   * Undo the last stroke on the current slice
+   */
+  undo() {
+    if (!this.historyManager || !this.brushEngine) return;
+
+    const sliceIndex = this.canvas?.currentSlice || 0;
+
+    if (!this.historyManager.canUndo(sliceIndex)) {
+      console.log('[AnnotationModule] Nothing to undo');
+      return;
+    }
+
+    // Get current data to save to redo stack
+    const currentData = this.brushEngine.getAnnotationData();
+
+    // Get previous state
+    const previousState = this.historyManager.undo(sliceIndex, currentData);
+
+    if (previousState) {
+      // Restore the previous state
+      this.brushEngine.setAnnotationData(sliceIndex, previousState);
+      this.brushEngine.renderAnnotations();
+      console.log('[AnnotationModule] Undo applied');
+    }
+
+    this.updateHistoryButtons();
+  }
+
+  /**
+   * Redo a previously undone stroke
+   */
+  redo() {
+    if (!this.historyManager || !this.brushEngine) return;
+
+    const sliceIndex = this.canvas?.currentSlice || 0;
+
+    if (!this.historyManager.canRedo(sliceIndex)) {
+      console.log('[AnnotationModule] Nothing to redo');
+      return;
+    }
+
+    // Get current data to save to undo stack
+    const currentData = this.brushEngine.getAnnotationData();
+
+    // Get next state
+    const nextState = this.historyManager.redo(sliceIndex, currentData);
+
+    if (nextState) {
+      // Restore the next state
+      this.brushEngine.setAnnotationData(sliceIndex, nextState);
+      this.brushEngine.renderAnnotations();
+      console.log('[AnnotationModule] Redo applied');
+    }
+
+    this.updateHistoryButtons();
+  }
+
+  /**
+   * Update the enabled/disabled state of undo/redo buttons
+   */
+  updateHistoryButtons() {
+    const undoBtn = this.container?.querySelector('#undoBtn');
+    const redoBtn = this.container?.querySelector('#redoBtn');
+
+    if (!this.historyManager) {
+      if (undoBtn) undoBtn.disabled = true;
+      if (redoBtn) redoBtn.disabled = true;
+      return;
+    }
+
+    const sliceIndex = this.canvas?.currentSlice || 0;
+
+    if (undoBtn) {
+      undoBtn.disabled = !this.historyManager.canUndo(sliceIndex);
+    }
+    if (redoBtn) {
+      redoBtn.disabled = !this.historyManager.canRedo(sliceIndex);
+    }
+  }
+
+  // ===========================================================================
   // FILE SELECTION HANDLERS
   // ===========================================================================
 
@@ -1078,6 +1214,18 @@ class AnnotationModule extends BaseModule {
   // ===========================================================================
 
   async deactivate() {
+    // Remove keyboard event listener
+    if (this.keydownHandler) {
+      document.removeEventListener('keydown', this.keydownHandler);
+      this.keydownHandler = null;
+    }
+
+    // Clean up history manager
+    if (this.historyManager) {
+      this.historyManager.destroy();
+      this.historyManager = null;
+    }
+
     // Clean up brush engine
     if (this.brushEngine) {
       this.brushEngine.destroy();
