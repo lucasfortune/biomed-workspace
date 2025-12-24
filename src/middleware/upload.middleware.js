@@ -39,6 +39,10 @@ function createStorage(workspaceManager, logger) {
         subdir = 'uploads/annotations';
       } else if (file.fieldname === 'inference_data') {
         subdir = 'uploads/inference_data';
+      } else if (file.fieldname === 'imported_models') {
+        subdir = 'uploads/imported_models';
+      } else if (file.fieldname === 'meshes') {
+        subdir = 'results/meshes';
       } else if (file.fieldname === 'file') {
         // For workspace upload endpoint, use category from body if available
         subdir = 'uploads/raw'; // Will be moved if needed
@@ -64,7 +68,45 @@ function createStorage(workspaceManager, logger) {
 }
 
 /**
- * TIFF file filter - accepts only TIFF files
+ * Workspace file filter - accepts files based on category/fieldname
+ * - meshes: JSON files
+ * - imported_models: PTH and JSON files
+ * - all others: TIFF files
+ */
+function workspaceFileFilter(req, file, cb) {
+  const fieldname = file.fieldname.toLowerCase();
+  const filename = file.originalname.toLowerCase();
+
+  // Mesh uploads accept JSON files
+  if (fieldname === 'meshes') {
+    if (filename.endsWith('.json')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JSON files are allowed for mesh data!'), false);
+    }
+    return;
+  }
+
+  // Model imports accept PTH and JSON files
+  if (fieldname === 'imported_models') {
+    if (filename.endsWith('.pth') || filename.endsWith('.json')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .pth and .json files are allowed for models!'), false);
+    }
+    return;
+  }
+
+  // All other categories accept TIFF files
+  if (file.mimetype === 'image/tiff' || filename.endsWith('.tif') || filename.endsWith('.tiff')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only TIFF files are allowed!'), false);
+  }
+}
+
+/**
+ * TIFF file filter - accepts only TIFF files (legacy, for specific routes)
  */
 function tiffFileFilter(req, file, cb) {
   if (file.mimetype === 'image/tiff' || file.originalname.toLowerCase().endsWith('.tif')) {
@@ -95,10 +137,10 @@ function modelFileFilter(req, file, cb) {
 function createUploadMiddleware(workspaceManager, logger) {
   const storage = createStorage(workspaceManager, logger);
 
-  // TIFF upload middleware (200MB limit)
+  // Workspace upload middleware - accepts files based on category (200MB limit)
   const upload = multer({
     storage: storage,
-    fileFilter: tiffFileFilter,
+    fileFilter: workspaceFileFilter,
     limits: {
       fileSize: UPLOAD_LIMITS.tiffFileSize
     }
@@ -155,6 +197,7 @@ function handleMulterError(err, req, res, next) {
 module.exports = {
   createStorage,
   createUploadMiddleware,
+  workspaceFileFilter,
   tiffFileFilter,
   modelFileFilter,
   handleMulterError
