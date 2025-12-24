@@ -81,7 +81,33 @@ class VisualizationAPI {
       return { valid: false, error: 'Empty or invalid JSON data' };
     }
 
-    // Check for our mesh format: { metadata, meshes }
+    // Check for VoxelSlices format (new slice-based visualization)
+    if (data.metadata && data.metadata.type === 'VoxelSlices') {
+      // Validate required fields
+      if (!data.data || !Array.isArray(data.data)) {
+        return { valid: false, error: 'VoxelSlices format missing data array' };
+      }
+
+      if (!data.shape || data.shape.length !== 3) {
+        return { valid: false, error: 'VoxelSlices format missing shape metadata' };
+      }
+
+      if (!data.classes || !Array.isArray(data.classes)) {
+        return { valid: false, error: 'VoxelSlices format missing classes array' };
+      }
+
+      return {
+        valid: true,
+        format: 'VoxelSlices',
+        classCount: data.classes.length,
+        classes: data.classes.sort((a, b) => a - b),
+        totalVoxels: data.statistics?.totalVoxels || data.data.length,
+        sliceCount: data.sliceCount || 20,
+        sliceDirection: data.sliceDirection || 'z'
+      };
+    }
+
+    // Check for BufferGeometry format (marching cubes)
     if (data.metadata && data.meshes) {
       // Validate metadata
       if (data.metadata.type !== 'BufferGeometry') {

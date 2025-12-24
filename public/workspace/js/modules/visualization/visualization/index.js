@@ -22,12 +22,22 @@ export {
 // Mesh loading
 export {
     loadMeshFromJSON,
+    detectMeshFormat,
     disposeMeshes,
     setMeshVisibility,
     setMeshOpacity,
     getMeshBoundingBox,
     centerMeshGroup
 } from './meshLoader.js';
+
+// Slice-based mesh creation (for VoxelSlices format)
+export {
+    createSliceBasedClassMeshes,
+    setClassSliceRange,
+    setClassVisibility,
+    setClassOpacity,
+    disposeSliceMeshes
+} from './meshCreation.js';
 
 // User interactions (mouse, keyboard, touch)
 export {
@@ -49,5 +59,9 @@ export {
     lerp,
     mapRange,
     debounce,
-    createClassMaterial
+    createClassMaterial,
+    // Voxel helpers (for slice-based mesh creation)
+    getVoxelValue,
+    addQuadFace,
+    centerAndScaleGeometry
 } from './utils.js';

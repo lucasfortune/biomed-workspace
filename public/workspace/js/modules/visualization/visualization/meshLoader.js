@@ -1,28 +1,99 @@
 /**
  * meshLoader.js - Load and parse mesh JSON data
  *
- * Parses the BufferGeometry JSON format from generate_mesh.py
- * and creates Three.js mesh objects for visualization.
+ * Supports two formats:
+ * 1. BufferGeometry (marching cubes) - smooth surface meshes
+ * 2. VoxelSlices - slice-based voxel meshes for range slider control
  */
 
 import { getClassColorHex, createClassMaterial } from './utils.js';
+import { createSliceBasedClassMeshes, disposeSliceMeshes } from './meshCreation.js';
+
+/**
+ * Detect the format of mesh JSON data
+ * @param {Object} jsonData - Parsed JSON mesh data
+ * @returns {string} - 'VoxelSlices' or 'BufferGeometry'
+ */
+export function detectMeshFormat(jsonData) {
+    if (!jsonData || !jsonData.metadata) {
+        // Legacy format without metadata - assume BufferGeometry
+        if (jsonData && jsonData.meshes) {
+            return 'BufferGeometry';
+        }
+        throw new Error('Invalid mesh JSON: missing metadata and meshes');
+    }
+
+    return jsonData.metadata.type || 'BufferGeometry';
+}
 
 /**
  * Load mesh data from JSON and create Three.js objects
+ * Automatically detects format and routes to appropriate loader
  * @param {Object} jsonData - Parsed JSON mesh data
  * @param {THREE.Scene} scene - Three.js scene to add meshes to
- * @returns {Object} - { meshGroup, classMeshes, availableClasses, metadata }
+ * @returns {Object} - { meshGroup, classMeshes/sliceMeshes, availableClasses, metadata, format }
  */
 export function loadMeshFromJSON(jsonData, scene) {
     console.log('[MeshLoader] Loading mesh from JSON...');
 
-    // Validate JSON structure
-    if (!jsonData || !jsonData.meshes) {
-        throw new Error('Invalid mesh JSON: missing "meshes" property');
+    // Detect format
+    const format = detectMeshFormat(jsonData);
+    console.log(`[MeshLoader] Detected format: ${format}`);
+
+    if (format === 'VoxelSlices') {
+        return loadVoxelSlicesFormat(jsonData, scene);
+    } else {
+        return loadBufferGeometryFormat(jsonData, scene);
+    }
+}
+
+/**
+ * Load VoxelSlices format (slice-based meshes)
+ * @param {Object} jsonData - Parsed JSON mesh data
+ * @param {THREE.Scene} scene - Three.js scene to add meshes to
+ * @returns {Object} - { meshGroup, sliceMeshes, availableClasses, metadata, sliceMetadata, format }
+ */
+function loadVoxelSlicesFormat(jsonData, scene) {
+    console.log('[MeshLoader] Loading VoxelSlices format...');
+
+    // Validate required fields
+    if (!jsonData.data || !jsonData.shape) {
+        throw new Error('Invalid VoxelSlices JSON: missing data or shape');
     }
 
-    if (!jsonData.metadata) {
-        console.warn('[MeshLoader] No metadata in mesh JSON');
+    // Performance warning for large datasets
+    const voxelCount = jsonData.data.length;
+    if (voxelCount > 500000) {
+        console.warn(`[MeshLoader] Large dataset (${voxelCount} voxels). Processing may take a moment.`);
+    }
+
+    // Create slice-based meshes
+    const result = createSliceBasedClassMeshes(jsonData, scene);
+
+    console.log(`[MeshLoader] Loaded VoxelSlices: ${result.availableClasses.length} classes, ${jsonData.sliceCount} slices each`);
+
+    return {
+        meshGroup: result.meshGroup,
+        sliceMeshes: result.sliceMeshes,
+        availableClasses: result.availableClasses,
+        metadata: jsonData.metadata || {},
+        sliceMetadata: result.sliceMetadata,
+        format: 'VoxelSlices'
+    };
+}
+
+/**
+ * Load BufferGeometry format (marching cubes meshes)
+ * @param {Object} jsonData - Parsed JSON mesh data
+ * @param {THREE.Scene} scene - Three.js scene to add meshes to
+ * @returns {Object} - { meshGroup, classMeshes, availableClasses, metadata, format }
+ */
+function loadBufferGeometryFormat(jsonData, scene) {
+    console.log('[MeshLoader] Loading BufferGeometry format...');
+
+    // Validate JSON structure
+    if (!jsonData.meshes) {
+        throw new Error('Invalid BufferGeometry JSON: missing "meshes" property');
     }
 
     // Create a group to hold all class meshes
@@ -53,13 +124,14 @@ export function loadMeshFromJSON(jsonData, scene) {
     // Add mesh group to scene
     scene.add(meshGroup);
 
-    console.log(`[MeshLoader] Loaded ${availableClasses.length} class meshes`);
+    console.log(`[MeshLoader] Loaded ${availableClasses.length} class meshes (BufferGeometry)`);
 
     return {
         meshGroup,
         classMeshes,
         availableClasses,
-        metadata: jsonData.metadata || {}
+        metadata: jsonData.metadata || {},
+        format: 'BufferGeometry'
     };
 }
 

@@ -209,3 +209,108 @@ export function createClassMaterial(classValue, options = {}) {
         shininess: options.shininess || 30
     });
 }
+
+// ============================================
+// VOXEL HELPER FUNCTIONS (for slice-based mesh creation)
+// ============================================
+
+/**
+ * Get voxel value from volume array with bounds checking
+ * @param {Uint8Array} volume - Volume data array
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ * @param {number} z - Z coordinate
+ * @param {number} width - Volume width
+ * @param {number} height - Volume height
+ * @param {number} depth - Volume depth
+ * @returns {number} - Voxel value or 0 if out of bounds
+ */
+export function getVoxelValue(volume, x, y, z, width, height, depth) {
+    if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= depth) return 0;
+    const index = z * (height * width) + y * width + x;
+    return volume[index] || 0;
+}
+
+/**
+ * Add a quad face to vertex and normal arrays
+ * @param {Array} vertices - Vertex array to append to
+ * @param {Array} normals - Normal array to append to
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ * @param {number} z - Z coordinate
+ * @param {Object} face - Face object with direction info
+ */
+export function addQuadFace(vertices, normals, x, y, z, face) {
+    const faceData = {
+        'right': {
+            verts: [
+                [x+1, y, z], [x+1, y+1, z], [x+1, y+1, z+1],
+                [x+1, y, z], [x+1, y+1, z+1], [x+1, y, z+1]
+            ],
+            normal: [1, 0, 0]
+        },
+        'left': {
+            verts: [
+                [x, y, z+1], [x, y+1, z+1], [x, y+1, z],
+                [x, y, z+1], [x, y+1, z], [x, y, z]
+            ],
+            normal: [-1, 0, 0]
+        },
+        'top': {
+            verts: [
+                [x, y+1, z], [x+1, y+1, z], [x+1, y+1, z+1],
+                [x, y+1, z], [x+1, y+1, z+1], [x, y+1, z+1]
+            ],
+            normal: [0, 1, 0]
+        },
+        'bottom': {
+            verts: [
+                [x, y, z+1], [x+1, y, z+1], [x+1, y, z],
+                [x, y, z+1], [x+1, y, z], [x, y, z]
+            ],
+            normal: [0, -1, 0]
+        },
+        'front': {
+            verts: [
+                [x, y, z+1], [x, y+1, z+1], [x+1, y+1, z+1],
+                [x, y, z+1], [x+1, y+1, z+1], [x+1, y, z+1]
+            ],
+            normal: [0, 0, 1]
+        },
+        'back': {
+            verts: [
+                [x+1, y, z], [x+1, y+1, z], [x, y+1, z],
+                [x+1, y, z], [x, y+1, z], [x, y, z]
+            ],
+            normal: [0, 0, -1]
+        }
+    };
+
+    const data = faceData[face.name];
+    data.verts.forEach(vertex => {
+        vertices.push(vertex[0], vertex[1], vertex[2]);
+        normals.push(data.normal[0], data.normal[1], data.normal[2]);
+    });
+}
+
+/**
+ * Center and scale geometry to make it a reasonable size
+ * @param {Float32Array} vertices - Vertex array to modify
+ * @param {Array} shape - Original data shape [depth, height, width]
+ * @param {number} scaleFactor - Scale factor to apply
+ */
+export function centerAndScaleGeometry(vertices, shape, scaleFactor) {
+    const [depth, height, width] = shape;
+
+    // Calculate center offset (before scaling)
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const centerZ = depth / 2;
+
+    // Apply centering AND scaling to all vertices
+    for (let i = 0; i < vertices.length; i += 3) {
+        vertices[i] = (vertices[i] - centerX) * scaleFactor;         // X
+        vertices[i + 1] = (vertices[i + 1] - centerY) * scaleFactor; // Y
+        vertices[i + 2] = (vertices[i + 2] - centerZ) * scaleFactor; // Z
+    }
+}

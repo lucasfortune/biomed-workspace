@@ -73,7 +73,10 @@ class VisualizationModule extends BaseModule {
     this.camera = null;
     this.renderer = null;
     this.meshGroup = null;
-    this.classMeshes = {};
+    this.classMeshes = {};       // For BufferGeometry format
+    this.sliceMeshes = {};       // For VoxelSlices format
+    this.sliceMetadata = null;   // Slice info for VoxelSlices format
+    this.meshFormat = null;      // 'BufferGeometry' or 'VoxelSlices'
     this.availableClasses = [];
 
     // Resize handler reference for cleanup
@@ -615,15 +618,30 @@ class VisualizationModule extends BaseModule {
         const meshResult = await this.api.getMeshData(fileId);
 
         if (meshResult.success && meshResult.data) {
-          // Load mesh from JSON
+          // Load mesh from JSON (auto-detects format)
           const loadResult = vizModule.loadMeshFromJSON(meshResult.data, this.scene);
 
+          // Store common data
           this.meshGroup = loadResult.meshGroup;
-          this.classMeshes = loadResult.classMeshes;
           this.availableClasses = loadResult.availableClasses;
+          this.meshFormat = loadResult.format;
 
-          // Center the mesh
-          vizModule.centerMeshGroup(this.meshGroup);
+          // Store format-specific data
+          if (loadResult.format === 'VoxelSlices') {
+            this.sliceMeshes = loadResult.sliceMeshes;
+            this.sliceMetadata = loadResult.sliceMetadata;
+            this.classMeshes = {}; // Not used in this format
+            console.log(`[VisualizationModule] VoxelSlices format: ${loadResult.sliceMetadata.sliceCount} slices`);
+          } else {
+            this.classMeshes = loadResult.classMeshes;
+            this.sliceMeshes = {}; // Not used in this format
+            this.sliceMetadata = null;
+          }
+
+          // Center the mesh (only for BufferGeometry - VoxelSlices is pre-centered)
+          if (loadResult.format === 'BufferGeometry') {
+            vizModule.centerMeshGroup(this.meshGroup);
+          }
 
           // Position camera for mesh
           vizModule.positionCameraForMesh(this.meshGroup);
@@ -638,8 +656,9 @@ class VisualizationModule extends BaseModule {
           this.renderClassControls();
 
           this.visualizationReady = true;
-          console.log(`[VisualizationModule] Mesh loaded: ${this.availableClasses.length} classes`);
-          this.state.notify('success', `Loaded ${this.availableClasses.length} class meshes`);
+          const formatLabel = loadResult.format === 'VoxelSlices' ? 'slice meshes' : 'class meshes';
+          console.log(`[VisualizationModule] Mesh loaded: ${this.availableClasses.length} classes (${loadResult.format})`);
+          this.state.notify('success', `Loaded ${this.availableClasses.length} ${formatLabel}`);
 
         } else {
           throw new Error(meshResult.error || 'Failed to load mesh data');
@@ -676,10 +695,10 @@ class VisualizationModule extends BaseModule {
     // Import utils for colors
     import('./visualization/utils.js').then(utils => {
       let html = '';
+      const isSliceBased = this.meshFormat === 'VoxelSlices';
+      const sliceCount = this.sliceMetadata?.sliceCount || 20;
 
       for (const classId of this.availableClasses) {
-        const mesh = this.classMeshes[classId];
-        const stats = mesh?.userData?.statistics || {};
         const colorCss = utils.getClassColor(classId);
 
         html += `
@@ -703,11 +722,111 @@ class VisualizationModule extends BaseModule {
                      oninput="vizModule.setClassOpacity(${classId}, this.value / 100)">
               <span id="classOpacityValue${classId}" class="class-opacity-value">80%</span>
             </div>
+            ${isSliceBased ? `
+            <div class="class-range-section">
+              <span class="class-range-label">Range</span>
+              <div class="dual-range-container" id="rangeContainer${classId}">
+                <div class="dual-range-track"></div>
+                <div class="dual-range-fill" id="rangeFill${classId}"></div>
+                <input type="range"
+                       id="rangeMin${classId}"
+                       class="dual-range-input"
+                       min="0" max="${sliceCount - 1}" value="0"
+                       oninput="vizModule.updateSliceRange(${classId})">
+                <input type="range"
+                       id="rangeMax${classId}"
+                       class="dual-range-input"
+                       min="0" max="${sliceCount - 1}" value="${sliceCount - 1}"
+                       oninput="vizModule.updateSliceRange(${classId})">
+              </div>
+              <span id="rangeValue${classId}" class="class-range-value">0-100%</span>
+            </div>
+            ` : ''}
           </div>
         `;
       }
 
       controlsPanel.innerHTML = html;
+
+      // Initialize range fills for slice-based meshes
+      if (isSliceBased) {
+        for (const classId of this.availableClasses) {
+          this.updateRangeFill(classId);
+        }
+      }
+    });
+  }
+
+  /**
+   * Update range fill visual for dual-range slider
+   */
+  updateRangeFill(classId) {
+    const minInput = document.getElementById(`rangeMin${classId}`);
+    const maxInput = document.getElementById(`rangeMax${classId}`);
+    const fill = document.getElementById(`rangeFill${classId}`);
+
+    if (!minInput || !maxInput || !fill) return;
+
+    const min = parseInt(minInput.value);
+    const max = parseInt(maxInput.value);
+    const sliceCount = this.sliceMetadata?.sliceCount || 20;
+
+    const leftPercent = (min / (sliceCount - 1)) * 100;
+    const rightPercent = (max / (sliceCount - 1)) * 100;
+
+    fill.style.left = `${leftPercent}%`;
+    fill.style.width = `${rightPercent - leftPercent}%`;
+  }
+
+  /**
+   * Update slice range for a class (called from dual-range slider)
+   */
+  updateSliceRange(classId) {
+    const minInput = document.getElementById(`rangeMin${classId}`);
+    const maxInput = document.getElementById(`rangeMax${classId}`);
+    const valueSpan = document.getElementById(`rangeValue${classId}`);
+
+    if (!minInput || !maxInput) return;
+
+    let min = parseInt(minInput.value);
+    let max = parseInt(maxInput.value);
+    const sliceCount = this.sliceMetadata?.sliceCount || 20;
+
+    // Ensure min <= max
+    if (min > max) {
+      if (minInput === document.activeElement) {
+        max = min;
+        maxInput.value = max;
+      } else {
+        min = max;
+        minInput.value = min;
+      }
+    }
+
+    // Update fill visual
+    this.updateRangeFill(classId);
+
+    // Update value display
+    const minPercent = Math.round((min / (sliceCount - 1)) * 100);
+    const maxPercent = Math.round((max / (sliceCount - 1)) * 100);
+    if (valueSpan) {
+      valueSpan.textContent = `${minPercent}-${maxPercent}%`;
+    }
+
+    // Apply to slices
+    this.setClassSliceRange(classId, min, max);
+  }
+
+  /**
+   * Set slice range visibility for a class
+   */
+  setClassSliceRange(classId, minSlice, maxSlice) {
+    if (!this.sliceMeshes[classId]) return;
+
+    this.sliceMeshes[classId].forEach((mesh, index) => {
+      if (mesh) {
+        mesh.visible = (index >= minSlice && index <= maxSlice);
+      }
     });
   }
 
@@ -715,9 +834,28 @@ class VisualizationModule extends BaseModule {
    * Toggle class visibility
    */
   toggleClassVisibility(classId, visible) {
-    const mesh = this.classMeshes[classId];
-    if (mesh) {
-      mesh.visible = visible;
+    if (this.meshFormat === 'VoxelSlices') {
+      // For slice-based meshes, toggle all slices
+      if (this.sliceMeshes[classId]) {
+        // Get current range to respect it
+        const minInput = document.getElementById(`rangeMin${classId}`);
+        const maxInput = document.getElementById(`rangeMax${classId}`);
+        const min = minInput ? parseInt(minInput.value) : 0;
+        const max = maxInput ? parseInt(maxInput.value) : (this.sliceMetadata?.sliceCount || 20) - 1;
+
+        this.sliceMeshes[classId].forEach((mesh, index) => {
+          if (mesh) {
+            // Only show if within range AND visibility is on
+            mesh.visible = visible && (index >= min && index <= max);
+          }
+        });
+      }
+    } else {
+      // For BufferGeometry, toggle single mesh
+      const mesh = this.classMeshes[classId];
+      if (mesh) {
+        mesh.visible = visible;
+      }
     }
   }
 
@@ -725,17 +863,31 @@ class VisualizationModule extends BaseModule {
    * Set class opacity
    */
   setClassOpacity(classId, opacity) {
-    const mesh = this.classMeshes[classId];
-    if (mesh && mesh.material) {
-      mesh.material.opacity = opacity;
-      mesh.material.transparent = opacity < 1;
-      mesh.material.needsUpdate = true;
-
-      // Update display value
-      const valueSpan = document.getElementById(`classOpacityValue${classId}`);
-      if (valueSpan) {
-        valueSpan.textContent = `${Math.round(opacity * 100)}%`;
+    if (this.meshFormat === 'VoxelSlices') {
+      // For slice-based meshes, set opacity on all slices
+      if (this.sliceMeshes[classId]) {
+        this.sliceMeshes[classId].forEach(mesh => {
+          if (mesh && mesh.material) {
+            mesh.material.opacity = opacity;
+            mesh.material.transparent = opacity < 1;
+            mesh.material.needsUpdate = true;
+          }
+        });
       }
+    } else {
+      // For BufferGeometry, set on single mesh
+      const mesh = this.classMeshes[classId];
+      if (mesh && mesh.material) {
+        mesh.material.opacity = opacity;
+        mesh.material.transparent = opacity < 1;
+        mesh.material.needsUpdate = true;
+      }
+    }
+
+    // Update display value
+    const valueSpan = document.getElementById(`classOpacityValue${classId}`);
+    if (valueSpan) {
+      valueSpan.textContent = `${Math.round(opacity * 100)}%`;
     }
   }
 
@@ -1018,6 +1170,9 @@ class VisualizationModule extends BaseModule {
     this.renderer = null;
     this.meshGroup = null;
     this.classMeshes = {};
+    this.sliceMeshes = {};
+    this.sliceMetadata = null;
+    this.meshFormat = null;
 
     // Clean up global references
     delete window.vizModule;
