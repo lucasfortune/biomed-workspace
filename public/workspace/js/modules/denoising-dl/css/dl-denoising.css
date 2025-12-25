@@ -212,39 +212,11 @@
    FORM ELEMENTS
    ============================================ */
 
-.dl-denoising-module .form-field {
-  margin-bottom: var(--module-spacing-md);
-}
-
-.dl-denoising-module .form-field:last-child {
-  margin-bottom: 0;
-}
-
-.dl-denoising-module .form-field label {
-  display: block;
-  margin-bottom: var(--module-spacing-xs);
-  font-weight: 500;
-  color: var(--module-text-primary);
-}
-
-.dl-denoising-module .form-field select,
-.dl-denoising-module .form-field input[type="text"],
-.dl-denoising-module .form-field input[type="number"] {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-sm);
-  font-size: var(--module-font-size-sm);
-  transition: var(--module-transition-fast);
-  background: var(--module-bg);
-  color: var(--module-text-primary);
-}
-
-.dl-denoising-module .form-field select:focus,
-.dl-denoising-module .form-field input:focus {
-  outline: none;
-  border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+/* Form field inputs - ensure white background */
+.dl-denoising-module select,
+.dl-denoising-module input[type="text"],
+.dl-denoising-module input[type="number"] {
+  background: white;
 }
 
 .dl-denoising-module .field-hint {
@@ -294,8 +266,342 @@
 }
 
 /* ============================================
+   PRESET SELECTOR (Step 2)
+   ============================================ */
+
+.dl-denoising-module .preset-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.dl-denoising-module .preset-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--module-spacing-md);
+}
+
+.dl-denoising-module .preset-header h4 {
+  margin: 0;
+  color: var(--module-text-primary);
+}
+
+.dl-denoising-module .preset-dropdown {
+  min-width: 200px;
+  padding: 10px 12px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  background: white;
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-sm);
+  cursor: pointer;
+  transition: var(--module-transition-fast);
+}
+
+.dl-denoising-module .preset-dropdown:hover {
+  border-color: var(--module-primary);
+}
+
+.dl-denoising-module .preset-dropdown:focus {
+  outline: none;
+  border-color: var(--module-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.dl-denoising-module .preset-desc {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+  font-style: italic;
+}
+
+/* ============================================
+   DUAL COLUMN CONFIGURATION
+   ============================================ */
+
+.dl-denoising-module .config-columns {
+  display: grid;
+  gap: 0;
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.dl-denoising-module .config-columns.single-column {
+  grid-template-columns: 1fr;
+}
+
+.dl-denoising-module .config-columns.dual-column {
+  grid-template-columns: 1fr 1fr;
+}
+
+.dl-denoising-module .config-column {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  overflow: hidden;
+}
+
+/* Dual column layout - make columns look like one connected card */
+.dl-denoising-module .config-columns.dual-column .stage1-column {
+  border-right: none;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.dl-denoising-module .config-columns.dual-column .stage2-column {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.dl-denoising-module .config-column .column-header {
+  background: rgba(102, 126, 234, 0.1);
+  padding: var(--module-spacing-sm) var(--module-spacing-md);
+  border-bottom: 1px solid var(--module-border);
+}
+
+.dl-denoising-module .config-column .column-header h4 {
+  margin: 0;
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dl-denoising-module .config-column .column-header.compact {
+  padding: var(--module-spacing-xs) var(--module-spacing-md);
+}
+
+.dl-denoising-module .config-column .column-header.compact h4 {
+  font-size: var(--module-font-size-xs);
+}
+
+.dl-denoising-module .config-column .column-subtitle {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.dl-denoising-module .advanced-columns {
+  margin-top: 0;
+}
+
+.dl-denoising-module .config-column .column-content {
+  padding: var(--module-spacing-md);
+}
+
+/* ============================================
+   COLLAPSIBLE SECTIONS
+   ============================================ */
+
+.dl-denoising-module .collapsible-section {
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  margin-bottom: var(--module-spacing-sm);
+  overflow: hidden;
+}
+
+.dl-denoising-module .collapsible-section:last-child {
+  margin-bottom: 0;
+}
+
+.dl-denoising-module .collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: var(--module-transition-fast);
+  user-select: none;
+  border-bottom: 2px solid var(--module-border);
+}
+
+.dl-denoising-module .collapsible-header:hover {
+  background: rgba(214, 221, 250, 0.1);
+}
+
+.dl-denoising-module .collapsible-title {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .collapsible-icon {
+  font-size: 10px;
+  color: var(--module-text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.dl-denoising-module .collapsible-section.expanded .collapsible-icon {
+  transform: rotate(0deg);
+}
+
+.dl-denoising-module .collapsible-label {
+  font-weight: 500;
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-sm);
+}
+
+.dl-denoising-module .collapsible-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.dl-denoising-module .collapsible-status.status-pending {
+  background: rgba(150, 150, 150, 0.2);
+  color: #999;
+}
+
+.dl-denoising-module .collapsible-status.status-in-progress {
+  background: rgba(255, 193, 7, 0.2);
+  color: #FFC107;
+}
+
+.dl-denoising-module .collapsible-status.status-complete {
+  background: rgba(80, 200, 120, 0.2);
+  color: #50C878;
+}
+
+.dl-denoising-module .collapsible-body {
+  max-height: 1000px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.dl-denoising-module .collapsible-section:not(.expanded) .collapsible-body {
+  max-height: 0;
+}
+
+.dl-denoising-module .collapsible-content {
+  padding: var(--module-spacing-md);
+  border-top: 1px solid var(--module-border);
+}
+
+/* ============================================
+   COLLAPSIBLE SECTIONS
+   ============================================ */
+
+/* Collapsible group within config-form */
+.dl-denoising-module .collapsible-group {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.dl-denoising-module .collapsible-group .collapsible-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.dl-denoising-module .collapsible-group .collapsible-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+  margin: 0;
+  padding-bottom: var(--module-spacing-xs);
+  border-bottom: none;
+}
+
+.dl-denoising-module .collapsible-group .collapsible-icon {
+  font-size: 10px;
+  transition: transform var(--module-transition-fast);
+}
+
+.dl-denoising-module .collapsible-group.expanded .collapsible-icon {
+  transform: rotate(90deg);
+}
+
+.dl-denoising-module .collapsible-group .collapsible-body {
+  padding-top: var(--module-spacing-sm);
+}
+
+/* ============================================
+   CONFIGURATION FORM STYLES
+   ============================================ */
+
+.dl-denoising-module .form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .form-row:last-child {
+  margin-bottom: 0;
+}
+
+.dl-denoising-module .config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dl-denoising-module .config-group label {
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+  font-weight: 500;
+}
+
+
+.dl-denoising-module .checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  grid-column: 1 / -1;
+}
+
+.dl-denoising-module .checkbox-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--module-primary);
+}
+
+.dl-denoising-module .checkbox-field label {
+  cursor: pointer;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-primary);
+}
+
+/* ============================================
+   SECTION DESCRIPTION
+   ============================================ */
+
+.dl-denoising-module .section-desc {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-md);
+  font-style: italic;
+}
+
+/* ============================================
+   MASK EXTRACTOR SECTION
+   ============================================ */
+
+.dl-denoising-module .mask-extractor-form {
+  margin-top: var(--module-spacing-lg);
+}
+
+.dl-denoising-module .mask-extractor-form .collapsible-header {
+  border-bottom: 2px solid rgba(155, 89, 182, 0.3);
+}
+
+.dl-denoising-module .mask-extractor-form .collapsible-header h3 {
+  color: #9B59B6;
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
+
+@media (max-width: 1200px) {
+  .dl-denoising-module .config-columns.dual-column {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 768px) {
   .dl-denoising-module .step-inner {
@@ -305,5 +611,19 @@
   .dl-denoising-module .method-option {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .dl-denoising-module .preset-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--module-spacing-sm);
+  }
+
+  .dl-denoising-module .preset-dropdown {
+    width: 100%;
+  }
+
+  .dl-denoising-module .form-row {
+    grid-template-columns: 1fr;
   }
 }
