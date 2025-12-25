@@ -952,6 +952,46 @@ body {
   transform: scale(1.02);
 }
 
+/* Dual-button card styles for multi-launch modules */
+.module-buttons-dual {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.btn-launch-half {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  gap: 2px;
+}
+
+.btn-launch-half .btn-launch-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btn-launch-half .btn-launch-sublabel {
+  font-size: 11px;
+  opacity: 0.85;
+  font-weight: 400;
+}
+
+.btn-launch-half:disabled {
+  background-color: var(--border-color);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.btn-launch-half:disabled:hover {
+  transform: none;
+  background-color: var(--border-color);
+}
+
 /* Welcome Footer */
 .welcome-footer {
   border-top: 1px solid var(--border-color);

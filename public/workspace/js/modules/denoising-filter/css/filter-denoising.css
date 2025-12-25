@@ -1,0 +1,341 @@
+/**
+ * Filter-Based Denoising Module Styles
+ *
+ * Imports shared module-base.css and adds module-specific styles.
+ */
+
+/* Import shared base styles */
+@import url('/workspace/js/core/css/module-base.css');
+
+/* ============================================
+   MODULE CONTAINER
+   ============================================ */
+
+.filter-denoising-module {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  font-family: var(--module-font-family);
+  margin: 0;
+  padding: 0;
+}
+
+.filter-denoising-module > .module-header,
+.filter-denoising-module > .progress-bar,
+.filter-denoising-module > .step-nav {
+  flex-shrink: 0;
+}
+
+/* ============================================
+   STEP CONTENT
+   ============================================ */
+
+.filter-denoising-module .step-contents {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
+}
+
+.filter-denoising-module .step-content {
+  display: none;
+}
+
+.filter-denoising-module .step-content.active {
+  display: block;
+}
+
+.filter-denoising-module .step-inner {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.filter-denoising-module .step-description {
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+/* ============================================
+   METHOD SELECTOR (module-specific)
+   ============================================ */
+
+.filter-denoising-module .method-selector {
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.filter-denoising-module .method-selector h4 {
+  margin-bottom: var(--module-spacing-md);
+  color: var(--module-text-primary);
+}
+
+.filter-denoising-module .method-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--module-spacing-md);
+  padding: var(--module-spacing-md);
+  border: 2px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  cursor: pointer;
+  transition: var(--module-transition-fast);
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.filter-denoising-module .method-option:hover {
+  border-color: var(--module-primary);
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.filter-denoising-module .method-option:has(input:checked) {
+  border-color: var(--module-primary);
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.filter-denoising-module .method-option input[type="radio"] {
+  margin-top: 4px;
+}
+
+.filter-denoising-module .method-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filter-denoising-module .method-name {
+  font-weight: 600;
+  color: var(--module-text-primary);
+}
+
+.filter-denoising-module .method-desc {
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+/* ============================================
+   PARAMETERS SECTION
+   ============================================ */
+
+.filter-denoising-module .params-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.filter-denoising-module .params-section h4 {
+  margin-bottom: var(--module-spacing-md);
+  color: var(--module-text-primary);
+}
+
+/* ============================================
+   SLIDER + NUMBER INPUT COMBO (module-specific)
+   ============================================ */
+
+.filter-denoising-module .slider-input {
+  display: flex;
+  gap: var(--module-spacing-md);
+  align-items: center;
+}
+
+.filter-denoising-module .slider-input input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--module-border);
+  border-radius: 3px;
+}
+
+.filter-denoising-module .slider-input input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--module-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: var(--module-transition-fast);
+}
+
+.filter-denoising-module .slider-input input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.filter-denoising-module .slider-input input[type="number"] {
+  width: 80px;
+  padding: 8px 10px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  font-size: var(--module-font-size-sm);
+  text-align: center;
+}
+
+.filter-denoising-module .slider-input input[type="number"]:focus {
+  outline: none;
+  border-color: var(--module-primary);
+}
+
+/* ============================================
+   CONFIGURATION FORM
+   ============================================ */
+
+.filter-denoising-module .config-form {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.filter-denoising-module .form-field {
+  margin-bottom: var(--module-spacing-md);
+}
+
+.filter-denoising-module .form-field:last-child {
+  margin-bottom: 0;
+}
+
+.filter-denoising-module .form-field label {
+  display: block;
+  margin-bottom: var(--module-spacing-xs);
+  font-weight: 500;
+  color: var(--module-text-primary);
+}
+
+.filter-denoising-module .form-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  font-size: var(--module-font-size-sm);
+  transition: var(--module-transition-fast);
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+}
+
+.filter-denoising-module .form-field select:focus {
+  outline: none;
+  border-color: var(--module-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.filter-denoising-module .field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+/* ============================================
+   CONFIG SUMMARY
+   ============================================ */
+
+.filter-denoising-module .config-summary {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  padding: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-lg);
+  text-align: left;
+}
+
+.filter-denoising-module .config-summary h4 {
+  margin-bottom: var(--module-spacing-sm);
+  color: var(--module-text-primary);
+}
+
+.filter-denoising-module .detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--module-spacing-xs) 0;
+  border-bottom: 1px solid var(--module-border);
+  font-size: var(--module-font-size-sm);
+}
+
+.filter-denoising-module .detail-row:last-child {
+  border-bottom: none;
+}
+
+.filter-denoising-module .detail-row span:first-child {
+  color: var(--module-text-secondary);
+}
+
+.filter-denoising-module .detail-row span:last-child {
+  color: var(--module-text-primary);
+  font-weight: 500;
+}
+
+/* ============================================
+   ACTION SECTION
+   ============================================ */
+
+.filter-denoising-module .action-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-xl);
+  text-align: center;
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.filter-denoising-module .btn-large {
+  padding: var(--module-spacing-md) var(--module-spacing-xl);
+  font-size: var(--module-font-size-md);
+}
+
+/* ============================================
+   PROGRESS SECTION
+   ============================================ */
+
+.filter-denoising-module .progress-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-xl);
+  margin-bottom: var(--module-spacing-lg);
+  text-align: center;
+}
+
+.filter-denoising-module .progress-section #progressStatus {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+  margin: 0;
+}
+
+/* ============================================
+   RESULTS SECTION
+   ============================================ */
+
+.filter-denoising-module .results-section {
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.filter-denoising-module .result-actions {
+  display: flex;
+  gap: var(--module-spacing-md);
+  margin-top: var(--module-spacing-lg);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .filter-denoising-module .step-inner {
+    padding: 0 var(--module-spacing-sm);
+  }
+
+  .filter-denoising-module .result-actions {
+    flex-direction: column;
+  }
+
+  .filter-denoising-module .slider-input {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-denoising-module .slider-input input[type="number"] {
+    width: 100%;
+  }
+}

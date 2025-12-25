@@ -222,7 +222,21 @@ class Workspace {
 
     const modules = this.moduleLoader.getAllModules();
 
-    grid.innerHTML = modules.map(module => `
+    grid.innerHTML = modules.map(module => {
+      // Handle multi-launch cards (dual buttons)
+      if (module.cardType === 'multi-launch') {
+        return this.renderMultiLaunchCard(module);
+      }
+      // Standard single-launch card
+      return this.renderSingleLaunchCard(module);
+    }).join('');
+  }
+
+  /**
+   * Render a standard single-launch module card
+   */
+  renderSingleLaunchCard(module) {
+    return `
       <div class="module-card ${module.status === 'coming_soon' ? 'coming-soon' : ''}"
            style="--card-color: ${module.color}"
            data-module-id="${module.id}">
@@ -240,7 +254,46 @@ class Workspace {
              </button>`
         }
       </div>
-    `).join('');
+    `;
+  }
+
+  /**
+   * Render a multi-launch module card with dual buttons
+   */
+  renderMultiLaunchCard(module) {
+    const buttons = module.launchOptions.map(opt => {
+      if (opt.status === 'coming_soon') {
+        return `
+          <button class="btn-launch btn-launch-half" disabled title="Coming Soon">
+            <span class="btn-launch-label">${opt.label}</span>
+            <span class="btn-launch-sublabel">${opt.sublabel}</span>
+          </button>
+        `;
+      }
+      return `
+        <button class="btn-launch btn-launch-half" onclick="workspace.loadModule('${opt.id}')">
+          <span class="btn-launch-label">${opt.label}</span>
+          <span class="btn-launch-sublabel">${opt.sublabel}</span>
+        </button>
+      `;
+    }).join('');
+
+    return `
+      <div class="module-card"
+           style="--card-color: ${module.color}"
+           data-module-id="${module.id}">
+        <div class="module-icon">${module.icon}</div>
+        <h3>${module.name}</h3>
+        <p>${module.description}</p>
+        <div class="module-io">
+          <div class="inputs">Inputs: ${module.inputs.join(', ')}</div>
+          <div class="outputs">Outputs: ${module.outputs.join(', ')}</div>
+        </div>
+        <div class="module-buttons-dual">
+          ${buttons}
+        </div>
+      </div>
+    `;
   }
 
   /**

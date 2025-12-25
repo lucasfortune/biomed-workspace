@@ -136,22 +136,50 @@ class ImageViewerModule extends BaseModule {
   }
 
   /**
-   * Check for incoming data from segmentation module
+   * Check for incoming data from other modules (segmentation, denoising, etc.)
    */
   checkForIncomingData() {
-    const results = this.state.get('modules.segmentation.inferenceResults');
-    if (results?.outputPath) {
-      console.log('[ImageViewerModule] Found incoming segmentation result:', results);
+    // Check for segmentation results
+    const segResults = this.state.get('modules.segmentation.inferenceResults');
+    if (segResults?.outputPath) {
+      console.log('[ImageViewerModule] Found incoming segmentation result:', segResults);
       this.selectedFile = {
-        id: results.inferenceId || 'segmentation_result',
-        path: results.outputPath,
+        id: segResults.inferenceId || 'segmentation_result',
+        path: segResults.outputPath,
         name: 'Segmentation Result',
         source: 'segmentation',
-        inferenceId: results.inferenceId,
-        metadataPath: results.metadataPath
+        inferenceId: segResults.inferenceId,
+        metadataPath: segResults.metadataPath
       };
       return true;
     }
+
+    // Check for denoising results
+    const denoisingResults = this.state.get('modules.denoising.viewerFile');
+    if (denoisingResults?.fileId) {
+      console.log('[ImageViewerModule] Found incoming denoising result:', denoisingResults);
+      this.selectedFile = {
+        id: denoisingResults.fileId,
+        path: denoisingResults.path,
+        name: denoisingResults.name || 'Denoised Image',
+        source: 'denoising'
+      };
+      return true;
+    }
+
+    // Check for generic incoming file (for any module to use)
+    const genericFile = this.state.get('workspace.viewerFile');
+    if (genericFile?.fileId) {
+      console.log('[ImageViewerModule] Found incoming generic file:', genericFile);
+      this.selectedFile = {
+        id: genericFile.fileId,
+        path: genericFile.path,
+        name: genericFile.name || 'Image File',
+        source: genericFile.source || 'workspace'
+      };
+      return true;
+    }
+
     return false;
   }
 
@@ -162,11 +190,13 @@ class ImageViewerModule extends BaseModule {
     try {
       await this.loadTiffInfo();
       this.goToStep(2);
-      // Clear the incoming data
+      // Clear all incoming data sources
       this.state.update('modules.segmentation.inferenceResults', null);
+      this.state.update('modules.denoising.viewerFile', null);
+      this.state.update('workspace.viewerFile', null);
     } catch (error) {
       console.error('[ImageViewerModule] Error handling incoming data:', error);
-      this.state.notify('error', 'Failed to load segmentation result');
+      this.state.notify('error', 'Failed to load image file');
     }
   }
 

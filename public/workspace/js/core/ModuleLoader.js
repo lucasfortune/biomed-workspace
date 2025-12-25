@@ -33,10 +33,58 @@ class ModuleLoader {
       inputs,
       outputs,
       color,
-      status
+      status,
+      cardType,
+      launchOptions
     } = moduleConfig;
 
-    // Validate required fields
+    // Handle multi-launch cards (register each launch option as a loadable module)
+    if (cardType === 'multi-launch' && launchOptions) {
+      // Register the parent card for display purposes (not loadable directly)
+      this.modules.set(id, {
+        id,
+        name,
+        description: description || '',
+        icon: icon || '📦',
+        path: null, // Parent card has no path
+        inputs: inputs || [],
+        outputs: outputs || [],
+        color: color || '#4A90E2',
+        status: 'multi-launch', // Special status for parent
+        cardType: 'multi-launch',
+        launchOptions,
+        loaded: false,
+        instance: null,
+        loadedAt: null,
+        isParentCard: true
+      });
+
+      // Register each launch option as a separate loadable module
+      launchOptions.forEach(opt => {
+        this.modules.set(opt.id, {
+          id: opt.id,
+          name: `${name} - ${opt.label}`,
+          description: opt.sublabel || '',
+          icon: icon || '📦',
+          path: opt.path,
+          inputs: inputs || [],
+          outputs: outputs || [],
+          color: color || '#4A90E2',
+          status: opt.status || 'available',
+          loaded: false,
+          instance: null,
+          loadedAt: null,
+          parentId: id, // Reference to parent card
+          isChildModule: true
+        });
+        console.log(`[ModuleLoader] Registered launch option: ${opt.label} (${opt.id})`);
+      });
+
+      console.log(`[ModuleLoader] Registered multi-launch card: ${name} (${id})`);
+      return;
+    }
+
+    // Validate required fields for standard modules
     if (!id || !name || !path) {
       throw new Error('Module must have id, name, and path');
     }
@@ -202,13 +250,18 @@ class ModuleLoader {
   }
 
   /**
-   * Get all registered modules
+   * Get all registered modules (excludes child modules from multi-launch cards)
    * @returns {Array} Array of module info objects
    */
   getAllModules() {
     const modules = [];
 
     for (const [id, module] of this.modules) {
+      // Skip child modules (they are launched via parent card buttons)
+      if (module.isChildModule) {
+        continue;
+      }
+
       modules.push({
         id: module.id,
         name: module.name,
@@ -219,7 +272,9 @@ class ModuleLoader {
         color: module.color,
         status: module.status,
         loaded: module.loaded,
-        active: this.activeModule?.id === id
+        active: this.activeModule?.id === id,
+        cardType: module.cardType,
+        launchOptions: module.launchOptions
       });
     }
 

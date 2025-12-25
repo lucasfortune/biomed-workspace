@@ -27,6 +27,7 @@ const createWorkspaceRoutes = require('./routes/workspace.routes');
 const createMLRoutes = require('./routes/ml.routes');
 const createMeshRoutes = require('./routes/mesh.routes');
 const createAnnotationRoutes = require('./routes/annotation.routes');
+const createDenoisingRoutes = require('./routes/denoising.routes');
 
 // Python runner wrappers
 const {
@@ -331,6 +332,14 @@ function configureApp(app, dependencies) {
     activityLogger,
     logger,
     io
+  }));
+
+  // Denoising routes
+  app.use('/api/denoising', createDenoisingRoutes({
+    workspaceManager,
+    workspaceService,
+    activityLogger,
+    logger
   }));
 
   // Ensure directories exist

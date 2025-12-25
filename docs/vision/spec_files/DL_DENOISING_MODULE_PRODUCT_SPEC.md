@@ -340,58 +340,61 @@ Step 2 differs significantly based on the selected method.
 - Resize Convolution toggle (default: true)
 - Upsampling Mode: bilinear, nearest, bicubic (default: bilinear)
 - Masking Strategy: local_mean, zeros, random (default: local_mean)
-
-*Note: ROI Selection is not available for standard N2V. It is only used in autoStructN2V for mask extraction.*
+- ROI Selection toggle + threshold (default: disabled, 0.5)
 
 #### 3.3.2 autoStructN2V Configuration (Two-Column Grid)
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│  ← Back to Hub                      Deep Learning Denoising                │
-├────────────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]         │
-│     ✓              ●                  ○                  ○                 │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  autoStructN2V CONFIGURATION                        [Load Preset ▼]  │  │
-│  │                                                                      │  │
-│  │  ┌───────────── STAGE 1 ─────────────┐ ┌───────── STAGE 2 ─────────┐ │  │
-│  │  │                                   │ │                           │ │  │
-│  │  │ ─── Dataset ───────────────────   │ │ ─── Dataset ───────────   │ │  │
-│  │  │ Patch Size       [  32  ▼]        │ │ Patch Size   [  64  ▼]    │ │  │
-│  │  │ Patches/Image    [  100  ]        │ │ Patches/Img  [  200  ]    │ │  │
-│  │  │ Batch Size       [   4  ▼]        │ │ Batch Size   [   2  ▼]    │ │  │
-│  │  │ Mask %           [ 15.0  ]        │ │ Mask %       [ 10.0  ]    │ │  │
-│  │  │ Augmentation     [✓]              │ │ Augmentation [✓]          │ │  │
-│  │  │                                   │ │                           │ │  │
-│  │  │ ─── Architecture ──────────────   │ │ ─── Architecture ───────  │ │  │
-│  │  │ Features         [  64  ▼]        │ │ Features     [  64  ▼]    │ │  │
-│  │  │ Layers           [   2  ▼]        │ │ Layers       [   3  ▼]    │ │  │
-│  │  │                                   │ │                           │ │  │
-│  │  │ ─── Training ──────────────────   │ │ ─── Training ───────────  │ │  │
-│  │  │ Learning Rate    [1e-4  ▼]        │ │ Learn Rate   [1e-5  ▼]    │ │  │
-│  │  │ Epochs           [  100  ]        │ │ Epochs       [  100  ]    │ │  │
-│  │  │ Early Stopping   [✓] Pat: [10]    │ │ Early Stop   [✓] Pat:[10] │ │  │
-│  │  │                                   │ │                           │ │  │
-│  │  └───────────────────────────────────┘ └───────────────────────────┘ │  │
-│  │                                                                      │  │
-│  │  ▶ Advanced Options                                                  │  │
-│  │  ▶ Mask Extractor Configuration                                      │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                            │
-│                                              [← Previous]  [ Next → ]      │
-└────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ← Back to Hub                      Deep Learning Denoising                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]          │
+│     ✓              ●                  ○                  ○                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │  autoStructN2V CONFIGURATION                        [Load Preset ▼]   │  │
+│  │                                                                       │  │
+│  │  ┌───────────── STAGE 1 ─────────────┐ ┌───────── STAGE 2 ──────────┐ │  │
+│  │  │                                   │ │                            │ │  │
+│  │  │ ─── Dataset ───────────────────   │ │ ─── Dataset ───────────    │ │  │
+│  │  │ Patch Size       [  32  ▼]        │ │ Patch Size   [  64  ▼]     │ │  │
+│  │  │ Patches/Image    [  100  ]        │ │ Patches/Img  [  200  ]     │ │  │
+│  │  │ Batch Size       [   4  ▼]        │ │ Batch Size   [   2  ▼]     │ │  │
+│  │  │ Mask %           [ 15.0  ]        │ │ Mask %       [ 10.0  ]     │ │  │
+│  │  │ Augmentation     [✓]              │ │ Augmentation [✓]           │ │  │
+│  │  │                                   │ │                            │ │  │
+│  │  │ ─── Architecture ──────────────   │ │ ─── Architecture ───────   │ │  │
+│  │  │ Features         [  64  ▼]        │ │ Features     [  64  ▼]     │ │  │
+│  │  │ Layers           [   2  ▼]        │ │ Layers       [   3  ▼]     │ │  │
+│  │  │                                   │ │                            │ │  │
+│  │  │ ─── Training ──────────────────   │ │ ─── Training ───────────   │ │  │
+│  │  │ Learning Rate    [1e-4  ▼]        │ │ Learn Rate   [1e-5  ▼]     │ │  │
+│  │  │ Epochs           [  100  ]        │ │ Epochs       [  100  ]     │ │  │
+│  │  │ Early Stopping   [✓] Pat: [10]    │ │ Early Stop   [✓] Pat:[10]  │ │  │
+│  │  │                                   │ │                            │ │  │
+│  │  └───────────────────────────────────┘ └────────────────────────────┘ │  │
+│  │                                                                       │  │
+│  │  ▶ Advanced Options                                                   │  │
+│  │  ┌───────────── STAGE 1 ─────────────┐ ┌───────── STAGE 2 ──────────┐ │  │
+│  │  └───────────────────────────────────┘ └────────────────────────────┘ │  │
+│  │                                                                       │  │
+│  │  ▶ Mask Extractor Configuration                                       │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│                                              [← Previous]  [ Next → ]       │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Advanced Options (Collapsed by Default):**
+**Advanced Options - Stage 1 (Collapsed):**
+- ROI Selection toggle (default: true)
+- ROI Threshold (default: 0.5)
+- Resize Convolution toggle (default: true)
+- Upsampling Mode (default: bilinear)
 
-| Option | Stage 1 | Stage 2 | Description |
-|--------|---------|---------|-------------|
-| ROI Selection | ✓ (default: true) | - | Enable ROI-based patch selection for mask extraction |
-| ROI Threshold | 0.5 | - | Intensity threshold for ROI detection |
-| Resize Convolution | ✓ (default: true) | ✓ (default: true) | Use resize convolution instead of transposed conv |
-| Upsampling Mode | bilinear | bilinear | Options: bilinear, nearest, bicubic |
+**Advanced Options - Stage 2 (Collapsed):**
+- Resize Convolution toggle (default: true)
+- Upsampling Mode (default: bilinear)
 
 **Mask Extractor Configuration (Collapsed):**
 
@@ -673,7 +676,7 @@ After training completes (either N2V only or full autoStructN2V):
 │  │  Successfully denoised 80 slices in 04:35                      │  │
 │  │                                                                │  │
 │  │  Output saved to:                                              │  │
-│  │  /workspaces/.../results/denoising/train_1703.../n2v_denoised.tif  │  │
+│  │  /workspaces/.../results/denoising/train_1703.../denoised.tif  │  │
 │  │                                                                │  │
 │  │  ┌─────────────────────┐  ┌─────────────────────────────┐      │  │
 │  │  │  View in Image      │  │  Start New Analysis         │      │  │
@@ -718,26 +721,14 @@ After training completes (either N2V only or full autoStructN2V):
 └── results/
     └── denoising/
         └── {trainingId}/
-            ├── n2v_denoised.tif         # If N2V method
-            ├── autostructn2v_denoised.tif  # If autoStructN2V method
-            ├── {method}_metadata.json   # Processing metadata
-            └── comparison/              # Optional comparison images
+            ├── denoised.tif         # Final denoised output
+            ├── metadata.json        # Processing metadata
+            └── comparison/          # Optional comparison images
                 ├── original_slice_50.png
                 └── denoised_slice_50.png
 ```
 
-### 4.2 Filename Convention
-
-Output files include the method name as a prefix for consistency across all denoising methods:
-
-| Method | Output Filename |
-|--------|-----------------|
-| N2V | `n2v_denoised.tif` |
-| autoStructN2V | `autostructn2v_denoised.tif` |
-| Gaussian (Filter) | `gaussian_denoised.tif` |
-| NLM (Filter) | `nlm_denoised.tif` |
-
-### 4.3 Config.json Structure
+### 4.2 Config.json Structure
 
 ```json
 {
@@ -782,7 +773,7 @@ Output files include the method name as a prefix for consistency across all deno
 }
 ```
 
-### 4.4 Results.json Structure
+### 4.3 Results.json Structure
 
 ```json
 {
@@ -815,7 +806,7 @@ Output files include the method name as a prefix for consistency across all deno
   "inference": {
     "completedAt": "2025-12-25T13:06:10Z",
     "slicesProcessed": 100,
-    "outputPath": "/workspaces/abc123/results/denoising/train_1703.../autostructn2v_denoised.tif"
+    "outputPath": "/workspaces/abc123/results/denoising/train_1703.../denoised.tif"
   }
 }
 ```
@@ -894,9 +885,9 @@ Output files include the method name as a prefix for consistency across all deno
         "patches_per_image": 300,
         "batch_size": 4,
         "features": 96,
-        "num_layers": 4,
+        "num_layers": 3,
         "learning_rate": 0.000005,
-        "num_epochs": 150
+        "num_epochs": 300
       }
     }
   },
@@ -1220,7 +1211,8 @@ Use Chart.js (already available in project) for:
     stage1Training: true,
     interimResults: true,
     stage2Training: true,
-    advancedOptions: false,
+    advancedStage1: false,
+    advancedStage2: false,
     maskExtractor: false
   }
 }

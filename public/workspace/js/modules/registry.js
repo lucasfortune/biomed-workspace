@@ -26,14 +26,29 @@ const moduleRegistry = [
   },
   {
     id: 'denoising',
-    name: 'Deep Learning Denoising',
-    description: 'Remove noise from electron microscopy images using advanced denoising algorithms',
+    name: 'Denoising',
+    description: 'Remove noise from images using filter-based or deep learning methods',
     icon: '🔊',
-    path: '/workspace/js/modules/denoising/DenoisingModule.js',
     inputs: ['image_stack'],
     outputs: ['denoised_stack'],
     color: '#50C878',
-    status: 'coming_soon'
+    cardType: 'multi-launch',
+    launchOptions: [
+      {
+        id: 'denoising-dl',
+        label: 'Deep Learning',
+        sublabel: 'N2V / autoN2V',
+        path: '/workspace/js/modules/denoising/DenoisingModule.js',
+        status: 'coming_soon'
+      },
+      {
+        id: 'denoising-filter',
+        label: 'Filter-Based',
+        sublabel: 'Gaussian / NLM',
+        path: '/workspace/js/modules/denoising-filter/FilterDenoisingModule.js',
+        status: 'available'
+      }
+    ]
   },
   {
     id: 'annotation',
