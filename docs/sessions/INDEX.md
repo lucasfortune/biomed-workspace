@@ -15,10 +15,11 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
-### 2025-12-25 (3D Visualization Module Completion)
+### 2025-12-25 (Annotation Bug Fixes & Sparse Encoding)
 
 | Date | Session | Type | Duration | Status |
 |------|---------|------|----------|--------|
+| 2025-12-25 | [Annotation Bug Fixes & Sparse Encoding](2025-12-25_annotation_bugfixes_sparse_encoding.md) | 🐛 Bug Fix | ~2 hrs | ✅ Complete |
 | 2025-12-25 | [3D Visualization Module Completion](2025-12-25_3d_visualization_completion.md) | ✨ Feature | ~2 hrs | ✅ Complete |
 
 ### 2025-12-23 (Data Lineage Tracking)
@@ -141,7 +142,8 @@ This index provides a chronological record of all development sessions. Sessions
 - [Phase 2 Completion](2025-11-26_phase2_completion.md) - Module system
 - [Phase 1 Completion](2025-11-20_phase1_completion.md) - Foundation
 
-### 🐛 Bug Fixes (4)
+### 🐛 Bug Fixes (5)
+- [Annotation Bug Fixes & Sparse Encoding](2025-12-25_annotation_bugfixes_sparse_encoding.md) - Brush, save, sparse encoding
 - [UI & Navigation Fixes](2025-12-02_ui_navigation_fixes.md) - Post-pipeline navigation & UI polish
 - [Custom Upload Fix](2025-11-28_custom_upload_fix.md) - Variable naming & approval checks
 - [Overlay Debug](2025-11-26_overlay_debug.md) - Original data overlay
@@ -156,21 +158,31 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 17 |
-| **Total Development Time** | ~91.5 hours |
-| **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Module Framework complete, Data Lineage complete |
+| **Total Sessions** | 18 |
+| **Total Development Time** | ~93.5 hours |
+| **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Module Framework complete, Data Lineage complete, Annotation Module complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
-| **Bugs Fixed** | 30+ issues |
-| **Lines Added** | ~21,000+ (code) + ~37,000 (docs) |
-| **Lines Removed** | ~800+ (cleanup) |
+| **Bugs Fixed** | 36+ issues |
+| **Lines Added** | ~21,500+ (code) + ~37,000 (docs) |
+| **Lines Removed** | ~900+ (cleanup) |
 | **Files Created** | 67+ |
-| **Files Modified** | 55+ |
+| **Files Modified** | 63+ |
 
 ---
 
 ## 📝 Recent Activity Summary
 
 ### What Was Accomplished (Latest First)
+
+**2025-12-25 - Annotation Bug Fixes & Sparse Encoding** ⭐ **ANNOTATION REFINEMENT COMPLETE**
+- Fixed brush preview not matching actual painting (shared getBrushPixels method)
+- Fixed 1px brush not painting (off-by-one in radius calculation)
+- Fixed eraser erasing invisible classes (visibility check added)
+- Fixed "Invalid width or height" error when resuming annotations (dimension guards)
+- Fixed save progress creating duplicate files (existingAnnotationId tracking)
+- Fixed "request entity too large" error (increased JSON limit to 100MB)
+- Implemented sparse encoding for annotation data (90%+ size reduction)
+- 8 files changed, 517 insertions(+), 107 deletions(-)
 
 **2025-12-23 - Data Lineage Tracking** ⭐ **LINEAGE TRACKING COMPLETE**
 - Implemented comprehensive data lineage/provenance tracking system
@@ -453,5 +465,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2025-12-23
-**Total Sessions Documented:** 17
+**Last Updated:** 2025-12-25
+**Total Sessions Documented:** 18
