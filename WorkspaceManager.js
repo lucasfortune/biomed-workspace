@@ -51,6 +51,7 @@ class WorkspaceManager {
     const directories = [
       'uploads/raw',
       'uploads/annotations',
+      'uploads/unfinished_annotations',
       'uploads/imported_models',
       'results/denoised',
       'results/segmented',

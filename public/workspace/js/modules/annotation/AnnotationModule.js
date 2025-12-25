@@ -75,6 +75,7 @@ class AnnotationModule extends BaseModule {
     // Annotation file info (for resume/edit scenarios)
     this.annotationFile = null;
     this.isResuming = false;
+    this.currentAnnotationId = null;  // ID of current unfinished annotation (for updates)
 
     // Slice navigation
     this.currentSlice = 0;
@@ -1069,8 +1070,12 @@ class AnnotationModule extends BaseModule {
 
     const sliceAnnotations = this.brushEngine.getAllAnnotations();
     const sliceData = {};
+    const width = this.tiffInfo.width;
 
-    // Convert each annotated slice to base64
+    let sparseCount = 0;
+    let denseCount = 0;
+
+    // Convert each annotated slice using sparse or dense encoding
     for (const [sliceIndex, data] of sliceAnnotations) {
       // Only include slices that have non-zero pixels
       let hasContent = false;
@@ -1082,11 +1087,26 @@ class AnnotationModule extends BaseModule {
       }
 
       if (hasContent) {
-        // Convert Uint8Array to base64
-        const base64 = this.uint8ArrayToBase64(data);
-        sliceData[sliceIndex.toString()] = base64;
+        // Choose encoding based on data density
+        if (this.shouldUseSparseEncoding(data)) {
+          // Use sparse encoding (more efficient for sparse data)
+          sliceData[sliceIndex.toString()] = {
+            encoding: 'sparse',
+            pixels: this.encodeSliceSparse(data, width)
+          };
+          sparseCount++;
+        } else {
+          // Use dense encoding (more efficient for heavily annotated slices)
+          sliceData[sliceIndex.toString()] = {
+            encoding: 'dense',
+            pixels: this.uint8ArrayToBase64(data)
+          };
+          denseCount++;
+        }
       }
     }
+
+    console.log(`[AnnotationModule] Encoding: ${sparseCount} sparse, ${denseCount} dense slices`);
 
     return {
       sourceFileId: this.sourceFile?.id || this.sourceFile?.path || 'unknown',
@@ -1095,7 +1115,8 @@ class AnnotationModule extends BaseModule {
       height: this.tiffInfo.height,
       slices: this.tiffInfo.sliceCount,
       sliceData,
-      classes: this.brushEngine.getClasses()
+      classes: this.brushEngine.getClasses(),
+      existingAnnotationId: this.currentAnnotationId  // For updating existing annotations
     };
   }
 
@@ -1133,6 +1154,65 @@ class AnnotationModule extends BaseModule {
     return array;
   }
 
+  // ===========================================================================
+  // SPARSE ENCODING
+  // ===========================================================================
+
+  /**
+   * Check if sparse encoding would be more efficient than dense
+   * Sparse is better when: nonZeroCount * 5 < totalSize
+   * @param {Uint8Array} uint8Array - The annotation data
+   * @returns {boolean} True if sparse encoding should be used
+   */
+  shouldUseSparseEncoding(uint8Array) {
+    let nonZeroCount = 0;
+    for (let i = 0; i < uint8Array.length; i++) {
+      if (uint8Array[i] !== 0) nonZeroCount++;
+    }
+    // Each sparse pixel takes 5 bytes (2 for x, 2 for y, 1 for classId)
+    return (nonZeroCount * 5) < uint8Array.length;
+  }
+
+  /**
+   * Encode slice data as sparse (only non-zero pixels)
+   * Each pixel is stored as 5 bytes: x(2) + y(2) + classId(1)
+   * @param {Uint8Array} uint8Array - The annotation data
+   * @param {number} width - Image width
+   * @returns {string} Base64-encoded sparse data
+   */
+  encodeSliceSparse(uint8Array, width) {
+    const pixels = [];
+    for (let i = 0; i < uint8Array.length; i++) {
+      if (uint8Array[i] !== 0) {
+        const x = i % width;
+        const y = Math.floor(i / width);
+        // Pack as little-endian uint16 for x and y, uint8 for classId
+        pixels.push(x & 0xFF, x >> 8, y & 0xFF, y >> 8, uint8Array[i]);
+      }
+    }
+    return this.uint8ArrayToBase64(new Uint8Array(pixels));
+  }
+
+  /**
+   * Decode sparse pixel data back to full Uint8Array
+   * @param {string} base64Data - Base64-encoded sparse data
+   * @param {number} width - Image width
+   * @param {number} height - Image height
+   * @returns {Uint8Array} Full annotation array
+   */
+  decodeSliceSparse(base64Data, width, height) {
+    const packed = this.base64ToUint8Array(base64Data);
+    const result = new Uint8Array(width * height);
+
+    for (let i = 0; i < packed.length; i += 5) {
+      const x = packed[i] | (packed[i + 1] << 8);
+      const y = packed[i + 2] | (packed[i + 3] << 8);
+      const classId = packed[i + 4];
+      result[y * width + x] = classId;
+    }
+    return result;
+  }
+
   /**
    * Restore annotation data from loaded annotation
    * @param {object} annotationData - Data from load endpoint
@@ -1149,19 +1229,41 @@ class AnnotationModule extends BaseModule {
       this.brushEngine.activeClassId = annotationData.classes[0].id;
     }
 
-    // Restore slice annotations
+    // Restore slice annotations (handles both sparse and dense encoding)
     if (annotationData.sliceData) {
-      for (const [sliceIndexStr, base64Data] of Object.entries(annotationData.sliceData)) {
+      const width = annotationData.width || this.tiffInfo?.width;
+      const height = annotationData.height || this.tiffInfo?.height;
+
+      for (const [sliceIndexStr, sliceInfo] of Object.entries(annotationData.sliceData)) {
         const sliceIndex = parseInt(sliceIndexStr, 10);
-        const uint8Array = this.base64ToUint8Array(base64Data);
+        let uint8Array;
+
+        // Handle both new format (object) and legacy format (raw string)
+        if (typeof sliceInfo === 'object' && sliceInfo.encoding) {
+          if (sliceInfo.encoding === 'sparse') {
+            uint8Array = this.decodeSliceSparse(sliceInfo.pixels, width, height);
+          } else {
+            // Dense encoding
+            uint8Array = this.base64ToUint8Array(sliceInfo.pixels);
+          }
+        } else {
+          // Legacy format: raw base64 string (dense)
+          uint8Array = this.base64ToUint8Array(sliceInfo);
+        }
+
         this.brushEngine.setAnnotationData(sliceIndex, uint8Array);
       }
     }
 
-    // Re-render
+    // Re-render class list
     this.renderClassList();
-    this.brushEngine.renderAnnotations();
     this.updateSaveButtonState();
+
+    // Only render annotations if brush engine has been initialized with dimensions
+    // (onSliceLoaded will call renderAnnotations after image loads)
+    if (this.brushEngine.imageWidth > 0 && this.brushEngine.imageHeight > 0) {
+      this.brushEngine.renderAnnotations();
+    }
 
     console.log(`[AnnotationModule] Restored annotation with ${annotationData.annotatedSlices || 0} slices`);
   }
@@ -1177,6 +1279,9 @@ class AnnotationModule extends BaseModule {
 
     const annotationFileId = this.annotationFile.id || this.annotationFile.path;
 
+    // Store the annotation ID for future saves (to update instead of create new)
+    this.currentAnnotationId = annotationFileId;
+
     try {
       // Load annotation data from API
       const result = await this.api.loadAnnotation(annotationFileId);
@@ -1191,6 +1296,8 @@ class AnnotationModule extends BaseModule {
           id: result.sourceFileId,
           name: result.sourceFileName
         };
+      } else {
+        console.warn('[AnnotationModule] No sourceFileId in annotation data');
       }
 
       // Update TIFF info
@@ -1210,8 +1317,12 @@ class AnnotationModule extends BaseModule {
       // Load source image slice
       const sourceFileId = this.sourceFile?.id;
       if (sourceFileId) {
+        console.log('[AnnotationModule] Loading source image:', sourceFileId);
         await this.canvas.loadSlice(sourceFileId, this.currentSlice);
         this.updateZoomIndicator(this.canvas.getZoom());
+      } else {
+        console.error('[AnnotationModule] Cannot load source image: sourceFileId is missing');
+        throw new Error('Source image not found. The original image may have been deleted.');
       }
 
       // Restore annotation data (classes and slice annotations)
@@ -1270,6 +1381,11 @@ class AnnotationModule extends BaseModule {
           this.state.notify('success', 'Annotation progress saved');
         }
         console.log('[AnnotationModule] Progress saved:', result);
+
+        // Store the annotation ID for future saves (to update instead of create new)
+        if (result.fileId) {
+          this.currentAnnotationId = result.fileId;
+        }
 
         // Mark as not dirty (for future unsaved changes warning)
         this.isDirty = false;
@@ -1393,6 +1509,7 @@ class AnnotationModule extends BaseModule {
     this.tiffInfo = null;
     this.isResuming = false;
     this.sourceFileLoaded = false;
+    this.currentAnnotationId = null;
 
     // Disable next button until validation passes
     const step1Next = document.getElementById('step1Next');
@@ -1601,6 +1718,7 @@ class AnnotationModule extends BaseModule {
     this.annotationFile = null;
     this.isResuming = false;
     this.sourceFileLoaded = false;
+    this.currentAnnotationId = null;
     this.currentSlice = 0;
     this.totalSlices = 1;
     this.isDirty = false;

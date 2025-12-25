@@ -39,6 +39,33 @@ except ImportError:
     sys.exit(1)
 
 
+def decode_sparse(b64_data: str, width: int, height: int) -> np.ndarray:
+    """
+    Decode sparse pixel data to numpy array.
+
+    Sparse format: 5 bytes per pixel (x_lo, x_hi, y_lo, y_hi, classId)
+    where x and y are uint16 little-endian coordinates.
+
+    Args:
+        b64_data: Base64-encoded sparse pixel data
+        width: Image width
+        height: Image height
+
+    Returns:
+        2D numpy array of shape (height, width) with class IDs
+    """
+    raw = base64.b64decode(b64_data)
+    arr = np.zeros((height, width), dtype=np.uint8)
+
+    for i in range(0, len(raw), 5):
+        x = raw[i] | (raw[i + 1] << 8)
+        y = raw[i + 2] | (raw[i + 3] << 8)
+        class_id = raw[i + 4]
+        arr[y, x] = class_id
+
+    return arr
+
+
 def create_annotation_tiff(config_path: str, output_path: str) -> None:
     """
     Create an annotation TIFF from config JSON.
@@ -78,7 +105,7 @@ def create_annotation_tiff(config_path: str, output_path: str) -> None:
     volume = np.zeros((slices, height, width), dtype=np.uint8)
 
     # Fill in annotated slices
-    for slice_idx_str, b64_data in slice_data.items():
+    for slice_idx_str, slice_info in slice_data.items():
         try:
             slice_idx = int(slice_idx_str)
         except ValueError:
@@ -90,21 +117,34 @@ def create_annotation_tiff(config_path: str, output_path: str) -> None:
             sys.exit(1)
 
         try:
-            # Decode base64 to bytes
-            raw_bytes = base64.b64decode(b64_data)
+            # Handle both new format (dict with encoding) and legacy format (raw string)
+            if isinstance(slice_info, dict):
+                encoding = slice_info.get('encoding', 'dense')
+                b64_data = slice_info.get('pixels', '')
+            else:
+                # Legacy format: raw base64 string = dense encoding
+                encoding = 'dense'
+                b64_data = slice_info
 
-            # Convert to numpy array
-            slice_array = np.frombuffer(raw_bytes, dtype=np.uint8)
+            if encoding == 'sparse':
+                # Sparse encoding: 5 bytes per pixel (x_lo, x_hi, y_lo, y_hi, classId)
+                slice_array = decode_sparse(b64_data, width, height)
+            else:
+                # Dense encoding: full width*height array
+                raw_bytes = base64.b64decode(b64_data)
+                slice_array = np.frombuffer(raw_bytes, dtype=np.uint8)
 
-            # Verify size matches
-            expected_size = width * height
-            if len(slice_array) != expected_size:
-                print(f"ERROR:Slice {slice_idx} data size mismatch. "
-                      f"Expected {expected_size}, got {len(slice_array)}")
-                sys.exit(1)
+                # Verify size matches for dense encoding
+                expected_size = width * height
+                if len(slice_array) != expected_size:
+                    print(f"ERROR:Slice {slice_idx} data size mismatch. "
+                          f"Expected {expected_size}, got {len(slice_array)}")
+                    sys.exit(1)
 
-            # Reshape and assign to volume
-            volume[slice_idx] = slice_array.reshape((height, width))
+                slice_array = slice_array.reshape((height, width))
+
+            # Assign to volume
+            volume[slice_idx] = slice_array
 
         except Exception as e:
             print(f"ERROR:Failed to decode slice {slice_idx}: {e}")

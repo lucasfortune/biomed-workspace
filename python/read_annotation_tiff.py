@@ -15,10 +15,13 @@ Output JSON structure:
     "height": 512,
     "slices": 64,
     "sliceData": {
-        "0": "<base64 encoded Uint8Array>",
-        "5": "<base64 encoded Uint8Array>"
+        "0": {"encoding": "sparse", "pixels": "<base64>"},
+        "5": {"encoding": "dense", "pixels": "<base64>"}
     }
 }
+
+Sparse encoding: 5 bytes per pixel (x_lo, x_hi, y_lo, y_hi, classId)
+Used when: nonZeroPixels * 5 < width * height
 
 Output:
     SUCCESS:<path> - on success
@@ -73,16 +76,48 @@ def read_annotation_tiff(input_path: str, output_path: str) -> None:
 
     # Extract non-empty slices
     slice_data = {}
+    sparse_count = 0
+    dense_count = 0
 
     for i in range(slices):
         slice_array = volume[i]
 
         # Check if slice has any non-zero values
-        if np.any(slice_array):
-            # Flatten to 1D and encode as base64
+        if not np.any(slice_array):
+            continue
+
+        # Find non-zero pixels
+        ys, xs = np.nonzero(slice_array)
+        non_zero_count = len(xs)
+
+        # Calculate sizes
+        sparse_size = non_zero_count * 5
+        dense_size = width * height
+
+        if sparse_size < dense_size:
+            # Use sparse encoding
+            packed = bytearray()
+            for x, y in zip(xs, ys):
+                packed.extend([
+                    x & 0xFF, x >> 8,
+                    y & 0xFF, y >> 8,
+                    slice_array[y, x]
+                ])
+            b64_data = base64.b64encode(bytes(packed)).decode('ascii')
+            slice_data[str(i)] = {
+                "encoding": "sparse",
+                "pixels": b64_data
+            }
+            sparse_count += 1
+        else:
+            # Use dense encoding
             flat_array = slice_array.flatten()
             b64_data = base64.b64encode(flat_array.tobytes()).decode('ascii')
-            slice_data[str(i)] = b64_data
+            slice_data[str(i)] = {
+                "encoding": "dense",
+                "pixels": b64_data
+            }
+            dense_count += 1
 
     # Create output JSON
     result = {
@@ -103,7 +138,7 @@ def read_annotation_tiff(input_path: str, output_path: str) -> None:
 
     print(f"SUCCESS:{output_path}")
     print(f"INFO:Read annotation TIFF with {len(slice_data)} non-empty slices "
-          f"({width}x{height}x{slices})")
+          f"({width}x{height}x{slices}), encoding: {sparse_count} sparse, {dense_count} dense")
 
 
 def main():

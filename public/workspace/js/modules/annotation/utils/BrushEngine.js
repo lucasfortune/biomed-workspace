@@ -367,7 +367,8 @@ class BrushEngine {
     const data = this.getAnnotationData();
     if (!data) return;
 
-    const value = this.tool === 'eraser' ? 0 : this.activeClassId;
+    const isEraser = this.tool === 'eraser';
+    const value = isEraser ? 0 : this.activeClassId;
 
     // Get the pixels that would be painted
     const pixels = this.getBrushPixels(cx, cy);
@@ -375,6 +376,19 @@ class BrushEngine {
     for (const { x, y } of pixels) {
       if (x >= 0 && x < this.imageWidth && y >= 0 && y < this.imageHeight) {
         const index = y * this.imageWidth + x;
+
+        // For eraser: only erase if the pixel's class is visible
+        if (isEraser) {
+          const currentClassId = data[index];
+          if (currentClassId !== 0) {
+            const currentClass = this.classes.find(c => c.id === currentClassId);
+            // Skip if class is hidden
+            if (currentClass && !currentClass.visible) {
+              continue;
+            }
+          }
+        }
+
         data[index] = value;
       }
     }
@@ -543,6 +557,9 @@ class BrushEngine {
     const width = this.imageWidth;
     const height = this.imageHeight;
 
+    // Guard: don't render if dimensions not set (image not loaded yet)
+    if (width <= 0 || height <= 0) return;
+
     // Create ImageData for efficient pixel manipulation
     const imageData = ctx.createImageData(width, height);
     const pixels = imageData.data;
@@ -621,12 +638,18 @@ class BrushEngine {
 
   /**
    * Update the brush preview cursor
-   * Shows exactly which pixels will be painted
+   * Shows exactly which pixels will be painted with hard edges
    * @param {object} coords - Coordinate info from AnnotationCanvas
    */
   updatePreview(coords = null) {
     const ctx = this.canvas.previewCtx;
     if (!ctx) return;
+
+    // Guard: don't render if dimensions not set (image not loaded yet)
+    if (this.imageWidth <= 0 || this.imageHeight <= 0) return;
+
+    // Disable anti-aliasing for crisp pixel edges
+    ctx.imageSmoothingEnabled = false;
 
     // Clear previous preview
     ctx.clearRect(0, 0, this.imageWidth, this.imageHeight);
@@ -636,55 +659,42 @@ class BrushEngine {
     const x = coords.source.x;
     const y = coords.source.y;
 
-    // Get color for preview
-    let strokeColor, fillColor;
+    // Get color for preview - use semi-transparent solid color
+    let previewColor;
     if (this.tool === 'eraser') {
-      strokeColor = '#ffffff';
-      fillColor = 'rgba(255, 255, 255, 0.5)';
+      previewColor = 'rgba(255, 255, 255, 0.6)';
     } else {
       const activeClass = this.classes.find(c => c.id === this.activeClassId);
-      strokeColor = activeClass ? activeClass.color : '#FF6B6B';
-      // Parse hex color and create semi-transparent version
-      const rgb = this.hexToRgb(strokeColor);
-      fillColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`;
+      const hexColor = activeClass ? activeClass.color : '#FF6B6B';
+      const rgb = this.hexToRgb(hexColor);
+      previewColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
     }
 
     // Get the exact pixels that would be painted
     const pixels = this.getBrushPixels(x, y);
 
-    // Draw each pixel as a filled square with border
-    ctx.fillStyle = fillColor;
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1;
-
-    for (const { x: px, y: py } of pixels) {
-      // Only show pixels within bounds
-      if (px >= 0 && px < this.imageWidth && py >= 0 && py < this.imageHeight) {
-        ctx.fillRect(px, py, 1, 1);
-      }
-    }
-
-    // Draw outline around the brush area for visibility
+    // Use ImageData for pixel-perfect rendering without anti-aliasing
     if (pixels.length > 0) {
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 0.5;
+      const imageData = ctx.createImageData(this.imageWidth, this.imageHeight);
+      const data = imageData.data;
+
+      // Parse the preview color
+      const rgb = this.tool === 'eraser'
+        ? { r: 255, g: 255, b: 255 }
+        : this.hexToRgb(this.classes.find(c => c.id === this.activeClassId)?.color || '#FF6B6B');
 
       for (const { x: px, y: py } of pixels) {
         if (px >= 0 && px < this.imageWidth && py >= 0 && py < this.imageHeight) {
-          ctx.strokeRect(px, py, 1, 1);
+          const idx = (py * this.imageWidth + px) * 4;
+          data[idx] = rgb.r;       // R
+          data[idx + 1] = rgb.g;   // G
+          data[idx + 2] = rgb.b;   // B
+          data[idx + 3] = 150;     // A (semi-transparent)
         }
       }
-    }
 
-    // Draw crosshair at cursor position for precision
-    ctx.beginPath();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 0.5;
-    ctx.moveTo(x - 2, y);
-    ctx.lineTo(x + 2, y);
-    ctx.moveTo(x, y - 2);
-    ctx.lineTo(x, y + 2);
-    ctx.stroke();
+      ctx.putImageData(imageData, 0, 0);
+    }
   }
 
   /**

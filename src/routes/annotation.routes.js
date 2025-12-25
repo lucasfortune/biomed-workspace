@@ -151,7 +151,8 @@ function createAnnotationRoutes(dependencies) {
    *   height: number,
    *   slices: number,
    *   sliceData: { "0": "base64...", "5": "base64...", ... },
-   *   classes: [{ id, name, color, visible }, ...]
+   *   classes: [{ id, name, color, visible }, ...],
+   *   existingAnnotationId: string  // Optional: ID of existing annotation to update
    * }
    */
   router.post('/save-progress', requireAuth, async (req, res) => {
@@ -166,7 +167,8 @@ function createAnnotationRoutes(dependencies) {
         height,
         slices,
         sliceData,
-        classes
+        classes,
+        existingAnnotationId
       } = req.body;
 
       // Validate required fields
@@ -186,16 +188,45 @@ function createAnnotationRoutes(dependencies) {
         fs.mkdirSync(annotationsDir, { recursive: true });
       }
 
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const baseName = sourceFileName
-        ? path.basename(sourceFileName, path.extname(sourceFileName))
-        : 'annotation';
-      const tiffFilename = `${timestamp}_${baseName}_annotation.tif`;
-      const sidecarFilename = `${timestamp}_${baseName}_annotation_classes.json`;
+      // Check if we're updating an existing annotation
+      let existingFile = null;
+      let existingSidecar = null;
+      let tiffFilename, sidecarFilename, tiffPath, sidecarPath, fileId;
 
-      const tiffPath = path.join(annotationsDir, tiffFilename);
-      const sidecarPath = path.join(annotationsDir, sidecarFilename);
+      if (existingAnnotationId) {
+        // Find the existing annotation in metadata
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        existingFile = metadata?.files?.find(f => f.id === existingAnnotationId);
+        if (existingFile) {
+          existingSidecar = metadata?.files?.find(f => f.parentId === existingAnnotationId);
+          // Reuse existing filenames and paths
+          tiffFilename = existingFile.name;
+          tiffPath = path.join(workspacePath, existingFile.path);
+          fileId = existingAnnotationId;
+          if (existingSidecar) {
+            sidecarFilename = existingSidecar.name;
+            sidecarPath = path.join(workspacePath, existingSidecar.path);
+          } else {
+            // Create sidecar filename based on TIFF name
+            sidecarFilename = tiffFilename.replace('.tif', '_classes.json');
+            sidecarPath = path.join(annotationsDir, sidecarFilename);
+          }
+          if (logger) logger.info(`[Annotation] Updating existing annotation: ${existingAnnotationId}`);
+        }
+      }
+
+      // If no existing file found, create new filenames
+      if (!existingFile) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const baseName = sourceFileName
+          ? path.basename(sourceFileName, path.extname(sourceFileName))
+          : 'annotation';
+        tiffFilename = `${timestamp}_${baseName}_annotation.tif`;
+        sidecarFilename = `${timestamp}_${baseName}_annotation_classes.json`;
+        tiffPath = path.join(annotationsDir, tiffFilename);
+        sidecarPath = path.join(annotationsDir, sidecarFilename);
+        fileId = `unfinished_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
 
       // Create config file for Python script
       const configData = {
@@ -259,40 +290,63 @@ function createAnnotationRoutes(dependencies) {
 
           fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
 
-          // Generate file ID
-          const fileId = `unfinished_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-          // Add to workspace metadata
+          // Update or add to workspace metadata
           const metadata = workspaceManager.loadMetadata(sessionId);
           if (!metadata.files) {
             metadata.files = [];
           }
 
-          // Add TIFF file
-          metadata.files.push({
-            id: fileId,
-            name: tiffFilename,
-            path: path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename),
-            category: 'unfinished_annotations',
-            uploadedAt: new Date().toISOString(),
-            size: fs.statSync(tiffPath).size,
-            lineage: {
-              processType: 'annotation',
-              inputs: [sourceFileId],
-              status: 'in_progress'
+          if (existingFile) {
+            // Update existing file entries
+            const tiffIndex = metadata.files.findIndex(f => f.id === fileId);
+            if (tiffIndex !== -1) {
+              metadata.files[tiffIndex].size = fs.statSync(tiffPath).size;
+              metadata.files[tiffIndex].lastModifiedAt = new Date().toISOString();
             }
-          });
 
-          // Add sidecar file
-          metadata.files.push({
-            id: `${fileId}_sidecar`,
-            name: sidecarFilename,
-            path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
-            category: 'unfinished_annotations_sidecar',
-            uploadedAt: new Date().toISOString(),
-            size: fs.statSync(sidecarPath).size,
-            parentId: fileId
-          });
+            const sidecarIndex = metadata.files.findIndex(f => f.parentId === fileId);
+            if (sidecarIndex !== -1) {
+              metadata.files[sidecarIndex].size = fs.statSync(sidecarPath).size;
+              metadata.files[sidecarIndex].lastModifiedAt = new Date().toISOString();
+            } else {
+              // Add sidecar if it didn't exist
+              metadata.files.push({
+                id: `${fileId}_sidecar`,
+                name: sidecarFilename,
+                path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
+                category: 'unfinished_annotations_sidecar',
+                uploadedAt: new Date().toISOString(),
+                size: fs.statSync(sidecarPath).size,
+                parentId: fileId
+              });
+            }
+          } else {
+            // Add new TIFF file
+            metadata.files.push({
+              id: fileId,
+              name: tiffFilename,
+              path: path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename),
+              category: 'unfinished_annotations',
+              uploadedAt: new Date().toISOString(),
+              size: fs.statSync(tiffPath).size,
+              lineage: {
+                processType: 'annotation',
+                inputs: [sourceFileId],
+                status: 'in_progress'
+              }
+            });
+
+            // Add sidecar file
+            metadata.files.push({
+              id: `${fileId}_sidecar`,
+              name: sidecarFilename,
+              path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
+              category: 'unfinished_annotations_sidecar',
+              uploadedAt: new Date().toISOString(),
+              size: fs.statSync(sidecarPath).size,
+              parentId: fileId
+            });
+          }
 
           workspaceManager.saveMetadata(sessionId, metadata);
 

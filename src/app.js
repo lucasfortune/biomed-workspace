@@ -263,7 +263,7 @@ function configureApp(app, dependencies) {
 
   // CORS and JSON parsing
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '100mb' }));
 
   // =============================================================================
   // ROUTE REGISTRATION
