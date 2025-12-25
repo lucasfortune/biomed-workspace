@@ -29,7 +29,8 @@ const {
   WorkspaceService,
   FileService,
   TrainingService,
-  InferenceService
+  InferenceService,
+  DenoisingService
 } = require('./src/services');
 const sessionTracker = require('./src/services/SessionTracker');
 
@@ -92,6 +93,12 @@ const inferenceService = new InferenceService({
   logger
 });
 
+const denoisingService = new DenoisingService({
+  pythonPath: PYTHON_PATH,
+  sessionTracker,
+  logger
+});
+
 // =============================================================================
 // CREATE EXPRESS APP, HTTP SERVER, AND SOCKET.IO
 // =============================================================================
@@ -125,7 +132,8 @@ configureApp(app, {
     fileService,
     authService,
     trainingService,
-    inferenceService
+    inferenceService,
+    denoisingService
   },
   activityLogger
 });

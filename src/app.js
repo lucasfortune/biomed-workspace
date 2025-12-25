@@ -71,7 +71,8 @@ function configureApp(app, dependencies) {
     fileService,
     authService,
     trainingService,
-    inferenceService
+    inferenceService,
+    denoisingService
   } = services;
 
   // Aliases for backward compatibility
@@ -339,7 +340,9 @@ function configureApp(app, dependencies) {
     workspaceManager,
     workspaceService,
     activityLogger,
-    logger
+    logger,
+    denoisingService,
+    io
   }));
 
   // Ensure directories exist

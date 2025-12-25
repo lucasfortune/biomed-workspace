@@ -9,6 +9,7 @@ const WorkspaceService = require('./WorkspaceService');
 const FileService = require('./FileService');
 const TrainingService = require('./TrainingService');
 const InferenceService = require('./InferenceService');
+const DenoisingService = require('./DenoisingService');
 const SessionTracker = require('./SessionTracker');
 
 module.exports = {
@@ -17,5 +18,6 @@ module.exports = {
   FileService,
   TrainingService,
   InferenceService,
+  DenoisingService,
   SessionTracker
 };

@@ -7,6 +7,19 @@
 const { registerTrainingHandlers, emitTrainingProgress, emitTrainingComplete } = require('./training.socket');
 const { registerInferenceHandlers, emitInferenceProgress, emitInferenceComplete } = require('./inference.socket');
 const { registerMeshHandlers, emitMeshProgress, emitMeshComplete, emitMeshError } = require('./mesh.socket');
+const {
+  registerDenoisingHandlers,
+  emitDenoisingStage1Progress,
+  emitDenoisingStage1Complete,
+  emitDenoisingMaskProgress,
+  emitDenoisingMaskResult,
+  emitDenoisingStage2Progress,
+  emitDenoisingStage2Complete,
+  emitDenoisingTrainingComplete,
+  emitDenoisingInferenceProgress,
+  emitDenoisingInferenceComplete,
+  emitDenoisingError
+} = require('./denoising.socket');
 
 /**
  * Initialize Socket.IO connection handlers
@@ -25,6 +38,9 @@ function initializeSocketHandlers(io, logger) {
 
     // Register mesh event handlers
     registerMeshHandlers(socket, logger);
+
+    // Register denoising event handlers
+    registerDenoisingHandlers(socket, logger);
 
     // Handle disconnection
     socket.on('disconnect', () => {
@@ -56,6 +72,18 @@ function createSocketEmitter(io) {
     meshComplete: (meshId, result) => emitMeshComplete(io, meshId, result),
     meshError: (meshId, error) => emitMeshError(io, meshId, error),
 
+    // Denoising events
+    denoisingStage1Progress: (trainingId, progress) => emitDenoisingStage1Progress(io, trainingId, progress),
+    denoisingStage1Complete: (trainingId, result) => emitDenoisingStage1Complete(io, trainingId, result),
+    denoisingMaskProgress: (trainingId, progress) => emitDenoisingMaskProgress(io, trainingId, progress),
+    denoisingMaskResult: (trainingId, result) => emitDenoisingMaskResult(io, trainingId, result),
+    denoisingStage2Progress: (trainingId, progress) => emitDenoisingStage2Progress(io, trainingId, progress),
+    denoisingStage2Complete: (trainingId, result) => emitDenoisingStage2Complete(io, trainingId, result),
+    denoisingTrainingComplete: (trainingId, result) => emitDenoisingTrainingComplete(io, trainingId, result),
+    denoisingInferenceProgress: (inferenceId, progress) => emitDenoisingInferenceProgress(io, inferenceId, progress),
+    denoisingInferenceComplete: (inferenceId, result) => emitDenoisingInferenceComplete(io, inferenceId, result),
+    denoisingError: (id, error) => emitDenoisingError(io, id, error),
+
     // Direct access to io for custom emissions
     io: io
   };
@@ -71,5 +99,16 @@ module.exports = {
   emitInferenceComplete,
   emitMeshProgress,
   emitMeshComplete,
-  emitMeshError
+  emitMeshError,
+  // Denoising emit functions
+  emitDenoisingStage1Progress,
+  emitDenoisingStage1Complete,
+  emitDenoisingMaskProgress,
+  emitDenoisingMaskResult,
+  emitDenoisingStage2Progress,
+  emitDenoisingStage2Complete,
+  emitDenoisingTrainingComplete,
+  emitDenoisingInferenceProgress,
+  emitDenoisingInferenceComplete,
+  emitDenoisingError
 };

@@ -451,6 +451,331 @@ function createDenoisingRoutes(dependencies) {
     }
   });
 
+  /**
+   * Start DL denoising training
+   * POST /api/denoising/dl/start-training
+   *
+   * Body:
+   *   - method: 'n2v' or 'autostructn2v'
+   *   - config: Training configuration
+   *   - inputFileId: ID of input file in workspace
+   *
+   * Returns training ID for Socket.IO room joining.
+   */
+  router.post('/dl/start-training', requireAuth, async (req, res) => {
+    const { method, config, inputFileId, inputPath } = req.body;
+    const sessionId = req.session.id;
+
+    // Validate method
+    if (!method || !['n2v', 'autostructn2v'].includes(method)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Method must be "n2v" or "autostructn2v"'
+      });
+    }
+
+    // Validate config
+    if (!config) {
+      return res.status(400).json({
+        success: false,
+        error: 'Training configuration is required'
+      });
+    }
+
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Resolve input path
+      let absoluteInputPath;
+      if (inputPath) {
+        absoluteInputPath = path.join(workspacePath, inputPath);
+      } else if (inputFileId) {
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        const inputFile = metadata?.files?.find(f => f.id === inputFileId);
+        if (!inputFile) {
+          return res.status(404).json({
+            success: false,
+            error: 'Input file not found'
+          });
+        }
+        absoluteInputPath = path.join(workspacePath, inputFile.path);
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Either inputPath or inputFileId is required'
+        });
+      }
+
+      // Verify input file exists
+      if (!fs.existsSync(absoluteInputPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Input file not found on disk'
+        });
+      }
+
+      // Generate training ID
+      const trainingId = `dl_denoise_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Create output directory
+      const outputDir = path.join(workspacePath, 'models', 'denoising', trainingId);
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      // Build full training config
+      const fullConfig = {
+        ...config,
+        method,
+        training_id: trainingId,
+        input_dir: path.dirname(absoluteInputPath),
+        output_dir: outputDir,
+        experiment_name: trainingId,
+        device: 'cuda', // Will fallback to CPU in wrapper
+        verbose: false
+      };
+
+      // Create session in DenoisingService
+      const { denoisingService, io } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Create training session
+      denoisingService.createSession(trainingId, {
+        sessionId,
+        method,
+        config: fullConfig
+      });
+
+      // Start training asynchronously
+      denoisingService.startTraining({
+        trainingId,
+        config: fullConfig,
+        inputPath: absoluteInputPath,
+        outputDir
+      }, io);
+
+      if (logger) {
+        logger.info('[Denoising] Started DL training:', {
+          sessionId,
+          trainingId,
+          method
+        });
+      }
+
+      if (activityLogger) {
+        activityLogger.logActivity(req.session.user.username, 'dl_denoising_start', {
+          trainingId,
+          method
+        });
+      }
+
+      // Return immediately with training ID
+      res.json({
+        success: true,
+        trainingId,
+        method,
+        message: 'Training started. Join Socket.IO room for progress updates.'
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error starting training:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Get training status
+   * GET /api/denoising/dl/training-status/:trainingId
+   *
+   * Returns current status of a training session.
+   */
+  router.get('/dl/training-status/:trainingId', requireAuth, async (req, res) => {
+    const { trainingId } = req.params;
+
+    try {
+      const { denoisingService } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      const session = denoisingService.getSession(trainingId);
+
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          error: 'Training session not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        session: {
+          id: session.id,
+          method: session.method,
+          status: session.status,
+          stage: session.stage,
+          startTime: session.startTime,
+          endTime: session.endTime,
+          stage1: session.stage1,
+          mask: session.mask,
+          stage2: session.stage2,
+          experimentDir: session.experimentDir,
+          error: session.error
+        }
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error getting training status:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Run inference with trained model
+   * POST /api/denoising/dl/run-inference
+   *
+   * Body:
+   *   - trainingId: Training ID to use model from
+   *   - inputPath: Path to input TIFF file
+   *   - stage: 'stage1' or 'stage2' (which model to use)
+   */
+  router.post('/dl/run-inference', requireAuth, async (req, res) => {
+    const { trainingId, inputPath, inputFileId, stage } = req.body;
+    const sessionId = req.session.id;
+
+    if (!trainingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Training ID is required'
+      });
+    }
+
+    try {
+      const { denoisingService, io } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Get training session to find model
+      const trainSession = denoisingService.getSession(trainingId);
+      if (!trainSession) {
+        return res.status(404).json({
+          success: false,
+          error: 'Training session not found'
+        });
+      }
+
+      // Determine which model to use
+      const useStage = stage || (trainSession.method === 'autostructn2v' && trainSession.stage2?.modelPath ? 'stage2' : 'stage1');
+      const modelPath = useStage === 'stage2' ? trainSession.stage2?.modelPath : trainSession.stage1?.modelPath;
+
+      if (!modelPath || !fs.existsSync(modelPath)) {
+        return res.status(400).json({
+          success: false,
+          error: `${useStage} model not found. Training may not be complete.`
+        });
+      }
+
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Resolve input path
+      let absoluteInputPath;
+      if (inputPath) {
+        absoluteInputPath = path.join(workspacePath, inputPath);
+      } else if (inputFileId) {
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        const inputFile = metadata?.files?.find(f => f.id === inputFileId);
+        if (!inputFile) {
+          return res.status(404).json({
+            success: false,
+            error: 'Input file not found'
+          });
+        }
+        absoluteInputPath = path.join(workspacePath, inputFile.path);
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Either inputPath or inputFileId is required'
+        });
+      }
+
+      // Generate inference ID
+      const inferenceId = `dl_infer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Create output directory
+      const outputDir = path.join(workspacePath, 'results', 'denoising', inferenceId);
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      // Get model config from training session
+      const stageConfig = trainSession.config?.[useStage] || {};
+      const modelConfig = {
+        features: stageConfig.features || 64,
+        num_layers: stageConfig.num_layers || 2,
+        patch_size: stageConfig.patch_size || 64,
+        use_resize_conv: stageConfig.use_resize_conv !== false,
+        upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
+      };
+
+      // Start inference
+      denoisingService.runInference({
+        inferenceId,
+        modelPath,
+        inputPath: absoluteInputPath,
+        outputDir,
+        modelConfig,
+        stage: useStage
+      }, io);
+
+      if (logger) {
+        logger.info('[Denoising] Started DL inference:', {
+          sessionId,
+          inferenceId,
+          trainingId,
+          stage: useStage
+        });
+      }
+
+      res.json({
+        success: true,
+        inferenceId,
+        trainingId,
+        stage: useStage,
+        message: 'Inference started. Join Socket.IO room for progress updates.'
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error starting inference:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   // ===========================================================================
   // TEST DATA FOR DENOISING
   // ===========================================================================
