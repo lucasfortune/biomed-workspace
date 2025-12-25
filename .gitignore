@@ -264,3 +264,6 @@ sessions/
 
 # User data
 users.json
+
+# Claude Code Prompts
+docs/prompts/
