@@ -1829,10 +1829,15 @@ class VisualizationModule extends BaseModule {
     this.originalDataGroup = null;
     this.originalDataMetadata = null;
 
-    // Clean up global references
-    delete window.vizModule;
-    delete window.nextStep;
-    delete window.previousStep;
+    // Clean up global references (use try-catch for non-configurable properties)
+    const globalsToClean = ['vizModule', 'nextStep', 'previousStep'];
+    for (const name of globalsToClean) {
+      try {
+        delete window[name];
+      } catch (e) {
+        window[name] = undefined;
+      }
+    }
 
     // Reset state flags
     this.visualizationReady = false;

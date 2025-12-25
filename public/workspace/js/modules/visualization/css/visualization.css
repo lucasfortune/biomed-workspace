@@ -295,6 +295,7 @@
 }
 
 .viz-module .class-control-panel {
+  display: block !important; /* Override segmentation module's global flex rule */
   background: var(--module-bg);
   border: 1px solid var(--module-border);
   border-radius: var(--module-radius-md);

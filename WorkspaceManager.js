@@ -449,25 +449,163 @@ class WorkspaceManager {
       throw new Error('File not found');
     }
 
+    const workspacePath = this.getWorkspacePath(sessionId);
+
     // Delete physical file
-    const filePath = path.join(this.getWorkspacePath(sessionId), file.path);
+    const filePath = path.join(workspacePath, file.path);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
 
     // Delete thumbnail if exists
     if (file.thumbnailPath) {
-      const thumbPath = path.join(this.getWorkspacePath(sessionId), file.thumbnailPath);
+      const thumbPath = path.join(workspacePath, file.thumbnailPath);
       if (fs.existsSync(thumbPath)) {
         fs.unlinkSync(thumbPath);
       }
     }
+
+    // Clean up slice cache files (in main .slices directory)
+    this.cleanupSliceCache(workspacePath, fileId);
+
+    // Clean up slice cache in the file's directory (for result files)
+    const fileDir = path.dirname(filePath);
+    const localSlicesDir = path.join(fileDir, '.slices');
+    if (fs.existsSync(localSlicesDir)) {
+      this.cleanupDirectorySliceCache(localSlicesDir, fileId);
+    }
+
+    // Clean up mesh preview cache files
+    this.cleanupMeshPreviewCache(workspacePath, filePath);
+
+    // Clean up empty parent directories (for result files in nested structures)
+    this.cleanupEmptyDirectories(fileDir, workspacePath);
 
     // Remove from metadata
     metadata.files = metadata.files.filter(f => f.id !== fileId);
     this.saveMetadata(sessionId, metadata);
 
     return { success: true, message: 'File deleted' };
+  }
+
+  /**
+   * Clean up slice cache files for a given fileId
+   * @param {string} workspacePath - Workspace path
+   * @param {string} fileId - File ID
+   */
+  cleanupSliceCache(workspacePath, fileId) {
+    const slicesDir = path.join(workspacePath, '.slices');
+    if (!fs.existsSync(slicesDir)) {
+      return;
+    }
+
+    try {
+      const files = fs.readdirSync(slicesDir);
+      const prefix = `${fileId}_`;
+      for (const file of files) {
+        if (file.startsWith(prefix)) {
+          fs.unlinkSync(path.join(slicesDir, file));
+        }
+      }
+    } catch (error) {
+      // Silently ignore cleanup errors
+    }
+  }
+
+  /**
+   * Clean up slice cache in a specific directory
+   * For result directories, we delete all files since the directory is result-specific
+   * @param {string} slicesDir - Slices directory path
+   * @param {string} fileId - File ID (used for prefix matching in shared directories)
+   * @param {boolean} deleteAll - If true, delete all files in directory (for result dirs)
+   */
+  cleanupDirectorySliceCache(slicesDir, fileId, deleteAll = true) {
+    try {
+      const files = fs.readdirSync(slicesDir);
+
+      if (deleteAll) {
+        // Delete all cache files in this directory (for result-specific .slices folders)
+        for (const file of files) {
+          fs.unlinkSync(path.join(slicesDir, file));
+        }
+      } else {
+        // Only delete files matching the fileId prefix
+        const prefix = `${fileId}_`;
+        for (const file of files) {
+          if (file.startsWith(prefix)) {
+            fs.unlinkSync(path.join(slicesDir, file));
+          }
+        }
+      }
+
+      // If directory is now empty, remove it
+      const remaining = fs.readdirSync(slicesDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(slicesDir);
+      }
+    } catch (error) {
+      // Silently ignore cleanup errors
+    }
+  }
+
+  /**
+   * Clean up mesh preview cache files for a given file path
+   * @param {string} workspacePath - Workspace path
+   * @param {string} filePath - Full file path
+   */
+  cleanupMeshPreviewCache(workspacePath, filePath) {
+    const meshPreviewsDir = path.join(workspacePath, '.mesh-previews');
+    if (!fs.existsSync(meshPreviewsDir)) {
+      return;
+    }
+
+    try {
+      // Generate the same hash used when creating previews
+      const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32);
+      const files = fs.readdirSync(meshPreviewsDir);
+      const prefix = `${fileHash}_`;
+      for (const file of files) {
+        if (file.startsWith(prefix)) {
+          fs.unlinkSync(path.join(meshPreviewsDir, file));
+        }
+      }
+      // If directory is now empty, remove it
+      const remaining = fs.readdirSync(meshPreviewsDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(meshPreviewsDir);
+      }
+    } catch (error) {
+      // Silently ignore cleanup errors
+    }
+  }
+
+  /**
+   * Clean up empty directories recursively up to the workspace root
+   * @param {string} dirPath - Directory to check
+   * @param {string} stopAt - Stop cleaning when reaching this directory
+   */
+  cleanupEmptyDirectories(dirPath, stopAt) {
+    try {
+      // Don't go above the workspace root
+      if (dirPath === stopAt || !dirPath.startsWith(stopAt)) {
+        return;
+      }
+
+      // Check if directory exists and is empty
+      if (!fs.existsSync(dirPath)) return;
+
+      const contents = fs.readdirSync(dirPath);
+
+      // If empty, remove it and check parent
+      if (contents.length === 0) {
+        fs.rmdirSync(dirPath);
+        // Recursively check parent directory
+        const parentDir = path.dirname(dirPath);
+        this.cleanupEmptyDirectories(parentDir, stopAt);
+      }
+    } catch (error) {
+      // Ignore errors (directory might be in use or have permission issues)
+    }
   }
 
   /**

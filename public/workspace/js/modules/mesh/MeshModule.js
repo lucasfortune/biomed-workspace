@@ -705,6 +705,13 @@ class MeshModule extends BaseModule {
 
     this.saveState();
     this.state.notify('success', 'Mesh generation complete!');
+
+    // Refresh file browser to show new mesh files
+    if (window.workspace && window.workspace.fileBrowser) {
+      window.workspace.fileBrowser.refresh().catch(err => {
+        console.warn('[MeshModule] Failed to refresh file browser:', err);
+      });
+    }
   }
 
   onGenerationError(error) {
@@ -1023,13 +1030,16 @@ class MeshModule extends BaseModule {
       // Don't disconnect - other modules may need it
     }
 
-    // Clean up global references
-    delete window.meshModule;
-    delete window.nextStep;
-    delete window.previousStep;
-    delete window.startGeneration;
-    delete window.openInVisualization;
-    delete window.generateAnother;
+    // Clean up global references (use try-catch for non-configurable properties)
+    const globalsToClean = ['meshModule', 'nextStep', 'previousStep', 'startGeneration', 'openInVisualization', 'generateAnother'];
+    for (const name of globalsToClean) {
+      try {
+        delete window[name];
+      } catch (e) {
+        // Property may be non-configurable, just set to undefined
+        window[name] = undefined;
+      }
+    }
 
     // Call parent deactivate
     await super.deactivate();

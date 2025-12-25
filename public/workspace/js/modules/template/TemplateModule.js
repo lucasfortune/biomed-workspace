@@ -616,11 +616,15 @@ class TemplateModule extends BaseModule {
       this.socket = null;
     }
 
-    // Clean up global references
-    delete window.templateModule;
-    delete window.nextStep;
-    delete window.previousStep;
-    delete window.startProcessing;
+    // Clean up global references (use try-catch for non-configurable properties)
+    const globalsToClean = ['templateModule', 'nextStep', 'previousStep', 'startProcessing'];
+    for (const name of globalsToClean) {
+      try {
+        delete window[name];
+      } catch (e) {
+        window[name] = undefined;
+      }
+    }
 
     // Call parent deactivate
     await super.deactivate();

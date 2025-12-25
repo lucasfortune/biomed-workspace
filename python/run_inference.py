@@ -287,13 +287,11 @@ def calculate_inference_metrics(segmented_stack):
 def save_segmentation_results(segmented_stack, output_path, input_path, model_config):
     """Save segmentation results and metadata"""
 
-    # Create directory structure: /segmented/ and /visualizations/
+    # Create directory structure: /segmented/
     base_dir = os.path.dirname(output_path)
     segmented_dir = os.path.join(base_dir, 'segmented')
-    visualizations_dir = os.path.join(base_dir, 'visualizations')
 
     os.makedirs(segmented_dir, exist_ok=True)
-    os.makedirs(visualizations_dir, exist_ok=True)
 
     # Update paths to use new subdirectories
     segmented_output_path = os.path.join(segmented_dir, 'inference_result.tif')
@@ -303,7 +301,7 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
     tifffile.imwrite(segmented_output_path, segmented_stack)
     print(f"Segmentation saved to: {segmented_output_path}", flush=True)
 
-    # Save metadata (will be updated with overlay path if successful)
+    # Save metadata
     metadata = {
         'input_file': str(input_path),
         'output_file': str(segmented_output_path),
@@ -312,187 +310,12 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
         'metrics': calculate_inference_metrics(segmented_stack)
     }
 
-    # Create downsampled version of original data for web visualization
-    try:
-        print("Creating downsampled original data for web visualization...", flush=True)
-
-        # Define output path for downsampled original data (renamed file)
-        downsampled_path = os.path.join(visualizations_dir, 'original_data_overlay.tif')
-        
-        # Call the downsampling script
-        import subprocess
-        downsample_process = subprocess.run(
-            [
-                'python',
-                'python/downsample_for_web.py',
-                str(input_path),
-                downsampled_path,
-                '0.25',  # 25% of original size
-                '5'      # Every 5th slice
-            ],
-            capture_output=True,
-            text=True
-        )
-        
-        # Check if downsampling was successful
-        if downsample_process.returncode == 0:
-            # Parse the downsampling result from stdout
-            for line in downsample_process.stdout.split('\n'):
-                if line.startswith('DOWNSAMPLE_RESULT:'):
-                    import json
-                    downsample_info = json.loads(line[18:])
-                    if downsample_info['success']:
-                        # Store with new key name (and keep old for backward compatibility)
-                        metadata['original_data_overlay'] = {
-                            'path': downsampled_path,
-                            'info': downsample_info
-                        }
-                        # Keep old key for backward compatibility
-                        metadata['original_data_web'] = {
-                            'path': downsampled_path,
-                            'info': downsample_info
-                        }
-                        print(f"Original data downsampled successfully: {downsampled_path}", flush=True)
-                    break
-        else:
-            print(f"Warning: Downsampling failed, original data overlay will not be available", flush=True)
-            print(f"Error: {downsample_process.stderr}", flush=True)
-            
-    except Exception as e:
-        print(f"Warning: Could not create downsampled original data: {e}", flush=True)
-        print("3D visualization will work but without original data overlay", flush=True)
-
-
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
-    
-    print(f"Metadata saved to: {metadata_path}", flush=True)
-    
-    return metadata
 
-def create_3d_visualization_data(segmented_stack, output_dir):
-    """Create data files for 3D visualization with full resolution data"""
-    print("Creating 3D visualization data at full resolution...", flush=True)
-    
-    original_shape = segmented_stack.shape
-    print(f"Segmentation shape: {original_shape}", flush=True)
-    
-    # Calculate non-zero voxel count to estimate final data size
-    non_zero_count = np.count_nonzero(segmented_stack)
-    print(f"Non-zero voxels to process: {non_zero_count:,}", flush=True)
-    
-    # Performance warning for very large datasets
-    if non_zero_count > 1000000:
-        print("⚠️  Large dataset detected - processing may take longer and use more memory", flush=True)
-    elif non_zero_count > 500000:
-        print("📊 Medium-sized dataset - good balance of detail and performance", flush=True)
-    else:
-        print("⚡ Optimal dataset size for real-time visualization", flush=True)
-    
-    # Use full resolution data (no downsampling)
-    print("Using full resolution data - no downsampling applied", flush=True)
-    
-    # Create sparse representation with explicit type conversion
-    non_zero_indices = np.nonzero(segmented_stack)
-    non_zero_values = segmented_stack[non_zero_indices]
-    
-    print("Creating sparse data structure with JSON-safe types...", flush=True)
-    sparse_data = []
-    
-    # Process in batches for memory efficiency
-    batch_size = 10000
-    total_voxels = len(non_zero_values)
-    
-    for batch_start in range(0, total_voxels, batch_size):
-        batch_end = min(batch_start + batch_size, total_voxels)
-        
-        for i in range(batch_start, batch_end):
-            # FIXED: Explicit conversion to native Python int to avoid JSON serialization issues
-            sparse_data.append({
-                'x': int(non_zero_indices[2][i].item()),  # .item() ensures native Python int
-                'y': int(non_zero_indices[1][i].item()),  # .item() ensures native Python int
-                'z': int(non_zero_indices[0][i].item()),  # .item() ensures native Python int
-                'value': int(non_zero_values[i].item())   # .item() ensures native Python int
-            })
-        
-        # Progress reporting for large datasets
-        if total_voxels > 50000:
-            progress = (batch_end / total_voxels) * 100
-            print(f"Sparse data creation progress: {progress:.1f}%", flush=True)
-    
-    # Calculate statistics with explicit type conversion
-    unique_classes = np.unique(non_zero_values)
-    
-    # FIXED: Ensure all values are native Python types for JSON serialization
-    class_counts = {}
-    for cls in unique_classes:
-        count = np.sum(non_zero_values == cls)
-        class_counts[int(cls.item())] = int(count.item())  # Convert both key and value
-    
-    # Convert unique classes to native Python int list
-    classes_list = [int(cls.item()) for cls in unique_classes]
-    
-    # FIXED: Ensure all numeric values are native Python types
-    viz_data = {
-        'format': 'sparse',
-        'version': '2.0',
-        'shape': [int(dim) for dim in segmented_stack.shape],  # Use original shape directly
-        'data': sparse_data,
-        'original_shape': [int(dim) for dim in original_shape],  # Keep for compatibility
-        'statistics': {
-            'total_voxels': len(sparse_data),  # Already Python int from len()
-            'original_non_zero_voxels': int(non_zero_count.item()) if hasattr(non_zero_count, 'item') else int(non_zero_count),
-            'classes': classes_list,
-            'class_counts': class_counts,
-            'density': float(len(sparse_data) / (segmented_stack.shape[0] * segmented_stack.shape[1] * segmented_stack.shape[2]))
-        }
-    }
-    
-    # Save to file with error handling
-    viz_path = os.path.join(output_dir, 'visualization_data.json')
-    print("Saving visualization data to JSON...", flush=True)
-    
-    try:
-        with open(viz_path, 'w') as f:
-            json.dump(viz_data, f, separators=(',', ':'))  # Compact JSON format
-        
-        print("JSON serialization successful", flush=True)
-        
-    except TypeError as e:
-        print(f"JSON serialization error: {e}", flush=True)
-        print("Attempting to identify problematic data types...", flush=True)
-        
-        # Debug: Check data types in the structure
-        def check_types(obj, path="root"):
-            if isinstance(obj, dict):
-                for key, value in obj.items():
-                    check_types(value, f"{path}.{key}")
-            elif isinstance(obj, list):
-                if len(obj) > 0:
-                    check_types(obj[0], f"{path}[0]")
-            else:
-                obj_type = type(obj)
-                if 'numpy' in str(obj_type):
-                    print(f"Found numpy type at {path}: {obj_type}", flush=True)
-        
-        check_types(viz_data)
-        raise e
-    
-    # Calculate file size
-    file_size_mb = os.path.getsize(viz_path) / (1024 * 1024)
-    
-    print("=" * 50, flush=True)
-    print("3D VISUALIZATION DATA SUMMARY:", flush=True)
-    print(f"  Data shape: {original_shape}", flush=True)
-    print(f"  Resolution: Full resolution (no downsampling)", flush=True)
-    print(f"  Voxels stored: {len(sparse_data):,}", flush=True)
-    print(f"  Classes found: {classes_list}", flush=True)
-    print(f"  Data density: {viz_data['statistics']['density']:.1%}", flush=True)
-    print(f"  File size: {file_size_mb:.2f} MB", flush=True)
-    print(f"  Saved to: {viz_path}", flush=True)
-    print("=" * 50, flush=True)
-    
-    return viz_path
+    print(f"Metadata saved to: {metadata_path}", flush=True)
+
+    return metadata
 
 def main():
     parser = argparse.ArgumentParser(description='Run inference on TIFF stack')
@@ -541,50 +364,24 @@ def main():
         print("Saving results...", flush=True)
         metadata = save_segmentation_results(segmented_stack, args.output, args.input, model_config)
 
-        # NEW: Calculate actual paths based on new directory structure
+        # Calculate actual paths based on directory structure
         base_dir = os.path.dirname(args.output)
         segmented_output_path = os.path.join(base_dir, 'segmented', 'inference_result.tif')
         metadata_path = os.path.join(base_dir, 'segmented', 'inference_result_metadata.json')
-        visualizations_dir = os.path.join(base_dir, 'visualizations')
-        overlay_path = os.path.join(visualizations_dir, 'original_data_overlay.tif')
 
-        try:
-            # Create 3D visualization data in visualizations directory
-            print("Creating 3D visualization data...", flush=True)
-            viz_path = create_3d_visualization_data(segmented_stack, visualizations_dir)
+        # Prepare results
+        result = {
+            'success': True,
+            'output_path': segmented_output_path,
+            'metadata_path': metadata_path,
+            'metrics': metadata['metrics']
+        }
 
-            # Prepare results with all file paths
-            result = {
-                'success': True,
-                'output_path': segmented_output_path,
-                'metadata_path': metadata_path,
-                'visualization_path': viz_path,
-                'original_data_overlay_path': overlay_path if os.path.exists(overlay_path) else None,
-                'metrics': metadata['metrics']
-            }
+        print("Inference completed successfully!", flush=True)
 
-            print("Inference completed successfully!", flush=True)
-            print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
-
-        except Exception as viz_error:
-            print(f"Error creating visualization data: {viz_error}", flush=True)
-            # Still report success for the main inference, just without visualization
-            result = {
-                'success': True,
-                'output_path': segmented_output_path,
-                'metadata_path': metadata_path,
-                'visualization_path': None,
-                'original_data_overlay_path': overlay_path if os.path.exists(overlay_path) else None,
-                'visualization_error': str(viz_error),
-                'metrics': metadata['metrics']
-            }
-
-            print("Inference completed with visualization error!", flush=True)
-            print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
-        
         # Send final result with special prefix for easy parsing
         print(f"FINAL_RESULT:{json.dumps(result)}", flush=True)
-        
+
         # Also output as regular JSON for backup parsing
         print("=" * 50, flush=True)
         print("BACKUP_JSON_START", flush=True)
