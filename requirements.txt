@@ -20,3 +20,9 @@ torchvision==0.16.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
 # Development and debugging (optional)
 matplotlib>=3.5.0  # For plotting training curves (optional)
 tqdm>=4.64.0       # For progress bars (optional)
+
+# Deep Learning Denoising (autoStructN2V)
+# Install separately in editable mode:
+#   pip install -e docs/autoStructN2V/codebase/
+# This enables the DL denoising module with N2V and autoStructN2V methods.
+# Requires: torch, tensorboard, tqdm (all included in base requirements)

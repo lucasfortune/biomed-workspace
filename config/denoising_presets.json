@@ -1,0 +1,175 @@
+{
+  "presets": {
+    "fast": {
+      "name": "Fast",
+      "description": "Quick training for testing and previewing results. Lower quality but faster iteration.",
+      "stage1": {
+        "patch_size": 64,
+        "patches_per_image": 100,
+        "batch_size": 16,
+        "mask_percentage": 15,
+        "features": 32,
+        "num_layers": 3,
+        "learning_rate": 0.001,
+        "epochs": 50,
+        "early_stopping": true,
+        "early_stopping_patience": 10
+      },
+      "stage2": {
+        "patch_size": 64,
+        "patches_per_image": 100,
+        "batch_size": 16,
+        "mask_percentage": 10,
+        "features": 32,
+        "num_layers": 3,
+        "learning_rate": 0.001,
+        "epochs": 50,
+        "early_stopping": true,
+        "early_stopping_patience": 10
+      },
+      "maskExtractor": {
+        "adaptive_thresholding": true,
+        "base_percentile": 50,
+        "percentile_decay": 1.1,
+        "max_masked_pixels": 25
+      }
+    },
+    "balanced": {
+      "name": "Balanced",
+      "description": "Good balance between training time and denoising quality. Recommended for most use cases.",
+      "stage1": {
+        "patch_size": 64,
+        "patches_per_image": 200,
+        "batch_size": 8,
+        "mask_percentage": 15,
+        "features": 64,
+        "num_layers": 4,
+        "learning_rate": 0.0005,
+        "epochs": 100,
+        "early_stopping": true,
+        "early_stopping_patience": 15
+      },
+      "stage2": {
+        "patch_size": 64,
+        "patches_per_image": 200,
+        "batch_size": 8,
+        "mask_percentage": 10,
+        "features": 64,
+        "num_layers": 4,
+        "learning_rate": 0.0005,
+        "epochs": 100,
+        "early_stopping": true,
+        "early_stopping_patience": 15
+      },
+      "maskExtractor": {
+        "adaptive_thresholding": true,
+        "base_percentile": 50,
+        "percentile_decay": 1.15,
+        "max_masked_pixels": 30
+      }
+    },
+    "high_quality": {
+      "name": "High Quality",
+      "description": "Maximum denoising quality. Longer training time but best results.",
+      "stage1": {
+        "patch_size": 96,
+        "patches_per_image": 300,
+        "batch_size": 4,
+        "mask_percentage": 15,
+        "features": 96,
+        "num_layers": 4,
+        "learning_rate": 0.0003,
+        "epochs": 200,
+        "early_stopping": true,
+        "early_stopping_patience": 25
+      },
+      "stage2": {
+        "patch_size": 96,
+        "patches_per_image": 300,
+        "batch_size": 4,
+        "mask_percentage": 10,
+        "features": 96,
+        "num_layers": 4,
+        "learning_rate": 0.0003,
+        "epochs": 200,
+        "early_stopping": true,
+        "early_stopping_patience": 25
+      },
+      "maskExtractor": {
+        "adaptive_thresholding": true,
+        "base_percentile": 45,
+        "percentile_decay": 1.2,
+        "max_masked_pixels": 35
+      }
+    }
+  },
+  "defaults": {
+    "preset": "balanced",
+    "method": "n2v"
+  },
+  "parameterRanges": {
+    "patch_size": {
+      "options": [32, 48, 64, 96, 128],
+      "default": 64
+    },
+    "patches_per_image": {
+      "min": 50,
+      "max": 500,
+      "step": 10,
+      "default": 200
+    },
+    "batch_size": {
+      "options": [1, 2, 4, 8, 16, 32],
+      "default": 8
+    },
+    "mask_percentage": {
+      "min": 5,
+      "max": 30,
+      "step": 1,
+      "default": 15
+    },
+    "features": {
+      "options": [32, 48, 64, 96, 128],
+      "default": 64
+    },
+    "num_layers": {
+      "options": [2, 3, 4, 5],
+      "default": 4
+    },
+    "learning_rate": {
+      "min": 0.000001,
+      "max": 0.001,
+      "default": 0.0005
+    },
+    "epochs": {
+      "min": 10,
+      "max": 500,
+      "step": 10,
+      "default": 100
+    },
+    "early_stopping_patience": {
+      "min": 5,
+      "max": 50,
+      "step": 5,
+      "default": 15
+    },
+    "base_percentile": {
+      "min": 30,
+      "max": 70,
+      "step": 5,
+      "default": 50
+    },
+    "percentile_decay": {
+      "min": 1.0,
+      "max": 1.3,
+      "step": 0.05,
+      "default": 1.15
+    },
+    "max_masked_pixels": {
+      "min": 10,
+      "max": 40,
+      "step": 5,
+      "default": 30
+    }
+  }
+}

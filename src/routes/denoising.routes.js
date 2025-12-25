@@ -263,6 +263,195 @@ function createDenoisingRoutes(dependencies) {
   });
 
   // ===========================================================================
+  // DEEP LEARNING DENOISING
+  // ===========================================================================
+
+  /**
+   * Check GPU availability
+   * GET /api/denoising/dl/gpu-check
+   *
+   * Returns GPU status for the deep learning module.
+   */
+  router.get('/dl/gpu-check', requireAuth, async (req, res) => {
+    try {
+      const pythonProcess = spawn(PYTHON_PATH, ['python/utils/gpu_check.py']);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        try {
+          const result = JSON.parse(stdout);
+          res.json(result);
+        } catch (parseError) {
+          if (logger) {
+            logger.error('[Denoising] Failed to parse GPU check output:', parseError);
+          }
+          res.json({
+            available: false,
+            device: 'cpu',
+            warning: 'Could not determine GPU status'
+          });
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        if (logger) {
+          logger.error('[Denoising] GPU check process error:', error);
+        }
+        res.json({
+          available: false,
+          device: 'cpu',
+          warning: `Error checking GPU: ${error.message}`
+        });
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] GPU check error:', error);
+      }
+      res.json({
+        available: false,
+        device: 'cpu',
+        warning: error.message
+      });
+    }
+  });
+
+  /**
+   * Validate TIFF file for DL denoising
+   * POST /api/denoising/dl/validate
+   *
+   * Body:
+   *   - filePath: Path to TIFF file (relative to workspace)
+   *
+   * Returns validation result with image info.
+   */
+  router.post('/dl/validate', requireAuth, async (req, res) => {
+    const { filePath } = req.body;
+    const sessionId = req.session.id;
+
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        error: 'File path is required'
+      });
+    }
+
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolutePath = path.join(workspacePath, filePath);
+
+      // Verify file exists
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'File not found'
+        });
+      }
+
+      // Run validation script
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/validate_dl_tiff.py',
+        '--input', absolutePath
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        try {
+          const result = JSON.parse(stdout);
+          res.json({
+            success: true,
+            ...result
+          });
+        } catch (parseError) {
+          if (logger) {
+            logger.error('[Denoising] Failed to parse validation output:', parseError);
+          }
+          res.status(500).json({
+            success: false,
+            error: 'Failed to parse validation result',
+            details: stderr || stdout
+          });
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        if (logger) {
+          logger.error('[Denoising] Validation process error:', error);
+        }
+        res.status(500).json({
+          success: false,
+          error: `Validation error: ${error.message}`
+        });
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Validation error:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Get configuration presets
+   * GET /api/denoising/dl/presets
+   *
+   * Returns available presets and parameter ranges.
+   */
+  router.get('/dl/presets', requireAuth, async (req, res) => {
+    try {
+      const presetsPath = path.join('config', 'denoising_presets.json');
+
+      if (!fs.existsSync(presetsPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Presets configuration not found'
+        });
+      }
+
+      const presetsData = fs.readFileSync(presetsPath, 'utf8');
+      const presets = JSON.parse(presetsData);
+
+      res.json({
+        success: true,
+        ...presets
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error loading presets:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // ===========================================================================
   // TEST DATA FOR DENOISING
   // ===========================================================================
 
