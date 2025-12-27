@@ -189,6 +189,99 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
 
 
 # =============================================================================
+# TIFF Stack Handling
+# =============================================================================
+
+def extract_tiff_stack_to_directory(input_path: str, output_dir: str) -> str:
+    """
+    Extract a TIFF stack to individual 2D TIF files in a directory.
+
+    The autoStructN2V library expects a directory of individual 2D images,
+    not a single TIFF stack file.
+
+    Args:
+        input_path: Path to TIFF stack file
+        output_dir: Base output directory for the experiment
+
+    Returns:
+        str: Path to directory containing extracted images
+    """
+    import tifffile
+
+    emit_progress('data', {"status": "extracting_stack"})
+
+    # Read the stack
+    stack = tifffile.imread(input_path)
+
+    # Handle 2D images (single slice)
+    if stack.ndim == 2:
+        stack = stack[np.newaxis, ...]
+
+    # Create output directory for extracted images
+    extracted_dir = os.path.join(output_dir, 'extracted_images')
+    os.makedirs(extracted_dir, exist_ok=True)
+
+    # Extract each slice
+    num_slices = len(stack)
+    for i, slice_img in enumerate(stack):
+        output_path = os.path.join(extracted_dir, f'slice_{i:04d}.tif')
+        tifffile.imwrite(output_path, slice_img)
+
+        # Emit progress every 10 slices
+        if (i + 1) % 10 == 0 or i == num_slices - 1:
+            emit_progress('data', {
+                "status": "extracting_stack",
+                "current": i + 1,
+                "total": num_slices
+            })
+
+    emit_progress('data', {
+        "status": "extraction_complete",
+        "numSlices": num_slices,
+        "extractedDir": extracted_dir
+    })
+
+    return extracted_dir
+
+
+def prepare_input_directory(config: dict) -> str:
+    """
+    Prepare input directory for training.
+
+    If input_dir points to a single TIFF file (stack), extract it.
+    If input_dir is already a directory, use it as-is.
+
+    Args:
+        config: Training configuration
+
+    Returns:
+        str: Path to directory containing training images
+    """
+    input_dir = config.get('input_dir', '')
+    output_dir = config.get('output_dir', '')
+
+    # Check if input_dir is a file (TIFF stack)
+    if os.path.isfile(input_dir):
+        # It's a file - extract the stack
+        return extract_tiff_stack_to_directory(input_dir, output_dir)
+
+    # Check if input_dir contains a single TIFF file
+    if os.path.isdir(input_dir):
+        tif_files = [f for f in os.listdir(input_dir) if f.lower().endswith(('.tif', '.tiff'))]
+        if len(tif_files) == 1:
+            # Single file in directory - might be a stack
+            single_file = os.path.join(input_dir, tif_files[0])
+            import tifffile
+            stack = tifffile.imread(single_file)
+            if stack.ndim == 3 and stack.shape[0] > 1:
+                # It's a stack - extract it
+                return extract_tiff_stack_to_directory(single_file, output_dir)
+
+    # input_dir is a directory with multiple images - use as-is
+    return input_dir
+
+
+# =============================================================================
 # Training Functions
 # =============================================================================
 
@@ -233,6 +326,11 @@ def run_training(config: dict):
     config['run_stage2'] = run_stage2
 
     try:
+        # Prepare input directory (extract TIFF stacks if needed)
+        # This must be done before validate_config since it may change input_dir
+        prepared_input_dir = prepare_input_directory(config)
+        config['input_dir'] = prepared_input_dir
+
         # Validate configuration
         config = validate_config(config)
         verbose = config.get('verbose', False)

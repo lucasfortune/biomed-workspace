@@ -153,10 +153,11 @@ class DenoisingService {
 
     try {
       await fsp.mkdir(outputDir, { recursive: true });
+      // Note: config already has input_dir set correctly (to directory path)
+      // Don't overwrite it with inputPath (which is the file path)
       await fsp.writeFile(configPath, JSON.stringify({
         ...config,
         training_id: trainingId,
-        input_dir: inputPath,
         output_dir: outputDir
       }, null, 2));
     } catch (err) {

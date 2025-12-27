@@ -522,11 +522,12 @@ function createDenoisingRoutes(dependencies) {
       fs.mkdirSync(outputDir, { recursive: true });
 
       // Build full training config
+      // Pass the file path as input_dir - the Python wrapper will extract stacks if needed
       const fullConfig = {
         ...config,
         method,
         training_id: trainingId,
-        input_dir: path.dirname(absoluteInputPath),
+        input_dir: absoluteInputPath,
         output_dir: outputDir,
         experiment_name: trainingId,
         device: 'cuda', // Will fallback to CPU in wrapper
