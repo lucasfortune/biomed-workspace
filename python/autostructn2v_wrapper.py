@@ -411,7 +411,7 @@ def run_training(config: dict):
             # Create optimizer and scheduler
             optimizer = torch.optim.Adam(stage1_model.parameters(), lr=config['stage1']['learning_rate'])
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode='min', factor=0.5, patience=5, verbose=True
+                optimizer, mode='min', factor=0.5, patience=5
             )
 
             # Create trainer with progress callback
@@ -586,7 +586,7 @@ def run_training(config: dict):
                     lr=config['stage2']['learning_rate']
                 )
                 stage2_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                    stage2_optimizer, mode='min', factor=0.5, patience=5, verbose=True
+                    stage2_optimizer, mode='min', factor=0.5, patience=5
                 )
 
                 # Create trainer with progress callback
