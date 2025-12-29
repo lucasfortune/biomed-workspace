@@ -523,16 +523,46 @@ function createDenoisingRoutes(dependencies) {
 
       // Build full training config
       // Pass the file path as input_dir - the Python wrapper will extract stacks if needed
+      // Restructure config to match Python wrapper expectations:
+      // - stage1, stage2 are direct properties
+      // - maskExtractor becomes stage2.extractor
+      // - Map frontend parameter names to Python parameter names (e.g., epochs -> num_epochs)
+
+      // Helper to map frontend param names to Python param names
+      const mapStageConfig = (stageConfig) => {
+        if (!stageConfig) return {};
+        const mapped = { ...stageConfig };
+        // Map 'epochs' to 'num_epochs' for Python compatibility
+        if (mapped.epochs !== undefined) {
+          mapped.num_epochs = mapped.epochs;
+          delete mapped.epochs;
+        }
+        return mapped;
+      };
+
       const fullConfig = {
-        ...config,
         method,
         training_id: trainingId,
         input_dir: absoluteInputPath,
         output_dir: outputDir,
         experiment_name: trainingId,
         device: 'cuda', // Will fallback to CPU in wrapper
-        verbose: false
+        verbose: false,
+        // Spread stage1 config with mapped parameter names
+        stage1: mapStageConfig(config.stage1),
+        // Spread stage2 config with mapped names and add extractor from maskExtractor
+        stage2: {
+          ...mapStageConfig(config.stage2),
+          extractor: config.maskExtractor || {}
+        },
+        // Add workspace directory for output file organization
+        workspace_dir: workspacePath
       };
+
+      // Log the full config for debugging
+      if (logger) {
+        logger.info('[Denoising] Full training config:', JSON.stringify(fullConfig, null, 2));
+      }
 
       // Create session in DenoisingService
       const { denoisingService, io } = dependencies;
@@ -769,6 +799,357 @@ function createDenoisingRoutes(dependencies) {
     } catch (error) {
       if (logger) {
         logger.error('[Denoising] Error starting inference:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // ===========================================================================
+  // MASK REGENERATION
+  // ===========================================================================
+
+  /**
+   * Regenerate structural noise mask with new parameters
+   * POST /api/denoising/dl/regenerate-mask
+   *
+   * Body:
+   *   - trainingId: Training ID of completed Stage 1
+   *   - parameters: New mask extraction parameters
+   *     - adaptive_thresholding: boolean
+   *     - base_percentile: number (30-70)
+   *     - percentile_decay: number (1.0-1.3)
+   *     - max_masked_pixels: number (10-40)
+   *
+   * Returns new mask data for visualization.
+   */
+  router.post('/dl/regenerate-mask', requireAuth, async (req, res) => {
+    const { trainingId, parameters } = req.body;
+
+    if (!trainingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Training ID is required'
+      });
+    }
+
+    try {
+      const { denoisingService, io } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Get training session
+      const session = denoisingService.getSession(trainingId);
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          error: 'Training session not found'
+        });
+      }
+
+      // Check if Stage 1 is complete
+      if (session.status !== 'stage1_complete' && session.status !== 'mask_complete') {
+        return res.status(400).json({
+          success: false,
+          error: 'Stage 1 must be complete before regenerating mask'
+        });
+      }
+
+      // Get Stage 1 experiment directory
+      const stage1Dir = session.experimentDir;
+      if (!stage1Dir || !fs.existsSync(stage1Dir)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Stage 1 output directory not found'
+        });
+      }
+
+      // Regenerate mask with new parameters
+      const result = await denoisingService.regenerateMask({
+        trainingId,
+        stage1Dir,
+        parameters: parameters || {}
+      }, io);
+
+      res.json({
+        success: true,
+        mask: result
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error regenerating mask:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // ===========================================================================
+  // DL DENOISING RESULT VIEWING (for ImageViewer integration)
+  // ===========================================================================
+
+  /**
+   * Get TIFF info for DL denoising result
+   * GET /api/denoising/dl/tiff-info
+   *
+   * Query params:
+   *   - path: Absolute or relative path to the TIFF file
+   */
+  router.get('/dl/tiff-info', requireAuth, async (req, res) => {
+    const { path: filePath } = req.query;
+    const sessionId = req.session.id;
+
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        error: 'File path is required'
+      });
+    }
+
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Resolve path - handle different path formats:
+      // 1. Absolute path -> use directly
+      // 2. Path starting with "workspaces/" -> resolve from project root
+      // 3. Relative path -> resolve from workspace directory
+      let absolutePath = filePath;
+      if (path.isAbsolute(filePath)) {
+        absolutePath = filePath;
+      } else if (filePath.startsWith('workspaces/') || filePath.startsWith('workspaces\\')) {
+        // Path is relative to project root
+        absolutePath = path.join(process.cwd(), filePath);
+      } else {
+        // Path is relative to workspace
+        absolutePath = path.join(workspacePath, filePath);
+      }
+
+      // Verify file exists
+      if (!fs.existsSync(absolutePath)) {
+        if (logger) {
+          logger.error('[Denoising] File not found:', absolutePath);
+        }
+        return res.status(404).json({
+          success: false,
+          error: 'File not found'
+        });
+      }
+
+      // Security: ensure path is within the workspaces directory
+      // (relaxed check since these paths come from our own training results)
+      const normalizedPath = path.normalize(absolutePath);
+      const workspacesDir = path.normalize(path.join(process.cwd(), 'workspaces'));
+      if (!normalizedPath.startsWith(workspacesDir)) {
+        if (logger) {
+          logger.error('[Denoising] Access denied - path outside workspaces:', normalizedPath);
+        }
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied'
+        });
+      }
+
+      // Run Python script to get TIFF info (using extract_slice.py with --info flag)
+      // Use --no-classes to skip expensive class detection (not needed for denoised images)
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/extract_slice.py',
+        absolutePath,
+        '--info',
+        '--no-classes'
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0 && stdout.includes('INFO:')) {
+          try {
+            const jsonStr = stdout.replace('INFO:', '').trim();
+            const result = JSON.parse(jsonStr);
+            res.json({
+              success: true,
+              sliceCount: result.sliceCount,
+              width: result.width,
+              height: result.height,
+              dtype: result.dtype
+            });
+          } catch (parseError) {
+            if (logger) {
+              logger.error('[Denoising] Failed to parse TIFF info:', parseError);
+            }
+            res.status(500).json({
+              success: false,
+              error: 'Failed to parse TIFF info'
+            });
+          }
+        } else {
+          const errorMsg = stdout.includes('ERROR:')
+            ? stdout.replace('ERROR:', '').trim()
+            : stderr || 'Failed to get TIFF info';
+          if (logger) {
+            logger.error('[Denoising] TIFF info failed:', errorMsg);
+          }
+          res.status(500).json({
+            success: false,
+            error: errorMsg
+          });
+        }
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error getting TIFF info:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Get slice image from DL denoising result
+   * GET /api/denoising/dl/slice/:sliceIndex
+   *
+   * Query params:
+   *   - path: Absolute or relative path to the TIFF file
+   *   - size: 'thumbnail', 'gallery', or 'full' (default: 'gallery')
+   */
+  router.get('/dl/slice/:sliceIndex', requireAuth, async (req, res) => {
+    const { sliceIndex } = req.params;
+    const { path: filePath, size = 'gallery' } = req.query;
+    const sessionId = req.session.id;
+
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        error: 'File path is required'
+      });
+    }
+
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Resolve path - handle different path formats:
+      // 1. Absolute path -> use directly
+      // 2. Path starting with "workspaces/" -> resolve from project root
+      // 3. Relative path -> resolve from workspace directory
+      let absolutePath = filePath;
+      if (path.isAbsolute(filePath)) {
+        absolutePath = filePath;
+      } else if (filePath.startsWith('workspaces/') || filePath.startsWith('workspaces\\')) {
+        // Path is relative to project root
+        absolutePath = path.join(process.cwd(), filePath);
+      } else {
+        // Path is relative to workspace
+        absolutePath = path.join(workspacePath, filePath);
+      }
+
+      // Verify file exists
+      if (!fs.existsSync(absolutePath)) {
+        if (logger) {
+          logger.error('[Denoising] Slice file not found:', absolutePath);
+        }
+        return res.status(404).json({
+          success: false,
+          error: 'File not found'
+        });
+      }
+
+      // Security: ensure path is within the workspaces directory
+      // (relaxed check since these paths come from our own training results)
+      const normalizedPath = path.normalize(absolutePath);
+      const workspacesDir = path.normalize(path.join(process.cwd(), 'workspaces'));
+      if (!normalizedPath.startsWith(workspacesDir)) {
+        if (logger) {
+          logger.error('[Denoising] Access denied - path outside workspaces:', normalizedPath);
+        }
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied'
+        });
+      }
+
+      // Map size parameter to extract_slice.py format
+      let sizeParam = size;
+      if (size === 'thumbnail') sizeParam = 'icon';
+      else if (size === 'full') sizeParam = '2048';
+
+      // Create cache directory for slices
+      const slicesDir = path.join(workspacePath, '.slices');
+      if (!fs.existsSync(slicesDir)) {
+        fs.mkdirSync(slicesDir, { recursive: true });
+      }
+
+      // Generate cache filename based on path hash, slice, and size
+      const pathHash = require('crypto').createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
+      const cacheFilename = `dl_${pathHash}_${sliceIndex}_${sizeParam}.jpg`;
+      const cachePath = path.join(slicesDir, cacheFilename);
+
+      // Check cache first
+      if (fs.existsSync(cachePath)) {
+        return res.sendFile(path.resolve(cachePath));
+      }
+
+      // Run Python script to extract slice
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/extract_slice.py',
+        absolutePath,
+        sliceIndex.toString(),
+        cachePath,
+        '--size',
+        sizeParam
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0 && stdout.includes('SUCCESS:')) {
+          res.sendFile(path.resolve(cachePath));
+        } else {
+          const errorMsg = stdout.includes('ERROR:')
+            ? stdout.replace('ERROR:', '').trim()
+            : stderr || 'Failed to extract slice';
+          if (logger) {
+            logger.error('[Denoising] Slice extraction failed:', errorMsg);
+          }
+          res.status(500).json({
+            success: false,
+            error: errorMsg
+          });
+        }
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error extracting slice:', error);
       }
       res.status(500).json({
         success: false,

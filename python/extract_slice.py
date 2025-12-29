@@ -4,7 +4,7 @@ Extract slice from TIFF as JPEG for Image Viewer module.
 
 Usage:
     python extract_slice.py <input_tiff> <slice_index> <output_jpeg> [--size SIZE]
-    python extract_slice.py <input_tiff> --info
+    python extract_slice.py <input_tiff> --info [--no-classes]
 
 Outputs:
     SUCCESS:<output_path> on success
@@ -15,6 +15,9 @@ Size options:
     icon    - 128px (for thumbnail grid)
     gallery - 512px (for gallery view)
     <number> - Custom size in pixels
+
+Info options:
+    --no-classes  Skip class detection (faster, use for continuous-valued images like denoised data)
 """
 
 import sys
@@ -160,7 +163,9 @@ def main():
     # Check for --info mode
     if len(sys.argv) >= 3 and sys.argv[2] == "--info":
         try:
-            info = get_tiff_info(input_path)
+            # Check for --no-classes flag (skips expensive class detection)
+            detect_classes = "--no-classes" not in sys.argv
+            info = get_tiff_info(input_path, detect_classes=detect_classes)
             print(f"INFO:{json.dumps(info)}")
         except Exception as e:
             print(f"ERROR:{str(e)}")

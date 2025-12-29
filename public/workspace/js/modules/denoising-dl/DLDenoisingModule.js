@@ -19,6 +19,8 @@ import CollapsibleSection from './components/CollapsibleSection.js';
 import TrainingProgress from './components/TrainingProgress.js';
 import LossChart from './components/LossChart.js';
 import ResultsDisplay from './components/ResultsDisplay.js';
+import MaskVisualization from './components/MaskVisualization.js';
+import MaskParameterPanel from './components/MaskParameterPanel.js';
 
 class DLDenoisingModule extends BaseModule {
 
@@ -78,6 +80,15 @@ class DLDenoisingModule extends BaseModule {
     this.lossChart = null;
     this.stage2LossChart = null;
     this.resultsDisplay = null;
+
+    // Chart instances and best loss tracking
+    this.charts = { n2v: null, stage1: null, stage2: null };
+    this.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+
+    // Mask components (autoStructN2V)
+    this.maskVisualization = null;
+    this.maskParameterPanel = null;
+    this.maskData = null;
 
     // Socket.IO connection
     this.socket = null;
@@ -205,29 +216,202 @@ class DLDenoisingModule extends BaseModule {
               </p>
 
               <!-- Start Training Button (shown when not training) -->
-              <div id="startTrainingSection" class="section-card training-start-section">
+              <div id="startTrainingSection" class="training-start-section">
                 <button id="startTrainingBtn" class="btn primary large" onclick="window.dlDenoisingModule?.startTraining()">
                   <span class="btn-icon">&#9658;</span>
                   Start Denoising
                 </button>
               </div>
 
-              <!-- Training Progress (shown during training) -->
-              <div id="trainingProgressSection" class="section-card" style="display: none;">
-                <div id="trainingProgressContainer"></div>
-              </div>
+              <!-- N2V Training Section (single stage) -->
+              <div id="n2vTrainingSection" class="training-stage-section" style="display: none;">
+                <div class="collapsible-section expanded">
+                  <div class="collapsible-header" data-section="n2vTraining">
+                    <span class="collapsible-icon">▼</span>
+                    <h4>Training Progress</h4>
+                    <span class="stage-status" id="n2vStageStatus">Initializing...</span>
+                  </div>
+                  <div class="collapsible-body" id="n2vTrainingBody">
+                    <!-- Progress Bar with Download Buttons -->
+                    <div class="training-status" id="n2vProgressStatus">
+                      <div class="status-text" id="n2vStatusText">Preparing training data...</div>
+                      <div class="training-progress">
+                        <div class="progress-header-row">
+                          <span class="epoch-info">Epoch <span id="n2vCurrentEpoch">0</span> of <span id="n2vTotalEpochs">0</span></span>
+                          <div class="download-buttons" id="n2vDownloadButtons" style="display: none;">
+                            <button class="btn primary small" onclick="window.dlDenoisingModule?.openInImageViewer('stage1')">
+                              Open in Viewer
+                            </button>
+                            <button class="btn secondary small" onclick="window.dlDenoisingModule?.startNewAnalysis()">
+                              Start new Analysis
+                            </button>
+                          </div>
+                        </div>
+                        <div class="training-progress-bar">
+                          <div class="training-progress-fill" id="n2vProgressFill"></div>
+                        </div>
+                      </div>
+                    </div>
 
-              <!-- Loss Charts -->
-              <div id="lossChartsSection" class="section-card loss-charts-section" style="display: none;">
-                <div class="loss-charts-grid">
-                  <div id="stage1LossChartContainer"></div>
-                  <div id="stage2LossChartContainer" style="display: none;"></div>
+                    <!-- Chart + Metrics Grid -->
+                    <div class="training-display-grid">
+                      <div class="chart-container">
+                        <h5>Loss Curves</h5>
+                        <div class="chart-wrapper">
+                          <canvas id="n2vLossChart"></canvas>
+                        </div>
+                      </div>
+                      <div class="metrics-stack">
+                        <div class="metric-card">
+                          <div class="metric-value" id="n2vTrainLoss">--</div>
+                          <div class="metric-label">Training Loss</div>
+                        </div>
+                        <div class="metric-card">
+                          <div class="metric-value" id="n2vValLoss">--</div>
+                          <div class="metric-label">Validation Loss</div>
+                        </div>
+                        <div class="metric-card best-metric">
+                          <div class="metric-value" id="n2vBestValLoss">--</div>
+                          <div class="metric-label">Best Val Loss</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- Results Section (shown after completion) -->
-              <div id="resultsSection" class="section-card" style="display: none;">
-                <div id="resultsContainer"></div>
+              <!-- autoStructN2V Training Sections (multi-stage) -->
+              <div id="autoStructTrainingSection" style="display: none;">
+
+                <!-- Stage 1 Section -->
+                <div class="collapsible-section expanded" id="stage1Section">
+                  <div class="collapsible-header" data-section="stage1Training">
+                    <span class="collapsible-icon">▼</span>
+                    <h4>Stage 1: N2V Training</h4>
+                    <span class="stage-status" id="stage1StageStatus">Pending</span>
+                  </div>
+                  <div class="collapsible-body" id="stage1TrainingBody">
+                    <!-- Progress Bar -->
+                    <div class="training-status" id="stage1ProgressStatus">
+                      <div class="status-text" id="stage1StatusText">Waiting to start...</div>
+                      <div class="training-progress">
+                        <div class="progress-header-row">
+                          <span class="epoch-info">Epoch <span id="stage1CurrentEpoch">0</span> of <span id="stage1TotalEpochs">0</span></span>
+                          <div class="download-buttons" id="stage1DownloadButtons" style="display: none;">
+                            <button class="btn secondary small" onclick="window.dlDenoisingModule?.openInImageViewer('stage1')">
+                              Open Stage 1 in Viewer
+                            </button>
+                          </div>
+                        </div>
+                        <div class="training-progress-bar">
+                          <div class="training-progress-fill" id="stage1ProgressFill"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Chart + Metrics Grid -->
+                    <div class="training-display-grid">
+                      <div class="chart-container">
+                        <h5>Loss Curves</h5>
+                        <div class="chart-wrapper">
+                          <canvas id="stage1LossChart"></canvas>
+                        </div>
+                      </div>
+                      <div class="metrics-stack">
+                        <div class="metric-card">
+                          <div class="metric-value" id="stage1TrainLoss">--</div>
+                          <div class="metric-label">Training Loss</div>
+                        </div>
+                        <div class="metric-card">
+                          <div class="metric-value" id="stage1ValLoss">--</div>
+                          <div class="metric-label">Validation Loss</div>
+                        </div>
+                        <div class="metric-card best-metric">
+                          <div class="metric-value" id="stage1BestValLoss">--</div>
+                          <div class="metric-label">Best Val Loss</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Mask Extraction Section -->
+                <div class="collapsible-section expanded" id="maskSection">
+                  <div class="collapsible-header" data-section="maskExtraction">
+                    <span class="collapsible-icon">▼</span>
+                    <h4>Mask Extraction</h4>
+                    <span class="stage-status" id="maskStageStatus">Pending</span>
+                  </div>
+                  <div class="collapsible-body" id="maskExtractionBody">
+                    <div class="mask-section-content">
+                      <div id="maskVisualizationContainer"></div>
+                      <div id="maskParameterContainer"></div>
+                    </div>
+                    <div class="mask-actions" id="maskActions" style="display: none;">
+                      <button class="btn primary" id="approveMaskBtn" onclick="window.dlDenoisingModule?.approveMask()">
+                        Approve & Continue to Stage 2
+                      </button>
+                      <button class="btn secondary" onclick="window.dlDenoisingModule?.skipStage2()">
+                        Skip Stage 2
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Stage 2 Section -->
+                <div class="collapsible-section expanded" id="stage2Section">
+                  <div class="collapsible-header" data-section="stage2Training">
+                    <span class="collapsible-icon">▼</span>
+                    <h4>Stage 2: Struct-N2V Training</h4>
+                    <span class="stage-status" id="stage2StageStatus">Pending</span>
+                  </div>
+                  <div class="collapsible-body" id="stage2TrainingBody">
+                    <!-- Progress Bar -->
+                    <div class="training-status" id="stage2ProgressStatus">
+                      <div class="status-text" id="stage2StatusText">Waiting for Stage 1 and mask approval...</div>
+                      <div class="training-progress">
+                        <div class="progress-header-row">
+                          <span class="epoch-info">Epoch <span id="stage2CurrentEpoch">0</span> of <span id="stage2TotalEpochs">0</span></span>
+                          <div class="download-buttons" id="stage2DownloadButtons" style="display: none;">
+                            <button class="btn primary small" onclick="window.dlDenoisingModule?.openInImageViewer('stage2')">
+                              Open in Viewer
+                            </button>
+                            <button class="btn secondary small" onclick="window.dlDenoisingModule?.startNewAnalysis()">
+                              Start new Analysis
+                            </button>
+                          </div>
+                        </div>
+                        <div class="training-progress-bar">
+                          <div class="training-progress-fill" id="stage2ProgressFill"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Chart + Metrics Grid -->
+                    <div class="training-display-grid">
+                      <div class="chart-container">
+                        <h5>Loss Curves</h5>
+                        <div class="chart-wrapper">
+                          <canvas id="stage2LossChart"></canvas>
+                        </div>
+                      </div>
+                      <div class="metrics-stack">
+                        <div class="metric-card">
+                          <div class="metric-value" id="stage2TrainLoss">--</div>
+                          <div class="metric-label">Training Loss</div>
+                        </div>
+                        <div class="metric-card">
+                          <div class="metric-value" id="stage2ValLoss">--</div>
+                          <div class="metric-label">Validation Loss</div>
+                        </div>
+                        <div class="metric-card best-metric">
+                          <div class="metric-value" id="stage2BestValLoss">--</div>
+                          <div class="metric-label">Best Val Loss</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div class="navigation-buttons">
@@ -610,55 +794,146 @@ class DLDenoisingModule extends BaseModule {
   initializeStep3() {
     console.log('[DLDenoisingModule] Initializing Step 3...');
 
-    // Initialize training progress component
-    const progressContainer = document.getElementById('trainingProgressContainer');
-    if (progressContainer) {
-      this.trainingProgress = new TrainingProgress({
-        containerId: 'trainingProgressContainer',
-        method: this.selectedMethod,
-        onCancel: () => this.cancelTraining()
-      });
-      progressContainer.innerHTML = this.trainingProgress.render();
-      this.trainingProgress.init();
-    }
+    // Initialize best val loss tracking
+    this.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
 
-    // Initialize loss chart for stage 1
-    const stage1ChartContainer = document.getElementById('stage1LossChartContainer');
-    if (stage1ChartContainer) {
-      this.lossChart = new LossChart({
-        containerId: 'stage1LossChartContainer',
-        title: this.selectedMethod === 'autostructn2v' ? 'Stage 1 Loss (N2V)' : 'Loss Curve'
-      });
-      stage1ChartContainer.innerHTML = this.lossChart.render();
-    }
+    // Initialize collapsible section handlers
+    this.initCollapsibleSections();
 
-    // Initialize stage 2 loss chart for autoStructN2V
-    if (this.selectedMethod === 'autostructn2v') {
-      const stage2ChartContainer = document.getElementById('stage2LossChartContainer');
-      if (stage2ChartContainer) {
-        this.stage2LossChart = new LossChart({
-          containerId: 'stage2LossChartContainer',
-          title: 'Stage 2 Loss (Struct-N2V)'
-        });
-        stage2ChartContainer.innerHTML = this.stage2LossChart.render();
-      }
-    }
-
-    // Initialize results display
-    const resultsContainer = document.getElementById('resultsContainer');
-    if (resultsContainer) {
-      this.resultsDisplay = new ResultsDisplay({
-        containerId: 'resultsContainer',
-        method: this.selectedMethod,
-        onDownload: (stage) => this.downloadResult(stage),
-        onViewInViewer: (stage) => this.viewInViewer(stage),
-        onProcessMore: () => this.goToStep(4)
-      });
-      resultsContainer.innerHTML = this.resultsDisplay.render();
-    }
+    // Charts will be initialized when training starts (after Chart.js is loaded)
+    this.charts = { n2v: null, stage1: null, stage2: null };
 
     // Check if there's an ongoing training to resume
     this.checkTrainingStatus();
+  }
+
+  /**
+   * Initialize collapsible section toggle functionality
+   */
+  initCollapsibleSections() {
+    const headers = document.querySelectorAll('.collapsible-header');
+    headers.forEach(header => {
+      header.addEventListener('click', () => {
+        const section = header.closest('.collapsible-section');
+        const icon = header.querySelector('.collapsible-icon');
+        const body = section.querySelector('.collapsible-body');
+
+        if (section.classList.contains('expanded')) {
+          section.classList.remove('expanded');
+          section.classList.add('collapsed');
+          icon.textContent = '▶';
+          body.style.display = 'none';
+        } else {
+          section.classList.remove('collapsed');
+          section.classList.add('expanded');
+          icon.textContent = '▼';
+          body.style.display = 'block';
+        }
+      });
+    });
+  }
+
+  /**
+   * Initialize Chart.js and create charts
+   */
+  async initializeCharts() {
+    // Load Chart.js from CDN if not already loaded
+    if (!window.Chart) {
+      await new Promise((resolve, reject) => {
+        if (window.Chart) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    // Chart configuration
+    const chartConfig = (canvasId) => ({
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Train Loss',
+            data: [],
+            borderColor: '#4A90E2',
+            backgroundColor: 'rgba(74, 144, 226, 0.1)',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.1,
+            fill: false
+          },
+          {
+            label: 'Val Loss',
+            data: [],
+            borderColor: '#E24A4A',
+            backgroundColor: 'rgba(226, 74, 74, 0.1)',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.1,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 8 } },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: {
+            display: true,
+            title: { display: true, text: 'Epoch', color: '#666' },
+            grid: { color: 'rgba(0, 0, 0, 0.05)' }
+          },
+          y: {
+            display: true,
+            title: { display: true, text: 'Loss', color: '#666' },
+            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+            ticks: { callback: (v) => v.toFixed(4) }
+          }
+        }
+      }
+    });
+
+    // Create charts for the current method
+    if (this.selectedMethod === 'n2v') {
+      const canvas = document.getElementById('n2vLossChart');
+      if (canvas) {
+        this.charts.n2v = new Chart(canvas.getContext('2d'), chartConfig('n2vLossChart'));
+      }
+    } else {
+      // autoStructN2V - create stage 1 and stage 2 charts
+      const stage1Canvas = document.getElementById('stage1LossChart');
+      if (stage1Canvas) {
+        this.charts.stage1 = new Chart(stage1Canvas.getContext('2d'), chartConfig('stage1LossChart'));
+      }
+      const stage2Canvas = document.getElementById('stage2LossChart');
+      if (stage2Canvas) {
+        this.charts.stage2 = new Chart(stage2Canvas.getContext('2d'), chartConfig('stage2LossChart'));
+      }
+    }
+  }
+
+  /**
+   * Add point to a chart
+   */
+  addChartPoint(chartKey, epoch, trainLoss, valLoss) {
+    const chart = this.charts[chartKey];
+    if (!chart) return;
+
+    chart.data.labels.push(epoch);
+    chart.data.datasets[0].data.push(trainLoss);
+    chart.data.datasets[1].data.push(valLoss);
+    chart.update('none');
   }
 
   /**
@@ -798,7 +1073,7 @@ class DLDenoisingModule extends BaseModule {
     const config = this.trainingConfig.stage1 || {};
 
     return `
-      <div class="config-form" data-stage="stage1">
+      <div class="config-form" id="stage1ConfigContent" data-stage="stage1">
         <div class="config-group">
           <h3>Dataset Configuration</h3>
           <div class="form-field">
@@ -1254,14 +1529,14 @@ class DLDenoisingModule extends BaseModule {
    * Save current configuration
    */
   saveConfig() {
-    console.log('[DLDenoisingModule] Saving configuration:', this.trainingConfig);
-
     // Read all current values from the form
     this.readConfigFromForm('stage1');
     if (this.selectedMethod === 'autostructn2v') {
       this.readConfigFromForm('stage2');
       this.readMaskConfigFromForm();
     }
+
+    console.log('[DLDenoisingModule] Configuration after reading from form:', JSON.stringify(this.trainingConfig, null, 2));
   }
 
   /**
@@ -1269,9 +1544,15 @@ class DLDenoisingModule extends BaseModule {
    */
   readConfigFromForm(stage) {
     const container = document.getElementById(`${stage}ConfigContent`);
-    if (!container) return;
+    if (!container) {
+      console.warn(`[DLDenoisingModule] Container not found: ${stage}ConfigContent`);
+      return;
+    }
 
-    container.querySelectorAll('[data-param]').forEach(input => {
+    const inputs = container.querySelectorAll('[data-param]');
+    console.log(`[DLDenoisingModule] Found ${inputs.length} inputs in ${stage}ConfigContent`);
+
+    inputs.forEach(input => {
       const param = input.getAttribute('data-param');
       let value;
 
@@ -1279,6 +1560,11 @@ class DLDenoisingModule extends BaseModule {
         value = input.checked;
       } else if (input.type === 'number') {
         value = parseFloat(input.value);
+      } else if (input.tagName === 'SELECT') {
+        // Handle select elements - parse numeric values
+        const rawValue = input.value;
+        const numValue = parseFloat(rawValue);
+        value = isNaN(numValue) ? rawValue : numValue;
       } else {
         value = parseInt(input.value) || input.value;
       }
@@ -1322,6 +1608,11 @@ class DLDenoisingModule extends BaseModule {
       this.state.notify('error', 'Please select a file and method first');
       return;
     }
+
+    // Read all current form values before starting training
+    this.saveConfig();
+
+    console.log('[DLDenoisingModule] Training config:', JSON.stringify(this.trainingConfig, null, 2));
 
     // Prepare training configuration in the format expected by backend
     // Backend expects: { method, config, inputPath }
@@ -1408,6 +1699,8 @@ class DLDenoisingModule extends BaseModule {
     if (!this.socket) return;
 
     // Remove existing listeners to prevent duplicates
+    this.socket.off('denoising-init-progress');
+    this.socket.off('denoising-data-progress');
     this.socket.off('denoising-stage1-progress');
     this.socket.off('denoising-stage1-complete');
     this.socket.off('denoising-mask-progress');
@@ -1415,8 +1708,21 @@ class DLDenoisingModule extends BaseModule {
     this.socket.off('denoising-stage2-progress');
     this.socket.off('denoising-stage2-complete');
     this.socket.off('denoising-cleanup-progress');
-    this.socket.off('denoising-complete');
+    this.socket.off('denoising-complete-complete');
+    this.socket.off('denoising-training-complete');
     this.socket.off('denoising-error');
+
+    // Init progress (device setup, GPU check)
+    this.socket.on('denoising-init-progress', (data) => {
+      console.log('[DLDenoisingModule] Init progress:', data);
+      this.handleInitProgress(data);
+    });
+
+    // Data progress (extracting stack, splitting data)
+    this.socket.on('denoising-data-progress', (data) => {
+      console.log('[DLDenoisingModule] Data progress:', data);
+      this.handleDataProgress(data);
+    });
 
     // Stage 1 progress
     this.socket.on('denoising-stage1-progress', (data) => {
@@ -1460,9 +1766,15 @@ class DLDenoisingModule extends BaseModule {
       this.handleCleanupProgress(data);
     });
 
-    // Training complete
-    this.socket.on('denoising-complete', (data) => {
-      console.log('[DLDenoisingModule] Training complete:', data);
+    // Final result (when Python script emits complete stage result)
+    this.socket.on('denoising-complete-complete', (data) => {
+      console.log('[DLDenoisingModule] Complete result:', data);
+      this.handleCompleteResult(data);
+    });
+
+    // Training process complete (from backend when process exits)
+    this.socket.on('denoising-training-complete', (data) => {
+      console.log('[DLDenoisingModule] Training process complete:', data);
       this.handleTrainingComplete(data);
     });
 
@@ -1474,29 +1786,110 @@ class DLDenoisingModule extends BaseModule {
   }
 
   /**
+   * Handle init progress (device setup, GPU detection)
+   */
+  handleInitProgress(data) {
+    console.log('[DLDenoisingModule] Device:', data.device, 'GPU available:', data.gpuAvailable);
+
+    if (this.trainingProgress) {
+      // Update status to show initialization complete
+      this.trainingProgress.updateStatus('Preparing data...');
+    }
+
+    this.state.notify('info', `Training initialized on ${data.device.toUpperCase()}`);
+  }
+
+  /**
+   * Handle data preparation progress (extracting stack, splitting)
+   */
+  handleDataProgress(data) {
+    if (this.trainingProgress) {
+      if (data.status === 'extracting_stack') {
+        const msg = data.current && data.total
+          ? `Extracting TIFF stack: ${data.current}/${data.total}`
+          : 'Extracting TIFF stack...';
+        this.trainingProgress.updateStatus(msg);
+      } else if (data.status === 'extraction_complete') {
+        this.trainingProgress.updateStatus(`Extracted ${data.numSlices} slices`);
+      } else if (data.status === 'splitting') {
+        this.trainingProgress.updateStatus('Splitting dataset...');
+      }
+    }
+  }
+
+  /**
+   * Handle complete result (final output info from Python)
+   */
+  handleCompleteResult(data) {
+    console.log('[DLDenoisingModule] Final result:', data);
+
+    // Store output files info
+    this.trainingResult = {
+      trainingId: data.training_id,
+      method: data.method,
+      stagesRun: data.stagesRun,
+      outputFiles: data.outputFiles
+    };
+
+    // Update results display
+    if (this.resultsDisplay) {
+      this.resultsDisplay.setResults(this.trainingResult);
+    }
+  }
+
+  /**
    * Handle Stage 1 progress update
    */
   handleStage1Progress(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.updateStage1Progress({
-        epoch: data.epoch,
-        totalEpochs: data.totalEpochs,
-        trainLoss: data.trainLoss,
-        valLoss: data.valLoss,
-        learningRate: data.learningRate,
-        timeElapsed: data.timeElapsed,
-        timeRemaining: data.timeRemaining
-      });
+    // Determine prefix based on method
+    const prefix = this.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
+
+    // Update progress bar
+    const progressPercent = data.totalEpochs > 0 ? (data.epoch / data.totalEpochs) * 100 : 0;
+    const progressFill = document.getElementById(`${prefix}ProgressFill`);
+    if (progressFill) {
+      progressFill.style.width = `${progressPercent}%`;
+    }
+
+    // Update epoch counter
+    const currentEpoch = document.getElementById(`${prefix}CurrentEpoch`);
+    const totalEpochs = document.getElementById(`${prefix}TotalEpochs`);
+    if (currentEpoch) currentEpoch.textContent = data.epoch || 0;
+    if (totalEpochs) totalEpochs.textContent = data.totalEpochs || 0;
+
+    // Update status text
+    const statusText = document.getElementById(`${prefix}StatusText`);
+    if (statusText) {
+      statusText.textContent = 'Training...';
+    }
+
+    // Update metrics
+    const trainLoss = document.getElementById(`${prefix}TrainLoss`);
+    const valLoss = document.getElementById(`${prefix}ValLoss`);
+    const bestValLoss = document.getElementById(`${prefix}BestValLoss`);
+
+    if (trainLoss && data.trainLoss != null) {
+      trainLoss.textContent = data.trainLoss.toFixed(6);
+    }
+    if (valLoss && data.valLoss != null) {
+      valLoss.textContent = data.valLoss.toFixed(6);
+    }
+
+    // Track and update best validation loss
+    if (data.valLoss != null && data.valLoss > 0) {
+      const lossKey = this.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
+      if (data.valLoss < this.bestValLoss[lossKey]) {
+        this.bestValLoss[lossKey] = data.valLoss;
+      }
+      if (bestValLoss && this.bestValLoss[lossKey] !== Infinity) {
+        bestValLoss.textContent = this.bestValLoss[lossKey].toFixed(6);
+      }
     }
 
     // Update loss chart
-    if (this.lossChart && data.epoch && data.trainLoss !== undefined) {
-      this.lossChart.addPoint(data.epoch, data.trainLoss, data.valLoss);
-    }
-
-    // Initialize loss chart if not already done
-    if (this.lossChart && !this.lossChart.chart) {
-      this.lossChart.init();
+    const chartKey = this.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
+    if (data.epoch && data.trainLoss != null) {
+      this.addChartPoint(chartKey, data.epoch, data.trainLoss, data.valLoss);
     }
   }
 
@@ -1504,15 +1897,29 @@ class DLDenoisingModule extends BaseModule {
    * Handle Stage 1 completion
    */
   handleStage1Complete(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.completeStage1({
-        modelPath: data.modelPath
-      });
+    const prefix = this.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
+
+    // Update status badge
+    this.updateStageStatus(prefix, 'completed', 'Complete');
+
+    // Update status text
+    const statusText = document.getElementById(`${prefix}StatusText`);
+    if (statusText) {
+      statusText.textContent = 'Stage 1 training complete!';
+    }
+
+    // Update progress bar to 100%
+    const progressFill = document.getElementById(`${prefix}ProgressFill`);
+    if (progressFill) {
+      progressFill.style.width = '100%';
     }
 
     // For N2V-only, we're essentially done (just cleanup remaining)
     if (this.selectedMethod === 'n2v') {
       this.state.notify('success', 'N2V training complete, finalizing output...');
+    } else {
+      // For autoStructN2V, update mask status to show it's starting
+      this.updateStageStatus('mask', 'training', 'Extracting...');
     }
   }
 
@@ -1520,57 +1927,145 @@ class DLDenoisingModule extends BaseModule {
    * Handle mask extraction progress
    */
   handleMaskProgress(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.updateMaskProgress({
-        status: data.status || 'extracting'
-      });
-    }
+    // Update mask status
+    this.updateStageStatus('mask', 'training', 'Extracting mask...');
   }
 
   /**
    * Handle mask extraction completion
    */
   handleMaskComplete(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.completeMask({
+    // Update mask status
+    this.updateStageStatus('mask', 'completed', 'Complete');
+
+    // Initialize mask UI for autoStructN2V
+    if (this.selectedMethod === 'autostructn2v') {
+      this.initializeMaskUI();
+
+      // Load mask data from .npy file for visualization
+      const maskData = this._createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
+      this.updateMaskVisualization({
+        mask: maskData,
         kernelSize: data.kernelSize,
         activePixels: data.activePixels,
         pattern: data.pattern,
-        isEmpty: data.isEmpty,
-        maskPath: data.maskPath
+        isEmpty: data.isEmpty
       });
-    }
 
-    // Show stage 2 chart container
-    const stage2Container = document.getElementById('stage2LossChartContainer');
-    if (stage2Container && this.selectedMethod === 'autostructn2v') {
-      stage2Container.style.display = 'block';
-      // Initialize stage 2 chart if needed
-      if (this.stage2LossChart && !this.stage2LossChart.chart) {
-        this.stage2LossChart.init();
+      // Show mask action buttons
+      const maskActions = document.getElementById('maskActions');
+      if (maskActions) {
+        maskActions.style.display = 'block';
       }
     }
+  }
+
+  /**
+   * Create a mask grid representation for visualization
+   * This is a simplified representation - actual mask loaded from file
+   */
+  _createMaskGrid(kernelSize, activePixels, pattern) {
+    const size = kernelSize || 11;
+    const grid = [];
+
+    for (let i = 0; i < size; i++) {
+      const row = [];
+      for (let j = 0; j < size; j++) {
+        row.push(false);
+      }
+      grid.push(row);
+    }
+
+    // Create a simple pattern based on active pixels count
+    const center = Math.floor(size / 2);
+
+    if (pattern === 'cross' || pattern === 'plus') {
+      // Horizontal and vertical lines
+      for (let i = 0; i < size; i++) {
+        grid[center][i] = true;
+        grid[i][center] = true;
+      }
+    } else if (pattern === 'diagonal') {
+      // Diagonal lines
+      for (let i = 0; i < size; i++) {
+        if (i < size) grid[i][i] = true;
+        if (size - 1 - i >= 0) grid[i][size - 1 - i] = true;
+      }
+    } else {
+      // Random-ish pattern based on active pixel count
+      let count = 0;
+      const maxPixels = activePixels || 10;
+
+      // Start from center and spread out
+      for (let r = 0; r <= center && count < maxPixels; r++) {
+        for (let dx = -r; dx <= r && count < maxPixels; dx++) {
+          for (let dy = -r; dy <= r && count < maxPixels; dy++) {
+            if (Math.abs(dx) === r || Math.abs(dy) === r) {
+              const x = center + dx;
+              const y = center + dy;
+              if (x >= 0 && x < size && y >= 0 && y < size && !grid[x][y]) {
+                if (Math.random() < 0.5 || r === 0) {
+                  grid[x][y] = true;
+                  count++;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return grid;
   }
 
   /**
    * Handle Stage 2 progress update
    */
   handleStage2Progress(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.updateStage2Progress({
-        epoch: data.epoch,
-        totalEpochs: data.totalEpochs,
-        trainLoss: data.trainLoss,
-        valLoss: data.valLoss,
-        learningRate: data.learningRate,
-        timeElapsed: data.timeElapsed,
-        timeRemaining: data.timeRemaining
-      });
+    // Update progress bar
+    const progressPercent = data.totalEpochs > 0 ? (data.epoch / data.totalEpochs) * 100 : 0;
+    const progressFill = document.getElementById('stage2ProgressFill');
+    if (progressFill) {
+      progressFill.style.width = `${progressPercent}%`;
+    }
+
+    // Update epoch counter
+    const currentEpoch = document.getElementById('stage2CurrentEpoch');
+    const totalEpochs = document.getElementById('stage2TotalEpochs');
+    if (currentEpoch) currentEpoch.textContent = data.epoch || 0;
+    if (totalEpochs) totalEpochs.textContent = data.totalEpochs || 0;
+
+    // Update status text
+    const statusText = document.getElementById('stage2StatusText');
+    if (statusText) {
+      statusText.textContent = 'Training...';
+    }
+
+    // Update metrics
+    const trainLoss = document.getElementById('stage2TrainLoss');
+    const valLoss = document.getElementById('stage2ValLoss');
+    const bestValLoss = document.getElementById('stage2BestValLoss');
+
+    if (trainLoss && data.trainLoss != null) {
+      trainLoss.textContent = data.trainLoss.toFixed(6);
+    }
+    if (valLoss && data.valLoss != null) {
+      valLoss.textContent = data.valLoss.toFixed(6);
+    }
+
+    // Track and update best validation loss
+    if (data.valLoss != null && data.valLoss > 0) {
+      if (data.valLoss < this.bestValLoss.stage2) {
+        this.bestValLoss.stage2 = data.valLoss;
+      }
+      if (bestValLoss && this.bestValLoss.stage2 !== Infinity) {
+        bestValLoss.textContent = this.bestValLoss.stage2.toFixed(6);
+      }
     }
 
     // Update stage 2 loss chart
-    if (this.stage2LossChart && data.epoch && data.trainLoss !== undefined) {
-      this.stage2LossChart.addPoint(data.epoch, data.trainLoss, data.valLoss);
+    if (data.epoch && data.trainLoss != null) {
+      this.addChartPoint('stage2', data.epoch, data.trainLoss, data.valLoss);
     }
   }
 
@@ -1578,10 +2073,19 @@ class DLDenoisingModule extends BaseModule {
    * Handle Stage 2 completion
    */
   handleStage2Complete(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.completeStage2({
-        modelPath: data.modelPath
-      });
+    // Update status badge
+    this.updateStageStatus('stage2', 'completed', 'Complete');
+
+    // Update status text
+    const statusText = document.getElementById('stage2StatusText');
+    if (statusText) {
+      statusText.textContent = 'Stage 2 training complete!';
+    }
+
+    // Update progress bar to 100%
+    const progressFill = document.getElementById('stage2ProgressFill');
+    if (progressFill) {
+      progressFill.style.width = '100%';
     }
 
     this.state.notify('success', 'Stage 2 training complete, finalizing output...');
@@ -1591,11 +2095,8 @@ class DLDenoisingModule extends BaseModule {
    * Handle cleanup progress
    */
   handleCleanupProgress(data) {
-    if (this.trainingProgress) {
-      this.trainingProgress.updateCleanupProgress({
-        status: data.status || 'cleaning'
-      });
-    }
+    // For cleanup, just show a notification
+    this.state.notify('info', 'Cleaning up temporary files...');
   }
 
   /**
@@ -1604,27 +2105,18 @@ class DLDenoisingModule extends BaseModule {
   handleTrainingComplete(data) {
     console.log('[DLDenoisingModule] Training complete with data:', data);
 
-    // Update training progress
-    if (this.trainingProgress) {
-      this.trainingProgress.complete({
-        outputFiles: data.outputFiles
-      });
-    }
-
-    // Store results
-    this.trainingResult = data;
+    // Merge with existing trainingResult (which has outputFiles from handleCompleteResult)
+    // Don't overwrite - the denoising-training-complete event doesn't include outputFiles
+    this.trainingResult = {
+      ...this.trainingResult,
+      ...data,
+      // Preserve outputFiles from handleCompleteResult if not in new data
+      outputFiles: data.outputFiles || this.trainingResult?.outputFiles
+    };
     this.trainingComplete = true;
 
-    // Update results display
-    if (this.resultsDisplay) {
-      this.resultsDisplay.setResults({
-        outputFiles: data.outputFiles
-      });
-      this.resultsDisplay.refresh();
-    }
-
     // Show results section
-    this.showTrainingComplete(data);
+    this.showTrainingComplete(this.trainingResult);
 
     // Enable next step button
     const step3Next = document.getElementById('step3Next');
@@ -1638,7 +2130,7 @@ class DLDenoisingModule extends BaseModule {
     // Disconnect socket
     this.disconnectSocket();
 
-    this.state.notify('success', 'Denoising complete! Your images are ready for download.');
+    this.state.notify('success', 'Denoising complete! Your images are ready.');
   }
 
   /**
@@ -1702,73 +2194,251 @@ class DLDenoisingModule extends BaseModule {
   // ==================== UI STATE METHODS ====================
 
   /**
-   * Show training ready state
+   * Show training ready state (reset UI to initial state)
    */
   showTrainingReady() {
     const startSection = document.getElementById('startTrainingSection');
-    const progressSection = document.getElementById('trainingProgressSection');
-    const chartsSection = document.getElementById('lossChartsSection');
-    const resultsSection = document.getElementById('resultsSection');
+    const n2vSection = document.getElementById('n2vTrainingSection');
+    const autoStructSection = document.getElementById('autoStructTrainingSection');
 
+    // Show start button, hide training sections
     if (startSection) startSection.style.display = 'block';
-    if (progressSection) progressSection.style.display = 'none';
-    if (chartsSection) chartsSection.style.display = 'none';
-    if (resultsSection) resultsSection.style.display = 'none';
+    if (n2vSection) n2vSection.style.display = 'none';
+    if (autoStructSection) autoStructSection.style.display = 'none';
 
-    // Reset progress component
-    if (this.trainingProgress) {
-      this.trainingProgress.reset();
+    // Reset best val loss tracking
+    this.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+
+    // Destroy and reset charts
+    if (this.charts) {
+      Object.keys(this.charts).forEach(key => {
+        if (this.charts[key]) {
+          this.charts[key].destroy();
+          this.charts[key] = null;
+        }
+      });
     }
 
-    // Clear loss charts
-    if (this.lossChart) {
-      this.lossChart.clear();
+    // Reset completion sections
+    const n2vComplete = document.getElementById('n2vCompleteSection');
+    const autoStructResults = document.getElementById('autoStructResultsSection');
+    const maskActions = document.getElementById('maskActions');
+    if (n2vComplete) n2vComplete.style.display = 'none';
+    if (autoStructResults) autoStructResults.style.display = 'none';
+    if (maskActions) maskActions.style.display = 'none';
+
+    // Reset status badges
+    this.updateStageStatus('n2v', 'pending', 'Initializing...');
+    this.updateStageStatus('stage1', 'pending', 'Pending');
+    this.updateStageStatus('mask', 'pending', 'Pending');
+    this.updateStageStatus('stage2', 'pending', 'Pending');
+
+    // Reset progress bars and download buttons
+    ['n2v', 'stage1', 'stage2'].forEach(prefix => {
+      const fill = document.getElementById(`${prefix}ProgressFill`);
+      if (fill) fill.style.width = '0%';
+      const current = document.getElementById(`${prefix}CurrentEpoch`);
+      if (current) current.textContent = '0';
+      const total = document.getElementById(`${prefix}TotalEpochs`);
+      if (total) total.textContent = '0';
+      const trainLoss = document.getElementById(`${prefix}TrainLoss`);
+      if (trainLoss) trainLoss.textContent = '--';
+      const valLoss = document.getElementById(`${prefix}ValLoss`);
+      if (valLoss) valLoss.textContent = '--';
+      const bestValLoss = document.getElementById(`${prefix}BestValLoss`);
+      if (bestValLoss) bestValLoss.textContent = '--';
+      // Hide download buttons
+      const downloadButtons = document.getElementById(`${prefix}DownloadButtons`);
+      if (downloadButtons) downloadButtons.style.display = 'none';
+      // Reset status text style
+      const statusText = document.getElementById(`${prefix}StatusText`);
+      if (statusText) {
+        statusText.style.color = '';
+        statusText.style.fontWeight = '';
+      }
+    });
+  }
+
+  /**
+   * Download denoised images
+   */
+  async downloadDenoised(stage) {
+    if (!this.trainingResult || !this.trainingResult.outputFiles) {
+      this.state.notify('error', 'No results available for download');
+      return;
     }
-    if (this.stage2LossChart) {
-      this.stage2LossChart.clear();
+
+    const stackKey = `${stage}_stack`;
+    const filePath = this.trainingResult.outputFiles[stackKey];
+
+    if (!filePath) {
+      this.state.notify('error', `No ${stage} output file found`);
+      return;
+    }
+
+    try {
+      // Download via API
+      const response = await fetch(`/api/dl-denoising/download?path=${encodeURIComponent(filePath)}`);
+      if (!response.ok) throw new Error('Download failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filePath.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error downloading:', error);
+      this.state.notify('error', `Failed to download: ${error.message}`);
+    }
+  }
+
+  /**
+   * Download trained model
+   */
+  async downloadModel(stage) {
+    if (!this.trainingResult || !this.trainingResult.outputFiles) {
+      this.state.notify('error', 'No model available for download');
+      return;
+    }
+
+    const modelKey = `${stage}_model`;
+    const filePath = this.trainingResult.outputFiles[modelKey];
+
+    if (!filePath) {
+      this.state.notify('error', `No ${stage} model file found`);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/dl-denoising/download?path=${encodeURIComponent(filePath)}`);
+      if (!response.ok) throw new Error('Download failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filePath.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error downloading model:', error);
+      this.state.notify('error', `Failed to download model: ${error.message}`);
     }
   }
 
   /**
    * Show training in progress state
    */
-  showTrainingInProgress() {
+  async showTrainingInProgress() {
     const startSection = document.getElementById('startTrainingSection');
-    const progressSection = document.getElementById('trainingProgressSection');
-    const chartsSection = document.getElementById('lossChartsSection');
-    const resultsSection = document.getElementById('resultsSection');
+    const n2vSection = document.getElementById('n2vTrainingSection');
+    const autoStructSection = document.getElementById('autoStructTrainingSection');
 
+    // Hide start button
     if (startSection) startSection.style.display = 'none';
-    if (progressSection) progressSection.style.display = 'block';
-    if (chartsSection) chartsSection.style.display = 'block';
-    if (resultsSection) resultsSection.style.display = 'none';
 
-    // Initialize the loss chart
-    if (this.lossChart && !this.lossChart.chart) {
-      this.lossChart.init();
+    // Show the correct training section based on method
+    if (this.selectedMethod === 'n2v') {
+      if (n2vSection) n2vSection.style.display = 'block';
+      if (autoStructSection) autoStructSection.style.display = 'none';
+      // Update status
+      this.updateStageStatus('n2v', 'training', 'Training...');
+    } else {
+      if (n2vSection) n2vSection.style.display = 'none';
+      if (autoStructSection) autoStructSection.style.display = 'block';
+      // Update status for autoStructN2V
+      this.updateStageStatus('stage1', 'training', 'Training...');
+      this.updateStageStatus('mask', 'pending', 'Pending');
+      this.updateStageStatus('stage2', 'pending', 'Pending');
+    }
+
+    // Initialize charts
+    await this.initializeCharts();
+  }
+
+  /**
+   * Update stage status badge
+   */
+  updateStageStatus(stage, status, text) {
+    const statusEl = document.getElementById(`${stage}StageStatus`);
+    if (statusEl) {
+      statusEl.textContent = text;
+      statusEl.className = `stage-status ${status}`;
     }
   }
 
   /**
-   * Show training complete state
+   * Show training complete state for N2V
+   */
+  showN2VComplete(data) {
+    // Update status badge
+    this.updateStageStatus('n2v', 'completed', 'Complete');
+
+    // Update status text
+    const statusText = document.getElementById('n2vStatusText');
+    if (statusText) {
+      statusText.textContent = 'Training completed successfully!';
+      statusText.style.color = '#50C878';
+      statusText.style.fontWeight = '600';
+    }
+
+    // Show download buttons in progress section
+    const downloadButtons = document.getElementById('n2vDownloadButtons');
+    if (downloadButtons) {
+      downloadButtons.style.display = 'flex';
+    }
+
+    // Store results for download
+    this.trainingResult = data;
+
+    // Enable next button
+    const nextBtn = document.getElementById('step3Next');
+    if (nextBtn) nextBtn.disabled = false;
+  }
+
+  /**
+   * Show training complete state for autoStructN2V
+   */
+  showAutoStructComplete(data) {
+    // Update final status
+    this.updateStageStatus('stage2', 'completed', 'Complete');
+
+    // Update status text
+    const statusText = document.getElementById('stage2StatusText');
+    if (statusText) {
+      statusText.textContent = 'Training completed successfully!';
+      statusText.style.color = '#50C878';
+      statusText.style.fontWeight = '600';
+    }
+
+    // Show download buttons in progress section
+    const downloadButtons = document.getElementById('stage2DownloadButtons');
+    if (downloadButtons) {
+      downloadButtons.style.display = 'flex';
+    }
+
+    // Store results for download
+    this.trainingResult = data;
+
+    // Enable next button
+    const nextBtn = document.getElementById('step3Next');
+    if (nextBtn) nextBtn.disabled = false;
+  }
+
+  /**
+   * Show training complete state (generic handler)
    */
   showTrainingComplete(data) {
-    const startSection = document.getElementById('startTrainingSection');
-    const progressSection = document.getElementById('trainingProgressSection');
-    const chartsSection = document.getElementById('lossChartsSection');
-    const resultsSection = document.getElementById('resultsSection');
-
-    if (startSection) startSection.style.display = 'none';
-    if (progressSection) progressSection.style.display = 'block';
-    if (chartsSection) chartsSection.style.display = 'block';
-    if (resultsSection) resultsSection.style.display = 'block';
-
-    // Update results display
-    if (this.resultsDisplay && data.outputFiles) {
-      this.resultsDisplay.setResults({
-        outputFiles: data.outputFiles
-      });
-      this.resultsDisplay.refresh();
+    if (this.selectedMethod === 'n2v') {
+      this.showN2VComplete(data);
+    } else {
+      this.showAutoStructComplete(data);
     }
   }
 
@@ -1840,9 +2510,10 @@ class DLDenoisingModule extends BaseModule {
   }
 
   /**
-   * View result in image viewer
+   * Open denoised images in Image Viewer module
+   * @param {string} stage - 'stage1' or 'stage2'
    */
-  viewInViewer(stage) {
+  openInImageViewer(stage) {
     if (!this.trainingResult || !this.trainingResult.outputFiles) {
       this.state.notify('error', 'No results available');
       return;
@@ -1856,19 +2527,327 @@ class DLDenoisingModule extends BaseModule {
       return;
     }
 
-    // Set viewer file in state and navigate to image viewer
-    this.state.update('modules.denoising-dl.viewerFile', {
-      path: filePath,
-      name: filePath.split('/').pop()
-    });
+    // Store denoising result in StateManager for Image Viewer to consume
+    const denoisingData = {
+      type: 'denoising_dl_result',
+      trainingId: this.trainingId,
+      outputPath: filePath,
+      stage: stage,
+      method: this.selectedMethod,
+      timestamp: Date.now()
+    };
 
-    // Navigate to image viewer module (Phase 7 implementation)
-    this.state.notify('info', 'Image viewer integration will be implemented in Phase 7');
+    this.state.update('modules.denoising-dl.viewerFile', denoisingData);
+
+    // Navigate to Image Viewer module
+    window.workspace.loadModule('imageviewer');
+  }
+
+  /**
+   * View result in image viewer (legacy alias)
+   */
+  viewInViewer(stage) {
+    this.openInImageViewer(stage);
   }
 
   viewResults() {
-    // Placeholder for Phase 7
-    this.state.notify('info', 'Results viewing will be implemented in Phase 7');
+    // Open the primary result in viewer
+    const stage = this.selectedMethod === 'autostructn2v' ? 'stage2' : 'stage1';
+    this.openInImageViewer(stage);
+  }
+
+  /**
+   * Start a new analysis - reset everything and go back to step 1
+   */
+  startNewAnalysis() {
+    console.log('[DLDenoisingModule] Starting new analysis...');
+
+    // Destroy charts if they exist
+    if (this.charts) {
+      Object.values(this.charts).forEach(chart => {
+        if (chart && typeof chart.destroy === 'function') {
+          chart.destroy();
+        }
+      });
+      this.charts = { n2v: null, stage1: null, stage2: null };
+    }
+
+    // Reset best val loss tracking
+    this.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+
+    // Disconnect any active socket connections
+    this.disconnectSocket();
+
+    // Clear state manager entries
+    this.state.update('modules.denoising-dl.trainingId', null);
+    this.state.update('modules.denoising-dl.viewerFile', null);
+
+    // Reset step 3 UI - training sections
+    const startSection = document.getElementById('startTrainingSection');
+    const n2vSection = document.getElementById('n2vTrainingSection');
+    const autoStructSection = document.getElementById('autoStructTrainingSection');
+
+    if (startSection) startSection.style.display = 'block';
+    if (n2vSection) n2vSection.style.display = 'none';
+    if (autoStructSection) autoStructSection.style.display = 'none';
+
+    // Reset training progress UI for all stages
+    ['n2v', 'stage1', 'stage2'].forEach(prefix => {
+      this.resetTrainingStageUI(prefix);
+    });
+
+    // Reset step 3 next button
+    const step3Next = document.getElementById('step3Next');
+    if (step3Next) step3Next.disabled = true;
+
+    // Hide mask section if visible
+    const maskSection = document.getElementById('interimMaskSection');
+    if (maskSection) maskSection.style.display = 'none';
+
+    // Use the existing reset() method which properly handles file selector and validation
+    this.reset();
+
+    this.state.notify('info', 'Ready for new analysis');
+  }
+
+  /**
+   * Reset training stage UI elements for a given prefix (n2v, stage1, stage2)
+   */
+  resetTrainingStageUI(prefix) {
+    // Reset progress bar
+    const progressFill = document.getElementById(`${prefix}ProgressFill`);
+    if (progressFill) progressFill.style.width = '0%';
+
+    // Reset epoch counters
+    const currentEpoch = document.getElementById(`${prefix}CurrentEpoch`);
+    if (currentEpoch) currentEpoch.textContent = '0';
+
+    const totalEpochs = document.getElementById(`${prefix}TotalEpochs`);
+    if (totalEpochs) totalEpochs.textContent = '0';
+
+    // Reset status text
+    const statusText = document.getElementById(`${prefix}StatusText`);
+    if (statusText) {
+      statusText.textContent = prefix === 'n2v' ? 'Preparing training data...' :
+                               prefix === 'stage1' ? 'Waiting to start...' :
+                               'Waiting for Stage 1 and mask approval...';
+      statusText.style.color = '';
+      statusText.style.fontWeight = '';
+    }
+
+    // Reset metrics
+    const trainLoss = document.getElementById(`${prefix}TrainLoss`);
+    if (trainLoss) trainLoss.textContent = '--';
+
+    const valLoss = document.getElementById(`${prefix}ValLoss`);
+    if (valLoss) valLoss.textContent = '--';
+
+    const bestValLoss = document.getElementById(`${prefix}BestValLoss`);
+    if (bestValLoss) bestValLoss.textContent = '--';
+
+    // Hide download buttons
+    const downloadButtons = document.getElementById(`${prefix}DownloadButtons`);
+    if (downloadButtons) downloadButtons.style.display = 'none';
+
+    // Reset stage status badge if exists
+    const stageStatus = document.getElementById(`${prefix}StageStatus`);
+    if (stageStatus) {
+      stageStatus.textContent = 'Pending';
+      stageStatus.className = 'stage-status pending';
+    }
+  }
+
+  // ==================== MASK UI METHODS (autoStructN2V) ====================
+
+  /**
+   * Initialize mask visualization components
+   * Called when mask extraction completes
+   */
+  initializeMaskUI() {
+    console.log('[DLDenoisingModule] Initializing mask UI...');
+
+    // Show interim mask section
+    const maskSection = document.getElementById('interimMaskSection');
+    if (maskSection) {
+      maskSection.style.display = 'block';
+    }
+
+    // Initialize mask visualization
+    const vizContainer = document.getElementById('maskVisualizationContainer');
+    if (vizContainer) {
+      this.maskVisualization = new MaskVisualization({
+        containerId: 'maskVisualizationContainer'
+      });
+      vizContainer.innerHTML = this.maskVisualization.render();
+    }
+
+    // Initialize mask parameter panel
+    const paramContainer = document.getElementById('maskParameterContainer');
+    if (paramContainer) {
+      this.maskParameterPanel = new MaskParameterPanel({
+        containerId: 'maskParameterContainer',
+        parameters: this.trainingConfig.maskExtractor,
+        onRegenerateMask: () => this.regenerateMask(),
+        onParameterChange: (name, value) => this.updateMaskParameter(name, value)
+      });
+      paramContainer.innerHTML = this.maskParameterPanel.render();
+    }
+  }
+
+  /**
+   * Update mask visualization with new data
+   */
+  updateMaskVisualization(data) {
+    this.maskData = data;
+
+    if (this.maskVisualization) {
+      this.maskVisualization.setMaskData(data);
+      this.maskVisualization.refresh();
+    }
+
+    // Show/hide approve button based on mask state
+    const approveBtn = document.getElementById('approveMaskBtn');
+    if (approveBtn) {
+      approveBtn.style.display = data.isEmpty ? 'none' : 'inline-block';
+    }
+  }
+
+  /**
+   * Toggle mask parameters panel
+   */
+  toggleMaskParameters() {
+    if (this.maskParameterPanel) {
+      this.maskParameterPanel.toggle();
+    }
+  }
+
+  /**
+   * Show mask parameters panel (from warning)
+   */
+  showMaskParameters() {
+    if (this.maskParameterPanel) {
+      this.maskParameterPanel.expand();
+    }
+  }
+
+  /**
+   * Update a mask parameter
+   */
+  updateMaskParameter(name, value) {
+    console.log('[DLDenoisingModule] Updating mask parameter:', name, value);
+
+    // Update local config
+    this.trainingConfig.maskExtractor[name] = value;
+
+    // Update parameter panel
+    if (this.maskParameterPanel) {
+      this.maskParameterPanel.updateParameter(name, value);
+    }
+  }
+
+  /**
+   * Reset mask parameters to defaults
+   */
+  resetMaskParameters() {
+    this.trainingConfig.maskExtractor = {
+      adaptive_thresholding: true,
+      base_percentile: 50,
+      percentile_decay: 1.15,
+      max_masked_pixels: 25
+    };
+
+    if (this.maskParameterPanel) {
+      this.maskParameterPanel.resetToDefaults();
+    }
+  }
+
+  /**
+   * Regenerate mask with current parameters
+   */
+  async regenerateMask() {
+    if (!this.trainingId) {
+      this.state.notify('error', 'No active training session');
+      return;
+    }
+
+    console.log('[DLDenoisingModule] Regenerating mask with params:', this.trainingConfig.maskExtractor);
+
+    if (this.maskParameterPanel) {
+      this.maskParameterPanel.setRegenerating(true);
+    }
+
+    try {
+      const result = await this.api.regenerateMask(
+        this.trainingId,
+        this.trainingConfig.maskExtractor
+      );
+
+      if (result.success) {
+        this.updateMaskVisualization(result.mask);
+        this.state.notify('success', 'Mask regenerated');
+      } else {
+        throw new Error(result.error || 'Failed to regenerate mask');
+      }
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error regenerating mask:', error);
+      this.state.notify('error', `Failed to regenerate mask: ${error.message}`);
+    } finally {
+      if (this.maskParameterPanel) {
+        this.maskParameterPanel.setRegenerating(false);
+      }
+    }
+  }
+
+  /**
+   * Approve current mask and continue to Stage 2
+   */
+  approveMask() {
+    console.log('[DLDenoisingModule] Mask approved, continuing to Stage 2...');
+
+    // Hide mask action buttons
+    const maskActions = document.getElementById('maskActions');
+    if (maskActions) {
+      maskActions.style.display = 'none';
+    }
+
+    // Update stage 2 status
+    this.updateStageStatus('stage2', 'training', 'Training...');
+
+    // Update status text
+    const statusText = document.getElementById('stage2StatusText');
+    if (statusText) {
+      statusText.textContent = 'Starting Stage 2 training...';
+    }
+
+    // Stage 2 will automatically start from the backend
+    // The Socket.IO handler will update the UI
+    this.state.notify('info', 'Mask approved. Stage 2 training starting...');
+  }
+
+  /**
+   * Skip Stage 2 and use N2V results
+   */
+  skipStage2() {
+    console.log('[DLDenoisingModule] Skipping Stage 2, using N2V results');
+
+    // Hide mask action buttons
+    const maskActions = document.getElementById('maskActions');
+    if (maskActions) {
+      maskActions.style.display = 'none';
+    }
+
+    // Update stage 2 status to skipped
+    this.updateStageStatus('stage2', 'skipped', 'Skipped');
+
+    // Show results section with Stage 1 only
+    const resultsSection = document.getElementById('autoStructResultsSection');
+    if (resultsSection) {
+      resultsSection.style.display = 'block';
+    }
+
+    this.state.notify('info', 'Stage 2 skipped. Using N2V results.');
+
+    // The training should complete with just Stage 1 results
   }
 
   reset() {
@@ -1879,11 +2858,20 @@ class DLDenoisingModule extends BaseModule {
     this.configSaved = false;
     this.trainingComplete = false;
     this.uploadedFile = null;
+    this.selectedFile = null;
     this.selectedMethod = null;
     this.validationResult = null;
     this.trainingId = null;
     this.trainingResult = null;
     this.inferenceResult = null;
+
+    // Re-initialize training config with empty objects (will be populated by applyPreset)
+    this.trainingConfig = {
+      stage1: {},
+      stage2: {},
+      maskExtractor: {}
+    };
+    this.currentPreset = 'balanced';
 
     // Reset UI
     const step1Next = document.getElementById('step1Next');
@@ -1907,14 +2895,12 @@ class DLDenoisingModule extends BaseModule {
 
     // Reset file selector
     if (this.fileSelector) {
-      this.fileSelector.hidePreview();
-      this.fileSelector.selectedFile = null;
+      this.fileSelector.clearSelection();
       this.fileSelector.refresh();
-      const dropdown = document.getElementById(`${this.fileSelector.id}-select`);
-      if (dropdown) {
-        dropdown.value = '';
-      }
     }
+
+    // Also reset the internal selected file reference
+    this.uploadedFile = null;
 
     this.goToStep(1);
   }

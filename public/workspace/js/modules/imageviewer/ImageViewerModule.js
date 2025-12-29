@@ -154,7 +154,24 @@ class ImageViewerModule extends BaseModule {
       return true;
     }
 
-    // Check for denoising results
+    // Check for DL denoising results (from DLDenoisingModule)
+    const dlDenoisingResults = this.state.get('modules.denoising-dl.viewerFile');
+    if (dlDenoisingResults?.outputPath) {
+      console.log('[ImageViewerModule] Found incoming DL denoising result:', dlDenoisingResults);
+      const stageName = dlDenoisingResults.stage === 'stage2' ? 'Stage 2' : 'Stage 1';
+      const methodName = dlDenoisingResults.method === 'autostructn2v' ? 'autoStructN2V' : 'N2V';
+      this.selectedFile = {
+        id: dlDenoisingResults.trainingId || 'dl_denoising_result',
+        path: dlDenoisingResults.outputPath,
+        name: `${methodName} Denoised (${stageName})`,
+        source: 'denoising-dl',
+        trainingId: dlDenoisingResults.trainingId,
+        stage: dlDenoisingResults.stage
+      };
+      return true;
+    }
+
+    // Check for filter denoising results
     const denoisingResults = this.state.get('modules.denoising.viewerFile');
     if (denoisingResults?.fileId) {
       console.log('[ImageViewerModule] Found incoming denoising result:', denoisingResults);
@@ -192,6 +209,7 @@ class ImageViewerModule extends BaseModule {
       this.goToStep(2);
       // Clear all incoming data sources
       this.state.update('modules.segmentation.inferenceResults', null);
+      this.state.update('modules.denoising-dl.viewerFile', null);
       this.state.update('modules.denoising.viewerFile', null);
       this.state.update('workspace.viewerFile', null);
     } catch (error) {
@@ -420,6 +438,9 @@ class ImageViewerModule extends BaseModule {
       let url;
       if (this.selectedFile.source === 'segmentation') {
         url = `/results/${this.selectedFile.inferenceId}/tiff-info`;
+      } else if (this.selectedFile.source === 'denoising-dl') {
+        // DL denoising results use path-based endpoint
+        url = `/api/denoising/dl/tiff-info?path=${encodeURIComponent(this.selectedFile.path)}`;
       } else {
         url = `/api/workspace/tiff-info/${this.selectedFile.id}`;
       }
@@ -604,6 +625,9 @@ class ImageViewerModule extends BaseModule {
       let url;
       if (this.selectedFile.source === 'segmentation') {
         url = `/results/${this.selectedFile.inferenceId}/slice/${sliceIndex}?size=gallery`;
+      } else if (this.selectedFile.source === 'denoising-dl') {
+        // DL denoising results use path-based endpoint
+        url = `/api/denoising/dl/slice/${sliceIndex}?path=${encodeURIComponent(this.selectedFile.path)}&size=gallery`;
       } else {
         url = `/api/workspace/slice/${this.selectedFile.id}/${sliceIndex}?size=gallery`;
       }
@@ -837,6 +861,9 @@ class ImageViewerModule extends BaseModule {
       let url;
       if (this.selectedFile.source === 'segmentation') {
         url = `/results/${this.selectedFile.inferenceId}/slice/${sliceIndex}?size=icon`;
+      } else if (this.selectedFile.source === 'denoising-dl') {
+        // DL denoising results use path-based endpoint
+        url = `/api/denoising/dl/slice/${sliceIndex}?path=${encodeURIComponent(this.selectedFile.path)}&size=thumbnail`;
       } else {
         url = `/api/workspace/slice/${this.selectedFile.id}/${sliceIndex}?size=icon`;
       }
