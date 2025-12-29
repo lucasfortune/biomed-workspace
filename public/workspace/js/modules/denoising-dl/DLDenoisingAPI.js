@@ -118,6 +118,51 @@ class DLDenoisingAPI {
     });
     return response.json();
   }
+
+  /**
+   * Cancel ongoing training
+   * @param {string} trainingId - Training session ID
+   * @returns {Promise<Object>} Cancellation result
+   */
+  async cancelTraining(trainingId) {
+    const response = await fetch(`${this.baseUrl}/cancel-training/${trainingId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return response.json();
+  }
+
+  /**
+   * Download a file from the server
+   * @param {string} filePath - Path to the file
+   * @returns {Promise<void>}
+   */
+  async downloadFile(filePath) {
+    // Extract filename from path
+    const filename = filePath.split('/').pop();
+
+    // Create download link
+    const response = await fetch(`/api/files/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to download file');
+    }
+
+    // Get blob and trigger download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
 }
 
 export default DLDenoisingAPI;

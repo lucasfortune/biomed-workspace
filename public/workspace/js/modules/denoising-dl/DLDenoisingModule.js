@@ -16,6 +16,9 @@ import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import DLDenoisingAPI from './DLDenoisingAPI.js';
 import CollapsibleSection from './components/CollapsibleSection.js';
+import TrainingProgress from './components/TrainingProgress.js';
+import LossChart from './components/LossChart.js';
+import ResultsDisplay from './components/ResultsDisplay.js';
 
 class DLDenoisingModule extends BaseModule {
 
@@ -70,11 +73,22 @@ class DLDenoisingModule extends BaseModule {
     // Collapsible sections for config
     this.configSections = {};
 
+    // Training components
+    this.trainingProgress = null;
+    this.lossChart = null;
+    this.stage2LossChart = null;
+    this.resultsDisplay = null;
+
+    // Socket.IO connection
+    this.socket = null;
+    this.socketConnected = false;
+
     // Bind methods
     this.onFileSelected = this.onFileSelected.bind(this);
     this.onFileUploaded = this.onFileUploaded.bind(this);
     this.onMethodChange = this.onMethodChange.bind(this);
     this.onPresetChange = this.onPresetChange.bind(this);
+    this.startTraining = this.startTraining.bind(this);
   }
 
   render() {
@@ -181,27 +195,44 @@ class DLDenoisingModule extends BaseModule {
             </div>
           </div>
 
-          <!-- Step 3: Training (placeholder for Phases 4-6) -->
+          <!-- Step 3: Run Denoising -->
           <div id="step3" class="step-content">
             <div class="step-inner">
-              <h3>Training</h3>
+              <h3>Run Denoising</h3>
               <p class="step-description">
-                Train the denoising model on your image data.
+                Train the denoising model on your image data. The training process will
+                denoise your images - results are available once training completes.
               </p>
 
-              <div class="section-card placeholder-section">
-                <div class="placeholder-icon">🧠</div>
-                <div class="placeholder-text">
-                  Training functionality will be implemented in Phases 4-6.
-                  <br><br>
-                  This will include real-time progress tracking, loss charts,
-                  and for autoStructN2V, mask visualization.
+              <!-- Start Training Button (shown when not training) -->
+              <div id="startTrainingSection" class="section-card training-start-section">
+                <button id="startTrainingBtn" class="btn primary large" onclick="window.dlDenoisingModule?.startTraining()">
+                  <span class="btn-icon">&#9658;</span>
+                  Start Denoising
+                </button>
+              </div>
+
+              <!-- Training Progress (shown during training) -->
+              <div id="trainingProgressSection" class="section-card" style="display: none;">
+                <div id="trainingProgressContainer"></div>
+              </div>
+
+              <!-- Loss Charts -->
+              <div id="lossChartsSection" class="section-card loss-charts-section" style="display: none;">
+                <div class="loss-charts-grid">
+                  <div id="stage1LossChartContainer"></div>
+                  <div id="stage2LossChartContainer" style="display: none;"></div>
                 </div>
+              </div>
+
+              <!-- Results Section (shown after completion) -->
+              <div id="resultsSection" class="section-card" style="display: none;">
+                <div id="resultsContainer"></div>
               </div>
 
               <div class="navigation-buttons">
                 <button id="step3Back" class="btn secondary">Back</button>
-                <button id="step3Next" class="btn" disabled>Next: Inference</button>
+                <button id="step3Next" class="btn" disabled>Process Additional Images (Optional)</button>
               </div>
             </div>
           </div>
@@ -565,6 +596,97 @@ class DLDenoisingModule extends BaseModule {
     // Render Step 2 when navigating to it
     if (stepNumber === 2) {
       this.renderStep2Config();
+    }
+
+    // Initialize Step 3 when navigating to it
+    if (stepNumber === 3) {
+      this.initializeStep3();
+    }
+  }
+
+  /**
+   * Initialize Step 3 (Training/Denoising)
+   */
+  initializeStep3() {
+    console.log('[DLDenoisingModule] Initializing Step 3...');
+
+    // Initialize training progress component
+    const progressContainer = document.getElementById('trainingProgressContainer');
+    if (progressContainer) {
+      this.trainingProgress = new TrainingProgress({
+        containerId: 'trainingProgressContainer',
+        method: this.selectedMethod,
+        onCancel: () => this.cancelTraining()
+      });
+      progressContainer.innerHTML = this.trainingProgress.render();
+      this.trainingProgress.init();
+    }
+
+    // Initialize loss chart for stage 1
+    const stage1ChartContainer = document.getElementById('stage1LossChartContainer');
+    if (stage1ChartContainer) {
+      this.lossChart = new LossChart({
+        containerId: 'stage1LossChartContainer',
+        title: this.selectedMethod === 'autostructn2v' ? 'Stage 1 Loss (N2V)' : 'Loss Curve'
+      });
+      stage1ChartContainer.innerHTML = this.lossChart.render();
+    }
+
+    // Initialize stage 2 loss chart for autoStructN2V
+    if (this.selectedMethod === 'autostructn2v') {
+      const stage2ChartContainer = document.getElementById('stage2LossChartContainer');
+      if (stage2ChartContainer) {
+        this.stage2LossChart = new LossChart({
+          containerId: 'stage2LossChartContainer',
+          title: 'Stage 2 Loss (Struct-N2V)'
+        });
+        stage2ChartContainer.innerHTML = this.stage2LossChart.render();
+      }
+    }
+
+    // Initialize results display
+    const resultsContainer = document.getElementById('resultsContainer');
+    if (resultsContainer) {
+      this.resultsDisplay = new ResultsDisplay({
+        containerId: 'resultsContainer',
+        method: this.selectedMethod,
+        onDownload: (stage) => this.downloadResult(stage),
+        onViewInViewer: (stage) => this.viewInViewer(stage),
+        onProcessMore: () => this.goToStep(4)
+      });
+      resultsContainer.innerHTML = this.resultsDisplay.render();
+    }
+
+    // Check if there's an ongoing training to resume
+    this.checkTrainingStatus();
+  }
+
+  /**
+   * Check if there's an ongoing training to resume
+   */
+  async checkTrainingStatus() {
+    if (!this.trainingId) {
+      // Check StateManager for saved training ID
+      const savedTrainingId = this.state.get(`modules.denoising-dl.trainingId`);
+      if (savedTrainingId) {
+        this.trainingId = savedTrainingId;
+      }
+    }
+
+    if (this.trainingId) {
+      try {
+        const status = await this.api.getTrainingStatus(this.trainingId);
+        if (status.status === 'running') {
+          // Resume training UI
+          this.showTrainingInProgress();
+          this.connectToTrainingSocket();
+        } else if (status.status === 'completed') {
+          // Show results
+          this.showTrainingComplete(status);
+        }
+      } catch (error) {
+        console.error('[DLDenoisingModule] Error checking training status:', error);
+      }
     }
   }
 
@@ -1186,6 +1308,562 @@ class DLDenoisingModule extends BaseModule {
 
       this.trainingConfig.maskExtractor[param] = value;
     });
+  }
+
+  // ==================== TRAINING METHODS ====================
+
+  /**
+   * Start the denoising training process
+   */
+  async startTraining() {
+    console.log('[DLDenoisingModule] Starting training...');
+
+    if (!this.uploadedFile || !this.selectedMethod) {
+      this.state.notify('error', 'Please select a file and method first');
+      return;
+    }
+
+    // Prepare training configuration in the format expected by backend
+    // Backend expects: { method, config, inputPath }
+    const trainingConfig = {
+      method: this.selectedMethod,
+      inputPath: this.uploadedFile.path,
+      config: {
+        stage1: this.trainingConfig.stage1,
+        stage2: this.selectedMethod === 'autostructn2v' ? this.trainingConfig.stage2 : null,
+        maskExtractor: this.selectedMethod === 'autostructn2v' ? this.trainingConfig.maskExtractor : null
+      }
+    };
+
+    try {
+      // Update UI to show training in progress
+      this.showTrainingInProgress();
+
+      // Start training via API
+      const result = await this.api.startTraining(trainingConfig);
+
+      if (result.success) {
+        this.trainingId = result.trainingId;
+
+        // Save training ID to state for resume capability
+        this.state.update(`modules.denoising-dl.trainingId`, this.trainingId);
+
+        // Connect to Socket.IO for progress updates
+        this.connectToTrainingSocket();
+
+        // Start the training progress component
+        if (this.trainingProgress) {
+          this.trainingProgress.start();
+        }
+
+        this.state.notify('info', 'Training started. This may take several minutes.');
+      } else {
+        throw new Error(result.error || 'Failed to start training');
+      }
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error starting training:', error);
+      this.state.notify('error', `Failed to start training: ${error.message}`);
+      this.showTrainingReady();
+
+      if (this.trainingProgress) {
+        this.trainingProgress.fail(error.message);
+      }
+    }
+  }
+
+  /**
+   * Connect to Socket.IO for training progress updates
+   */
+  connectToTrainingSocket() {
+    if (!this.trainingId) {
+      console.error('[DLDenoisingModule] No training ID for socket connection');
+      return;
+    }
+
+    // Get or create socket connection
+    if (!this.socket) {
+      // Use existing socket connection from workspace or create new one
+      if (window.io) {
+        this.socket = window.io();
+      } else {
+        console.error('[DLDenoisingModule] Socket.IO not available');
+        return;
+      }
+    }
+
+    console.log('[DLDenoisingModule] Connecting to training socket room:', `denoising-${this.trainingId}`);
+
+    // Join training room
+    this.socket.emit('join-denoising', this.trainingId);
+    this.socketConnected = true;
+
+    // Set up event handlers
+    this.setupSocketHandlers();
+  }
+
+  /**
+   * Set up Socket.IO event handlers
+   */
+  setupSocketHandlers() {
+    if (!this.socket) return;
+
+    // Remove existing listeners to prevent duplicates
+    this.socket.off('denoising-stage1-progress');
+    this.socket.off('denoising-stage1-complete');
+    this.socket.off('denoising-mask-progress');
+    this.socket.off('denoising-mask-complete');
+    this.socket.off('denoising-stage2-progress');
+    this.socket.off('denoising-stage2-complete');
+    this.socket.off('denoising-cleanup-progress');
+    this.socket.off('denoising-complete');
+    this.socket.off('denoising-error');
+
+    // Stage 1 progress
+    this.socket.on('denoising-stage1-progress', (data) => {
+      console.log('[DLDenoisingModule] Stage 1 progress:', data);
+      this.handleStage1Progress(data);
+    });
+
+    // Stage 1 complete
+    this.socket.on('denoising-stage1-complete', (data) => {
+      console.log('[DLDenoisingModule] Stage 1 complete:', data);
+      this.handleStage1Complete(data);
+    });
+
+    // Mask extraction progress (autoStructN2V only)
+    this.socket.on('denoising-mask-progress', (data) => {
+      console.log('[DLDenoisingModule] Mask progress:', data);
+      this.handleMaskProgress(data);
+    });
+
+    // Mask extraction complete
+    this.socket.on('denoising-mask-complete', (data) => {
+      console.log('[DLDenoisingModule] Mask complete:', data);
+      this.handleMaskComplete(data);
+    });
+
+    // Stage 2 progress (autoStructN2V only)
+    this.socket.on('denoising-stage2-progress', (data) => {
+      console.log('[DLDenoisingModule] Stage 2 progress:', data);
+      this.handleStage2Progress(data);
+    });
+
+    // Stage 2 complete
+    this.socket.on('denoising-stage2-complete', (data) => {
+      console.log('[DLDenoisingModule] Stage 2 complete:', data);
+      this.handleStage2Complete(data);
+    });
+
+    // Cleanup progress
+    this.socket.on('denoising-cleanup-progress', (data) => {
+      console.log('[DLDenoisingModule] Cleanup progress:', data);
+      this.handleCleanupProgress(data);
+    });
+
+    // Training complete
+    this.socket.on('denoising-complete', (data) => {
+      console.log('[DLDenoisingModule] Training complete:', data);
+      this.handleTrainingComplete(data);
+    });
+
+    // Training error
+    this.socket.on('denoising-error', (data) => {
+      console.error('[DLDenoisingModule] Training error:', data);
+      this.handleTrainingError(data);
+    });
+  }
+
+  /**
+   * Handle Stage 1 progress update
+   */
+  handleStage1Progress(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.updateStage1Progress({
+        epoch: data.epoch,
+        totalEpochs: data.totalEpochs,
+        trainLoss: data.trainLoss,
+        valLoss: data.valLoss,
+        learningRate: data.learningRate,
+        timeElapsed: data.timeElapsed,
+        timeRemaining: data.timeRemaining
+      });
+    }
+
+    // Update loss chart
+    if (this.lossChart && data.epoch && data.trainLoss !== undefined) {
+      this.lossChart.addPoint(data.epoch, data.trainLoss, data.valLoss);
+    }
+
+    // Initialize loss chart if not already done
+    if (this.lossChart && !this.lossChart.chart) {
+      this.lossChart.init();
+    }
+  }
+
+  /**
+   * Handle Stage 1 completion
+   */
+  handleStage1Complete(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.completeStage1({
+        modelPath: data.modelPath
+      });
+    }
+
+    // For N2V-only, we're essentially done (just cleanup remaining)
+    if (this.selectedMethod === 'n2v') {
+      this.state.notify('success', 'N2V training complete, finalizing output...');
+    }
+  }
+
+  /**
+   * Handle mask extraction progress
+   */
+  handleMaskProgress(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.updateMaskProgress({
+        status: data.status || 'extracting'
+      });
+    }
+  }
+
+  /**
+   * Handle mask extraction completion
+   */
+  handleMaskComplete(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.completeMask({
+        kernelSize: data.kernelSize,
+        activePixels: data.activePixels,
+        pattern: data.pattern,
+        isEmpty: data.isEmpty,
+        maskPath: data.maskPath
+      });
+    }
+
+    // Show stage 2 chart container
+    const stage2Container = document.getElementById('stage2LossChartContainer');
+    if (stage2Container && this.selectedMethod === 'autostructn2v') {
+      stage2Container.style.display = 'block';
+      // Initialize stage 2 chart if needed
+      if (this.stage2LossChart && !this.stage2LossChart.chart) {
+        this.stage2LossChart.init();
+      }
+    }
+  }
+
+  /**
+   * Handle Stage 2 progress update
+   */
+  handleStage2Progress(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.updateStage2Progress({
+        epoch: data.epoch,
+        totalEpochs: data.totalEpochs,
+        trainLoss: data.trainLoss,
+        valLoss: data.valLoss,
+        learningRate: data.learningRate,
+        timeElapsed: data.timeElapsed,
+        timeRemaining: data.timeRemaining
+      });
+    }
+
+    // Update stage 2 loss chart
+    if (this.stage2LossChart && data.epoch && data.trainLoss !== undefined) {
+      this.stage2LossChart.addPoint(data.epoch, data.trainLoss, data.valLoss);
+    }
+  }
+
+  /**
+   * Handle Stage 2 completion
+   */
+  handleStage2Complete(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.completeStage2({
+        modelPath: data.modelPath
+      });
+    }
+
+    this.state.notify('success', 'Stage 2 training complete, finalizing output...');
+  }
+
+  /**
+   * Handle cleanup progress
+   */
+  handleCleanupProgress(data) {
+    if (this.trainingProgress) {
+      this.trainingProgress.updateCleanupProgress({
+        status: data.status || 'cleaning'
+      });
+    }
+  }
+
+  /**
+   * Handle training completion
+   */
+  handleTrainingComplete(data) {
+    console.log('[DLDenoisingModule] Training complete with data:', data);
+
+    // Update training progress
+    if (this.trainingProgress) {
+      this.trainingProgress.complete({
+        outputFiles: data.outputFiles
+      });
+    }
+
+    // Store results
+    this.trainingResult = data;
+    this.trainingComplete = true;
+
+    // Update results display
+    if (this.resultsDisplay) {
+      this.resultsDisplay.setResults({
+        outputFiles: data.outputFiles
+      });
+      this.resultsDisplay.refresh();
+    }
+
+    // Show results section
+    this.showTrainingComplete(data);
+
+    // Enable next step button
+    const step3Next = document.getElementById('step3Next');
+    if (step3Next) {
+      step3Next.disabled = false;
+    }
+
+    // Clear saved training ID from state (training is done)
+    this.state.update(`modules.denoising-dl.trainingId`, null);
+
+    // Disconnect socket
+    this.disconnectSocket();
+
+    this.state.notify('success', 'Denoising complete! Your images are ready for download.');
+  }
+
+  /**
+   * Handle training error
+   */
+  handleTrainingError(data) {
+    const errorMessage = data.error || data.message || 'Unknown error occurred';
+
+    if (this.trainingProgress) {
+      this.trainingProgress.fail(errorMessage);
+    }
+
+    this.state.notify('error', `Training failed: ${errorMessage}`);
+
+    // Show error state
+    this.showTrainingReady();
+
+    // Clear saved training ID
+    this.state.update(`modules.denoising-dl.trainingId`, null);
+
+    // Disconnect socket
+    this.disconnectSocket();
+  }
+
+  /**
+   * Cancel ongoing training
+   */
+  async cancelTraining() {
+    if (!this.trainingId) return;
+
+    try {
+      await this.api.cancelTraining(this.trainingId);
+      this.state.notify('info', 'Training cancelled');
+
+      if (this.trainingProgress) {
+        this.trainingProgress.reset();
+      }
+
+      this.showTrainingReady();
+      this.disconnectSocket();
+
+      // Clear training ID
+      this.trainingId = null;
+      this.state.update(`modules.denoising-dl.trainingId`, null);
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error cancelling training:', error);
+      this.state.notify('error', 'Failed to cancel training');
+    }
+  }
+
+  /**
+   * Disconnect from Socket.IO
+   */
+  disconnectSocket() {
+    if (this.socket && this.socketConnected) {
+      this.socket.emit('leave-denoising', this.trainingId);
+      this.socketConnected = false;
+    }
+  }
+
+  // ==================== UI STATE METHODS ====================
+
+  /**
+   * Show training ready state
+   */
+  showTrainingReady() {
+    const startSection = document.getElementById('startTrainingSection');
+    const progressSection = document.getElementById('trainingProgressSection');
+    const chartsSection = document.getElementById('lossChartsSection');
+    const resultsSection = document.getElementById('resultsSection');
+
+    if (startSection) startSection.style.display = 'block';
+    if (progressSection) progressSection.style.display = 'none';
+    if (chartsSection) chartsSection.style.display = 'none';
+    if (resultsSection) resultsSection.style.display = 'none';
+
+    // Reset progress component
+    if (this.trainingProgress) {
+      this.trainingProgress.reset();
+    }
+
+    // Clear loss charts
+    if (this.lossChart) {
+      this.lossChart.clear();
+    }
+    if (this.stage2LossChart) {
+      this.stage2LossChart.clear();
+    }
+  }
+
+  /**
+   * Show training in progress state
+   */
+  showTrainingInProgress() {
+    const startSection = document.getElementById('startTrainingSection');
+    const progressSection = document.getElementById('trainingProgressSection');
+    const chartsSection = document.getElementById('lossChartsSection');
+    const resultsSection = document.getElementById('resultsSection');
+
+    if (startSection) startSection.style.display = 'none';
+    if (progressSection) progressSection.style.display = 'block';
+    if (chartsSection) chartsSection.style.display = 'block';
+    if (resultsSection) resultsSection.style.display = 'none';
+
+    // Initialize the loss chart
+    if (this.lossChart && !this.lossChart.chart) {
+      this.lossChart.init();
+    }
+  }
+
+  /**
+   * Show training complete state
+   */
+  showTrainingComplete(data) {
+    const startSection = document.getElementById('startTrainingSection');
+    const progressSection = document.getElementById('trainingProgressSection');
+    const chartsSection = document.getElementById('lossChartsSection');
+    const resultsSection = document.getElementById('resultsSection');
+
+    if (startSection) startSection.style.display = 'none';
+    if (progressSection) progressSection.style.display = 'block';
+    if (chartsSection) chartsSection.style.display = 'block';
+    if (resultsSection) resultsSection.style.display = 'block';
+
+    // Update results display
+    if (this.resultsDisplay && data.outputFiles) {
+      this.resultsDisplay.setResults({
+        outputFiles: data.outputFiles
+      });
+      this.resultsDisplay.refresh();
+    }
+  }
+
+  // ==================== RESULT METHODS ====================
+
+  /**
+   * Download result for a specific stage
+   */
+  async downloadResult(stage) {
+    if (!this.trainingResult || !this.trainingResult.outputFiles) {
+      this.state.notify('error', 'No results available for download');
+      return;
+    }
+
+    const stackKey = `${stage}_stack`;
+    const filePath = this.trainingResult.outputFiles[stackKey];
+
+    if (!filePath) {
+      this.state.notify('error', `No ${stage} output file found`);
+      return;
+    }
+
+    try {
+      await this.api.downloadFile(filePath);
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error downloading result:', error);
+      this.state.notify('error', `Failed to download: ${error.message}`);
+    }
+  }
+
+  /**
+   * Download all results
+   */
+  async downloadAllResults() {
+    if (!this.trainingResult || !this.trainingResult.outputFiles) {
+      this.state.notify('error', 'No results available for download');
+      return;
+    }
+
+    const files = this.trainingResult.outputFiles;
+    const downloadPromises = [];
+
+    // Download TIFF stacks
+    if (files.stage1_stack) {
+      downloadPromises.push(this.api.downloadFile(files.stage1_stack));
+    }
+    if (files.stage2_stack) {
+      downloadPromises.push(this.api.downloadFile(files.stage2_stack));
+    }
+
+    // Download model files
+    if (files.stage1_model) {
+      downloadPromises.push(this.api.downloadFile(files.stage1_model));
+    }
+    if (files.stage2_model) {
+      downloadPromises.push(this.api.downloadFile(files.stage2_model));
+    }
+    if (files.config) {
+      downloadPromises.push(this.api.downloadFile(files.config));
+    }
+
+    try {
+      await Promise.all(downloadPromises);
+      this.state.notify('success', 'All files downloaded');
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error downloading all results:', error);
+      this.state.notify('error', `Download failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * View result in image viewer
+   */
+  viewInViewer(stage) {
+    if (!this.trainingResult || !this.trainingResult.outputFiles) {
+      this.state.notify('error', 'No results available');
+      return;
+    }
+
+    const stackKey = `${stage}_stack`;
+    const filePath = this.trainingResult.outputFiles[stackKey];
+
+    if (!filePath) {
+      this.state.notify('error', `No ${stage} output file found`);
+      return;
+    }
+
+    // Set viewer file in state and navigate to image viewer
+    this.state.update('modules.denoising-dl.viewerFile', {
+      path: filePath,
+      name: filePath.split('/').pop()
+    });
+
+    // Navigate to image viewer module (Phase 7 implementation)
+    this.state.notify('info', 'Image viewer integration will be implemented in Phase 7');
   }
 
   viewResults() {
