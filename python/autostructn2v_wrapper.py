@@ -91,17 +91,20 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
         if self.stage == 'stage2' and test_loader is None:
             raise ValueError("test_loader is required for stage2 training")
 
+        # Get stage-specific config
+        stage_config = self.hparams.get(self.stage, {})
+
         # Set up early stopping
-        patience = self.hparams.get('early_stopping_patience', 10)
-        min_delta = self.hparams.get('early_stopping_min_delta', 0.001)
+        patience = stage_config.get('early_stopping_patience', self.hparams.get('early_stopping_patience', 10))
+        min_delta = stage_config.get('early_stopping_min_delta', self.hparams.get('early_stopping_min_delta', 0.001))
         early_stopping = EarlyStopping(patience=patience, min_delta=min_delta)
 
         # Path to save best model
         os.makedirs(self.log_dir, exist_ok=True)
         best_model_path = os.path.join(self.log_dir, 'best_model.pth')
 
-        # Get number of epochs
-        num_epochs = self.hparams.get('num_epochs', 100)
+        # Get number of epochs from stage-specific config
+        num_epochs = stage_config.get('num_epochs', self.hparams.get('num_epochs', 100))
 
         # Track timing
         self.start_time = time.time()
@@ -147,7 +150,7 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
                 best_val_loss = val_loss
                 self.save_checkpoint(best_model_path)
 
-            if early_stopping(val_loss) and self.hparams.get('early_stopping', True):
+            if early_stopping(val_loss) and stage_config.get('early_stopping', self.hparams.get('early_stopping', True)):
                 print(f"Early stopping triggered at epoch {epoch}")
                 # Emit final progress
                 if self.progress_callback:
@@ -172,8 +175,8 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
         denoised_patches = []
 
         with torch.no_grad():
-            for batch in train_loader:
-                inputs = batch['image'].to(self.device)
+            for inputs, targets, masks in train_loader:
+                inputs = inputs.to(self.device)
                 outputs = self.model(inputs)
 
                 # Convert to numpy
@@ -192,7 +195,7 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
 # TIFF Stack Handling
 # =============================================================================
 
-def extract_tiff_stack_to_directory(input_path: str, output_dir: str) -> str:
+def extract_tiff_stack_to_directory(input_path: str, output_dir: str) -> tuple:
     """
     Extract a TIFF stack to individual 2D TIF files in a directory.
 
@@ -204,7 +207,7 @@ def extract_tiff_stack_to_directory(input_path: str, output_dir: str) -> str:
         output_dir: Base output directory for the experiment
 
     Returns:
-        str: Path to directory containing extracted images
+        tuple: (path to directory containing extracted images, number of slices)
     """
     import tifffile
 
@@ -241,10 +244,10 @@ def extract_tiff_stack_to_directory(input_path: str, output_dir: str) -> str:
         "extractedDir": extracted_dir
     })
 
-    return extracted_dir
+    return extracted_dir, num_slices
 
 
-def prepare_input_directory(config: dict) -> str:
+def prepare_input_directory(config: dict) -> tuple:
     """
     Prepare input directory for training.
 
@@ -255,7 +258,7 @@ def prepare_input_directory(config: dict) -> str:
         config: Training configuration
 
     Returns:
-        str: Path to directory containing training images
+        tuple: (path to directory containing training images, extracted_images_dir or None, num_slices or None)
     """
     input_dir = config.get('input_dir', '')
     output_dir = config.get('output_dir', '')
@@ -263,7 +266,8 @@ def prepare_input_directory(config: dict) -> str:
     # Check if input_dir is a file (TIFF stack)
     if os.path.isfile(input_dir):
         # It's a file - extract the stack
-        return extract_tiff_stack_to_directory(input_dir, output_dir)
+        extracted_dir, num_slices = extract_tiff_stack_to_directory(input_dir, output_dir)
+        return extracted_dir, extracted_dir, num_slices
 
     # Check if input_dir contains a single TIFF file
     if os.path.isdir(input_dir):
@@ -275,10 +279,11 @@ def prepare_input_directory(config: dict) -> str:
             stack = tifffile.imread(single_file)
             if stack.ndim == 3 and stack.shape[0] > 1:
                 # It's a stack - extract it
-                return extract_tiff_stack_to_directory(single_file, output_dir)
+                extracted_dir, num_slices = extract_tiff_stack_to_directory(single_file, output_dir)
+                return extracted_dir, extracted_dir, num_slices
 
     # input_dir is a directory with multiple images - use as-is
-    return input_dir
+    return input_dir, None, None
 
 
 # =============================================================================
@@ -328,8 +333,12 @@ def run_training(config: dict):
     try:
         # Prepare input directory (extract TIFF stacks if needed)
         # This must be done before validate_config since it may change input_dir
-        prepared_input_dir = prepare_input_directory(config)
+        prepared_input_dir, extracted_images_dir, original_num_slices = prepare_input_directory(config)
         config['input_dir'] = prepared_input_dir
+
+        print(f"[DEBUG] prepared_input_dir: {prepared_input_dir}")
+        print(f"[DEBUG] extracted_images_dir: {extracted_images_dir}")
+        print(f"[DEBUG] original_num_slices: {original_num_slices}")
 
         # Validate configuration
         config = validate_config(config)
@@ -378,7 +387,9 @@ def run_training(config: dict):
             'experiment_dir': dirs['experiment'],
             'training_id': training_id,
             'method': method,
-            'stages_run': []
+            'stages_run': [],
+            'extracted_images_dir': extracted_images_dir,
+            'original_num_slices': original_num_slices
         }
 
         denoised_patches = None
@@ -468,12 +479,20 @@ def run_training(config: dict):
             stage1_denoised_dir = os.path.join(dirs['data'], 'stage1_denoised')
             os.makedirs(stage1_denoised_dir, exist_ok=True)
 
+            print(f"[DEBUG] stage1_denoised_dir: {stage1_denoised_dir}")
+            print(f"[DEBUG] image_paths structure: {[(name, len(paths)) for name, paths in zip(['train', 'val', 'test'], image_paths)]}")
+
             for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
                 split_output_dir = os.path.join(stage1_denoised_dir, split_name)
                 os.makedirs(split_output_dir, exist_ok=True)
                 input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
+                print(f"[DEBUG] Processing {split_name}: input_dir={input_split_dir}, output_dir={split_output_dir}, num_files={len(split_paths)}")
                 if input_split_dir and os.path.exists(input_split_dir):
+                    input_files = os.listdir(input_split_dir)
+                    print(f"[DEBUG] Files in {split_name} input dir: {input_files}")
                     predictor.process_directory(input_split_dir, split_output_dir, show=False)
+                    output_files = os.listdir(split_output_dir)
+                    print(f"[DEBUG] Files in {split_name} output dir after processing: {output_files}")
 
             results['stage1_denoised_dir'] = stage1_denoised_dir
 
@@ -525,25 +544,26 @@ def run_training(config: dict):
             np.save(mask_save_path, struct_mask)
 
             # Check for empty mask (only center pixel or < 2 active pixels)
-            active_pixels = np.sum(struct_mask)
-            kernel_size = struct_mask.shape[0]
-            center_only = active_pixels == 1 and struct_mask[kernel_size//2, kernel_size//2]
+            active_pixels = int(np.sum(struct_mask))
+            kernel_size = int(struct_mask.shape[0])
+            center_only = bool(active_pixels == 1 and struct_mask[kernel_size//2, kernel_size//2])
+            is_empty = bool(active_pixels < 2 or center_only)
 
             emit_result('mask', {
                 "training_id": training_id,
-                "kernelSize": int(kernel_size),
-                "activePixels": int(active_pixels),
-                "centerOnly": bool(center_only),
-                "isEmpty": active_pixels < 2 or center_only,
+                "kernelSize": kernel_size,
+                "activePixels": active_pixels,
+                "centerOnly": center_only,
+                "isEmpty": is_empty,
                 "maskPath": mask_save_path,
                 "pattern": _detect_pattern(struct_mask)
             })
 
             results['mask_path'] = mask_save_path
             results['mask_info'] = {
-                'active_pixels': int(active_pixels),
-                'kernel_size': int(kernel_size),
-                'is_empty': active_pixels < 2 or center_only
+                'active_pixels': active_pixels,
+                'kernel_size': kernel_size,
+                'is_empty': is_empty
             }
 
             # If mask is effectively empty, we can skip stage 2
@@ -622,18 +642,64 @@ def run_training(config: dict):
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
+        # =====================================================================
+        # Stage 2 Denoising (if autoStructN2V)
+        # =====================================================================
+        # After Stage 2 training, run inference on training data to get stage2 denoised output
+        if run_stage2 and 'stage2' in results['stages_run']:
+            emit_progress('stage2_inference', {"training_id": training_id, "status": "starting"})
+
+            # Load stage 2 trained model for inference
+            stage2_trained_model = create_model(
+                'stage2',
+                features=config['stage2']['features'],
+                num_layers=config['stage2']['num_layers'],
+                use_resize_conv=config['stage2'].get('use_resize_conv', True),
+                upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
+            ).to(device)
+
+            checkpoint = torch.load(results['stage2_model_path'], map_location=device)
+            stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
+            stage2_trained_model.eval()
+
+            # Create predictor and denoise
+            predictor = AutoStructN2VPredictor(
+                model=stage2_trained_model,
+                patch_size=config['stage2']['patch_size']
+            )
+
+            stage2_denoised_dir = os.path.join(dirs['data'], 'stage2_denoised')
+            os.makedirs(stage2_denoised_dir, exist_ok=True)
+
+            for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
+                split_output_dir = os.path.join(stage2_denoised_dir, split_name)
+                os.makedirs(split_output_dir, exist_ok=True)
+                input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
+                if input_split_dir and os.path.exists(input_split_dir):
+                    predictor.process_directory(input_split_dir, split_output_dir, show=False)
+
+            results['stage2_denoised_dir'] = stage2_denoised_dir
+
+            emit_progress('stage2_inference', {"training_id": training_id, "status": "complete"})
+
+            # Cleanup
+            del stage2_trained_model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        # =====================================================================
+        # Finalize Output: Create TIFF stacks and cleanup
+        # =====================================================================
+        output_files = finalize_training_output(config, dirs, results, method, training_id)
+        results['output_files'] = output_files
+
         # Emit final completion
         emit_result('complete', {
             "training_id": training_id,
             "method": method,
-            "experimentDir": dirs['experiment'],
-            "stagesRun": results['stages_run']
+            "stagesRun": results['stages_run'],
+            "outputFiles": output_files
         })
-
-        # Save results summary
-        results_path = os.path.join(dirs['experiment'], 'results.json')
-        with open(results_path, 'w') as f:
-            json.dump(results, f, indent=4)
 
         return results
 
@@ -676,6 +742,343 @@ def _detect_pattern(mask: np.ndarray) -> str:
         return "diagonal"
 
     return "irregular"
+
+
+# =============================================================================
+# Output Cleanup and Stack Creation Functions
+# =============================================================================
+
+def collect_denoised_slices(denoised_dir: str) -> list:
+    """
+    Collect all denoised slice TIFF files from train/val/test directories.
+
+    Args:
+        denoised_dir: Path to directory containing train/val/test subdirs with denoised slices
+
+    Returns:
+        List of (slice_number, file_path) tuples, sorted by slice number
+    """
+    import re
+
+    slices = []
+
+    print(f"[DEBUG] Looking for denoised slices in: {denoised_dir}")
+
+    # Check for train/val/test subdirectories
+    for split in ['train', 'val', 'test']:
+        split_dir = os.path.join(denoised_dir, split)
+        if not os.path.exists(split_dir):
+            print(f"[DEBUG] Split directory does not exist: {split_dir}")
+            continue
+
+        files_in_dir = os.listdir(split_dir)
+        print(f"[DEBUG] Found {len(files_in_dir)} files in {split}: {files_in_dir[:5]}{'...' if len(files_in_dir) > 5 else ''}")
+
+        for filename in files_in_dir:
+            if filename.endswith('_denoised.tif') or filename.endswith('.tif'):
+                # Extract slice number from filename (e.g., slice_0042_denoised.tif -> 42)
+                match = re.search(r'slice_(\d+)', filename)
+                if match:
+                    slice_num = int(match.group(1))
+                    file_path = os.path.join(split_dir, filename)
+                    slices.append((slice_num, file_path))
+                else:
+                    print(f"[DEBUG] Could not extract slice number from: {filename}")
+
+    print(f"[DEBUG] Total slices collected: {len(slices)}")
+
+    # Sort by slice number
+    slices.sort(key=lambda x: x[0])
+
+    return slices
+
+
+def create_tiff_stack(slices: list, output_path: str) -> int:
+    """
+    Combine individual slice TIFFs into an ordered TIFF stack.
+
+    Args:
+        slices: List of (slice_number, file_path) tuples, sorted by slice number
+        output_path: Path to save the combined TIFF stack
+
+    Returns:
+        Number of slices in the stack
+    """
+    import tifffile
+
+    if not slices:
+        return 0
+
+    # Read all slices and ensure consistent shapes
+    stack_list = []
+    expected_shape = None
+
+    for i, (slice_num, file_path) in enumerate(slices):
+        img = tifffile.imread(file_path)
+
+        # Ensure 2D
+        if img.ndim == 3 and img.shape[0] == 1:
+            img = img.squeeze(0)
+        elif img.ndim > 2:
+            print(f"[DEBUG] Warning: slice {slice_num} has unexpected shape {img.shape}, taking first frame")
+            img = img[0] if img.ndim == 3 else img.reshape(img.shape[-2], img.shape[-1])
+
+        if i == 0:
+            expected_shape = img.shape
+            print(f"[DEBUG] First slice (#{slice_num}) shape: {img.shape}, dtype: {img.dtype}")
+        elif img.shape != expected_shape:
+            print(f"[DEBUG] Warning: slice {slice_num} shape {img.shape} differs from expected {expected_shape}")
+
+        if i < 5 or i >= len(slices) - 2:
+            print(f"[DEBUG] Slice {i} (orig #{slice_num}): shape={img.shape}")
+
+        stack_list.append(img)
+
+    print(f"[DEBUG] Collected {len(stack_list)} slices into list")
+
+    # Stack into 3D array (Z, H, W)
+    stack = np.stack(stack_list, axis=0)
+    print(f"[DEBUG] np.stack result shape: {stack.shape}, dtype: {stack.dtype}")
+
+    # Ensure output directory exists
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    # Write as standard multi-page TIFF (avoid imagej=True which can cause slice count issues)
+    print(f"[DEBUG] Writing to: {output_path}")
+    tifffile.imwrite(output_path, stack)
+
+    # Verify the written file
+    verification = tifffile.imread(output_path)
+    print(f"[DEBUG] Verification - saved file shape: {verification.shape}, dtype: {verification.dtype}")
+
+    if verification.ndim == 2:
+        print(f"[DEBUG] ERROR: Written file is 2D instead of 3D! Something went wrong.")
+    elif verification.shape[0] != len(stack_list):
+        print(f"[DEBUG] ERROR: Written file has {verification.shape[0]} slices but expected {len(stack_list)}")
+
+    return len(stack_list)
+
+
+def finalize_training_output(config: dict, dirs: dict, results: dict, method: str, training_id: str):
+    """
+    Finalize training output by creating TIFF stacks and cleaning up intermediate files.
+
+    This function:
+    1. Collects all denoised slices from train/val/test directories
+    2. Combines them into single TIFF stacks (sorted by original order)
+    3. Copies model files to final locations
+    4. Saves config to models directory
+    5. Deletes all intermediate files and directories
+
+    Args:
+        config: Training configuration
+        dirs: Directory structure from create_output_directories
+        results: Results dictionary with paths
+        method: 'n2v' or 'autostructn2v'
+        training_id: Training ID for naming
+    """
+    import shutil
+
+    emit_progress('cleanup', {
+        "training_id": training_id,
+        "status": "starting"
+    })
+
+    # Get workspace paths from config
+    workspace_dir = config.get('workspace_dir', os.path.dirname(dirs['experiment']))
+
+    # Create final output directories
+    results_output_dir = os.path.join(workspace_dir, 'results', 'denoising', f'DL_{training_id}')
+    models_output_dir = os.path.join(workspace_dir, 'models', 'denoising', f'DL_{training_id}')
+    os.makedirs(results_output_dir, exist_ok=True)
+    os.makedirs(models_output_dir, exist_ok=True)
+
+    output_files = {}
+
+    # =========================================================================
+    # Stage 1 Output (N2V or autoStructN2V Stage 1)
+    # =========================================================================
+
+    stage1_denoised_dir = results.get('stage1_denoised_dir')
+    if stage1_denoised_dir and os.path.exists(stage1_denoised_dir):
+        emit_progress('cleanup', {
+            "training_id": training_id,
+            "status": "creating_stage1_stack"
+        })
+
+        # Collect and sort slices
+        slices = collect_denoised_slices(stage1_denoised_dir)
+
+        if slices:
+            # Determine output filename based on method
+            if method == 'n2v':
+                stack_filename = f'n2v_denoised_{training_id}.tif'
+                model_filename = 'best_model.pth'
+            else:
+                stack_filename = f'asn2v_stage1_denoised_{training_id}.tif'
+                model_filename = 'stage1_best_model.pth'
+
+            stack_output_path = os.path.join(results_output_dir, stack_filename)
+            slice_count = create_tiff_stack(slices, stack_output_path)
+
+            output_files['stage1_stack'] = stack_output_path
+            output_files['stage1_slice_count'] = slice_count
+
+            emit_progress('cleanup', {
+                "training_id": training_id,
+                "status": "stage1_stack_created",
+                "sliceCount": slice_count,
+                "outputPath": stack_output_path
+            })
+
+    # =========================================================================
+    # Stage 2 Output (autoStructN2V only)
+    # =========================================================================
+
+    if method == 'autostructn2v' and 'stage2' in results.get('stages_run', []):
+        # Stage 2 denoised output should be in a similar structure
+        # After stage 2 training, we need to run inference to get denoised output
+        # For now, check if there's a stage2_denoised_dir
+        stage2_denoised_dir = results.get('stage2_denoised_dir')
+
+        if stage2_denoised_dir and os.path.exists(stage2_denoised_dir):
+            emit_progress('cleanup', {
+                "training_id": training_id,
+                "status": "creating_stage2_stack"
+            })
+
+            slices = collect_denoised_slices(stage2_denoised_dir)
+
+            if slices:
+                stack_filename = f'asn2v_stage2_denoised_{training_id}.tif'
+                stack_output_path = os.path.join(results_output_dir, stack_filename)
+                slice_count = create_tiff_stack(slices, stack_output_path)
+
+                output_files['stage2_stack'] = stack_output_path
+                output_files['stage2_slice_count'] = slice_count
+
+                emit_progress('cleanup', {
+                    "training_id": training_id,
+                    "status": "stage2_stack_created",
+                    "sliceCount": slice_count,
+                    "outputPath": stack_output_path
+                })
+
+    # =========================================================================
+    # Copy Model Files
+    # =========================================================================
+
+    emit_progress('cleanup', {
+        "training_id": training_id,
+        "status": "copying_models"
+    })
+
+    # Copy stage 1 model
+    stage1_model_path = results.get('stage1_model_path')
+    if stage1_model_path and os.path.exists(stage1_model_path):
+        if method == 'n2v':
+            dest_model_path = os.path.join(models_output_dir, 'best_model.pth')
+        else:
+            dest_model_path = os.path.join(models_output_dir, 'stage1_best_model.pth')
+        shutil.copy2(stage1_model_path, dest_model_path)
+        output_files['stage1_model'] = dest_model_path
+
+    # Copy stage 2 model (autoStructN2V only)
+    stage2_model_path = results.get('stage2_model_path')
+    if stage2_model_path and os.path.exists(stage2_model_path):
+        dest_model_path = os.path.join(models_output_dir, 'stage2_best_model.pth')
+        shutil.copy2(stage2_model_path, dest_model_path)
+        output_files['stage2_model'] = dest_model_path
+
+    # Copy structural mask (autoStructN2V only - for documentation/reproducibility)
+    mask_path = results.get('mask_path')
+    if mask_path and os.path.exists(mask_path):
+        dest_mask_path = os.path.join(models_output_dir, 'structural_mask.npy')
+        shutil.copy2(mask_path, dest_mask_path)
+        output_files['structural_mask'] = dest_mask_path
+
+        # Also save mask info as JSON for easy inspection
+        mask_info = results.get('mask_info', {})
+        if mask_info:
+            mask_info_path = os.path.join(models_output_dir, 'mask_info.json')
+            with open(mask_info_path, 'w') as f:
+                json.dump(mask_info, f, indent=2)
+            output_files['mask_info'] = mask_info_path
+
+    # =========================================================================
+    # Save Config to Models Directory
+    # =========================================================================
+
+    config_src = os.path.join(dirs['experiment'], 'config.json')
+    if os.path.exists(config_src):
+        # Add output file info to config
+        config_copy = config.copy() if isinstance(config, dict) else {}
+        config_copy['outputs'] = {
+            'stage1_stack': output_files.get('stage1_stack', ''),
+            'stage2_stack': output_files.get('stage2_stack', ''),
+            'sliceCount': output_files.get('stage1_slice_count', 0)
+        }
+
+        config_dest = os.path.join(models_output_dir, 'config.json')
+        with open(config_dest, 'w') as f:
+            # Make config JSON serializable
+            config_serializable = {}
+            for k, v in config_copy.items():
+                if isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                    config_serializable[k] = v
+                else:
+                    config_serializable[k] = str(v)
+            json.dump(config_serializable, f, indent=4)
+        output_files['config'] = config_dest
+
+    # =========================================================================
+    # Cleanup Intermediate Files
+    # =========================================================================
+
+    emit_progress('cleanup', {
+        "training_id": training_id,
+        "status": "cleaning_up"
+    })
+
+    # Delete the experiment directory (contains all intermediate files)
+    experiment_dir = dirs['experiment']
+    if os.path.exists(experiment_dir):
+        try:
+            shutil.rmtree(experiment_dir)
+            print(f"[DEBUG] Deleted experiment directory: {experiment_dir}")
+        except Exception as e:
+            emit_progress('cleanup', {
+                "training_id": training_id,
+                "status": "cleanup_warning",
+                "message": f"Could not fully delete experiment directory: {str(e)}"
+            })
+
+    # Delete the extracted_images directory (created during TIFF stack extraction)
+    extracted_images_dir = results.get('extracted_images_dir')
+    if extracted_images_dir and os.path.exists(extracted_images_dir):
+        try:
+            shutil.rmtree(extracted_images_dir)
+            print(f"[DEBUG] Deleted extracted_images directory: {extracted_images_dir}")
+        except Exception as e:
+            emit_progress('cleanup', {
+                "training_id": training_id,
+                "status": "cleanup_warning",
+                "message": f"Could not delete extracted_images directory: {str(e)}"
+            })
+
+    # =========================================================================
+    # Emit Final Result
+    # =========================================================================
+
+    emit_progress('cleanup', {
+        "training_id": training_id,
+        "status": "complete",
+        "outputFiles": output_files
+    })
+
+    return output_files
 
 
 # =============================================================================
