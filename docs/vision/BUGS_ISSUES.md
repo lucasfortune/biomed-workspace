@@ -19,17 +19,28 @@ This document contains bugs and/or issues reported by the developer and/or users
     - should stay hidden
     - prio 4
 
+- step navigation functions of base module do not scroll up automatically
+    - should scroll up automatically
+    - prio 3
+
 - mesh creation module: "back to hub" button does not always work and lead to error
     - [ModuleLoader] Error deactivating module mesh: TypeError: property "nextStep" is non-configurable and can't be deleted
     - prio 3
   
 - educational content: all modules that contain novel processesing methods should contain explanations
     - prio 3
+
+- documentation. many new things are created and documentation is not up to date
+    - prio 3
   
 - Image Viewer: image icon too small
     - image icons size was coosen too small and needs to be increased
     - doesnt look good
     - prio 2
+
+- filter denoising module: result is saved twice, once in result folder (correct) and once in upload folder (incorrect)
+    - should only be saved in appropriate results folder
+    - prio 3
 
 - new module: pipeline module
     - for setting up a pipeline and letting it run completely autonomously

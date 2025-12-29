@@ -1,7 +1,7 @@
 # Deep Learning Denoising Module - Product Specification
 
-**Version:** 1.0
-**Last Updated:** 2025-12-25
+**Version:** 1.1
+**Last Updated:** 2025-12-28
 **Status:** Draft
 
 ---
@@ -39,6 +39,24 @@ The module supports two denoising approaches, both powered by the autoStructN2V 
 | **autoStructN2V** | Two-stage pipeline: N2V + Structured N2V with automatic mask extraction | Random noise + structured artifacts (scan lines, camera patterns, periodic interference) |
 
 **Key Insight:** When users select "N2V mode", the module uses the autoStructN2V pipeline with `run_stage2: False`. This simplifies the backend to a single Python module while providing both capabilities.
+
+### 1.2.1 How Self-Supervised Denoising Works
+
+Unlike traditional denoising that requires clean reference images, N2V and autoStructN2V learn to denoise directly from the noisy images themselves:
+
+1. **The images you upload ARE the images that will be denoised**
+   - There is no separate "training data" and "inference data"
+   - The denoising process runs on your actual images
+
+2. **No ground truth required**
+   - The neural network learns noise patterns from the data itself
+   - Clean reference images are not needed
+
+3. **Training = Denoising**
+   - When the denoising process completes (Step 3), your denoised images are ready
+   - Step 4 is only needed for processing ADDITIONAL images from the same recording
+
+**Important:** This means the workflow differs from traditional ML pipelines. Users do NOT need to complete Step 4 to get their denoised results - the results are available immediately after Step 3 completes.
 
 ### 1.3 Target Users
 
@@ -172,6 +190,53 @@ config/
 
 ## 3. User Flow & Steps
 
+### 3.0 Operating Modes
+
+The module supports two operating modes, selectable when the module is launched:
+
+#### Mode A: "Train & Denoise" (Default)
+
+The complete workflow for denoising new images:
+
+```
+Step 1: Select Images to Denoise → Step 2: Configure → Step 3: Run Denoising → [Step 4: Optional]
+```
+
+- Upload the images you want to denoise
+- Configure denoising parameters
+- Run the denoising process (Step 3 produces the denoised output)
+- **Step 4 is optional** - only needed to process additional images from the same recording
+
+#### Mode B: "Import Existing Model"
+
+For reusing a previously trained model on new compatible data:
+
+```
+Import Model → Step 4: Process Additional Images
+```
+
+- Upload a pre-trained model (`.pth` + `config.json`)
+- Validate model compatibility
+- Skip directly to Step 4 to denoise images
+- **Requirement:** New images must be from the same recording type (similar noise characteristics)
+
+**UI Implementation:**
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  SELECT OPERATING MODE                                              │
+│                                                                    │
+│  ┌─────────────────────────────┐  ┌─────────────────────────────┐  │
+│  │  ● Train & Denoise         │  │  ○ Import Existing Model    │  │
+│  │  (Default)                 │  │                             │  │
+│  │                            │  │  Use a pre-trained model    │  │
+│  │  Upload images and run     │  │  to denoise compatible      │  │
+│  │  the full denoising        │  │  images from the same       │  │
+│  │  workflow.                 │  │  recording type.            │  │
+│  └─────────────────────────────┘  └─────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+```
+
 ### 3.1 Step Configuration
 
 ```javascript
@@ -181,30 +246,31 @@ const config = {
   cssPath: '/workspace/js/modules/denoising/css/denoising.css',
   steps: [
     {
-      id: 'upload',
-      name: 'Data Selection',
+      id: 'select',
+      name: 'Select Images',
       canNavigate: true
     },
     {
       id: 'config',
-      name: 'Configuration',
+      name: 'Configure',
       canNavigate: (module) => module.filesValidated && module.methodSelected
     },
     {
-      id: 'training',
-      name: 'Training',
+      id: 'denoise',
+      name: 'Run Denoising',
       canNavigate: (module) => module.configSaved
     },
     {
-      id: 'inference',
-      name: 'Inference',
-      canNavigate: (module) => module.trainingComplete
+      id: 'additional',
+      name: 'Additional (Optional)',
+      canNavigate: (module) => module.trainingComplete,
+      optional: true
     }
   ]
 };
 ```
 
-### 3.2 Step 1: Data Selection
+### 3.2 Step 1: Select Images to Denoise
 
 #### 3.2.1 UI Layout
 
@@ -212,15 +278,19 @@ const config = {
 ┌──────────────────────────────────────────────────────────────────────┐
 │  ← Back to Hub                      Deep Learning Denoising          │
 ├──────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]   │
-│     ●              ○                  ○                  ○           │
+│  [1. Select] ── [2. Configure] ── [3. Denoise] ── [4. Additional*]   │
+│     ●              ○                  ○               ○  *optional   │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  SELECT NOISY IMAGE DATA                                       │  │
+│  │  SELECT IMAGES TO DENOISE                                      │  │
+│  │                                                                │  │
+│  │  ℹ️ The images you select here will be denoised during the     │  │
+│  │    process. After Step 3 completes, your denoised images       │  │
+│  │    will be ready to download.                                  │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
-│  │  │  📁 Raw Images                                           │  │  │
+│  │  │  📁 Images                                              │  │  │
 │  │  │  ┌──────────────────────────────────┐  ┌──────────────┐  │  │  │
 │  │  │  │ Select from workspace...      ▼ │  │   Upload     │  │  │  │
 │  │  │  └──────────────────────────────────┘  └──────────────┘  │  │  │
@@ -296,7 +366,7 @@ const config = {
 
 ---
 
-### 3.3 Step 2: Configuration
+### 3.3 Step 2: Configure Denoising
 
 Step 2 differs significantly based on the selected method.
 
@@ -306,8 +376,8 @@ Step 2 differs significantly based on the selected method.
 ┌──────────────────────────────────────────────────────────────────────┐
 │  ← Back to Hub                      Deep Learning Denoising          │
 ├──────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]   │
-│     ✓              ●                  ○                  ○           │
+│  [1. Select] ── [2. Configure] ── [3. Denoise] ── [4. Additional*]   │
+│     ✓              ●                  ○               ○  *optional   │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
@@ -340,7 +410,6 @@ Step 2 differs significantly based on the selected method.
 - Resize Convolution toggle (default: true)
 - Upsampling Mode: bilinear, nearest, bicubic (default: bilinear)
 - Masking Strategy: local_mean, zeros, random (default: local_mean)
-- ROI Selection toggle + threshold (default: disabled, 0.5)
 
 #### 3.3.2 autoStructN2V Configuration (Two-Column Grid)
 
@@ -348,8 +417,8 @@ Step 2 differs significantly based on the selected method.
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  ← Back to Hub                      Deep Learning Denoising                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]          │
-│     ✓              ●                  ○                  ○                  │
+│  [1. Select] ──── [2. Configure] ──── [3. Denoise] ──── [4. Additional*]    │
+│     ✓                 ●                   ○                 ○  *optional    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
@@ -446,20 +515,20 @@ Step 2 differs significantly based on the selected method.
 
 ---
 
-### 3.4 Step 3: Training
+### 3.4 Step 3: Run Denoising
 
-#### 3.4.1 N2V Training (Single Stage)
+#### 3.4.1 N2V Denoising (Single Stage)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  ← Back to Hub                      Deep Learning Denoising          │
 ├──────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]   │
-│     ✓              ✓                  ●                  ○           │
+│  [1. Select] ── [2. Configure] ── [3. Denoise] ── [4. Additional*]   │
+│     ✓              ✓                  ●               ○  *optional   │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  N2V TRAINING                                                  │  │
+│  │  N2V DENOISING                                                 │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
 │  │  │  📊 Configuration Summary                                │  │  │
@@ -467,9 +536,9 @@ Step 2 differs significantly based on the selected method.
 │  │  │  • Epochs: 100  • Learning Rate: 1e-4  • Batch Size: 4   │  │  │
 │  │  └──────────────────────────────────────────────────────────┘  │  │
 │  │                                                                │  │
-│  │                      [ Start Training ]                        │  │
+│  │                      [ Start Denoising ]                       │  │
 │  │                                                                │  │
-│  │  ─── Training Progress ───────────────────────────────────     │  │
+│  │  ─── Denoising Progress ──────────────────────────────────     │  │
 │  │                                                                │  │
 │  │  Epoch: 45 / 100                    [████████████░░░░░░░] 45%  │  │
 │  │  Current Loss: 0.0234               Best Loss: 0.0198          │  │
@@ -493,21 +562,21 @@ Step 2 differs significantly based on the selected method.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 3.4.2 autoStructN2V Training (Three Collapsible Sections)
+#### 3.4.2 autoStructN2V Denoising (Three Collapsible Sections)
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │  ← Back to Hub                        Deep Learning Denoising             │
 ├───────────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]        │
-│     ✓              ✓                  ●                  ○                │
+│  [1. Select] ──── [2. Configure] ──── [3. Denoise] ──── [4. Additional*]  │
+│     ✓                 ✓                   ●                 ○  *optional  │
 ├───────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  Overall Progress: [█████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 25%   │
 │  Stage 1: ✓ Complete  |  Mask: ✓ Extracted  |  Stage 2: ● In Progress     │
 │                                                                           │
 │  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │  ▼ STAGE 1: N2V Training                               [Complete ✓] │  │
+│  │  ▼ STAGE 1: N2V Denoising                              [Complete ✓] │  │
 │  ├─────────────────────────────────────────────────────────────────────┤  │
 │  │  Epoch: 100/100 • Final Loss: 0.0198 • Duration: 25:12              │  │
 │  │                                                                     │  │
@@ -543,7 +612,7 @@ Step 2 differs significantly based on the selected method.
 │  └─────────────────────────────────────────────────────────────────────┘  │
 │                                                                           │
 │  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │  ▼ STAGE 2: Structured N2V Training                 [In Progress ●] │  │
+│  │  ▼ STAGE 2: Structured N2V Denoising                [In Progress ●] │  │
 │  ├─────────────────────────────────────────────────────────────────────┤  │
 │  │  Epoch: 45/100                  [████████████░░░░░░░░] 45%          │  │
 │  │  Current Loss: 0.0156           Best Loss: 0.0142                   │  │
@@ -590,9 +659,92 @@ When the mask extractor detects no significant structural noise pattern (e.g., m
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 3.4.4 Training Complete State
+#### 3.4.4 Denoising Complete - Results Available
 
-After training completes (either N2V only or full autoStructN2V):
+When denoising completes, the results are immediately available for download. This is the primary workflow output - **Step 4 is optional**.
+
+**N2V Complete State:**
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  ← Back to Hub                      Deep Learning Denoising          │
+├──────────────────────────────────────────────────────────────────────┤
+│  [1. Select] ── [2. Configure] ── [3. Denoise] ── [4. Additional*]   │
+│     ✓              ✓                  ✓               ○  *optional   │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │  ✓ DENOISING COMPLETE                                          │  │
+│  │                                                                │  │
+│  │  Your images have been denoised successfully.                  │  │
+│  │                                                                │  │
+│  │  ┌──────────────────────────────────────────────────────────┐  │  │
+│  │  │  DENOISED RESULTS                                        │  │  │
+│  │  │                                                          │  │  │
+│  │  │  Output File:     n2v_denoised_train_1703.tif            │  │  │
+│  │  │  Slices:          100 images                             │  │  │
+│  │  │  File Size:       52.4 MB                                │  │  │
+│  │  │                                                          │  │  │
+│  │  │  [ Download TIFF Stack ]  [ View in Image Viewer ]       │  │  │
+│  │  └──────────────────────────────────────────────────────────┘  │  │
+│  │                                                                │  │
+│  │  ┌───────────────────────────────────────────────────────────┐ │  │
+│  │  │  💡 Your denoising is complete!                           │ │  │
+│  │  │                                                           │ │  │
+│  │  │  The denoised images are ready to download above.         │ │  │
+│  │  │  Step 4 is OPTIONAL - only use it if you need to          │ │  │
+│  │  │  process additional images from the same recording.       │ │  │
+│  │  └───────────────────────────────────────────────────────────┘ │  │
+│  │                                                                │  │
+│  │  ┌─────────────────────────────┐                               │  │
+│  │  │  Process Additional Images  │  (Optional)                   │  │
+│  │  │  Go to Step 4 →             │                               │  │
+│  │  └─────────────────────────────┘                               │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**autoStructN2V Complete State:**
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  ✓ DENOISING COMPLETE                                                  │
+│                                                                        │
+│  Your images have been denoised successfully using the two-stage       │
+│  autoStructN2V pipeline.                                               │
+│                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  DENOISED RESULTS                                                │  │
+│  │                                                                  │  │
+│  │  Stage 1 (N2V):                                                  │  │
+│  │    File:  asn2v_stage1_denoised_train_1703.tif                   │  │
+│  │    Size:  52.4 MB (100 slices)                                   │  │
+│  │    [ Download ]  [ View ]                                        │  │
+│  │                                                                  │  │
+│  │  Stage 2 (StructN2V):  ← Recommended                             │  │
+│  │    File:  asn2v_stage2_denoised_train_1703.tif                   │  │
+│  │    Size:  52.4 MB (100 slices)                                   │  │
+│  │    [ Download ]  [ View ]                                        │  │
+│  │                                                                  │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                        │
+│  ┌────────────────────────────────────────────────────────────────┐    │
+│  │  💡 Stage 2 output is recommended for images with structured   │    │
+│  │    noise patterns. Stage 1 output is available if you prefer   │    │
+│  │    the intermediate results.                                   │    │
+│  └────────────────────────────────────────────────────────────────┘    │
+│                                                                        │
+│  ┌─────────────────────────────┐                                       │
+│  │  Process Additional Images  │  (Optional)                           │
+│  │  Go to Step 4 →             │                                       │
+│  └─────────────────────────────┘                                       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.4.5 Denoising State Object
+
+After denoising completes (either N2V only or full autoStructN2V):
 
 ```javascript
 {
@@ -621,7 +773,16 @@ After training completes (either N2V only or full autoStructN2V):
 
 ---
 
-### 3.5 Step 4: Inference
+### 3.5 Step 4: Process Additional Images (Optional)
+
+> ⚠️ **THIS STEP IS OPTIONAL**
+>
+> Your denoised images are already available from Step 3.
+> Use this step ONLY if you need to:
+> - Process additional images from the SAME recording/experiment
+> - Apply a previously trained model to new compatible data
+>
+> **IMPORTANT:** Additional images must have the same noise characteristics as the original images. Images from different microscopes, different settings, or different sample types may not denoise properly.
 
 #### 3.5.1 UI Layout
 
@@ -629,35 +790,40 @@ After training completes (either N2V only or full autoStructN2V):
 ┌──────────────────────────────────────────────────────────────────────┐
 │  ← Back to Hub                      Deep Learning Denoising          │
 ├──────────────────────────────────────────────────────────────────────┤
-│  [1. Data] ──── [2. Config] ──── [3. Training] ──── [4. Inference]   │
-│     ✓              ✓                  ✓                  ●           │
+│  [1. Select] ── [2. Configure] ── [3. Denoise] ── [4. Additional*]   │
+│     ✓              ✓                  ✓               ●  *optional   │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  SELECT INFERENCE DATA                                         │  │
+│  │  ⚠️ OPTIONAL: PROCESS ADDITIONAL IMAGES                        │  │
 │  │                                                                │  │
-│  │  ○ Use training data (recommended for initial evaluation)      │  │
-│  │  ○ Upload new data                                             │  │
+│  │  Your original images were already denoised in Step 3.         │  │
+│  │  Use this step only to process MORE images from the same       │  │
+│  │  recording with the same noise characteristics.                │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │  SELECT ADDITIONAL IMAGES                                      │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
-│  │  │  📁 Inference Images                                     │  │  │
+│  │  │  📁 Additional Images                                    │  │  │
 │  │  │  ┌──────────────────────────────────┐  ┌──────────────┐  │  │  │
 │  │  │  │ Select from workspace...      ▼ │  │   Upload     │  │  │  │
 │  │  │  └──────────────────────────────────┘  └──────────────┘  │  │  │
 │  │  └──────────────────────────────────────────────────────────┘  │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
-│  │  │  VALIDATION                                   [Strict]   │  │  │
+│  │  │  COMPATIBILITY CHECK                         [Strict]    │  │  │
 │  │  │  ✓ Dimensions match: 512 x 512 x 80 slices               │  │  │
 │  │  │  ✓ Bit depth compatible: 16-bit                          │  │  │
-│  │  │  ✓ Ready for inference                                   │  │  │
+│  │  │  ⚠ Different source file - ensure same noise type        │  │  │
 │  │  └──────────────────────────────────────────────────────────┘  │  │
 │  │                                                                │  │
-│  │                        [ Run Inference ]                       │  │
+│  │                   [ Process Additional Images ]                │  │
 │  │                                                                │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │                                                                      │
-│  ─── Inference Progress ──────────────────────────────────────────   │
+│  ─── Processing Progress ────────────────────────────────────────    │
 │                                                                      │
 │  Processing slice 40 / 80              [████████████░░░░░░░░] 50%    │
 │  Time Elapsed: 02:15                   Est. Remaining: 02:20         │
@@ -665,70 +831,163 @@ After training completes (either N2V only or full autoStructN2V):
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 3.5.2 Inference Complete
+#### 3.5.2 Processing Complete
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  ✓ INFERENCE COMPLETE                                          │  │
+│  │  ✓ ADDITIONAL IMAGES PROCESSED                                 │  │
 │  │                                                                │  │
-│  │  Successfully denoised 80 slices in 04:35                      │  │
+│  │  Successfully denoised 80 additional slices in 04:35           │  │
 │  │                                                                │  │
 │  │  Output saved to:                                              │  │
-│  │  /workspaces/.../results/denoising/train_1703.../denoised.tif  │  │
+│  │  /workspaces/.../results/denoising/DL_train_1703/additional/   │  │
 │  │                                                                │  │
-│  │  ┌─────────────────────┐  ┌─────────────────────────────┐      │  │
-│  │  │  View in Image      │  │  Start New Analysis         │      │  │
-│  │  │  Viewer             │  │                             │      │  │
-│  │  └─────────────────────┘  └─────────────────────────────┘      │  │
+│  │  ┌──────────────────────┐  ┌─────────────────────────────┐     │  │
+│  │  │  Download Results    │  │  View in Image Viewer       │     │  │
+│  │  └──────────────────────┘  └─────────────────────────────┘     │  │
+│  │                                                                │  │
+│  │  ┌─────────────────────────────┐                               │  │
+│  │  │  Process More Images        │                               │  │
+│  │  └─────────────────────────────┘                               │  │
 │  │                                                                │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 3.5.3 Strict Validation Requirements
+#### 3.5.3 Compatibility Requirements
 
 | Property | Requirement | Error Message |
 |----------|-------------|---------------|
-| Width | Must match training data | "Image width (X) does not match training data (Y)" |
-| Height | Must match training data | "Image height (X) does not match training data (Y)" |
+| Width | Must match original images | "Image width (X) does not match original data (Y)" |
+| Height | Must match original images | "Image height (X) does not match original data (Y)" |
 | Bit depth | Must be compatible (8 or 16-bit) | "Bit depth (X-bit) not compatible with trained model" |
 | Format | Must be TIFF stack | "File must be a TIFF image stack" |
 
 ---
 
+### 3.6 Model Import Mode
+
+Model Import Mode allows users to skip the denoising process and use a previously trained model to process new images.
+
+#### 3.6.1 When to Use Model Import
+
+- **Reusing a model:** You have a model trained on similar data and want to process new images from the same type of recording
+- **Sharing models:** A colleague shared a trained model for your data type
+- **Batch processing:** You want to process multiple datasets with the same noise characteristics
+
+#### 3.6.2 Required Files
+
+| File | Description |
+|------|-------------|
+| `*.pth` | PyTorch model weights file (best_model.pth or stage*_best_model.pth) |
+| `config.json` | Configuration file with training parameters and input dimensions |
+
+#### 3.6.3 Model Import UI
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  IMPORT EXISTING MODEL                                              │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  📁 Model File (.pth)                                        │  │
+│  │  ┌────────────────────────────────────┐  ┌──────────────┐    │  │
+│  │  │ No file selected                   │  │   Browse     │    │  │
+│  │  └────────────────────────────────────┘  └──────────────┘    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  📁 Config File (.json)                                      │  │
+│  │  ┌────────────────────────────────────┐  ┌──────────────┐    │  │
+│  │  │ No file selected                   │  │   Browse     │    │  │
+│  │  └────────────────────────────────────┘  └──────────────┘    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  MODEL VALIDATION                                             │  │
+│  │  ✓ Model architecture: FlexibleUNet (64 features, 2 layers)  │  │
+│  │  ✓ Method: N2V (single-stage)                                │  │
+│  │  ✓ Original dimensions: 512 x 512                            │  │
+│  │  ✓ Ready for inference                                       │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  ⚠ COMPATIBILITY WARNING                                     │  │
+│  │                                                              │  │
+│  │  This model was trained on specific data. For best results:  │  │
+│  │  • Use images from the SAME microscope/camera                │  │
+│  │  • Use the SAME acquisition settings                         │  │
+│  │  • Use the SAME sample type                                  │  │
+│  │                                                              │  │
+│  │  Results may be poor if noise characteristics differ.        │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│                              [ Continue to Step 4 → ]              │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3.6.4 Validation Process
+
+1. **File format check:** Verify .pth and .json files are valid
+2. **Architecture extraction:** Parse config.json for model architecture
+3. **Compatibility check:** Ensure model architecture is supported
+4. **Dimension extraction:** Get original input dimensions for validation
+
+---
+
 ## 4. Data Management
 
-### 4.1 Directory Structure
+### 4.1 Simplified Output Structure
+
+The autoStructN2V library generates many intermediate files during processing. Our wrapper simplifies this to keep only essential outputs.
+
+#### 4.1.1 N2V Mode (Single-Stage) Output
 
 ```
-/workspaces/{sessionId}/
-├── uploads/
-│   └── denoising/
-│       └── {filename}.tif           # Uploaded noisy data
+workspaces/{sessionId}/
+├── results/denoising/DL_{trainingId}/
+│   └── n2v_denoised_{trainingId}.tif     # Combined TIFF stack (all slices in original order)
 │
-├── models/
-│   └── denoising/
-│       └── {trainingId}/
-│           ├── config.json          # Full configuration
-│           ├── results.json         # Training metrics & summary
-│           ├── stage1_model.pth     # Stage 1 (N2V) model
-│           ├── stage2_model.pth     # Stage 2 model (if autoStructN2V)
-│           └── extracted_mask.npy   # Mask kernel (if autoStructN2V)
-│
-└── results/
-    └── denoising/
-        └── {trainingId}/
-            ├── denoised.tif         # Final denoised output
-            ├── metadata.json        # Processing metadata
-            └── comparison/          # Optional comparison images
-                ├── original_slice_50.png
-                └── denoised_slice_50.png
+└── models/denoising/DL_{trainingId}/
+    ├── best_model.pth                     # Trained model weights
+    └── config.json                        # Full configuration
 ```
 
-### 4.2 Config.json Structure
+#### 4.1.2 autoStructN2V Mode (Two-Stage) Output
+
+```
+workspaces/{sessionId}/
+├── results/denoising/DL_{trainingId}/
+│   ├── asn2v_stage1_denoised_{trainingId}.tif   # Stage 1 output stack
+│   └── asn2v_stage2_denoised_{trainingId}.tif   # Stage 2 output stack (final/recommended)
+│
+└── models/denoising/DL_{trainingId}/
+    ├── stage1_best_model.pth              # Stage 1 model weights
+    ├── stage2_best_model.pth              # Stage 2 model weights
+    └── config.json                        # Full configuration
+```
+
+### 4.2 Output Cleanup Process
+
+The wrapper script performs the following cleanup after denoising completes:
+
+1. **Collect denoised slices:** Gather all `slice_XXXX_denoised.tif` files from train/val/test directories
+2. **Sort by slice number:** Extract numeric index from filename (e.g., `slice_0042` → 42)
+3. **Create TIFF stack:** Combine sorted slices into single multi-page TIFF
+4. **Copy essential files:** Model weights (.pth) and config to final locations
+5. **Delete intermediate data:** Remove all temporary directories, TensorBoard logs, duplicate files
+
+**What Gets Deleted:**
+- Nested duplicate directories (`dl_denoise_xxx/dl_denoise_xxx/`)
+- Original images duplicated in output directories
+- TensorBoard logs (`runs/` directories)
+- Train/val/test split directories
+- Individual slice TIFF files (replaced by combined stack)
+- Intermediate checkpoints (only best model kept)
+
+### 4.3 Config.json Structure
 
 ```json
 {
@@ -769,44 +1028,32 @@ After training completes (either N2V only or full autoStructN2V):
       "percentile_decay": 1.15,
       "max_true_pixels": 25
     }
+  },
+  "outputs": {
+    "stage1_stack": "asn2v_stage1_denoised_train_1703512345678.tif",
+    "stage2_stack": "asn2v_stage2_denoised_train_1703512345678.tif",
+    "sliceCount": 100
   }
 }
 ```
 
-### 4.3 Results.json Structure
+### 4.4 Lineage Tracking
+
+Output files are registered with the workspace FileService for lineage tracking:
 
 ```json
 {
-  "trainingId": "train_1703512345678",
-  "status": "complete",
-  "stage1": {
-    "startedAt": "2025-12-25T12:00:00Z",
-    "completedAt": "2025-12-25T12:25:12Z",
-    "duration": "25:12",
-    "finalLoss": 0.0198,
-    "bestEpoch": 95,
-    "trainLossHistory": [0.5, 0.3, ...],
-    "valLossHistory": [0.52, 0.31, ...]
-  },
-  "maskExtraction": {
-    "completedAt": "2025-12-25T12:25:45Z",
-    "kernelSize": 11,
-    "activePixels": 5,
-    "patternType": "cross"
-  },
-  "stage2": {
-    "startedAt": "2025-12-25T12:25:50Z",
-    "completedAt": "2025-12-25T13:01:35Z",
-    "duration": "35:45",
-    "finalLoss": 0.0142,
-    "bestEpoch": 88,
-    "trainLossHistory": [0.08, 0.06, ...],
-    "valLossHistory": [0.085, 0.062, ...]
-  },
-  "inference": {
-    "completedAt": "2025-12-25T13:06:10Z",
-    "slicesProcessed": 100,
-    "outputPath": "/workspaces/abc123/results/denoising/train_1703.../denoised.tif"
+  "fileId": "file_abc123",
+  "path": "results/denoising/DL_train_1703/asn2v_stage2_denoised_train_1703.tif",
+  "type": "denoised_stack",
+  "createdAt": "2025-12-25T13:01:35Z",
+  "lineage": {
+    "operation": "dl_denoising",
+    "method": "autostructn2v",
+    "stage": 2,
+    "trainingId": "train_1703512345678",
+    "sourceFile": "uploads/denoising/noisy_stack.tif",
+    "modelUsed": "models/denoising/DL_train_1703/stage2_best_model.pth"
   }
 }
 ```

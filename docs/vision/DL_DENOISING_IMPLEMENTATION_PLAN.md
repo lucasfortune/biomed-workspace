@@ -4,6 +4,12 @@
 
 Implement the Deep Learning Denoising Module using the autoStructN2V library for self-supervised image denoising. The module supports both N2V (Stage 1 only) and autoStructN2V (Stage 1 + Mask Extraction + Stage 2) methods.
 
+**Key Concepts (Self-Supervised Denoising):**
+- The images uploaded ARE the images that will be denoised (training = denoising)
+- No ground truth required - the network learns from the noisy data itself
+- Step 3 ("Run Denoising") produces the final denoised output
+- Step 4 ("Process Additional Images") is **OPTIONAL** - only for processing more images from the same recording
+
 **Key References:**
 - Product Spec: `docs/vision/spec_files/DL_DENOISING_MODULE_PRODUCT_SPEC.md`
 - autoStructN2V Codebase: `docs/autoStructN2V/codebase/`
@@ -14,6 +20,7 @@ Implement the Deep Learning Denoising Module using the autoStructN2V library for
 - Scope: Full spec (N2V + autoStructN2V)
 - GPU: CPU fallback with warning
 - Mask UI: Full visualization with parameter adjustment
+- **Simplified Output:** Only keep essential files (TIFF stacks + models + config)
 
 ---
 
@@ -57,7 +64,7 @@ python python/utils/gpu_check.py
 
 ## Phase 1: Module Foundation & Registry
 
-**Objective:** Create module skeleton, register in workspace, implement Step 1 (Data Selection + Method Choice).
+**Objective:** Create module skeleton, register in workspace, implement Step 1 (Data Selection + Method Choice) with mode selection.
 
 ### To-Do List
 
@@ -71,9 +78,17 @@ python python/utils/gpu_check.py
   ```
 - [ ] Update `registry.js`: Change `denoising-dl` status to `'available'`
 - [ ] Implement `DLDenoisingModule.js`:
-  - Extend BaseModule with 4-step config (Data, Config, Training, Inference)
+  - Extend BaseModule with 4-step config using new step names:
+    - Step 1: "Select Images" (canNavigate: true)
+    - Step 2: "Configure" (canNavigate when validated)
+    - Step 3: "Run Denoising" (canNavigate when configured)
+    - Step 4: "Additional (Optional)" (canNavigate when complete, optional: true)
+  - Add **Mode Selection UI** at module entry:
+    - Mode A: "Train & Denoise" (default) - full workflow
+    - Mode B: "Import Existing Model" - skip to Step 4
   - Render Step 1 with FileSelector and Method Selector
   - Method selector: N2V vs autoStructN2V radio buttons with descriptions
+  - Add info box: "The images you select here will be denoised during the process"
 - [ ] Create `DLDenoisingAPI.js` with stub methods
 - [ ] Create `dl-denoising.css` importing module-base.css
 - [ ] Wire up test data loading via existing `/api/denoising/test-data`
@@ -216,7 +231,7 @@ python python/utils/gpu_check.py
 
 ## Phase 4: Training Backend & N2V Flow
 
-**Objective:** Implement Python wrapper, training endpoints, Socket.IO, and N2V training.
+**Objective:** Implement Python wrapper, training endpoints, Socket.IO, and N2V training with output cleanup.
 
 ### To-Do List
 
@@ -226,6 +241,7 @@ python python/utils/gpu_check.py
   - Result emission: `DENOISING_RESULT:{json}`
   - Error emission: `DENOISING_ERROR:{json}`
   - GPU/CPU auto-detection with fallback
+  - **Output cleanup and stack creation** (see Phase 4.5 for details)
 - [ ] Create `src/services/DenoisingService.js`:
   - Training session management
   - Progress parsing from Python stdout
@@ -266,17 +282,67 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
 
 ### Manual Testing
 
-1. Configure N2V training, click "Start Training"
+1. Configure N2V training, click "Start Denoising"
 2. Verify training starts (check server logs)
 3. Verify Socket.IO connection established
-4. Verify model saved to `models/<sessionId>/denoising/<trainingId>/`
+4. Verify model saved to `models/<sessionId>/denoising/DL_<trainingId>/`
 5. Test with CPU (if no GPU) → verify warning shown, training proceeds
 
 ---
 
-## Phase 5: Training UI & Charts
+## Phase 4.5: Output Cleanup & Stack Creation
 
-**Objective:** Implement Step 3 training UI with progress, loss charts, and state management.
+**Objective:** Simplify autoStructN2V output by keeping only essential files and combining slices into TIFF stacks.
+
+### To-Do List
+
+- [ ] Add `finalize_training_output()` function to `autostructn2v_wrapper.py`:
+  - Collect all denoised slice TIFFs from train/val/test directories
+  - Sort slices by original slice number (slice_0000, slice_0001, ...)
+  - Combine into single TIFF stack using tifffile
+  - Copy model file(s) to correct location
+  - Copy config.json to models directory
+  - Delete all intermediate files and directories
+  - Emit progress during cleanup
+
+- [ ] Add stack creation helper function:
+  ```python
+  def create_tiff_stack(slice_dirs: list, output_path: str) -> int:
+      """Combine individual slice TIFFs into ordered stack."""
+      # Collect all slice files from train/val/test
+      # Sort by slice number (extract from filename)
+      # Stack and save as single TIFF
+      # Return slice count
+  ```
+
+- [ ] Update `run_training()` to call cleanup after completion:
+  - For N2V-only: Cleanup after Stage 1 completes
+  - For autoStructN2V: Wait until Stage 2 completes before cleanup
+
+- [ ] Output file naming:
+  - N2V: `n2v_denoised_<trainingId>.tif`
+  - autoStructN2V Stage 1: `asn2v_stage1_denoised_<trainingId>.tif`
+  - autoStructN2V Stage 2: `asn2v_stage2_denoised_<trainingId>.tif`
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `python/autostructn2v_wrapper.py` | Add cleanup and stack creation functions |
+
+### Manual Testing
+
+1. Run N2V training → verify single TIFF stack created in `results/denoising/DL_<trainingId>/`
+2. Run autoStructN2V training → verify two TIFF stacks (stage1, stage2) created
+3. Verify models saved to `models/denoising/DL_<trainingId>/` with correct names
+4. Verify intermediate files are deleted (no nested directories, no TensorBoard logs)
+5. Open output TIFF stack → verify slice order matches original input
+
+---
+
+## Phase 5: Denoising UI, Charts & Results Display
+
+**Objective:** Implement Step 3 denoising UI with progress, loss charts, results display, and state management.
 
 ### To-Do List
 
@@ -296,11 +362,19 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
 - [ ] Implement training state persistence:
   - Save training ID to StateManager
   - Rejoin room on page refresh
-  - Show "Training in Progress" if resuming
-- [ ] Training UI states:
-  - Ready → Show "Start Training" button
-  - Training → Show progress, hide button
-  - Complete → Show results, enable "Next"
+  - Show "Denoising in Progress" if resuming
+- [ ] Denoising UI states:
+  - Ready → Show "Start Denoising" button
+  - Denoising → Show progress, hide button
+  - Complete → Show "Denoising Complete" results section
+
+- [ ] **Create "Denoising Complete" results section:**
+  - Display denoised TIFF stack info (filename, slice count, file size)
+  - Download button for TIFF stack (single file)
+  - "View in Image Viewer" button
+  - Info box: "Your denoising is complete! Step 4 is OPTIONAL"
+  - "Process Additional Images (Optional)" button linking to Step 4
+  - For autoStructN2V: Show both Stage 1 and Stage 2 stacks with "Recommended" label on Stage 2
 
 ### Files to Create
 
@@ -389,24 +463,41 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
 
 ---
 
-## Phase 7: Inference & Polish
+## Phase 7: Additional Processing, Model Import & Polish
 
-**Objective:** Implement Step 4 (Inference), error handling, and final polish.
+**Objective:** Implement Step 4 (Optional), model import mode, error handling, and final polish.
+
+> **Note:** Step 4 is OPTIONAL. Denoised output from Step 3 is the primary result.
+> Step 4 is only needed for processing additional images from the same recording.
 
 ### To-Do List
 
 - [ ] Add inference endpoints:
-  - `POST /api/denoising/dl/run-inference`
+  - `POST /api/denoising/dl/process-additional`
   - Progress via Socket.IO: `denoising-inference-progress`
 - [ ] Add inference support to `autostructn2v_wrapper.py`:
   - Load trained model (Stage 1 or Stage 2 based on method)
   - Process TIFF slice by slice with progress
-  - Save denoised output
-- [ ] Implement Step 4 UI:
-  - Data selection: "Use training data" or "Upload new"
-  - Strict validation (dimensions must match training data)
-  - Inference progress bar
-  - Completion: "View in Image Viewer" + "Start New Analysis"
+  - Save denoised output to `additional/` subdirectory
+- [ ] Implement Step 4 UI (Optional):
+  - Prominent "OPTIONAL" notice at top
+  - Explanation: "Your denoised images are already available from Step 3"
+  - File selector for additional images
+  - Compatibility check with warnings for different source files
+  - Processing progress bar
+  - Completion: Download + "View in Image Viewer" + "Process More Images"
+
+- [ ] **Implement Model Import Mode:**
+  - Add "Import Model" mode selection in Phase 1 Mode Selection UI
+  - Create model upload UI (.pth + config.json)
+  - Validate uploaded model files:
+    - Parse config.json for architecture info
+    - Check .pth file is valid PyTorch weights
+    - Extract original dimensions for compatibility checks
+  - Show compatibility warnings
+  - Skip directly to Step 4 when model imported
+  - Add endpoint: `POST /api/denoising/dl/import-model`
+
 - [ ] Error handling:
   - Training errors (GPU OOM → suggest reduce batch size)
   - Validation errors (clear messages)
@@ -422,6 +513,7 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
   - Disabled states during processing
   - Tooltips for parameters
   - Responsive design fixes
+  - Step 4 indicator shows "(Optional)" suffix
 - [ ] Integration with ImageViewer:
   - Set `modules.denoising.viewerFile` state
   - Navigate to ImageViewer on "View Results"
@@ -437,11 +529,12 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
 
 ### Manual Testing
 
-1. **Full N2V workflow**: Data → Config → Train → Infer → View
-2. **Full autoStructN2V workflow**: Data → Config → Train (Stage 1) → Mask → Train (Stage 2) → Infer → View
-3. Test inference with training data
-4. Test inference with new upload (matching dimensions)
-5. Test error scenarios:
+1. **Full N2V workflow** (without Step 4): Data → Config → Denoise → Download results
+2. **Full autoStructN2V workflow** (without Step 4): Data → Config → Denoise (Stage 1) → Mask → Denoise (Stage 2) → Download results
+3. **N2V with additional processing**: Complete Step 3 → Go to Step 4 → Upload additional images → Process → Download
+4. **Model Import workflow**: Select "Import Model" mode → Upload .pth + config.json → Go to Step 4 → Process images
+5. Test Step 4 compatibility check with mismatched dimensions
+6. Test error scenarios:
    - Invalid file upload
    - Mismatched dimensions for inference
    - Training failure simulation (if possible)
@@ -453,14 +546,14 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
 
 ## Files Summary
 
-### New Files (17 total)
+### New Files (19 total)
 
 | File | Phase |
 |------|-------|
 | `python/utils/__init__.py` | 0 |
 | `python/utils/gpu_check.py` | 0 |
 | `python/validate_dl_tiff.py` | 2 |
-| `python/autostructn2v_wrapper.py` | 4 |
+| `python/autostructn2v_wrapper.py` | 4, 4.5 |
 | `python/extract_mask_preview.py` | 6 |
 | `config/denoising_presets.json` | 2 |
 | `src/services/DenoisingService.js` | 4 |
@@ -472,8 +565,10 @@ def emit_error(stage, message)  # DENOISING_ERROR:{json}
 | `public/workspace/js/modules/denoising-dl/components/CollapsibleSection.js` | 3 |
 | `public/workspace/js/modules/denoising-dl/components/TrainingProgress.js` | 5 |
 | `public/workspace/js/modules/denoising-dl/components/LossChart.js` | 5 |
+| `public/workspace/js/modules/denoising-dl/components/ResultsDisplay.js` | 5 |
 | `public/workspace/js/modules/denoising-dl/components/MaskVisualization.js` | 6 |
 | `public/workspace/js/modules/denoising-dl/components/MaskParameterPanel.js` | 6 |
+| `public/workspace/js/modules/denoising-dl/components/ModelImportPanel.js` | 7 |
 
 ### Modified Files (5 total)
 
