@@ -47,6 +47,40 @@ except ImportError as e:
 # Progress Emission Functions
 # =============================================================================
 
+def sanitize_config(config: dict) -> dict:
+    """
+    Recursively sanitize config values, converting strings to appropriate types.
+
+    This is necessary because JSON values from the frontend may be strings
+    when they should be numbers or booleans.
+    """
+    result = {}
+    for key, value in config.items():
+        if isinstance(value, dict):
+            result[key] = sanitize_config(value)
+        elif isinstance(value, str):
+            # Try to convert to number
+            if value.lower() == 'true':
+                result[key] = True
+            elif value.lower() == 'false':
+                result[key] = False
+            elif value.lower() == 'null' or value.lower() == 'none':
+                result[key] = None
+            else:
+                try:
+                    # Try integer first
+                    if '.' in value:
+                        result[key] = float(value)
+                    else:
+                        result[key] = int(value)
+                except ValueError:
+                    # Keep as string if conversion fails
+                    result[key] = value
+        else:
+            result[key] = value
+    return result
+
+
 def emit_progress(stage: str, data: dict):
     """Emit progress message for Node.js to parse."""
     message = {"stage": stage, **data}
@@ -1298,6 +1332,8 @@ def main():
     try:
         with open(args.config) as f:
             config = json.load(f)
+        # Sanitize config to ensure proper types (convert strings to numbers/booleans)
+        config = sanitize_config(config)
     except Exception as e:
         emit_error('init', f'Failed to load config: {str(e)}')
         sys.exit(1)

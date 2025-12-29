@@ -173,7 +173,7 @@ class TrainingProgress {
     return `
       <div class="progress-initializing">
         <div class="spinner-large"></div>
-        <p>Initializing...</p>
+        <p>${this.state.statusMessage || 'Initializing...'}</p>
       </div>
     `;
   }
@@ -202,15 +202,15 @@ class TrainingProgress {
         <div class="loss-values">
           <div class="loss-item">
             <span class="loss-label">Train Loss</span>
-            <span class="loss-value">${stage.trainLoss !== null ? stage.trainLoss.toFixed(6) : '-'}</span>
+            <span class="loss-value">${stage.trainLoss != null ? stage.trainLoss.toFixed(6) : '-'}</span>
           </div>
           <div class="loss-item">
             <span class="loss-label">Val Loss</span>
-            <span class="loss-value">${stage.valLoss !== null ? stage.valLoss.toFixed(6) : '-'}</span>
+            <span class="loss-value">${stage.valLoss != null ? stage.valLoss.toFixed(6) : '-'}</span>
           </div>
           <div class="loss-item">
             <span class="loss-label">Learning Rate</span>
-            <span class="loss-value">${stage.learningRate !== null ? stage.learningRate.toExponential(2) : '-'}</span>
+            <span class="loss-value">${stage.learningRate != null ? stage.learningRate.toExponential(2) : '-'}</span>
           </div>
         </div>
 
@@ -470,6 +470,15 @@ class TrainingProgress {
   start() {
     this.state.status = 'running';
     this.state.currentStage = 'init';
+    this.state.statusMessage = 'Initializing...';
+    this._refresh();
+  }
+
+  /**
+   * Update status message (for init/data phases)
+   */
+  updateStatus(message) {
+    this.state.statusMessage = message;
     this._refresh();
   }
 

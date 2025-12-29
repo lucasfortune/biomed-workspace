@@ -13,6 +13,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
+// fs is already imported for async operations; sync functions used for file tracking
 
 class DenoisingService {
   /**
@@ -20,11 +21,13 @@ class DenoisingService {
    * @param {object} options - Configuration options
    * @param {string} options.pythonPath - Path to Python interpreter
    * @param {object} options.sessionTracker - SessionTracker instance
+   * @param {object} options.workspaceManager - WorkspaceManager instance
    * @param {object} options.logger - Logger instance
    */
   constructor(options = {}) {
     this.pythonPath = options.pythonPath;
     this.sessionTracker = options.sessionTracker;
+    this.workspaceManager = options.workspaceManager;
     this.logger = options.logger;
 
     // Map to track active denoising sessions
@@ -314,6 +317,12 @@ class DenoisingService {
       } else if (stage === 'complete') {
         session.status = 'completed';
         session.experimentDir = data.experimentDir;
+        session.outputFiles = data.outputFiles;
+
+        // Track output files in workspace metadata
+        if (data.outputFiles && session.sessionId && this.workspaceManager) {
+          this._trackOutputFiles(session.sessionId, data.outputFiles, session.method, data.training_id);
+        }
       }
     }
 
@@ -322,6 +331,106 @@ class DenoisingService {
 
     if (this.logger) {
       this.logger.debug(`Emitted ${stage} complete to ${roomName}`);
+    }
+  }
+
+  /**
+   * Track output files in workspace metadata
+   * @private
+   */
+  _trackOutputFiles(sessionId, outputFiles, method, trainingId) {
+    try {
+      const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
+
+      // Track denoised TIFF stacks
+      if (outputFiles.stage1_stack && fs.existsSync(outputFiles.stage1_stack)) {
+        const relativePath = path.relative(workspacePath, outputFiles.stage1_stack);
+        const stats = fs.statSync(outputFiles.stage1_stack);
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(outputFiles.stage1_stack),
+          path: relativePath,
+          category: 'denoised_images',
+          size: stats.size,
+          folderId: null,
+          lineage: {
+            operation: `denoising-${method}`,
+            trainingId: trainingId
+          }
+        });
+        if (this.logger) {
+          this.logger.debug(`Tracked stage1 output: ${relativePath}`);
+        }
+      }
+
+      if (outputFiles.stage2_stack && fs.existsSync(outputFiles.stage2_stack)) {
+        const relativePath = path.relative(workspacePath, outputFiles.stage2_stack);
+        const stats = fs.statSync(outputFiles.stage2_stack);
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(outputFiles.stage2_stack),
+          path: relativePath,
+          category: 'denoised_images',
+          size: stats.size,
+          folderId: null,
+          lineage: {
+            operation: `denoising-${method}-stage2`,
+            trainingId: trainingId
+          }
+        });
+        if (this.logger) {
+          this.logger.debug(`Tracked stage2 output: ${relativePath}`);
+        }
+      }
+
+      // Track model files
+      if (outputFiles.stage1_model && fs.existsSync(outputFiles.stage1_model)) {
+        const relativePath = path.relative(workspacePath, outputFiles.stage1_model);
+        const stats = fs.statSync(outputFiles.stage1_model);
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(outputFiles.stage1_model),
+          path: relativePath,
+          category: 'models',
+          size: stats.size,
+          folderId: null,
+          lineage: {
+            operation: `denoising-${method}-model`,
+            trainingId: trainingId
+          }
+        });
+      }
+
+      if (outputFiles.stage2_model && fs.existsSync(outputFiles.stage2_model)) {
+        const relativePath = path.relative(workspacePath, outputFiles.stage2_model);
+        const stats = fs.statSync(outputFiles.stage2_model);
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(outputFiles.stage2_model),
+          path: relativePath,
+          category: 'models',
+          size: stats.size,
+          folderId: null,
+          lineage: {
+            operation: `denoising-${method}-model-stage2`,
+            trainingId: trainingId
+          }
+        });
+      }
+
+      // Track config file
+      if (outputFiles.config && fs.existsSync(outputFiles.config)) {
+        const relativePath = path.relative(workspacePath, outputFiles.config);
+        const stats = fs.statSync(outputFiles.config);
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(outputFiles.config),
+          path: relativePath,
+          category: 'config',
+          size: stats.size,
+          folderId: null
+        });
+      }
+
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('Error tracking output files:', error);
+      }
     }
   }
 
@@ -534,18 +643,55 @@ class DenoisingService {
   /**
    * Regenerate mask with new parameters
    * @param {object} params - Mask parameters
+   * @param {string} params.trainingId - Training session ID
+   * @param {string} params.stage1Dir - Path to Stage 1 experiment directory
+   * @param {object} params.parameters - Mask extractor parameters
    * @param {object} io - Socket.IO instance
+   * @returns {Promise<object>} Mask result data
    */
   async regenerateMask(params, io) {
-    const { trainingId, inputPath, outputDir, extractorParams } = params;
+    const { trainingId, stage1Dir, parameters } = params;
 
     if (!this.pythonPath) {
-      this._emitError(io, trainingId, 'mask', 'Python path not configured');
-      return;
+      throw new Error('Python path not configured');
     }
+
+    // Find denoised images from Stage 1
+    // They should be in stage1Dir/extracted_images/ or in the denoised output
+    const session = this.getSession(trainingId);
+    let inputPath;
+
+    // Check for Stage 1 denoised stack in results directory
+    const resultsDir = path.join(stage1Dir, '..', '..', 'results', 'denoising');
+    const possiblePaths = [
+      path.join(resultsDir, `DL_${trainingId}`, `asn2v_stage1_denoised_${trainingId}.tif`),
+      path.join(resultsDir, `DL_${trainingId}`, `n2v_denoised_${trainingId}.tif`),
+      session?.config?.input_dir  // Original input as fallback
+    ];
+
+    for (const p of possiblePaths) {
+      if (p && fs.existsSync(p)) {
+        inputPath = p;
+        break;
+      }
+    }
+
+    if (!inputPath) {
+      throw new Error('Could not find Stage 1 denoised images for mask extraction');
+    }
+
+    const outputDir = stage1Dir;
 
     // Write config to temp file
     const configPath = path.join(outputDir, `mask_config_${Date.now()}.json`);
+
+    // Map frontend parameter names to extractor parameter names
+    const extractorParams = {
+      adaptive_thresholding: parameters.adaptive_thresholding !== false,
+      base_percentile: parameters.base_percentile || 50,
+      percentile_decay: parameters.percentile_decay || 1.15,
+      max_true_pixels: parameters.max_masked_pixels || 25
+    };
 
     try {
       await fsp.mkdir(outputDir, { recursive: true });
@@ -556,64 +702,89 @@ class DenoisingService {
         patch_size: 64
       }, null, 2));
     } catch (err) {
-      this._emitError(io, trainingId, 'mask', `Failed to write config: ${err.message}`);
-      return;
+      throw new Error(`Failed to write config: ${err.message}`);
     }
 
     const roomName = `denoising-${trainingId}`;
 
-    // Spawn Python process
-    const pythonScript = spawn(this.pythonPath, [
-      'python/autostructn2v_wrapper.py',
-      '--config', configPath,
-      '--mode', 'extract_mask'
-    ]);
+    return new Promise((resolve, reject) => {
+      // Spawn Python process
+      const pythonScript = spawn(this.pythonPath, [
+        'python/autostructn2v_wrapper.py',
+        '--config', configPath,
+        '--mode', 'extract_mask'
+      ]);
 
-    let outputBuffer = '';
+      let outputBuffer = '';
+      let stderrBuffer = '';
+      let result = null;
+      let error = null;
 
-    pythonScript.stdout.on('data', (data) => {
-      const output = data.toString();
-      outputBuffer += output;
+      pythonScript.stdout.on('data', (data) => {
+        const output = data.toString();
+        outputBuffer += output;
 
-      const lines = outputBuffer.split('\n');
-      outputBuffer = lines.pop();
+        const lines = outputBuffer.split('\n');
+        outputBuffer = lines.pop();
 
-      for (const line of lines) {
-        if (line.startsWith('DENOISING_PROGRESS:')) {
-          try {
-            const progressData = JSON.parse(line.substring(19));
-            io.to(roomName).emit('denoising-mask-progress', progressData);
-          } catch (e) {
-            // Ignore parse errors
-          }
-        } else if (line.startsWith('DENOISING_RESULT:')) {
-          try {
-            const resultData = JSON.parse(line.substring(17));
-            // Update session
-            const session = this.getSession(trainingId);
-            if (session) {
-              session.mask.kernelSize = resultData.kernelSize;
-              session.mask.activePixels = resultData.activePixels;
-              session.mask.pattern = resultData.pattern;
-              session.mask.maskPath = resultData.maskPath;
+        for (const line of lines) {
+          if (line.startsWith('DENOISING_PROGRESS:')) {
+            try {
+              const progressData = JSON.parse(line.substring(19));
+              io.to(roomName).emit('denoising-mask-progress', progressData);
+            } catch (e) {
+              // Ignore parse errors
             }
-            io.to(roomName).emit('denoising-mask-result', resultData);
-          } catch (e) {
-            // Ignore parse errors
-          }
-        } else if (line.startsWith('DENOISING_ERROR:')) {
-          try {
-            const errorData = JSON.parse(line.substring(16));
-            io.to(roomName).emit('denoising-error', errorData);
-          } catch (e) {
-            // Ignore parse errors
+          } else if (line.startsWith('DENOISING_RESULT:')) {
+            try {
+              const resultData = JSON.parse(line.substring(17));
+              result = resultData;
+
+              // Update session
+              if (session) {
+                session.mask.kernelSize = resultData.kernelSize;
+                session.mask.activePixels = resultData.activePixels;
+                session.mask.pattern = resultData.pattern;
+                session.mask.maskPath = resultData.maskPath;
+                session.mask.isEmpty = resultData.activePixels < 2;
+              }
+
+              io.to(roomName).emit('denoising-mask-complete', resultData);
+            } catch (e) {
+              // Ignore parse errors
+            }
+          } else if (line.startsWith('DENOISING_ERROR:')) {
+            try {
+              const errorData = JSON.parse(line.substring(16));
+              error = errorData;
+              io.to(roomName).emit('denoising-error', errorData);
+            } catch (e) {
+              // Ignore parse errors
+            }
           }
         }
-      }
-    });
+      });
 
-    pythonScript.on('close', () => {
-      fsp.unlink(configPath).catch(() => {});
+      pythonScript.stderr.on('data', (data) => {
+        stderrBuffer += data.toString();
+      });
+
+      pythonScript.on('close', (code) => {
+        fsp.unlink(configPath).catch(() => {});
+
+        if (code !== 0 || error) {
+          reject(new Error(error?.message || stderrBuffer || 'Mask extraction failed'));
+        } else if (result) {
+          resolve(result);
+        } else {
+          reject(new Error('No result from mask extraction'));
+        }
+      });
+
+      pythonScript.on('error', (err) => {
+        fsp.unlink(configPath).catch(() => {});
+        reject(err);
+      });
     });
   }
 }

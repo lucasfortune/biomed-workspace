@@ -96,6 +96,7 @@ const inferenceService = new InferenceService({
 const denoisingService = new DenoisingService({
   pythonPath: PYTHON_PATH,
   sessionTracker,
+  workspaceManager,
   logger
 });
 

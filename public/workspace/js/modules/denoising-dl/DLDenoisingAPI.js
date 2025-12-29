@@ -81,14 +81,15 @@ class DLDenoisingAPI {
 
   /**
    * Regenerate mask with new parameters
-   * @param {Object} params - Mask regeneration parameters
+   * @param {string} trainingId - Training session ID
+   * @param {Object} parameters - Mask extraction parameters
    * @returns {Promise<Object>} New mask result
    */
-  async regenerateMask(params) {
+  async regenerateMask(trainingId, parameters) {
     const response = await fetch(`${this.baseUrl}/regenerate-mask`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({ trainingId, parameters })
     });
     return response.json();
   }
