@@ -53,7 +53,7 @@
 
 .imageviewer-module .step-contents {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
 }
 

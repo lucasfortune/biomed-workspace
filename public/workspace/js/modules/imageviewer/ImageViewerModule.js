@@ -394,6 +394,12 @@ class ImageViewerModule extends BaseModule {
     // Call parent implementation
     super.goToStep(stepNum);
 
+    // Scroll step-contents to top when changing steps
+    const stepContents = this.container?.querySelector('.step-contents');
+    if (stepContents) {
+      stepContents.scrollTop = 0;
+    }
+
     // Update StepNavigator
     if (this.stepNavigator) {
       this.stepNavigator.update(stepNum);

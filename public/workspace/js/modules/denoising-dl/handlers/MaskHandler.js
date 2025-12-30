@@ -205,7 +205,23 @@ class MaskHandler {
       );
 
       if (result.success) {
-        this.updateMaskVisualization(result.mask);
+        // Convert maskArray to boolean mask for visualization
+        const maskResult = result.mask;
+        let maskData;
+        if (maskResult.maskArray && Array.isArray(maskResult.maskArray)) {
+          maskData = maskResult.maskArray.map(row => row.map(val => Boolean(val)));
+        } else {
+          // Fallback to mock grid
+          maskData = this.createMaskGrid(maskResult.kernelSize, maskResult.activePixels, maskResult.pattern);
+        }
+
+        this.updateMaskVisualization({
+          mask: maskData,
+          kernelSize: maskResult.kernelSize,
+          activePixels: maskResult.activePixels,
+          pattern: maskResult.pattern,
+          isEmpty: maskResult.activePixels < 2
+        });
         this.module.state.notify('success', 'Mask regenerated');
       } else {
         throw new Error(result.error || 'Failed to regenerate mask');
@@ -223,8 +239,13 @@ class MaskHandler {
   /**
    * Approve current mask and continue to Stage 2
    */
-  approveMask() {
-    console.log('[MaskHandler] Mask approved, continuing to Stage 2...');
+  async approveMask() {
+    console.log('[MaskHandler] Mask approved, triggering Stage 2 training...');
+
+    if (!this.module.trainingId) {
+      this.module.state.notify('error', 'No active training session');
+      return;
+    }
 
     // Hide mask action buttons
     const maskActions = document.getElementById('maskActions');
@@ -233,7 +254,7 @@ class MaskHandler {
     }
 
     // Update stage 2 status
-    this.module.updateStageStatus('stage2', 'training', 'Training...');
+    this.module.updateStageStatus('stage2', 'training', 'Starting...');
 
     // Update status text
     const statusText = document.getElementById('stage2StatusText');
@@ -241,9 +262,31 @@ class MaskHandler {
       statusText.textContent = 'Starting Stage 2 training...';
     }
 
-    // Stage 2 will automatically start from the backend
-    // The Socket.IO handler will update the UI
-    this.module.state.notify('info', 'Mask approved. Stage 2 training starting...');
+    // Update training progress status
+    if (this.module.trainingProgress) {
+      this.module.trainingProgress.updateStatus('Starting Stage 2 training...');
+    }
+
+    try {
+      // Call backend to continue training with Stage 2
+      const result = await this.module.api.continueTraining(this.module.trainingId);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to continue training');
+      }
+
+      this.module.state.notify('info', 'Mask approved. Stage 2 training started.');
+      // Socket.IO handlers will update the UI with Stage 2 progress
+    } catch (error) {
+      console.error('[MaskHandler] Error continuing training:', error);
+      this.module.state.notify('error', `Failed to start Stage 2: ${error.message}`);
+
+      // Reset UI state on error
+      this.module.updateStageStatus('stage2', 'pending', 'Pending');
+      if (maskActions) {
+        maskActions.style.display = 'block';
+      }
+    }
   }
 
   /**

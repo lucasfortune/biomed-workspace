@@ -255,7 +255,8 @@ function onInferenceComplete(data) {
             completionSection.style.display = 'block';
         }
 
-        showSuccess('Inference completed successfully! Your segmentation is ready.');
+        // Note: showSuccess() removed - the completion section above already shows the success message
+        // The old showSuccess() was creating a duplicate message that persisted after reset
 
         // Update navigation buttons
         updateNavigationButtons();

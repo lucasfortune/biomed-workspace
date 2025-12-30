@@ -3,28 +3,6 @@
  */
 const moduleRegistry = [
   {
-    id: 'segmentation',
-    name: 'U-Net Segmentation',
-    description: 'Complete ML pipeline: Data Upload → Training → Inference',
-    icon: '🧩',
-    path: '/workspace/js/modules/segmentation/SegmentationModule.js',
-    inputs: ['image_stack', 'annotations'],
-    outputs: ['segmented_stack', 'trained_model'],
-    color: '#4A90E2',
-    status: 'available'
-  },
-  {
-    id: 'imageviewer',
-    name: 'Image Viewer',
-    description: 'View TIFF image stacks with gallery and thumbnail modes',
-    icon: '🖼️',
-    path: '/workspace/js/modules/imageviewer/ImageViewerModule.js',
-    inputs: ['image_stack', 'segmented_stack'],
-    outputs: [],
-    color: '#17A2B8',
-    status: 'available'
-  },
-  {
     id: 'denoising',
     name: 'Denoising',
     description: 'Remove noise from images using filter-based or deep learning methods',
@@ -59,6 +37,28 @@ const moduleRegistry = [
     inputs: ['image_stack'],
     outputs: ['annotations'],
     color: '#FF6B6B',
+    status: 'available'
+  },
+  {
+    id: 'segmentation',
+    name: 'U-Net Segmentation',
+    description: 'Complete ML pipeline: Data Upload → Training → Inference',
+    icon: '🧩',
+    path: '/workspace/js/modules/segmentation/SegmentationModule.js',
+    inputs: ['image_stack', 'annotations'],
+    outputs: ['segmented_stack', 'trained_model'],
+    color: '#4A90E2',
+    status: 'available'
+  },
+  {
+    id: 'imageviewer',
+    name: 'Image Viewer',
+    description: 'View TIFF image stacks with gallery and thumbnail modes',
+    icon: '🖼️',
+    path: '/workspace/js/modules/imageviewer/ImageViewerModule.js',
+    inputs: ['image_stack', 'segmented_stack'],
+    outputs: [],
+    color: '#17A2B8',
     status: 'available'
   },
   {

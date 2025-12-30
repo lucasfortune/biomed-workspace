@@ -853,6 +853,8 @@ body {
   transition: all 0.3s;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .module-card::before {
@@ -945,6 +947,7 @@ body {
   font-size: 14px;
   font-weight: 600;
   transition: all 0.2s;
+  margin-top: auto;
 }
 
 .btn-launch:hover {
@@ -957,6 +960,7 @@ body {
   display: flex;
   gap: 8px;
   width: 100%;
+  margin-top: auto;
 }
 
 .btn-launch-half {

@@ -1835,7 +1835,13 @@ class VisualizationModule extends BaseModule {
       try {
         delete window[name];
       } catch (e) {
-        window[name] = undefined;
+        // Property may be non-configurable, try setting to undefined
+        try {
+          window[name] = undefined;
+        } catch (e2) {
+          // Property may also be non-writable, just log and continue
+          console.warn(`[VisualizationModule] Could not clean up window.${name}`);
+        }
       }
     }
 

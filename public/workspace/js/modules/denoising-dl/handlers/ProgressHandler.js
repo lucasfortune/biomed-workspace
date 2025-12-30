@@ -56,6 +56,7 @@ class ProgressHandler {
     this.module.socket.off('denoising-stage1-complete');
     this.module.socket.off('denoising-mask-progress');
     this.module.socket.off('denoising-mask-complete');
+    this.module.socket.off('denoising-paused');
     this.module.socket.off('denoising-stage2-progress');
     this.module.socket.off('denoising-stage2-complete');
     this.module.socket.off('denoising-cleanup-progress');
@@ -97,6 +98,12 @@ class ProgressHandler {
     this.module.socket.on('denoising-mask-complete', (data) => {
       console.log('[ProgressHandler] Mask complete:', data);
       this.handleMaskComplete(data);
+    });
+
+    // Training paused for mask approval (autoStructN2V only)
+    this.module.socket.on('denoising-paused', (data) => {
+      console.log('[ProgressHandler] Training paused for mask approval:', data);
+      this.handleTrainingPaused(data);
     });
 
     // Stage 2 progress (autoStructN2V only)
@@ -303,8 +310,16 @@ class ProgressHandler {
     if (this.module.selectedMethod === 'autostructn2v') {
       this.module.initializeMaskUI();
 
-      // Load mask data from .npy file for visualization
-      const maskData = this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
+      // Use real maskArray if provided, otherwise create mock grid for visualization
+      let maskData;
+      if (data.maskArray && Array.isArray(data.maskArray)) {
+        // Convert to boolean 2D array for visualization
+        maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
+      } else {
+        // Fallback to mock grid (for backwards compatibility)
+        maskData = this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
+      }
+
       this.module.updateMaskVisualization({
         mask: maskData,
         kernelSize: data.kernelSize,
@@ -313,12 +328,63 @@ class ProgressHandler {
         isEmpty: data.isEmpty
       });
 
-      // Show mask action buttons
-      const maskActions = document.getElementById('maskActions');
-      if (maskActions) {
-        maskActions.style.display = 'block';
+      // Note: For pause-and-resume workflow, mask actions will be shown by handleTrainingPaused
+      // For continuous workflow (legacy), show them here
+      if (!this.module.trainingConfig?.pauseAfterMask) {
+        const maskActions = document.getElementById('maskActions');
+        if (maskActions) {
+          maskActions.style.display = 'block';
+        }
       }
     }
+  }
+
+  /**
+   * Handle training paused for mask approval (autoStructN2V only)
+   * This is called when the Python process exits after mask extraction,
+   * waiting for user approval before starting Stage 2.
+   */
+  handleTrainingPaused(data) {
+    console.log('[ProgressHandler] Training paused, awaiting mask approval');
+
+    // Update mask status to show awaiting approval
+    this.module.updateStageStatus('mask', 'completed', 'Awaiting Approval');
+
+    // Initialize mask UI if not already done
+    this.module.initializeMaskUI();
+
+    // Use real maskArray for visualization (this should always be present for pause workflow)
+    let maskData;
+    if (data.maskArray && Array.isArray(data.maskArray)) {
+      // Convert to boolean 2D array for visualization
+      maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
+    } else {
+      // Fallback (shouldn't happen in normal pause workflow)
+      console.warn('[ProgressHandler] No maskArray in paused data, using mock');
+      maskData = this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
+    }
+
+    this.module.updateMaskVisualization({
+      mask: maskData,
+      kernelSize: data.kernelSize,
+      activePixels: data.activePixels,
+      pattern: data.pattern,
+      isEmpty: data.activePixels < 2
+    });
+
+    // Show mask action buttons (Approve/Skip)
+    const maskActions = document.getElementById('maskActions');
+    if (maskActions) {
+      maskActions.style.display = 'block';
+    }
+
+    // Update training progress component
+    if (this.module.trainingProgress) {
+      this.module.trainingProgress.updateStatus('Mask extracted - awaiting your approval');
+    }
+
+    // Keep socket connected - we'll need it when Stage 2 starts
+    this.module.state.notify('info', 'Mask extracted. Review and approve to continue to Stage 2.');
   }
 
   /**
@@ -398,8 +464,8 @@ class ProgressHandler {
    * Handle cleanup progress
    */
   handleCleanupProgress(data) {
-    // For cleanup, just show a notification
-    this.module.state.notify('info', 'Cleaning up temporary files...');
+    // Cleanup notifications removed - they were showing for every file
+    // The UI already shows cleanup status in the progress component
   }
 
   /**

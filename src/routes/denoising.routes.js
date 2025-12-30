@@ -540,6 +540,22 @@ function createDenoisingRoutes(dependencies) {
         return mapped;
       };
 
+      // Helper to map frontend mask extractor params to Python param names
+      const mapExtractorConfig = (extractorConfig) => {
+        if (!extractorConfig) return {};
+        return {
+          // Map frontend names to Python StructuralNoiseExtractor params
+          base_percentile: extractorConfig.base_percentile || 50,
+          percentile_decay: extractorConfig.percentile_decay || 1.15,
+          // Frontend uses 'max_masked_pixels', Python expects 'max_true_pixels'
+          max_true_pixels: extractorConfig.max_masked_pixels || 25,
+          // These are Python defaults, include them for completeness
+          norm_autocorr: extractorConfig.norm_autocorr !== false,
+          log_autocorr: extractorConfig.log_autocorr !== false,
+          adapt_autocorr: extractorConfig.adaptive_thresholding !== false
+        };
+      };
+
       const fullConfig = {
         method,
         training_id: trainingId,
@@ -553,10 +569,12 @@ function createDenoisingRoutes(dependencies) {
         // Spread stage2 config with mapped names and add extractor from maskExtractor
         stage2: {
           ...mapStageConfig(config.stage2),
-          extractor: config.maskExtractor || {}
+          extractor: mapExtractorConfig(config.maskExtractor)
         },
         // Add workspace directory for output file organization
-        workspace_dir: workspacePath
+        workspace_dir: workspacePath,
+        // For autoStructN2V: pause after mask extraction to allow user approval
+        pauseAfterMask: config.pauseAfterMask || false
       };
 
       // Log the full config for debugging
@@ -854,8 +872,8 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      // Check if Stage 1 is complete
-      if (session.status !== 'stage1_complete' && session.status !== 'mask_complete') {
+      // Check if Stage 1 is complete or paused at mask
+      if (session.status !== 'stage1_complete' && session.status !== 'mask_complete' && session.status !== 'paused_at_mask') {
         return res.status(400).json({
           success: false,
           error: 'Stage 1 must be complete before regenerating mask'
@@ -886,6 +904,105 @@ function createDenoisingRoutes(dependencies) {
     } catch (error) {
       if (logger) {
         logger.error('[Denoising] Error regenerating mask:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Continue training after mask approval
+   * POST /api/denoising/dl/continue-training
+   *
+   * Body:
+   *   - trainingId: Training ID paused at mask approval
+   *
+   * Continues with Stage 2 training using saved Stage 1 output and approved mask.
+   */
+  router.post('/dl/continue-training', requireAuth, async (req, res) => {
+    const { trainingId } = req.body;
+
+    if (!trainingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Training ID is required'
+      });
+    }
+
+    try {
+      const { denoisingService, io } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Get training session
+      const session = denoisingService.getSession(trainingId);
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          error: 'Training session not found'
+        });
+      }
+
+      // Verify session is in paused_at_mask status
+      if (session.status !== 'paused_at_mask') {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot continue training: session status is '${session.status}', expected 'paused_at_mask'`
+        });
+      }
+
+      // Verify required paths exist
+      if (!session.stage1ModelPath || !fs.existsSync(session.stage1ModelPath)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Stage 1 model not found. Cannot continue.'
+        });
+      }
+
+      if (!session.maskPath || !fs.existsSync(session.maskPath)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Mask file not found. Cannot continue.'
+        });
+      }
+
+      if (logger) {
+        logger.info('[Denoising] Continuing training after mask approval:', {
+          trainingId,
+          stage1ModelPath: session.stage1ModelPath,
+          maskPath: session.maskPath
+        });
+      }
+
+      // Continue training with Stage 2
+      denoisingService.continueTraining({
+        trainingId,
+        session
+      }, io);
+
+      if (activityLogger) {
+        activityLogger.logActivity(req.session.user.username, 'dl_denoising_continue', {
+          trainingId,
+          stage: 'stage2'
+        });
+      }
+
+      res.json({
+        success: true,
+        trainingId,
+        message: 'Stage 2 training started. Continue monitoring Socket.IO room for progress.'
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error continuing training:', error);
       }
       res.status(500).json({
         success: false,
@@ -1173,7 +1290,7 @@ function createDenoisingRoutes(dependencies) {
 
     try {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
-      const uploadsDir = path.join(workspacePath, 'uploads');
+      const uploadsDir = path.join(workspacePath, 'uploads', 'raw');
 
       // Ensure uploads directory exists
       if (!fs.existsSync(uploadsDir)) {

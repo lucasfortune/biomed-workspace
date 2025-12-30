@@ -1036,8 +1036,13 @@ class MeshModule extends BaseModule {
       try {
         delete window[name];
       } catch (e) {
-        // Property may be non-configurable, just set to undefined
-        window[name] = undefined;
+        // Property may be non-configurable, try setting to undefined
+        try {
+          window[name] = undefined;
+        } catch (e2) {
+          // Property may also be non-writable, just log and continue
+          console.warn(`[MeshModule] Could not clean up window.${name}`);
+        }
       }
     }
 

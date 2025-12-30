@@ -2,83 +2,94 @@
 
 **Document Type:** Bug Report
 **Status:** Living Document (Updated Regularly)
-**Last Updated:** 2025-12-23
+**Last Updated:** 2025-12-30
  
 ---
 
 
 ## Overview
 
-This document contains bugs and/or issues reported by the developer and/or users in order of their discovery. The reports shoudl always include a descriptioin of errors, behaviour, problem and a priority rating out of 5 (0:lowest, fix whenever, 5: highest, critical, fix now) as well. These bugs must get fixed in the future.
+This document contains bugs and/or issues reported by the developer and/or users in order of their discovery. The reports shoudl always include a descriptioin of errors, behaviour, problem and a priority rating out of 5 (0:lowest, fix whenever, 5: highest, critical, fix now) & estimated complexity (0:low, 5: high) as well. These bugs must get fixed in the future.
 
 ---
 
 ## open Bugs/Issues:
 
-- visualization module: deselecting class, then changing range sliders will make class reappear (even though still deselected)
+- bug: visualization module: deselecting class, then changing range sliders will make class reappear (even though still deselected)
     - should stay hidden
     - prio 4
+    - compl. 3
 
-- step navigation functions of base module do not scroll up automatically
-    - should scroll up automatically
+- issue: educational content: all modules that contain novel processesing methods should contain explanations
     - prio 3
+    - compl. 4
 
-- mesh creation module: "back to hub" button does not always work and lead to error
-    - [ModuleLoader] Error deactivating module mesh: TypeError: property "nextStep" is non-configurable and can't be deleted
+- issue: documentation. many new things are created and documentation is not up to date
     - prio 3
-  
-- educational content: all modules that contain novel processesing methods should contain explanations
-    - prio 3
+    - compl. 3
 
-- documentation. many new things are created and documentation is not up to date
-    - prio 3
-  
-- Image Viewer: image icon too small
-    - image icons size was coosen too small and needs to be increased
-    - doesnt look good
-    - prio 2
-
-- filter denoising module: result is saved twice, once in result folder (correct) and once in upload folder (incorrect)
-    - should only be saved in appropriate results folder
-    - prio 3
-
-- new module: pipeline module
+- issue: new module: pipeline module
     - for setting up a pipeline and letting it run completely autonomously
     - prio 2
-  
-- module order on start page should be consistent with experiment data flow
-    - denoising -> annotation -> segmentation -> image viewer -> mesh generation -> visualization
-    - prio 1
+    - compl. 4
 
-- design: color scheme consistent with "Pyhsics of parasitism"-color scheme
+- issue: design: color scheme consistent with "Pyhsics of parasitism"-color scheme
     - include claude frontend skill
     - prio 1
+    - compl. 3
 
-- login button on welcome page has no css styling
-    - probably not loaded correctly somewhere
+- issue: annotaion module: auto saving would be great.
+    - save unfinished file while annotating every 60 sec
+    - overwrite older version
     - prio 1
+    - compl.
 
-- legacy folder in workspace are still being created
-    - /results/segmented & /results/visualizations
-    - prio 1
-
-- 3d vis module: reset view does not reset range slider but should
-    - prio 1 
-
-- annotaion module: auto saving would be great.
-    - prio 1
-  
-- segmentation module: segmentation complete message is doubled
-    - opaque one line message from earlier version below new green container can be removed
-    - and it also persists after starting new analysis!
-    - also there are still legacy folders created in results/segmentation: /segmented not necessary anymore.
-    - prio 1
-
-- main page: module cards layout is not the same for all cards
-    - launch buttons not aligned
-    - prio 1
 
 ## CLOSED
+
+- issue: step navigation functions of image viewer module do not scroll up automatically
+    - FIXED: Added scrollTop = 0 in goToStep() method
+    - prio 3
+
+- bug: mesh creation module: "back to hub" button does not always work and lead to error
+    - FIXED: Added nested try-catch for non-configurable/non-writable window properties
+    - prio 3
+
+- bug: dl denoising module: selecting test data will save data in workspace/uploads/ instead of in workspace/uploads/raw/
+    - FIXED: Changed path in denoising.routes.js to include 'raw' subdirectory
+    - prio 3
+
+- issue: filter denoising module: result is saved twice
+    - FIXED: Was already resolved before this session
+    - prio 3
+
+- issue: dl denoising module: cleanup notification shows up for every file
+    - FIXED: Removed notification in ProgressHandler.js handleCleanupProgress()
+    - prio 2
+
+- issue: module order on start page should be consistent with experiment data flow
+    - FIXED: Reordered modules in registry.js to: denoising → annotation → segmentation → image viewer → mesh → visualization
+    - prio 1
+
+- bug: login button on welcome page has no css styling
+    - FIXED: Added CSS for .login-btn and .login-button-container in welcome.css
+    - prio 1
+
+- issue: segmentation module: segmentation complete message is doubled
+    - FIXED: Removed duplicate showSuccess() call in inference.js, added cleanup in navigation.js
+    - prio 1
+
+- issue: there are still legacy folders created in results/segmentation: /segmented not necessary anymore.
+    - FIXED: Removed 'results/segmented' from WorkspaceManager.js directory creation
+    - prio 1
+
+- issue: main page: module cards layout is not the same for all cards
+    - FIXED: Added flexbox to .module-card and margin-top:auto to buttons in workspace.css
+    - prio 1
+
+- issue: image viewer module step 1 not scrollable
+    - FIXED: Changed overflow:hidden to overflow-y:auto in imageviewer.css .step-contents
+    - prio 3
 
 - Segmentation module inference testdata not working
     - choosing test data for the inference does not work currently
@@ -109,3 +120,7 @@ This document contains bugs and/or issues reported by the developer and/or users
     - after inference visualization data is created (leftover from before module was split)
     - should not be created in this module but in 3d vis module (coming with future update)
     - prio 2
+
+
+- 3d vis module: reset view does not reset range slider but should
+    - prio 1 

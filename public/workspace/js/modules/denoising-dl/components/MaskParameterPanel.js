@@ -62,10 +62,10 @@ class MaskParameterPanel {
               <label for="mask_base_percentile">Base Percentile</label>
               <div class="slider-container">
                 <input type="range" id="mask_base_percentile"
-                       min="30" max="70" step="5"
+                       min="30" max="70" step="1"
                        value="${this.parameters.base_percentile}"
                        onchange="window.dlDenoisingModule?.updateMaskParameter('base_percentile', parseInt(this.value))">
-                <span class="slider-value">${this.parameters.base_percentile}</span>
+                <span class="slider-value">${this.parameters.base_percentile}%</span>
               </div>
               <span class="param-hint">Higher = more selective (fewer active pixels)</span>
             </div>
@@ -74,7 +74,7 @@ class MaskParameterPanel {
               <label for="mask_percentile_decay">Percentile Decay</label>
               <div class="slider-container">
                 <input type="range" id="mask_percentile_decay"
-                       min="1.0" max="1.3" step="0.05"
+                       min="1.0" max="1.3" step="0.01"
                        value="${this.parameters.percentile_decay}"
                        onchange="window.dlDenoisingModule?.updateMaskParameter('percentile_decay', parseFloat(this.value))">
                 <span class="slider-value">${this.parameters.percentile_decay.toFixed(2)}</span>
@@ -83,15 +83,15 @@ class MaskParameterPanel {
             </div>
 
             <div class="parameter-row">
-              <label for="mask_max_masked_pixels">Max Masked Pixels (%)</label>
+              <label for="mask_max_masked_pixels">Max Masked Pixels</label>
               <div class="slider-container">
                 <input type="range" id="mask_max_masked_pixels"
-                       min="10" max="40" step="5"
+                       min="5" max="50" step="1"
                        value="${this.parameters.max_masked_pixels}"
                        onchange="window.dlDenoisingModule?.updateMaskParameter('max_masked_pixels', parseInt(this.value))">
-                <span class="slider-value">${this.parameters.max_masked_pixels}%</span>
+                <span class="slider-value">${this.parameters.max_masked_pixels}</span>
               </div>
-              <span class="param-hint">Maximum percentage of kernel pixels that can be active</span>
+              <span class="param-hint">Maximum number of active pixels in the mask</span>
             </div>
           </div>
 
@@ -119,7 +119,9 @@ class MaskParameterPanel {
   }
 
   /**
-   * Update a single parameter
+   * Update a single parameter (internal state update only)
+   * Note: Does NOT call onParameterChange to avoid recursion, since HTML
+   * slider events already call updateMaskParameter directly.
    * @param {string} name - Parameter name
    * @param {*} value - Parameter value
    */
@@ -131,16 +133,15 @@ class MaskParameterPanel {
     if (valueDisplay) {
       if (name === 'percentile_decay') {
         valueDisplay.textContent = value.toFixed(2);
-      } else if (name === 'max_masked_pixels') {
+      } else if (name === 'base_percentile') {
         valueDisplay.textContent = `${value}%`;
       } else {
+        // max_masked_pixels and others: just show the number
         valueDisplay.textContent = value;
       }
     }
-
-    if (this.onParameterChange) {
-      this.onParameterChange(name, value);
-    }
+    // Note: onParameterChange callback is NOT called here to prevent recursion.
+    // The HTML onchange handlers already call updateMaskParameter directly.
   }
 
   /**

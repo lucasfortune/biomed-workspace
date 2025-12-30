@@ -95,6 +95,20 @@ class DLDenoisingAPI {
   }
 
   /**
+   * Continue training after mask approval (Stage 2)
+   * @param {string} trainingId - Training session ID
+   * @returns {Promise<Object>} Continue result
+   */
+  async continueTraining(trainingId) {
+    const response = await fetch(`${this.baseUrl}/continue-training`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trainingId })
+    });
+    return response.json();
+  }
+
+  /**
    * Run inference with trained model
    * @param {Object} params - Inference parameters
    * @returns {Promise<Object>} Inference result

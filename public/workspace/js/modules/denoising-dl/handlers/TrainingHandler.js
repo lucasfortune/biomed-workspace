@@ -30,13 +30,16 @@ class TrainingHandler {
 
     // Prepare training configuration in the format expected by backend
     // Backend expects: { method, config, inputPath }
+    // For autoStructN2V, set pauseAfterMask to allow user to approve mask before Stage 2
     const trainingConfig = {
       method: this.module.selectedMethod,
       inputPath: this.module.uploadedFile.path,
       config: {
         stage1: this.module.trainingConfig.stage1,
         stage2: this.module.selectedMethod === 'autostructn2v' ? this.module.trainingConfig.stage2 : null,
-        maskExtractor: this.module.selectedMethod === 'autostructn2v' ? this.module.trainingConfig.maskExtractor : null
+        maskExtractor: this.module.selectedMethod === 'autostructn2v' ? this.module.trainingConfig.maskExtractor : null,
+        // Pause after mask extraction for user approval (autoStructN2V only)
+        pauseAfterMask: this.module.selectedMethod === 'autostructn2v'
       }
     };
 

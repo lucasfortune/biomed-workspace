@@ -54,7 +54,6 @@ class WorkspaceManager {
       'uploads/unfinished_annotations',
       'uploads/imported_models',
       'results/denoised',
-      'results/segmented',
       'results/meshes',
       'results/visualizations',
       'models/segmentation',

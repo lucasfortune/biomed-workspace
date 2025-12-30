@@ -466,22 +466,22 @@ class ConfigHandler {
               <label for="mask_adaptive_thresholding">Adaptive Thresholding</label>
             </div>
             <div class="form-field">
-              <label for="mask_base_percentile">Base Percentile</label>
+              <label for="mask_base_percentile">Base Percentile (%)</label>
               <input type="number" id="mask_base_percentile" data-param="base_percentile"
-                     value="${config.base_percentile || 50}" min="30" max="70" step="5">
+                     value="${config.base_percentile || 50}" min="30" max="70" step="1">
               <span class="field-hint">Threshold for noise detection (30-70)</span>
             </div>
             <div class="form-field">
               <label for="mask_percentile_decay">Percentile Decay</label>
               <input type="number" id="mask_percentile_decay" data-param="percentile_decay"
-                     value="${config.percentile_decay || 1.15}" min="1.0" max="1.3" step="0.05">
+                     value="${config.percentile_decay || 1.15}" min="1.0" max="1.3" step="0.01">
               <span class="field-hint">Decay rate for adaptive threshold</span>
             </div>
             <div class="form-field">
-              <label for="mask_max_masked_pixels">Max Masked Pixels (%)</label>
+              <label for="mask_max_masked_pixels">Max Masked Pixels</label>
               <input type="number" id="mask_max_masked_pixels" data-param="max_masked_pixels"
-                     value="${config.max_masked_pixels || 30}" min="10" max="40" step="5">
-              <span class="field-hint">Maximum percentage of pixels to mask</span>
+                     value="${config.max_masked_pixels || 25}" min="5" max="50" step="1">
+              <span class="field-hint">Maximum number of active pixels in the mask</span>
             </div>
           </div>
         </div>

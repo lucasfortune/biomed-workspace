@@ -310,6 +310,9 @@ function performCompleteStateReset() {
     if (window.socket) {
         window.socket.disconnect();
     }
+
+    // Remove any dynamically created success-message elements (legacy cleanup)
+    document.querySelectorAll('.success-message').forEach(el => el.remove());
 }
 
 // ============================================

@@ -226,6 +226,117 @@ class DenoisingService {
   }
 
   /**
+   * Continue training after mask approval (Stage 2 only)
+   * @param {object} params - Continue parameters
+   * @param {string} params.trainingId - Training ID
+   * @param {object} params.session - Existing session object
+   * @param {object} io - Socket.IO instance
+   * @returns {Promise<void>}
+   */
+  async continueTraining(params, io) {
+    const { trainingId, session } = params;
+
+    if (!this.pythonPath) {
+      this._emitError(io, trainingId, 'stage2', 'Python path not configured');
+      return;
+    }
+
+    // Update session status
+    session.status = 'running';
+    session.stage = 'stage2';
+    session.stage2.status = 'starting';
+
+    // Build config for Stage 2 only
+    const stage2Config = {
+      training_id: trainingId,
+      method: 'autostructn2v',
+      experiment_dir: session.experimentDir,
+      mask_path: session.maskPath,
+      stage1_model_path: session.stage1ModelPath,
+      stage1_denoised_dir: session.stage1DenoisedDir,
+      // Include original config for stage2 parameters
+      stage2: session.config?.stage2 || {},
+      input_dir: session.config?.input_dir,
+      output_dir: session.config?.output_dir,
+      workspace_dir: session.config?.workspace_dir,
+      device: session.config?.device || 'cuda',
+      verbose: session.config?.verbose || false
+    };
+
+    // Write config to temp file
+    const configPath = path.join(session.experimentDir, `config_stage2_${trainingId}.json`);
+
+    try {
+      await fsp.writeFile(configPath, JSON.stringify(stage2Config, null, 2));
+    } catch (err) {
+      this._emitError(io, trainingId, 'stage2', `Failed to write config: ${err.message}`);
+      return;
+    }
+
+    if (this.logger) {
+      this.logger.info(`Continuing training ${trainingId} with Stage 2`);
+    }
+
+    // Emit stage2 starting event
+    const roomName = `denoising-${trainingId}`;
+    io.to(roomName).emit('denoising-stage2-progress', {
+      stage: 'stage2',
+      status: 'starting',
+      epoch: 0,
+      totalEpochs: stage2Config.stage2?.num_epochs || 100
+    });
+
+    // Spawn Python process
+    const pythonScript = spawn(this.pythonPath, [
+      'python/autostructn2v_wrapper.py',
+      '--config', configPath,
+      '--mode', 'train_stage2_only'
+    ]);
+
+    let outputBuffer = '';
+    let stderrBuffer = '';
+
+    // Handle stdout for progress updates
+    pythonScript.stdout.on('data', (data) => {
+      const output = data.toString();
+
+      if (this.logger) {
+        this.logger.debug('Denoising Stage 2 output:', output);
+      }
+
+      outputBuffer += output;
+
+      // Process complete lines
+      const lines = outputBuffer.split('\n');
+      outputBuffer = lines.pop(); // Keep incomplete line
+
+      for (const line of lines) {
+        this._handleOutputLine(line, trainingId, io);
+      }
+    });
+
+    // Handle stderr
+    pythonScript.stderr.on('data', (data) => {
+      stderrBuffer += data.toString();
+      if (this.logger) {
+        this.logger.debug('Denoising Stage 2 stderr:', data.toString());
+      }
+    });
+
+    // Handle process completion
+    pythonScript.on('close', (code) => {
+      this._handleProcessComplete(code, trainingId, stderrBuffer, io);
+
+      // Clean up config file
+      fsp.unlink(configPath).catch(() => {});
+    });
+
+    pythonScript.on('error', (err) => {
+      this._emitError(io, trainingId, 'stage2', `Failed to spawn process: ${err.message}`);
+    });
+  }
+
+  /**
    * Handle a line of output from the training process
    * @private
    */
@@ -314,6 +425,16 @@ class DenoisingService {
       } else if (stage === 'stage2') {
         session.stage2.status = 'completed';
         session.stage2.modelPath = data.modelPath;
+      } else if (stage === 'paused') {
+        // Training paused at mask approval - store state for resume
+        session.status = 'paused_at_mask';
+        session.stage1ModelPath = data.stage1ModelPath;
+        session.stage1DenoisedDir = data.stage1DenoisedDir;
+        session.maskPath = data.maskPath;
+        session.mask.kernelSize = data.kernelSize;
+        session.mask.activePixels = data.activePixels;
+        session.mask.pattern = data.pattern;
+        session.mask.maskArray = data.maskArray;
       } else if (stage === 'complete') {
         session.status = 'completed';
         session.experimentDir = data.experimentDir;
@@ -471,6 +592,23 @@ class DenoisingService {
     }
 
     if (code === 0) {
+      // Check if we're paused at mask - don't emit training-complete, just paused event
+      if (session.status === 'paused_at_mask') {
+        if (this.logger) {
+          this.logger.info(`Training ${trainingId} paused at mask approval`);
+        }
+        io.to(roomName).emit('denoising-paused', {
+          trainingId,
+          reason: 'awaiting_mask_approval',
+          maskPath: session.maskPath,
+          kernelSize: session.mask.kernelSize,
+          activePixels: session.mask.activePixels,
+          pattern: session.mask.pattern,
+          maskArray: session.mask.maskArray
+        });
+        return;
+      }
+
       // Success - should have been marked completed by DENOISING_RESULT:complete
       if (session.status !== 'completed') {
         session.status = 'completed';
@@ -685,11 +823,15 @@ class DenoisingService {
     // Write config to temp file
     const configPath = path.join(outputDir, `mask_config_${Date.now()}.json`);
 
-    // Map frontend parameter names to extractor parameter names
+    // Map frontend parameter names to Python StructuralNoiseExtractor param names
     const extractorParams = {
-      adaptive_thresholding: parameters.adaptive_thresholding !== false,
+      // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
+      adapt_autocorr: parameters.adaptive_thresholding !== false,
+      norm_autocorr: true,
+      log_autocorr: true,
       base_percentile: parameters.base_percentile || 50,
       percentile_decay: parameters.percentile_decay || 1.15,
+      // Map frontend 'max_masked_pixels' to Python 'max_true_pixels'
       max_true_pixels: parameters.max_masked_pixels || 25
     };
 

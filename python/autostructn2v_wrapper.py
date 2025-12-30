@@ -590,7 +590,8 @@ def run_training(config: dict):
                 "centerOnly": center_only,
                 "isEmpty": is_empty,
                 "maskPath": mask_save_path,
-                "pattern": _detect_pattern(struct_mask)
+                "pattern": _detect_pattern(struct_mask),
+                "maskArray": struct_mask.astype(int).tolist()  # 2D boolean array for visualization
             })
 
             results['mask_path'] = mask_save_path
@@ -599,6 +600,24 @@ def run_training(config: dict):
                 'kernel_size': kernel_size,
                 'is_empty': is_empty
             }
+
+            # Check if we should pause for user approval of mask before Stage 2
+            # If pauseAfterMask is True and mask is not empty, pause here
+            if config.get('pauseAfterMask', False) and not is_empty:
+                emit_result('paused', {
+                    "training_id": training_id,
+                    "reason": "awaiting_mask_approval",
+                    "stage1ModelPath": results.get('stage1_model_path'),
+                    "stage1DenoisedDir": results.get('stage1_denoised_dir'),
+                    "maskPath": mask_save_path,
+                    "kernelSize": kernel_size,
+                    "activePixels": active_pixels,
+                    "pattern": _detect_pattern(struct_mask),
+                    "maskArray": struct_mask.astype(int).tolist()
+                })
+                # Return here - Stage 2 will be triggered separately via continue-training
+                results['paused_at_mask'] = True
+                return results
 
             # If mask is effectively empty, we can skip stage 2
             if active_pixels < 2 or center_only:
@@ -1308,11 +1327,255 @@ def extract_mask(config: dict):
             "previewPath": preview_path,
             "kernelSize": int(struct_mask.shape[0]),
             "activePixels": int(np.sum(struct_mask)),
-            "pattern": _detect_pattern(struct_mask)
+            "pattern": _detect_pattern(struct_mask),
+            "maskArray": struct_mask.astype(int).tolist()  # 2D boolean array for visualization
         })
 
     except Exception as e:
         emit_error('mask', str(e), traceback.format_exc())
+        raise
+
+
+# =============================================================================
+# Stage 2 Only Mode (Resume after mask approval)
+# =============================================================================
+
+def run_stage2_only(config: dict):
+    """
+    Run Stage 2 training only, using existing Stage 1 output and approved mask.
+
+    This mode is used to resume training after the user has approved the mask
+    during the pauseAfterMask workflow.
+
+    Required config keys:
+        - training_id: The original training ID
+        - experiment_dir: Path to the experiment directory from Stage 1
+        - stage1_model_path: Path to Stage 1 model checkpoint
+        - stage1_denoised_dir: Path to Stage 1 denoised images
+        - mask_path: Path to the approved mask .npy file
+    """
+    training_id = config.get('training_id')
+    experiment_dir = config.get('experiment_dir')
+    stage1_model_path = config.get('stage1_model_path')
+    stage1_denoised_dir = config.get('stage1_denoised_dir')
+    mask_path = config.get('mask_path')
+
+    if not all([training_id, experiment_dir, mask_path]):
+        emit_error('stage2', 'Missing required config: training_id, experiment_dir, and mask_path are required')
+        raise ValueError('Missing required config for Stage 2 only mode')
+
+    try:
+        # Load original config from experiment directory
+        original_config_path = os.path.join(experiment_dir, 'config.json')
+        if os.path.exists(original_config_path):
+            with open(original_config_path) as f:
+                original_config = json.load(f)
+            # Merge with provided config (provided config takes precedence)
+            for key, value in original_config.items():
+                if key not in config:
+                    config[key] = value
+
+        config = sanitize_config(config)
+        verbose = config.get('verbose', False)
+
+        # Set device
+        device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() and config.get('device') == 'cuda' else 'cpu')
+        emit_progress('init', {
+            "training_id": training_id,
+            "device": str(device),
+            "method": "autostructn2v",
+            "mode": "stage2_only",
+            "gpuAvailable": torch.cuda.is_available()
+        })
+
+        # Load mask
+        if not os.path.exists(mask_path):
+            emit_error('stage2', f'Mask file not found: {mask_path}')
+            raise FileNotFoundError(f'Mask file not found: {mask_path}')
+
+        struct_mask = np.load(mask_path)
+
+        # Create full mask
+        from autoStructN2V.masking import create_full_mask
+        full_mask, prediction_kernel = create_full_mask(
+            struct_mask,
+            config['stage2']['patch_size'],
+            config['stage2']['mask_percentage'],
+            verbose
+        )
+
+        # Reconstruct directory structure
+        dirs = {
+            'experiment': experiment_dir,
+            'data': os.path.join(experiment_dir, 'data'),
+            'stage1': {
+                'model': os.path.join(experiment_dir, 'models', 'stage1'),
+                'logs': os.path.join(experiment_dir, 'logs', 'stage1')
+            },
+            'stage2': {
+                'model': os.path.join(experiment_dir, 'models', 'stage2'),
+                'logs': os.path.join(experiment_dir, 'logs', 'stage2')
+            }
+        }
+
+        # Ensure stage2 directories exist
+        os.makedirs(dirs['stage2']['model'], exist_ok=True)
+        os.makedirs(dirs['stage2']['logs'], exist_ok=True)
+
+        # Reconstruct image_paths from data directories
+        data_dir = dirs['data']
+        image_extension = config.get('image_extension', '.tif')
+        image_paths = []
+        for split_name in ['train', 'val', 'test']:
+            split_dir = os.path.join(data_dir, split_name)
+            if os.path.exists(split_dir):
+                paths = sorted(glob.glob(os.path.join(split_dir, f'*{image_extension}')))
+                image_paths.append(paths)
+            else:
+                image_paths.append([])
+
+        # Initialize results
+        results = {
+            'experiment_dir': experiment_dir,
+            'training_id': training_id,
+            'method': 'autostructn2v',
+            'stages_run': ['stage1'],  # Stage 1 already completed
+            'stage1_model_path': stage1_model_path,
+            'stage1_denoised_dir': stage1_denoised_dir,
+            'mask_path': mask_path
+        }
+
+        # =====================================================================
+        # Stage 2: Structured Noise2Void
+        # =====================================================================
+        emit_progress('stage2', {
+            "training_id": training_id,
+            "status": "starting",
+            "totalEpochs": config['stage2'].get('num_epochs', config.get('num_epochs', 100))
+        })
+
+        # Create dataloaders with structured mask
+        stage2_train_loader, stage2_val_loader, stage2_test_loader = create_dataloaders(
+            image_paths,
+            config,
+            "stage2",
+            structured_mask=full_mask,
+            prediction_kernel=prediction_kernel,
+            verbose=verbose
+        )
+
+        # Create model
+        stage2_model = create_model(
+            'stage2',
+            features=config['stage2']['features'],
+            num_layers=config['stage2']['num_layers'],
+            use_resize_conv=config['stage2'].get('use_resize_conv', True),
+            upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
+        )
+
+        # Create optimizer and scheduler
+        stage2_optimizer = torch.optim.Adam(
+            stage2_model.parameters(),
+            lr=config['stage2']['learning_rate']
+        )
+        stage2_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            stage2_optimizer, mode='min', factor=0.5, patience=5
+        )
+
+        # Create trainer with progress callback
+        stage2_trainer = WebAutoStructN2VTrainer(
+            model=stage2_model,
+            optimizer=stage2_optimizer,
+            scheduler=stage2_scheduler,
+            device=device,
+            hparams=config,
+            stage='stage2',
+            experiment_name=os.path.join(dirs['stage2']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+            progress_callback=create_progress_callback('stage2', training_id)
+        )
+
+        # Train
+        stage2_trainer.train(stage2_train_loader, stage2_val_loader, stage2_test_loader)
+
+        # Save model
+        stage2_checkpoint_path = os.path.join(dirs['stage2']['model'], 'stage2_model.pth')
+        stage2_trainer.save_checkpoint(stage2_checkpoint_path)
+
+        # Emit completion
+        emit_result('stage2', {
+            "training_id": training_id,
+            "modelPath": stage2_checkpoint_path
+        })
+
+        results['stage2_model_path'] = stage2_checkpoint_path
+        results['stages_run'].append('stage2')
+
+        # Cleanup
+        del stage2_model, stage2_trainer, stage2_optimizer, stage2_scheduler
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # =====================================================================
+        # Stage 2 Denoising
+        # =====================================================================
+        emit_progress('stage2_inference', {"training_id": training_id, "status": "starting"})
+
+        # Load stage 2 trained model for inference
+        stage2_trained_model = create_model(
+            'stage2',
+            features=config['stage2']['features'],
+            num_layers=config['stage2']['num_layers'],
+            use_resize_conv=config['stage2'].get('use_resize_conv', True),
+            upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
+        ).to(device)
+
+        checkpoint = torch.load(results['stage2_model_path'], map_location=device)
+        stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
+        stage2_trained_model.eval()
+
+        # Create predictor and denoise
+        predictor = AutoStructN2VPredictor(
+            model=stage2_trained_model,
+            patch_size=config['stage2']['patch_size']
+        )
+
+        stage2_denoised_dir = os.path.join(dirs['data'], 'stage2_denoised')
+        os.makedirs(stage2_denoised_dir, exist_ok=True)
+
+        for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
+            split_output_dir = os.path.join(stage2_denoised_dir, split_name)
+            os.makedirs(split_output_dir, exist_ok=True)
+            input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
+            if input_split_dir and os.path.exists(input_split_dir):
+                predictor.process_directory(input_split_dir, split_output_dir, show=False)
+
+        results['stage2_denoised_dir'] = stage2_denoised_dir
+
+        emit_progress('stage2_inference', {"training_id": training_id, "status": "complete"})
+
+        # Cleanup
+        del stage2_trained_model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # =====================================================================
+        # Finalize Output: Create TIFF stacks and cleanup
+        # =====================================================================
+        output_files = finalize_training_output(config, dirs, results, 'autostructn2v', training_id)
+        results['output_files'] = output_files
+
+        # Emit final completion
+        emit_result('complete', {
+            "training_id": training_id,
+            "method": 'autostructn2v',
+            "stagesRun": results['stages_run'],
+            "outputFiles": output_files
+        })
+
+        return results
+
+    except Exception as e:
+        emit_error('stage2', str(e), traceback.format_exc())
         raise
 
 
@@ -1323,8 +1586,9 @@ def extract_mask(config: dict):
 def main():
     parser = argparse.ArgumentParser(description='autoStructN2V Web Wrapper')
     parser.add_argument('--config', required=True, help='Path to config JSON file')
-    parser.add_argument('--mode', required=True, choices=['train', 'inference', 'extract_mask'],
-                        help='Operation mode')
+    parser.add_argument('--mode', required=True,
+                        choices=['train', 'inference', 'extract_mask', 'train_stage2_only'],
+                        help='Operation mode: train, inference, extract_mask, or train_stage2_only (resume after mask approval)')
 
     args = parser.parse_args()
 
@@ -1346,6 +1610,8 @@ def main():
             run_inference(config)
         elif args.mode == 'extract_mask':
             extract_mask(config)
+        elif args.mode == 'train_stage2_only':
+            run_stage2_only(config)
     except Exception as e:
         # Error already emitted in the function
         sys.exit(1)

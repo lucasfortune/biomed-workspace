@@ -1,4 +1,131 @@
 /* Welcome page specific styles */
+
+/* Login Button Container */
+.login-button-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: none;
+}
+
+.login-button-container.visible {
+    display: block;
+}
+
+.login-btn {
+    display: inline-block;
+    padding: 10px 24px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95em;
+    transition: all 0.3s ease;
+}
+
+.login-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* User Info Bar for Welcome Page */
+.user-info-bar-welcome {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    padding: 12px 20px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-info-bar-welcome.visible {
+    display: flex;
+}
+
+.user-info-bar-welcome .user-details {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-info-bar-welcome .user-name {
+    font-weight: 600;
+    color: white;
+}
+
+.user-info-bar-welcome .user-institution {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9em;
+}
+
+.user-info-bar-welcome .user-status-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.user-info-bar-welcome .user-status-badge.active {
+    background: rgba(76, 175, 80, 0.3);
+    color: #81c784;
+}
+
+.user-info-bar-welcome .user-status-badge.pending {
+    background: rgba(255, 193, 7, 0.3);
+    color: #ffd54f;
+}
+
+.user-info-bar-welcome .user-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-info-bar-welcome .admin-dashboard-link {
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    font-size: 0.9em;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.user-info-bar-welcome .admin-dashboard-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.user-info-bar-welcome .logout-button {
+    padding: 6px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s ease;
+}
+
+.user-info-bar-welcome .logout-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Adjust welcome container when user bar is visible */
+body.has-user-bar .welcome-container {
+    padding-top: 70px;
+}
+
 .welcome-container {
     min-height: 100vh;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
