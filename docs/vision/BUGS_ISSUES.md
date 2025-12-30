@@ -38,14 +38,12 @@ This document contains bugs and/or issues reported by the developer and/or users
     - prio 1
     - compl. 3
 
-- issue: annotaion module: auto saving would be great.
-    - save unfinished file while annotating every 60 sec
-    - overwrite older version
-    - prio 1
-    - compl.
-
 
 ## CLOSED
+
+- issue: annotation module: auto saving would be great.
+    - FIXED: Added autosave toggle in Tools section with 120s interval, only saves when dirty
+    - prio 1
 
 - issue: step navigation functions of image viewer module do not scroll up automatically
     - FIXED: Added scrollTop = 0 in goToStep() method

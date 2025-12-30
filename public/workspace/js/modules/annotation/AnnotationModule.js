@@ -84,6 +84,10 @@ class AnnotationModule extends BaseModule {
     // Dirty state tracking
     this.isDirty = false;
 
+    // Autosave
+    this.autosaveEnabled = true;
+    this.autosaveInterval = null;
+
     // =========================================================================
     // BIND METHODS
     // =========================================================================
@@ -222,7 +226,7 @@ class AnnotationModule extends BaseModule {
                         <span class="tool-icon">🧹</span>
                         <span class="tool-label">Eraser</span>
                       </button>
-                    </div>
+                    </div> 
                   </div>
 
                   <!-- Brush Size Section -->
@@ -247,6 +251,14 @@ class AnnotationModule extends BaseModule {
                         <span class="tool-icon">↷</span>
                         <span class="tool-label">Redo</span>
                       </button>
+                    </div>
+                    <div class="autosave-toggle">
+                      <label class="toggle-switch">
+                        <input type="checkbox" id="autosaveToggle" checked>
+                        <span class="toggle-slider"></span>
+                      </label>
+                      <span class="toggle-label">Autosave</span>
+                      <span id="autosaveStatus" class="autosave-status"></span>
                     </div>
                   </div>
 
@@ -349,6 +361,11 @@ class AnnotationModule extends BaseModule {
     // Set up event listeners
     this.setupEventListeners();
 
+    // Start autosave interval (enabled by default)
+    if (this.autosaveEnabled) {
+      this.startAutosaveInterval();
+    }
+
     console.log('[AnnotationModule] Initialized');
   }
 
@@ -399,6 +416,14 @@ class AnnotationModule extends BaseModule {
     const createAnnotationBtn = this.container.querySelector('#createAnnotationBtn');
     if (createAnnotationBtn) {
       createAnnotationBtn.addEventListener('click', () => this.createAnnotation());
+    }
+
+    // Autosave toggle
+    const autosaveToggle = this.container.querySelector('#autosaveToggle');
+    if (autosaveToggle) {
+      autosaveToggle.addEventListener('change', (e) => {
+        this.toggleAutosave(e.target.checked);
+      });
     }
 
     // =========================================================================
@@ -1493,6 +1518,82 @@ class AnnotationModule extends BaseModule {
   }
 
   // ===========================================================================
+  // AUTOSAVE METHODS
+  // ===========================================================================
+
+  /**
+   * Toggle autosave on/off
+   * @param {boolean} enabled - Whether autosave should be enabled
+   */
+  toggleAutosave(enabled) {
+    this.autosaveEnabled = enabled;
+
+    if (enabled) {
+      this.startAutosaveInterval();
+      console.log('[AnnotationModule] Autosave enabled (120s interval)');
+    } else {
+      this.stopAutosaveInterval();
+      console.log('[AnnotationModule] Autosave disabled');
+    }
+  }
+
+  /**
+   * Start the autosave interval timer
+   */
+  startAutosaveInterval() {
+    // Clear any existing interval first
+    this.stopAutosaveInterval();
+
+    // Set interval to 120 seconds (120000ms)
+    this.autosaveInterval = setInterval(() => {
+      this.performAutosave();
+    }, 120000);
+  }
+
+  /**
+   * Stop the autosave interval timer
+   */
+  stopAutosaveInterval() {
+    if (this.autosaveInterval) {
+      clearInterval(this.autosaveInterval);
+      this.autosaveInterval = null;
+    }
+  }
+
+  /**
+   * Perform autosave if there are unsaved changes
+   */
+  async performAutosave() {
+    // Only save if there are unsaved changes
+    if (!this.isDirty) {
+      console.log('[AnnotationModule] Autosave skipped: no unsaved changes');
+      return;
+    }
+
+    // Show autosave status indicator
+    const statusEl = this.container?.querySelector('#autosaveStatus');
+    if (statusEl) {
+      statusEl.textContent = 'Saving...';
+      statusEl.classList.add('active');
+    }
+
+    try {
+      await this.saveProgress();
+      console.log('[AnnotationModule] Autosave completed');
+    } catch (error) {
+      console.error('[AnnotationModule] Autosave failed:', error);
+    } finally {
+      // Hide status indicator after a brief delay
+      setTimeout(() => {
+        if (statusEl) {
+          statusEl.textContent = '';
+          statusEl.classList.remove('active');
+        }
+      }, 1500);
+    }
+  }
+
+  // ===========================================================================
   // FILE SELECTION HANDLERS
   // ===========================================================================
 
@@ -1677,6 +1778,9 @@ class AnnotationModule extends BaseModule {
   // ===========================================================================
 
   async deactivate() {
+    // Stop autosave interval
+    this.stopAutosaveInterval();
+
     // Remove keyboard event listener
     if (this.keydownHandler) {
       document.removeEventListener('keydown', this.keydownHandler);
