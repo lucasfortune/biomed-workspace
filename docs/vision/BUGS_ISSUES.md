@@ -15,11 +15,6 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 ## open Bugs/Issues:
 
-- bug: visualization module: deselecting class, then changing range sliders will make class reappear (even though still deselected)
-    - should stay hidden
-    - prio 4
-    - compl. 3
-
 - issue: educational content: all modules that contain novel processesing methods should contain explanations
     - prio 3
     - compl. 4
@@ -40,6 +35,10 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 
 ## CLOSED
+
+- bug: visualization module: deselecting class, then changing range sliders will make class reappear
+    - FIXED: Added classVisibility state tracking; setClassSliceRange() now respects visibility state
+    - prio 4
 
 - issue: annotation module: auto saving would be great.
     - FIXED: Added autosave toggle in Tools section with 120s interval, only saves when dirty

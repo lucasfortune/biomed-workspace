@@ -79,6 +79,7 @@ class VisualizationModule extends BaseModule {
     this.meshFormat = null;      // 'BufferGeometry' or 'VoxelSlices'
     this.volume = null;          // Dense volume data for endcap generation
     this.availableClasses = [];
+    this.classVisibility = {};   // Track visibility state per class { classId: boolean }
 
     // Original data overlay
     this.originalDataPlanes = null;   // Array of plane meshes
@@ -676,6 +677,12 @@ class VisualizationModule extends BaseModule {
           this.availableClasses = loadResult.availableClasses;
           this.meshFormat = loadResult.format;
 
+          // Initialize visibility state for all classes (default: visible)
+          this.classVisibility = {};
+          this.availableClasses.forEach(cls => {
+            this.classVisibility[cls.id] = true;
+          });
+
           // Store format-specific data
           if (loadResult.format === 'VoxelSlices') {
             this.sliceMeshes = loadResult.sliceMeshes;
@@ -945,10 +952,13 @@ class VisualizationModule extends BaseModule {
   setClassSliceRange(classId, minSlice, maxSlice) {
     if (!this.sliceMeshes[classId]) return;
 
-    // Update slice visibility
+    // Check if class is visible (default to true if not explicitly set)
+    const isClassVisible = this.classVisibility[classId] !== false;
+
+    // Update slice visibility - respect BOTH visibility state AND range
     this.sliceMeshes[classId].forEach((mesh, index) => {
       if (mesh) {
-        mesh.visible = (index >= minSlice && index <= maxSlice);
+        mesh.visible = isClassVisible && (index >= minSlice && index <= maxSlice);
       }
     });
 
@@ -969,6 +979,9 @@ class VisualizationModule extends BaseModule {
             volume: this.volume
           }
         );
+
+        // Set capping visibility to match class visibility state
+        clipping.setCappingVisibility(classId, isClassVisible);
       });
     }
   }
@@ -1139,6 +1152,9 @@ class VisualizationModule extends BaseModule {
    * Toggle class visibility
    */
   toggleClassVisibility(classId, visible) {
+    // Store visibility state for range slider updates to reference
+    this.classVisibility[classId] = visible;
+
     if (this.meshFormat === 'VoxelSlices') {
       // For slice-based meshes, toggle all slices
       if (this.sliceMeshes[classId]) {
