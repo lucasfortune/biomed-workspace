@@ -414,10 +414,8 @@ class VisualizationModule extends BaseModule {
           { label: 'Format', value: validationResult.info.format || 'BufferGeometry' }
         ]);
 
-        // Look up original data via lineage (skip for mesh module files - no lineage yet)
-        if (!fileInfo.fromMeshModule) {
-          await this.lookupOriginalData(fileInfo.id);
-        }
+        // Look up original data via lineage
+        await this.lookupOriginalData(fileInfo.id);
 
         // Enable next button
         this.dataValidated = true;

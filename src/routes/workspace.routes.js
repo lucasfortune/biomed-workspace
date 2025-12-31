@@ -519,8 +519,12 @@ function createWorkspaceRoutes(dependencies) {
         });
       }
 
-      // Find the file
-      const file = metadata.files.find(f => f.id === fileId);
+      // Find the file by ID or path (path fallback for direct module navigation)
+      let file = metadata.files.find(f => f.id === fileId);
+      if (!file) {
+        // Try matching by path (fileId might be a path from mesh module)
+        file = metadata.files.find(f => f.path === fileId || f.path === decodeURIComponent(fileId));
+      }
       if (!file) {
         return res.status(404).json({
           success: false,
@@ -529,11 +533,12 @@ function createWorkspaceRoutes(dependencies) {
         });
       }
 
-      // Get lineage information
-      const chain = getLineageChain(fileId, metadata.files);
-      const roots = findRootFiles(fileId, metadata.files);
-      const processingHistory = getProcessingHistoryString(fileId, metadata.files);
-      const originalDataFile = findOriginalDataFile(fileId, metadata.files);
+      // Get lineage information (use actual file.id for lookups)
+      const actualFileId = file.id;
+      const chain = getLineageChain(actualFileId, metadata.files);
+      const roots = findRootFiles(actualFileId, metadata.files);
+      const processingHistory = getProcessingHistoryString(actualFileId, metadata.files);
+      const originalDataFile = findOriginalDataFile(actualFileId, metadata.files);
 
       res.json({
         success: true,

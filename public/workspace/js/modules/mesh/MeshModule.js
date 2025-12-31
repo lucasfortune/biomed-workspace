@@ -839,8 +839,8 @@ class MeshModule extends BaseModule {
       return;
     }
 
-    // Build the JSON file path from the output directory
-    const jsonFilePath = `${this.meshResult.output_dir}/mesh_data.json`;
+    // Build the JSON file path as a relative path (matches how backend stores in metadata)
+    const jsonFilePath = `results/meshes/${this.currentMeshId}/mesh_data.json`;
 
     // Store result in state for visualization module
     this.state.update('modules.mesh.result', {

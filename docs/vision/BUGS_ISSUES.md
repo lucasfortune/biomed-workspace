@@ -33,8 +33,17 @@ This document contains bugs and/or issues reported by the developer and/or users
     - prio 1
     - compl. 3
 
+- issue: dl denoising module: when autostructn2v method: stage 1 should not have augmentation option & should be off by default.
+    - needs to be removed from config section
+    - stage 2 augmentation toggle should be moved to advanced options section
+    - prio 3
+    - compl. 1
 
 ## CLOSED
+
+- bug: mesh generation & 3d visualization module: original data not available when navigating directly from mesh gen
+    - FIXED: Path mismatch - MeshModule was using absolute path, backend stores relative. Fixed path construction and added path fallback in lineage lookup.
+    - prio 2
 
 - bug: visualization module: deselecting class, then changing range sliders will make class reappear
     - FIXED: Added classVisibility state tracking; setClassSliceRange() now respects visibility state
