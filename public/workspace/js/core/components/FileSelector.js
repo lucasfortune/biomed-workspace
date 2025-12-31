@@ -77,6 +77,9 @@ class FileSelector {
     this.filterRecentResults = config.filterRecentResults || null;
     this.stateManager = config.stateManager || null;
 
+    // External recent results (passed via config, not fetched from API)
+    this.externalRecentResults = config.recentResults || null;
+
     // State
     this.selectedFile = null;
     this.availableFiles = [];
@@ -179,6 +182,14 @@ class FileSelector {
   }
 
   /**
+   * Check if external recent results are provided
+   * @returns {boolean}
+   */
+  hasExternalRecentResults() {
+    return this.externalRecentResults && this.externalRecentResults.length > 0;
+  }
+
+  /**
    * Check if a filename is a TIFF file
    * @param {string} name - Filename
    * @returns {boolean}
@@ -242,7 +253,12 @@ class FileSelector {
       this.addTestDataOptions(dropdown);
     }
 
-    // Add recent results optgroup
+    // Add external recent results (passed via config from API, e.g., training results)
+    if (this.hasExternalRecentResults()) {
+      this.addExternalRecentResultsOptions(dropdown);
+    }
+
+    // Add recent results from workspace files
     if (this.showRecentResults) {
       this.addRecentResultsOptions(dropdown);
     }
@@ -263,14 +279,38 @@ class FileSelector {
       dropdown.appendChild(workspaceGroup);
     }
 
-    // Add help text if no files and no test data
-    if (this.availableFiles.length === 0 && !this.showTestData) {
+    // Add help text if no files, no test data, and no external results
+    if (this.availableFiles.length === 0 && !this.showTestData && !this.hasExternalRecentResults()) {
       const helpOption = document.createElement('option');
       helpOption.value = '';
       helpOption.textContent = '📤 No files available - upload one above';
       helpOption.disabled = true;
       dropdown.appendChild(helpOption);
     }
+  }
+
+  /**
+   * Add external recent results options to dropdown
+   * These are results passed via config, typically from a dedicated API endpoint
+   * @param {HTMLSelectElement} dropdown
+   */
+  addExternalRecentResultsOptions(dropdown) {
+    const resultsGroup = document.createElement('optgroup');
+    resultsGroup.label = 'Recent Training Results';
+
+    this.externalRecentResults.forEach(result => {
+      const option = document.createElement('option');
+      option.value = result.value || result.path;
+      option.textContent = result.label || result.name || 'Result';
+      option.dataset.fileInfo = JSON.stringify(result);
+      option.dataset.isExternalResult = 'true';
+      if (result.trainingId) {
+        option.dataset.trainingId = result.trainingId;
+      }
+      resultsGroup.appendChild(option);
+    });
+
+    dropdown.appendChild(resultsGroup);
   }
 
   /**
@@ -399,6 +439,21 @@ class FileSelector {
       this.showPreview({
         name: selectedOption.textContent,
         info: 'Built-in test dataset for demonstration'
+      });
+    } else if (selectedOption.dataset.isExternalResult) {
+      // External result (e.g., from training API)
+      const fileInfo = JSON.parse(selectedOption.dataset.fileInfo || '{}');
+      this.selectedFile = {
+        path: fileInfo.value || fileInfo.path || selectedOption.value,
+        name: fileInfo.label || selectedOption.textContent,
+        isExternalResult: true,
+        trainingId: fileInfo.trainingId || selectedOption.dataset.trainingId,
+        ...fileInfo
+      };
+
+      this.showPreview({
+        name: fileInfo.label || selectedOption.textContent,
+        info: 'From previous training session'
       });
     } else {
       // Regular workspace file

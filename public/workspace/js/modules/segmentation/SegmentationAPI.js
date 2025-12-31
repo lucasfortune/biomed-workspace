@@ -171,7 +171,7 @@ class SegmentationAPI {
   // ============================================================================
 
   /**
-   * Import pre-trained model
+   * Import pre-trained model (classic file upload)
    * @param {File} modelFile - .pth model file
    * @param {File} configFile - .json config file
    */
@@ -181,6 +181,34 @@ class SegmentationAPI {
     formData.append('config', configFile);
 
     return this._postFormData('/import-pretrained-model', formData);
+  }
+
+  /**
+   * Get recent completed training results for model import
+   * @returns {Promise<{success: boolean, results: Array}>}
+   */
+  async getRecentTrainingResults() {
+    return this._get('/api/segmentation/recent-results');
+  }
+
+  /**
+   * Validate model and config files for import
+   * @param {string} modelPath - Path to model file
+   * @param {string} configPath - Path to config file
+   * @returns {Promise<{success: boolean, valid: boolean, modelInfo?: object, configData?: object, errors?: Array}>}
+   */
+  async validateImportedModel(modelPath, configPath) {
+    return this._post('/api/segmentation/validate-model', { modelPath, configPath });
+  }
+
+  /**
+   * Store imported model paths in session for inference
+   * @param {string} modelPath - Path to model file
+   * @param {string} configPath - Path to config file
+   * @returns {Promise<{success: boolean, message?: string}>}
+   */
+  async storeImportedModel(modelPath, configPath) {
+    return this._post('/api/segmentation/store-imported-model', { modelPath, configPath });
   }
 
   // ============================================================================

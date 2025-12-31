@@ -52,6 +52,23 @@ class SegmentationModule extends BaseModule {
     this.trainingComplete = false;
     this.hasImportedModel = false;
 
+    // Workflow mode: 'train' or 'import'
+    this.workflowMode = null;
+
+    // Import-specific state
+    this.importSelectors = { model: null, config: null };
+    this.importSelectorsInitialized = false;
+    this.importFiles = {
+      model: null,
+      config: null
+    };
+    this.importValidation = {
+      model: { valid: false, result: null },
+      config: { valid: false, result: null }
+    };
+    this.importValidated = false;
+    this.importedModelConfig = null;
+
     // File uploads
     this.uploadedFiles = {
       raw_images: null,
@@ -187,16 +204,51 @@ class SegmentationModule extends BaseModule {
 
         <!-- Main Content Area -->
         <div class="main-content">
-          <!-- Step 1: Data Upload -->
+          <!-- Step 1: Data Upload / Model Import -->
           <div class="step-content active" id="step1">
-            <h2>Step 1: Training Data Selection</h2>
-            <p>Select your TIFF image stacks for training. Both raw images and annotations are required.</p>
+            <h2>Step 1: Training Data or Model Selection</h2>
+            <p>Either upload training data to train a new model, or import a previously trained model.</p>
 
-            <!-- FileSelector components will be inserted here -->
-            <div id="rawImagesSelectorContainer"></div>
-            <div id="annotationsSelectorContainer"></div>
+            <!-- Workflow Selection Section -->
+            <div class="workflow-selection-section">
+              <h4>Choose Workflow</h4>
+              <p class="workflow-hint">Select one option. Opening one will close the other.</p>
 
-            <div id="validationResult"></div>
+              <!-- Train from Scratch Section -->
+              <div class="workflow-section" id="trainFromScratchSection">
+                <div class="workflow-header" data-workflow="train">
+                  <span class="workflow-icon">&#9654;</span>
+                  <div class="workflow-header-content">
+                    <span class="workflow-title">Train from Scratch</span>
+                    <span class="workflow-subtitle">Upload training images and annotations</span>
+                  </div>
+                </div>
+                <div class="workflow-body">
+                  <div class="section-card-inner">
+                    <!-- FileSelector components will be inserted here -->
+                    <div id="rawImagesSelectorContainer"></div>
+                    <div id="annotationsSelectorContainer"></div>
+                    <div id="validationResult"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Import Model Section -->
+              <div class="workflow-section" id="importModelSection">
+                <div class="workflow-header" data-workflow="import">
+                  <span class="workflow-icon">&#9654;</span>
+                  <div class="workflow-header-content">
+                    <span class="workflow-title">Use Pretrained Model</span>
+                    <span class="workflow-subtitle">Import a previously trained model for inference</span>
+                  </div>
+                </div>
+                <div class="workflow-body">
+                  <div id="importModelContent">
+                    <!-- Import selectors will be initialized dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div class="navigation-buttons">
               <div></div>
@@ -548,24 +600,8 @@ class SegmentationModule extends BaseModule {
         await this.loadTestData();
       } else if (this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
         // Both files are selected (workspace files or mix)
-        // Enable the Next button and mark as validated
-        this.filesValidated = true;
-        const step1Next = document.getElementById('step1Next');
-        if (step1Next) {
-          step1Next.disabled = false;
-        }
-
-        // Show validation message using ValidationDisplay component
-        if (!this.validationDisplay) {
-          this.validationDisplay = new ValidationDisplay('validationResult');
-        }
-        this.validationDisplay.showSuccess('Files Selected', [
-          { label: 'Raw Images', value: this.uploadedFiles.raw_images.name || 'Selected' },
-          { label: 'Annotations', value: this.uploadedFiles.annotations.name || 'Selected' }
-        ]);
-
-        // Save state
-        this.saveState();
+        // Need to validate and register files with backend session
+        await this.validateUploadedFiles();
       }
     } else if (type === 'inference_data') {
       if (fileInfo.isTestData) {
@@ -672,12 +708,7 @@ class SegmentationModule extends BaseModule {
 
         // Mark files as validated for step navigation
         this.filesValidated = true;
-
-        // Enable next button
-        const step1Next = document.getElementById('step1Next');
-        if (step1Next) {
-          step1Next.disabled = false;
-        }
+        this.updateStep1NextButton();
 
         // Save state to persist uploaded files
         this.saveState();
@@ -723,14 +754,14 @@ class SegmentationModule extends BaseModule {
       const result = await response.json();
 
       if (result.success) {
-        // Update uploadedFiles with validated info (preserve file names from original upload)
+        // Update uploadedFiles with validated info (preserve file names from original selection)
         this.uploadedFiles.raw_images = {
           path: result.raw_images_path,
-          name: this.pendingFiles.raw_images?.name || 'Raw Images'
+          name: this.pendingFiles?.raw_images?.name || this.uploadedFiles.raw_images?.name || 'Raw Images'
         };
         this.uploadedFiles.annotations = {
           path: result.annotations_path,
-          name: this.pendingFiles.annotations?.name || 'Annotations'
+          name: this.pendingFiles?.annotations?.name || this.uploadedFiles.annotations?.name || 'Annotations'
         };
 
         // Show validation results
@@ -738,12 +769,7 @@ class SegmentationModule extends BaseModule {
 
         // Mark files as validated for step navigation
         this.filesValidated = true;
-
-        // Enable next button
-        const step1Next = document.getElementById('step1Next');
-        if (step1Next) {
-          step1Next.disabled = false;
-        }
+        this.updateStep1NextButton();
 
         // Update FileSelector UI to show uploaded files
         if (this.rawImageSelector && this.uploadedFiles.raw_images) {
@@ -969,6 +995,363 @@ class SegmentationModule extends BaseModule {
     }
   }
 
+  // ===========================================================================
+  // WORKFLOW TOGGLE LOGIC
+  // ===========================================================================
+
+  /**
+   * Handle workflow section toggle (train vs import)
+   * @param {string} workflow - 'train' or 'import'
+   */
+  onWorkflowSectionToggle(workflow) {
+    const trainSection = document.getElementById('trainFromScratchSection');
+    const importSection = document.getElementById('importModelSection');
+
+    if (!trainSection || !importSection) return;
+
+    if (workflow === 'train') {
+      const isActive = trainSection.classList.contains('active');
+      importSection.classList.remove('active');
+      trainSection.classList.toggle('active', !isActive);
+      this.workflowMode = !isActive ? 'train' : null;
+    } else if (workflow === 'import') {
+      const isActive = importSection.classList.contains('active');
+      trainSection.classList.remove('active');
+      importSection.classList.toggle('active', !isActive);
+      this.workflowMode = !isActive ? 'import' : null;
+
+      // Initialize import selectors when first opened
+      if (this.workflowMode === 'import') {
+        this.initializeImportSelectors();
+      }
+    }
+
+    this.updateStep1NextButton();
+    this.saveState();
+  }
+
+  /**
+   * Update Step 1 Next button state based on workflow mode
+   */
+  updateStep1NextButton() {
+    const step1Next = document.getElementById('step1Next');
+    if (!step1Next) return;
+
+    if (!this.workflowMode) {
+      step1Next.disabled = true;
+      step1Next.textContent = 'Next: Configuration';
+      return;
+    }
+
+    if (this.workflowMode === 'train') {
+      step1Next.disabled = !this.filesValidated;
+      step1Next.textContent = 'Next: Configuration';
+    } else if (this.workflowMode === 'import') {
+      step1Next.disabled = !this.importValidated;
+      step1Next.textContent = 'Next: Run Inference';
+    }
+  }
+
+  /**
+   * Handle Step 1 Next button click
+   */
+  async handleStep1Next() {
+    if (this.workflowMode === 'train') {
+      this.goToStep(2); // Go to Configuration
+    } else if (this.workflowMode === 'import') {
+      // Set hasImportedModel flag
+      this.hasImportedModel = true;
+      // Store imported model in session
+      await this.storeImportedModelInSession();
+      // Skip to Step 4
+      this.goToStep(4);
+    }
+  }
+
+  // ===========================================================================
+  // IMPORT MODEL FUNCTIONALITY
+  // ===========================================================================
+
+  /**
+   * Initialize import model FileSelectors
+   */
+  async initializeImportSelectors() {
+    const importContent = document.getElementById('importModelContent');
+    if (!importContent) return;
+
+    // Check if already initialized
+    if (this.importSelectorsInitialized) return;
+
+    console.log('[SegmentationModule] Initializing import selectors...');
+
+    // Fetch recent training results
+    let recentResults = [];
+    try {
+      const api = new SegmentationAPI();
+      const result = await api.getRecentTrainingResults();
+      if (result.success) {
+        recentResults = result.results || [];
+        console.log('[SegmentationModule] Recent results:', recentResults);
+      }
+    } catch (error) {
+      console.error('[SegmentationModule] Error fetching recent results:', error);
+    }
+
+    // Render import section HTML with placeholder containers
+    importContent.innerHTML = this.renderImportSectionContent();
+
+    // Initialize Config FileSelector
+    const configContainer = document.getElementById('importConfigSelector');
+    if (configContainer) {
+      this.importSelectors.config = new FileSelector({
+        id: 'import_config',
+        fileType: 'config',
+        title: 'Select Config',
+        icon: '⚙️',
+        showTestData: false,
+        accept: '.json',
+        stateManager: this.state,
+        recentResults: this.filterRecentResultsForConfig(recentResults),
+        onSelect: (fileInfo) => this.onImportFileSelected('config', fileInfo)
+      });
+      configContainer.innerHTML = this.importSelectors.config.render();
+      this.importSelectors.config.init();
+    }
+
+    // Initialize Model FileSelector
+    const modelContainer = document.getElementById('importModelSelector');
+    if (modelContainer) {
+      this.importSelectors.model = new FileSelector({
+        id: 'import_model',
+        fileType: 'models',
+        title: 'Select Model',
+        icon: '🧠',
+        showTestData: false,
+        accept: '.pth',
+        stateManager: this.state,
+        recentResults: this.filterRecentResultsForModel(recentResults),
+        onSelect: (fileInfo) => this.onImportFileSelected('model', fileInfo)
+      });
+      modelContainer.innerHTML = this.importSelectors.model.render();
+      this.importSelectors.model.init();
+    }
+
+    this.importSelectorsInitialized = true;
+    console.log('[SegmentationModule] Import selectors initialized');
+  }
+
+  /**
+   * Render import model section HTML with placeholder containers for FileSelectors
+   */
+  renderImportSectionContent() {
+    return `
+      <div class="import-content">
+        <div class="import-stage-panel">
+          <h5>Configuration</h5>
+          <p class="import-hint">Select the configuration file (.json) from a previous training.</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Config File (.json)</label>
+              <div id="importConfigSelector"></div>
+            </div>
+          </div>
+          <div id="importConfigValidation" class="import-validation"></div>
+        </div>
+
+        <div class="import-stage-panel">
+          <h5>Model</h5>
+          <p class="import-hint">Select the trained model file (.pth).</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Model File (.pth)</label>
+              <div id="importModelSelector"></div>
+            </div>
+          </div>
+          <div id="importModelValidation" class="import-validation"></div>
+        </div>
+
+        <div id="overallImportValidation"></div>
+      </div>
+    `;
+  }
+
+  /**
+   * Filter recent results for config file selector
+   */
+  filterRecentResultsForConfig(results) {
+    return results.map(r => ({
+      label: `Training ${r.trainingId.substring(0, 8)}... (${r.isTestData ? 'Test Data' : 'Custom'})`,
+      value: r.configPath,
+      trainingId: r.trainingId
+    }));
+  }
+
+  /**
+   * Filter recent results for model file selector
+   */
+  filterRecentResultsForModel(results) {
+    return results.map(r => ({
+      label: `Training ${r.trainingId.substring(0, 8)}... (${r.isTestData ? 'Test Data' : 'Custom'})`,
+      value: r.modelPath,
+      trainingId: r.trainingId
+    }));
+  }
+
+  /**
+   * Handle import file selection
+   * @param {string} field - 'model' or 'config'
+   * @param {Object|null} fileInfo - Selected file info
+   */
+  async onImportFileSelected(field, fileInfo) {
+    console.log(`[SegmentationModule] Import file selected for ${field}:`, fileInfo);
+
+    this.importFiles[field] = fileInfo;
+
+    if (!fileInfo) {
+      // File deselected
+      this.importValidation[field] = { valid: false, result: null };
+      this.updateImportValidationDisplay(field);
+      this.checkOverallImportValidation();
+      return;
+    }
+
+    // Show loading state
+    this.updateImportValidationDisplay(field, 'loading');
+
+    // Check if both files are now selected
+    if (this.importFiles.model && this.importFiles.config) {
+      try {
+        // Validate both files together
+        const api = new SegmentationAPI();
+        const result = await api.validateImportedModel(
+          this.importFiles.model.path || this.importFiles.model.value,
+          this.importFiles.config.path || this.importFiles.config.value
+        );
+
+        console.log('[SegmentationModule] Validation result:', result);
+
+        if (result.success && result.valid) {
+          this.importValidation.model = { valid: true, result };
+          this.importValidation.config = { valid: true, result };
+          this.importedModelConfig = result.configData;
+        } else {
+          this.importValidation.model = { valid: false, result };
+          this.importValidation.config = { valid: false, result };
+        }
+
+        this.updateImportValidationDisplay('model');
+        this.updateImportValidationDisplay('config');
+      } catch (error) {
+        console.error(`[SegmentationModule] Import validation error:`, error);
+        this.importValidation[field] = { valid: false, result: { errors: [error.message] } };
+        this.updateImportValidationDisplay(field);
+      }
+    }
+
+    this.checkOverallImportValidation();
+  }
+
+  /**
+   * Update import validation display for a field
+   * @param {string} field - 'model' or 'config'
+   * @param {string} [state] - 'loading' for loading state
+   */
+  updateImportValidationDisplay(field, state) {
+    const containerId = field === 'model' ? 'importModelValidation' : 'importConfigValidation';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (state === 'loading') {
+      container.innerHTML = `<div class="import-validation-loading">⏳ Validating...</div>`;
+      return;
+    }
+
+    const validation = this.importValidation[field];
+    if (!validation || !this.importFiles[field]) {
+      container.innerHTML = '';
+      return;
+    }
+
+    if (validation.valid) {
+      container.innerHTML = `<div class="import-validation-success">✓ Valid</div>`;
+    } else if (validation.result?.errors) {
+      container.innerHTML = `<div class="import-validation-error">✗ ${validation.result.errors.join(', ')}</div>`;
+    }
+  }
+
+  /**
+   * Check overall import validation and update UI
+   */
+  checkOverallImportValidation() {
+    const modelValid = this.importValidation.model?.valid || false;
+    const configValid = this.importValidation.config?.valid || false;
+
+    this.importValidated = modelValid && configValid;
+
+    // Update overall validation display
+    const overallContainer = document.getElementById('overallImportValidation');
+    if (overallContainer) {
+      if (this.importValidated) {
+        const configInfo = this.importedModelConfig;
+        overallContainer.innerHTML = `
+          <div class="overall-import-validation success">
+            <strong>✓ Model Ready for Inference</strong>
+            <p style="margin: 8px 0 0 0; font-size: 13px; color: #28a745;">
+              Features: ${configInfo?.features || 'N/A'} | Layers: ${configInfo?.num_layers || 'N/A'} | Classes: ${configInfo?.num_classes || 'N/A'}
+            </p>
+          </div>
+        `;
+      } else if (this.importFiles.model && this.importFiles.config) {
+        const errors = this.importValidation.model?.result?.errors ||
+                      this.importValidation.config?.result?.errors || [];
+        if (errors.length > 0) {
+          overallContainer.innerHTML = `
+            <div class="overall-import-validation error">
+              <strong>✗ Validation Failed</strong>
+              <p style="margin: 8px 0 0 0; font-size: 13px;">${errors.join(', ')}</p>
+            </div>
+          `;
+        } else {
+          overallContainer.innerHTML = '';
+        }
+      } else {
+        overallContainer.innerHTML = '';
+      }
+    }
+
+    this.updateStep1NextButton();
+    this.saveState();
+  }
+
+  /**
+   * Store imported model info in session for inference
+   */
+  async storeImportedModelInSession() {
+    try {
+      const modelPath = this.importFiles.model?.path || this.importFiles.model?.value;
+      const configPath = this.importFiles.config?.path || this.importFiles.config?.value;
+
+      if (!modelPath || !configPath) {
+        throw new Error('Model and config paths are required');
+      }
+
+      const api = new SegmentationAPI();
+      const result = await api.storeImportedModel(modelPath, configPath);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to store imported model');
+      }
+
+      this.state.notify('success', 'Model imported successfully');
+      console.log('[SegmentationModule] Imported model stored in session');
+
+    } catch (error) {
+      console.error('[SegmentationModule] Error storing imported model:', error);
+      this.state.notify('error', `Import failed: ${error.message}`);
+      throw error;
+    }
+  }
+
   /**
    * Initialize Socket.IO connection
    */
@@ -1117,10 +1500,20 @@ class SegmentationModule extends BaseModule {
    * Set up event listeners
    */
   setupEventListeners() {
+    // Workflow section toggle handlers
+    document.querySelectorAll('.workflow-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const workflow = header.dataset.workflow;
+        if (workflow) {
+          this.onWorkflowSectionToggle(workflow);
+        }
+      });
+    });
+
     // Step 1: Navigation
     const step1Next = document.getElementById('step1Next');
     if (step1Next) {
-      step1Next.onclick = () => this.goToStep(2);
+      step1Next.onclick = () => this.handleStep1Next();
     }
 
     // Step 2: Configuration
@@ -1618,7 +2011,12 @@ class SegmentationModule extends BaseModule {
       filesValidated: this.filesValidated,
       configSaved: this.configSaved,
       trainingComplete: this.trainingComplete,
-      hasImportedModel: this.hasImportedModel
+      hasImportedModel: this.hasImportedModel,
+      // Workflow mode and import state
+      workflowMode: this.workflowMode,
+      importFiles: this.importFiles,
+      importValidated: this.importValidated,
+      importedModelConfig: this.importedModelConfig
     };
 
     // Preserve currentTask if it exists
@@ -1638,6 +2036,11 @@ class SegmentationModule extends BaseModule {
     this.state.update('modules.segmentation.configSaved', this.configSaved);
     this.state.update('modules.segmentation.trainingComplete', this.trainingComplete);
     this.state.update('modules.segmentation.hasImportedModel', this.hasImportedModel);
+    // Persist workflow mode and import state
+    this.state.update('modules.segmentation.workflowMode', this.workflowMode);
+    this.state.update('modules.segmentation.importFiles', this.importFiles);
+    this.state.update('modules.segmentation.importValidated', this.importValidated);
+    this.state.update('modules.segmentation.importedModelConfig', this.importedModelConfig);
     if (state.currentTask) {
       this.state.update('modules.segmentation.currentTask', state.currentTask);
     }
@@ -1682,6 +2085,24 @@ class SegmentationModule extends BaseModule {
       configSaved: this.configSaved,
       trainingComplete: this.trainingComplete,
       hasImportedModel: this.hasImportedModel
+    });
+
+    // Restore workflow mode and import state
+    if (segmentationState.workflowMode) {
+      this.workflowMode = segmentationState.workflowMode;
+    }
+    if (segmentationState.importFiles) {
+      this.importFiles = segmentationState.importFiles;
+    }
+    if (segmentationState.importValidated !== undefined) {
+      this.importValidated = segmentationState.importValidated;
+    }
+    if (segmentationState.importedModelConfig) {
+      this.importedModelConfig = segmentationState.importedModelConfig;
+    }
+    console.log('[SegmentationModule] Restored workflow state:', {
+      workflowMode: this.workflowMode,
+      importValidated: this.importValidated
     });
 
     // Restore training/inference IDs

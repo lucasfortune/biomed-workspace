@@ -284,18 +284,18 @@ def calculate_inference_metrics(segmented_stack):
     
     return metrics
 
-def save_segmentation_results(segmented_stack, output_path, input_path, model_config):
+def save_segmentation_results(segmented_stack, output_dir, input_path, model_config, inference_id):
     """Save segmentation results and metadata"""
 
-    # Create directory structure: /segmented/
-    base_dir = os.path.dirname(output_path)
-    segmented_dir = os.path.join(base_dir, 'segmented')
+    # Create output directory (results/segmentation/<ID>/)
+    os.makedirs(output_dir, exist_ok=True)
 
-    os.makedirs(segmented_dir, exist_ok=True)
+    # Use consistent naming: segmentation_inference_<ID>.tif
+    output_filename = f"segmentation_inference_{inference_id}.tif"
+    metadata_filename = f"segmentation_inference_{inference_id}_metadata.json"
 
-    # Update paths to use new subdirectories
-    segmented_output_path = os.path.join(segmented_dir, 'inference_result.tif')
-    metadata_path = os.path.join(segmented_dir, 'inference_result_metadata.json')
+    segmented_output_path = os.path.join(output_dir, output_filename)
+    metadata_path = os.path.join(output_dir, metadata_filename)
 
     # Save the segmented TIFF stack
     tifffile.imwrite(segmented_output_path, segmented_stack)
@@ -315,7 +315,7 @@ def save_segmentation_results(segmented_stack, output_path, input_path, model_co
 
     print(f"Metadata saved to: {metadata_path}", flush=True)
 
-    return metadata
+    return metadata, segmented_output_path, metadata_path
 
 def main():
     parser = argparse.ArgumentParser(description='Run inference on TIFF stack')
@@ -362,12 +362,12 @@ def main():
         
         # Save results
         print("Saving results...", flush=True)
-        metadata = save_segmentation_results(segmented_stack, args.output, args.input, model_config)
-
-        # Calculate actual paths based on directory structure
-        base_dir = os.path.dirname(args.output)
-        segmented_output_path = os.path.join(base_dir, 'segmented', 'inference_result.tif')
-        metadata_path = os.path.join(base_dir, 'segmented', 'inference_result_metadata.json')
+        # Output dir is the directory part of the output path
+        output_dir = os.path.dirname(args.output)
+        inference_id = args.inference_id or 'unknown'
+        metadata, segmented_output_path, metadata_path = save_segmentation_results(
+            segmented_stack, output_dir, args.input, model_config, inference_id
+        )
 
         # Prepare results
         result = {

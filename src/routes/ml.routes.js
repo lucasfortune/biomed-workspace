@@ -82,6 +82,13 @@ function createMLRoutes(dependencies) {
       const sessionId = req.session.id;
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
+      // Clear any imported model from session when uploading training data
+      // This indicates user is starting the "Train from Scratch" workflow
+      if (req.session.importedModel) {
+        delete req.session.importedModel;
+        if (logger) logger.info('Cleared importedModel from session - uploading training data');
+      }
+
       const skipUpload = req.body.skipUpload === 'true';
       const isTestData = req.body.isTestData === 'true';
 
@@ -338,6 +345,13 @@ function createMLRoutes(dependencies) {
 
       const sessionId = req.session.id;
       const trainingId = uuid.v4();
+
+      // Clear any imported model from session since we're training from scratch
+      // This prevents inference from mistakenly using an old imported model
+      if (req.session.importedModel) {
+        delete req.session.importedModel;
+        if (logger) logger.info('Cleared importedModel from session - training from scratch');
+      }
 
       // Add num_classes from validation
       const config = req.session.trainingConfig;
@@ -676,6 +690,226 @@ function createMLRoutes(dependencies) {
   });
 
   // ===========================================================================
+  // SEGMENTATION MODEL IMPORT (Workspace Workflow)
+  // ===========================================================================
+
+  /**
+   * Get recent completed training results for model import
+   * GET /api/segmentation/recent-results
+   */
+  router.get('/api/segmentation/recent-results', requireAuth, (req, res) => {
+    try {
+      const sessionId = req.session.id;
+      const results = [];
+
+      // Iterate through trainingSessions to find completed ones for this session
+      for (const [trainingId, session] of trainingSessions.entries()) {
+        if (session.sessionId === sessionId && session.status === 'completed') {
+          const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+          const modelDir = path.join(workspacePath, 'models', 'segmentation', trainingId);
+          const modelPath = path.join(modelDir, 'best_model.pth');
+          const configPath = path.join(modelDir, 'config.json');
+
+          // Only include if model files exist
+          if (fs.existsSync(modelPath) && fs.existsSync(configPath)) {
+            let configData = null;
+            try {
+              configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            } catch (e) {
+              // Ignore parse errors
+            }
+
+            results.push({
+              trainingId,
+              completedAt: session.endTime || session.startTime,
+              modelPath: path.relative(workspacePath, modelPath),
+              configPath: path.relative(workspacePath, configPath),
+              config: configData,
+              isTestData: session.isTestData || false
+            });
+          }
+        }
+      }
+
+      // Sort by completion time (most recent first)
+      results.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+      res.json({ success: true, results });
+
+    } catch (error) {
+      if (logger) logger.error('Error getting recent results:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get recent training results: ' + error.message
+      });
+    }
+  });
+
+  /**
+   * Validate model and config files for import
+   * POST /api/segmentation/validate-model
+   */
+  router.post('/api/segmentation/validate-model', requireAuth, async (req, res) => {
+    try {
+      const { modelPath, configPath } = req.body;
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      if (!modelPath || !configPath) {
+        return res.status(400).json({
+          success: false,
+          error: 'Both modelPath and configPath are required'
+        });
+      }
+
+      // Resolve paths relative to workspace
+      const absoluteModelPath = path.isAbsolute(modelPath)
+        ? modelPath
+        : path.join(workspacePath, modelPath);
+      const absoluteConfigPath = path.isAbsolute(configPath)
+        ? configPath
+        : path.join(workspacePath, configPath);
+
+      // Check files exist
+      if (!fs.existsSync(absoluteModelPath)) {
+        return res.json({
+          success: true,
+          valid: false,
+          errors: [`Model file not found: ${modelPath}`]
+        });
+      }
+
+      if (!fs.existsSync(absoluteConfigPath)) {
+        return res.json({
+          success: true,
+          valid: false,
+          errors: [`Config file not found: ${configPath}`]
+        });
+      }
+
+      // Validate using existing function
+      const validationResult = await validateImportedModel(absoluteModelPath, absoluteConfigPath);
+
+      if (validationResult.success) {
+        // Parse config for additional info
+        let configData = null;
+        try {
+          configData = JSON.parse(fs.readFileSync(absoluteConfigPath, 'utf8'));
+        } catch (e) {
+          return res.json({
+            success: true,
+            valid: false,
+            errors: ['Failed to parse config.json: ' + e.message]
+          });
+        }
+
+        res.json({
+          success: true,
+          valid: true,
+          modelInfo: {
+            path: modelPath,
+            size: validationResult.model_size
+          },
+          configData
+        });
+      } else {
+        res.json({
+          success: true,
+          valid: false,
+          errors: [validationResult.error || 'Model validation failed']
+        });
+      }
+
+    } catch (error) {
+      if (logger) logger.error('Error validating model:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to validate model: ' + error.message
+      });
+    }
+  });
+
+  /**
+   * Store imported model paths in session (workspace workflow)
+   * POST /api/segmentation/store-imported-model
+   *
+   * Unlike /import-pretrained-model which expects file uploads,
+   * this accepts paths to already-validated files in workspace.
+   */
+  router.post('/api/segmentation/store-imported-model', requireAuth, async (req, res) => {
+    try {
+      const { modelPath, configPath } = req.body;
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      if (!modelPath || !configPath) {
+        return res.status(400).json({
+          success: false,
+          error: 'Both modelPath and configPath are required'
+        });
+      }
+
+      // Resolve paths
+      const absoluteModelPath = path.isAbsolute(modelPath)
+        ? modelPath
+        : path.join(workspacePath, modelPath);
+      const absoluteConfigPath = path.isAbsolute(configPath)
+        ? configPath
+        : path.join(workspacePath, configPath);
+
+      // Verify files exist
+      if (!fs.existsSync(absoluteModelPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Model file not found'
+        });
+      }
+      if (!fs.existsSync(absoluteConfigPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Config file not found'
+        });
+      }
+
+      // Load and parse config
+      let configData;
+      try {
+        configData = JSON.parse(fs.readFileSync(absoluteConfigPath, 'utf8'));
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          error: 'Failed to parse config file: ' + e.message
+        });
+      }
+
+      // Store in session (matches existing importedModel format)
+      req.session.importedModel = {
+        modelPath: absoluteModelPath,
+        configPath: absoluteConfigPath,
+        validated: true,
+        validation: {
+          config: configData,
+          model_size: fs.statSync(absoluteModelPath).size
+        }
+      };
+
+      if (logger) logger.info(`[ML] Stored imported model for session ${sessionId}`);
+
+      res.json({
+        success: true,
+        message: 'Model stored in session for inference'
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Error storing imported model:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to store imported model: ' + error.message
+      });
+    }
+  });
+
+  // ===========================================================================
   // INFERENCE EXECUTION
   // ===========================================================================
 
@@ -757,22 +991,21 @@ function createMLRoutes(dependencies) {
         req.session.importedModelResultsDirs = [];
       }
 
-      // Generate output path if not provided
-      let actualOutputPath = output_path;
-      if (!actualOutputPath) {
-        if (req.session.importedModel && req.session.importedModel.validated) {
-          const timestamp = Date.now();
-          const importedModelDir = `imported_model_${timestamp}`;
-          actualOutputPath = path.join(workspacePath, 'results', 'segmentation', importedModelDir, 'inference_result.tif');
-
-          const resultsDir = path.join(workspacePath, 'results', 'segmentation', importedModelDir);
-          req.session.importedModelResultsDirs.push(resultsDir);
-        } else if (training_id) {
-          actualOutputPath = path.join(workspacePath, 'results', 'segmentation', training_id, 'inference_result.tif');
-        } else {
-          actualOutputPath = path.join(workspacePath, 'results', 'segmentation', `inference_${inferenceId}`, 'inference_result.tif');
-        }
+      // Generate output directory path (Python script will generate filename)
+      let outputDir;
+      if (req.session.importedModel && req.session.importedModel.validated) {
+        const timestamp = Date.now();
+        const importedModelDir = `imported_model_${timestamp}`;
+        outputDir = path.join(workspacePath, 'results', 'segmentation', importedModelDir);
+        req.session.importedModelResultsDirs.push(outputDir);
+      } else if (training_id) {
+        outputDir = path.join(workspacePath, 'results', 'segmentation', training_id);
+      } else {
+        outputDir = path.join(workspacePath, 'results', 'segmentation', `inference_${inferenceId}`);
       }
+
+      // Create a placeholder path for the Python script (it will use the directory)
+      const actualOutputPath = path.join(outputDir, 'placeholder.tif');
 
       // Store inference session
       inferenceSessions.set(inferenceId, {

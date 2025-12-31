@@ -276,8 +276,8 @@ class TrainingService {
 
     const filesToTrack = [
       { path: path.join(outputDir, 'best_model.pth'), category: 'models' },
-      { path: path.join(outputDir, 'config.json'), category: 'models' },
-      { path: path.join(outputDir, 'results.json'), category: 'models' }
+      { path: path.join(outputDir, 'config.json'), category: 'config' },
+      { path: path.join(outputDir, 'results.json'), category: 'results' }
     ];
 
     for (const file of filesToTrack) {
