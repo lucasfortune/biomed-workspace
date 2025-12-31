@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="15" fill="#EB1F17"/>
+  <!-- Microscope/cell visualization icon -->
+  <g fill="#FFFFFF">
+    <!-- Grid pattern representing image processing -->
+    <rect x="8" y="8" width="6" height="6" rx="1"/>
+    <rect x="18" y="8" width="6" height="6" rx="1"/>
+    <rect x="8" y="18" width="6" height="6" rx="1"/>
+    <!-- Highlighted/analyzed segment -->
+    <rect x="18" y="18" width="6" height="6" rx="1" fill="#FFFFFF" opacity="0.6"/>
+    <!-- Center crosshair/focus point -->
+    <circle cx="16" cy="16" r="2" fill="#EB1F17" stroke="#FFFFFF" stroke-width="1.5"/>
+  </g>
+</svg>
