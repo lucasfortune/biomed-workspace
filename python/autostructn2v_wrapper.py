@@ -1155,6 +1155,7 @@ def run_inference(config: dict):
         input_path = config['input_path']
         output_dir = config['output_dir']
         stage = config.get('stage', 'stage1')  # Which model to use
+        method = config.get('method', 'n2v')  # 'n2v' or 'autostructn2v'
 
         # Get model config
         model_config = config.get('model_config', {})
@@ -1212,8 +1213,10 @@ def run_inference(config: dict):
             slice_norm = (slice_img - slice_img.min()) / (slice_img.max() - slice_img.min() + 1e-8)
             slice_norm = slice_norm.astype(np.float32)
 
-            # Denoise
-            denoised = predictor.predict(slice_norm)
+            # Convert to tensor and denoise
+            slice_tensor = torch.from_numpy(slice_norm).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
+            denoised_tensor = predictor.denoise_tensor(slice_tensor)
+            denoised = denoised_tensor.squeeze().cpu().numpy()
 
             # Rescale to original range
             denoised_rescaled = denoised * (slice_img.max() - slice_img.min()) + slice_img.min()
@@ -1228,15 +1231,18 @@ def run_inference(config: dict):
                     "progressPercent": round((i + 1) / total_slices * 100, 1)
                 })
 
-        # Save output
+        # Save output with proper naming convention
         os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, 'denoised.tif')
+        method_prefix = 'n2v' if method == 'n2v' else 'asn2v'
+        output_filename = f'{method_prefix}_denoised_{inference_id}.tif'
+        output_path = os.path.join(output_dir, output_filename)
         output_stack = np.array(output_stack)
         tifffile.imwrite(output_path, output_stack)
 
         # Save metadata
         metadata = {
             "inference_id": inference_id,
+            "method": method,
             "input_path": input_path,
             "output_path": output_path,
             "model_path": model_path,
@@ -1253,7 +1259,180 @@ def run_inference(config: dict):
             "inference_id": inference_id,
             "outputPath": output_path,
             "metadataPath": metadata_path,
-            "slicesProcessed": total_slices
+            "totalSlices": total_slices,
+            "method": method
+        })
+
+    except Exception as e:
+        emit_error('inference', str(e), traceback.format_exc())
+        raise
+
+
+def run_sequential_inference(config: dict):
+    """
+    Run sequential inference for autoStructN2V: Stage 1 (N2V) -> Stage 2 (Struct-N2V).
+
+    This processes input data through both stages, using the output of Stage 1
+    as input to Stage 2.
+    """
+    inference_id = config.get('inference_id', f'infer_seq_{int(time.time())}')
+
+    try:
+        stage1_model_path = config['stage1_model_path']
+        stage2_model_path = config['stage2_model_path']
+        input_path = config['input_path']
+        output_dir = config['output_dir']
+
+        stage1_config = config.get('stage1_config', {})
+        stage2_config = config.get('stage2_config', {})
+
+        # Set device
+        device = torch.device('cuda' if torch.cuda.is_available() and config.get('device', 'cuda') == 'cuda' else 'cpu')
+
+        import tifffile
+
+        # Load input data
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "stage": "stage1",
+            "status": "loading_data"
+        })
+
+        input_stack = tifffile.imread(input_path)
+        if input_stack.ndim == 2:
+            input_stack = input_stack[np.newaxis, ...]
+
+        total_slices = len(input_stack)
+
+        # =========== Stage 1: N2V ===========
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "stage": "stage1",
+            "status": "loading_model",
+            "device": str(device)
+        })
+
+        # Load Stage 1 model
+        stage1_model = create_model(
+            'stage1',
+            features=stage1_config.get('features', 64),
+            num_layers=stage1_config.get('num_layers', 2),
+            use_resize_conv=stage1_config.get('use_resize_conv', True),
+            upsampling_mode=stage1_config.get('upsampling_mode', 'bilinear')
+        ).to(device)
+
+        checkpoint = torch.load(stage1_model_path, map_location=device)
+        stage1_model.load_state_dict(checkpoint['model_state_dict'])
+        stage1_model.eval()
+
+        patch_size = stage1_config.get('patch_size', 64)
+        stage1_predictor = AutoStructN2VPredictor(model=stage1_model, patch_size=patch_size)
+
+        # Process Stage 1
+        stage1_output = []
+        for i, img in enumerate(input_stack):
+            # Normalize
+            img_normalized = (img - img.min()) / (img.max() - img.min() + 1e-8)
+            img_normalized = img_normalized.astype(np.float32)
+
+            # Convert to tensor and denoise
+            img_tensor = torch.from_numpy(img_normalized).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
+            denoised_tensor = stage1_predictor.denoise_tensor(img_tensor)
+            denoised = denoised_tensor.squeeze().cpu().numpy()
+            stage1_output.append(denoised)
+
+            progress_percent = ((i + 1) / total_slices) * 50  # Stage 1 is 0-50%
+            emit_progress('inference', {
+                "inference_id": inference_id,
+                "stage": "stage1",
+                "status": "processing",
+                "current_slice": i + 1,
+                "total_slices": total_slices,
+                "progress_percent": progress_percent
+            })
+
+        stage1_output = np.array(stage1_output)
+
+        # Save Stage 1 intermediate output
+        stage1_output_path = os.path.join(output_dir, f'stage1_denoised_{inference_id}.tif')
+        tifffile.imwrite(stage1_output_path, stage1_output.astype(np.float32))
+
+        # =========== Stage 2: Struct-N2V ===========
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "stage": "stage2",
+            "status": "loading_model"
+        })
+
+        # Load Stage 2 model
+        stage2_model = create_model(
+            'stage2',
+            features=stage2_config.get('features', 64),
+            num_layers=stage2_config.get('num_layers', 2),
+            use_resize_conv=stage2_config.get('use_resize_conv', True),
+            upsampling_mode=stage2_config.get('upsampling_mode', 'bilinear')
+        ).to(device)
+
+        checkpoint = torch.load(stage2_model_path, map_location=device)
+        stage2_model.load_state_dict(checkpoint['model_state_dict'])
+        stage2_model.eval()
+
+        patch_size = stage2_config.get('patch_size', 64)
+        stage2_predictor = AutoStructN2VPredictor(model=stage2_model, patch_size=patch_size)
+
+        # Process Stage 2 using Stage 1 output
+        stage2_output = []
+        for i, img in enumerate(stage1_output):
+            # Stage 1 output is already normalized (0-1 range)
+            img_float = img.astype(np.float32)
+
+            # Convert to tensor and denoise
+            img_tensor = torch.from_numpy(img_float).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
+            denoised_tensor = stage2_predictor.denoise_tensor(img_tensor)
+            denoised = denoised_tensor.squeeze().cpu().numpy()
+            stage2_output.append(denoised)
+
+            progress_percent = 50 + ((i + 1) / total_slices) * 50  # Stage 2 is 50-100%
+            emit_progress('inference', {
+                "inference_id": inference_id,
+                "stage": "stage2",
+                "status": "processing",
+                "current_slice": i + 1,
+                "total_slices": total_slices,
+                "progress_percent": progress_percent
+            })
+
+        stage2_output = np.array(stage2_output)
+
+        # Save final output with proper naming convention
+        output_filename = f'asn2v_denoised_{inference_id}.tif'
+        output_path = os.path.join(output_dir, output_filename)
+        tifffile.imwrite(output_path, stage2_output.astype(np.float32))
+
+        # Save metadata
+        metadata = {
+            "inference_id": inference_id,
+            "method": "autostructn2v",
+            "input_path": input_path,
+            "output_path": output_path,
+            "stage1_output_path": stage1_output_path,
+            "stage1_model_path": stage1_model_path,
+            "stage2_model_path": stage2_model_path,
+            "slices_processed": total_slices,
+            "completed_at": datetime.now().isoformat()
+        }
+
+        metadata_path = os.path.join(output_dir, 'inference_metadata.json')
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=4)
+
+        emit_result('inference', {
+            "inference_id": inference_id,
+            "outputPath": output_path,
+            "stage1OutputPath": stage1_output_path,
+            "metadataPath": metadata_path,
+            "totalSlices": total_slices,
+            "method": "autostructn2v"
         })
 
     except Exception as e:
@@ -1627,8 +1806,8 @@ def main():
     parser = argparse.ArgumentParser(description='autoStructN2V Web Wrapper')
     parser.add_argument('--config', required=True, help='Path to config JSON file')
     parser.add_argument('--mode', required=True,
-                        choices=['train', 'inference', 'extract_mask', 'train_stage2_only'],
-                        help='Operation mode: train, inference, extract_mask, or train_stage2_only (resume after mask approval)')
+                        choices=['train', 'inference', 'extract_mask', 'train_stage2_only', 'inference_sequential'],
+                        help='Operation mode: train, inference, extract_mask, train_stage2_only (resume after mask approval), or inference_sequential (stage1 then stage2)')
 
     args = parser.parse_args()
 
@@ -1652,6 +1831,8 @@ def main():
             extract_mask(config)
         elif args.mode == 'train_stage2_only':
             run_stage2_only(config)
+        elif args.mode == 'inference_sequential':
+            run_sequential_inference(config)
     except Exception as e:
         # Error already emitted in the function
         sys.exit(1)

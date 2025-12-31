@@ -36,10 +36,9 @@ class Templates {
       <!-- Step 1: Data Selection -->
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Image Data & Method</h3>
+          <h3>Select Method & Data</h3>
           <p class="step-description">
-            Choose a TIFF stack to denoise and select your denoising method.
-            Deep learning denoising uses self-supervised learning - no clean reference images needed.
+            First select your denoising method, then choose to train from scratch or import a previously trained model.
           </p>
 
           <!-- GPU Status -->
@@ -48,17 +47,10 @@ class Templates {
             <span class="gpu-status-text">Checking GPU availability...</span>
           </div>
 
-          <!-- File Selection -->
-          <div class="section-card">
-            <h4>Input Image</h4>
-            <div id="fileSelectorContainer"></div>
-            <div id="validationResult"></div>
-          </div>
-
-          <!-- Method Selection -->
-          <div class="section-card">
+          <!-- Method Selection (always visible at top) -->
+          <div class="section-card method-section">
             <div class="method-selector">
-              <h4>Denoising Method</h4>
+              <h4>1. Select Denoising Method</h4>
               <label class="method-option">
                 <input type="radio" name="dl-method" value="n2v">
                 <span class="method-content">
@@ -85,6 +77,49 @@ class Templates {
                   </span>
                 </span>
               </label>
+            </div>
+          </div>
+
+          <!-- Workflow Selection Section -->
+          <div id="workflowSelectionSection" class="workflow-selection-section" style="display: none;">
+            <h4>2. Choose Workflow</h4>
+            <p class="workflow-hint">Select one of the options below. Opening one will close the other.</p>
+
+            <!-- Train from Scratch Section (collapsible) -->
+            <div class="workflow-section" id="trainFromScratchSection">
+              <div class="workflow-header" data-workflow="train">
+                <span class="workflow-icon">&#9654;</span>
+                <div class="workflow-header-content">
+                  <span class="workflow-title">Train from Scratch</span>
+                  <span class="workflow-subtitle">Upload images to train a new denoising model</span>
+                </div>
+              </div>
+              <div class="workflow-body">
+                <div class="section-card-inner">
+                  <h5>Input Image</h5>
+                  <div id="fileSelectorContainer"></div>
+                  <div id="validationResult"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Import Previously Trained Section (collapsible) -->
+            <div class="workflow-section" id="importModelSection">
+              <div class="workflow-header" data-workflow="import">
+                <span class="workflow-icon">&#9654;</span>
+                <div class="workflow-header-content">
+                  <span class="workflow-title">Import Previously Trained Model</span>
+                  <span class="workflow-subtitle">Use an existing model to process new images</span>
+                </div>
+              </div>
+              <div class="workflow-body">
+                <div id="importModelContent">
+                  <!-- Content will be populated based on method selection -->
+                  <div class="import-placeholder">
+                    <p>Import functionality will be populated after method selection.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -405,31 +440,151 @@ class Templates {
   }
 
   /**
-   * Render Step 4: Inference
+   * Render import model section content for N2V (single stage)
+   * @returns {string} HTML for N2V import section
+   */
+  static renderN2VImportSection() {
+    return `
+      <div class="import-content">
+        <div class="import-stage-panel">
+          <h5>Configuration</h5>
+          <p class="import-hint">Select the configuration file (.json) from a previous training.</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Config File (.json)</label>
+              <div id="importConfigSelector"></div>
+            </div>
+          </div>
+          <div id="importConfigValidation" class="import-validation"></div>
+        </div>
+
+        <div class="import-stage-panel">
+          <h5>Model</h5>
+          <p class="import-hint">Select the trained model file (.pth).</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Model File (.pth)</label>
+              <div id="importStage1ModelSelector"></div>
+            </div>
+          </div>
+          <div id="importStage1Validation" class="import-validation"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render import model section content for autoStructN2V (two stages)
+   * @returns {string} HTML for autoStructN2V import section
+   */
+  static renderAutoStructN2VImportSection() {
+    return `
+      <div class="import-content">
+        <div class="import-stage-panel">
+          <h5>Configuration</h5>
+          <p class="import-hint">Select the configuration file (.json) containing settings for both stages.</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Config File (.json)</label>
+              <div id="importConfigSelector"></div>
+            </div>
+          </div>
+          <div id="importConfigValidation" class="import-validation"></div>
+        </div>
+
+        <div class="import-stage-panel">
+          <h5>Stage 1 Model (N2V)</h5>
+          <p class="import-hint">Select the Stage 1 (N2V) model file.</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Stage 1 Model (.pth)</label>
+              <div id="importStage1ModelSelector"></div>
+            </div>
+          </div>
+          <div id="importStage1Validation" class="import-validation"></div>
+        </div>
+
+        <div class="import-stage-panel">
+          <h5>Stage 2 Model (Struct-N2V)</h5>
+          <p class="import-hint">Select the Stage 2 (Struct-N2V) model file.</p>
+          <div class="file-row">
+            <div class="file-input-group">
+              <label>Stage 2 Model (.pth)</label>
+              <div id="importStage2ModelSelector"></div>
+            </div>
+          </div>
+          <div id="importStage2Validation" class="import-validation"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render Step 4: Inference / Additional Processing
    */
   static renderStep4() {
     return `
-      <!-- Step 4: Inference (placeholder for Phase 7) -->
+      <!-- Step 4: Inference / Additional Processing -->
       <div id="step4" class="step-content">
         <div class="step-inner">
-          <h3>Inference</h3>
+          <h3>Process Additional Data</h3>
           <p class="step-description">
-            Apply the trained model to denoise images.
+            Apply the trained model to denoise additional images.
           </p>
 
-          <div class="section-card placeholder-section">
-            <div class="placeholder-icon">&#128300;</div>
-            <div class="placeholder-text">
-              Inference functionality will be implemented in Phase 7.
-              <br><br>
-              This will allow you to apply the trained model to your
-              training data or upload new images for denoising.
+          <!-- Model Info Section -->
+          <div id="inferenceModelInfo" class="section-card model-info-card">
+            <h4>Model Information</h4>
+            <div id="modelInfoContent" class="model-info-content">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Input Selection Section -->
+          <div class="section-card">
+            <h4>Select Data to Process</h4>
+            <p class="section-hint">Select a TIFF stack to denoise using the trained model.</p>
+            <div id="inferenceFileSelectorContainer"></div>
+            <div id="inferenceValidationResult"></div>
+          </div>
+
+          <!-- Process Button -->
+          <div id="inferenceActions" class="inference-actions">
+            <button id="processDataBtn" class="btn primary" disabled>
+              Process Data
+            </button>
+          </div>
+
+          <!-- Progress Section (hidden initially) -->
+          <div id="inferenceProgressSection" class="section-card" style="display: none;">
+            <h4>Processing Progress</h4>
+            <div class="inference-progress">
+              <div id="inferenceStatusText" class="inference-status">Initializing...</div>
+              <div class="progress-bar-container">
+                <div id="inferenceProgressBar" class="progress-bar" style="width: 0%"></div>
+              </div>
+              <div id="inferenceProgressText" class="progress-text">0%</div>
+            </div>
+          </div>
+
+          <!-- Success Section (hidden initially) -->
+          <div id="inferenceSuccessSection" class="section-card success-card" style="display: none;">
+            <div class="success-header">
+              <span class="success-icon">✓</span>
+              <span class="success-title">Processing Complete!</span>
+            </div>
+            <div id="inferenceResultInfo" class="result-info">
+              <!-- Populated dynamically -->
+            </div>
+            <div class="success-actions">
+              <button id="openInViewerBtn" class="btn primary">Open in Image Viewer</button>
+              <button id="processMoreBtn" class="btn secondary">Process More</button>
             </div>
           </div>
 
           <div class="navigation-buttons">
             <button id="step4Back" class="btn secondary">Back</button>
-            <button id="step4Finish" class="btn" disabled>View Results</button>
+            <button id="step4Finish" class="btn" style="display: none;">Done</button>
           </div>
         </div>
       </div>

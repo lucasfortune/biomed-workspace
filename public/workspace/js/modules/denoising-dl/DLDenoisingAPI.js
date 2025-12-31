@@ -135,6 +135,45 @@ class DLDenoisingAPI {
   }
 
   /**
+   * Get recent training results for model import
+   * @returns {Promise<Object>} Recent completed trainings with model paths
+   */
+  async getRecentResults() {
+    const response = await fetch(`${this.baseUrl}/recent-results`);
+    return response.json();
+  }
+
+  /**
+   * Validate and parse config file for import
+   * @param {string} configPath - Path to .json config file
+   * @returns {Promise<Object>} Validation result with parsed config data
+   */
+  async validateConfig(configPath) {
+    const response = await fetch(`${this.baseUrl}/validate-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ configPath })
+    });
+    return response.json();
+  }
+
+  /**
+   * Validate model files for import
+   * @param {string} modelPath - Path to .pth model file
+   * @param {string} configPath - Path to .json config file
+   * @param {string} stage - 'stage1' or 'stage2' (optional)
+   * @returns {Promise<Object>} Validation result
+   */
+  async validateModel(modelPath, configPath, stage = 'stage1') {
+    const response = await fetch(`${this.baseUrl}/validate-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelPath, configPath, stage })
+    });
+    return response.json();
+  }
+
+  /**
    * Cancel ongoing training
    * @param {string} trainingId - Training session ID
    * @returns {Promise<Object>} Cancellation result

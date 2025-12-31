@@ -33,6 +33,7 @@ import MaskHandler from './handlers/MaskHandler.js';
 import ProgressHandler from './handlers/ProgressHandler.js';
 import TrainingHandler from './handlers/TrainingHandler.js';
 import ResultsHandler from './handlers/ResultsHandler.js';
+import InferenceHandler from './handlers/InferenceHandler.js';
 
 class DLDenoisingModule extends BaseModule {
 
@@ -62,12 +63,20 @@ class DLDenoisingModule extends BaseModule {
     this.progressHandler = new ProgressHandler(this);
     this.trainingHandler = new TrainingHandler(this);
     this.resultsHandler = new ResultsHandler(this);
+    this.inferenceHandler = new InferenceHandler(this);
 
     // Step condition flags
     this.fileValidated = false;
     this.methodSelected = false;
     this.configSaved = false;
     this.trainingComplete = false;
+
+    // Workflow mode: 'train' or 'import'
+    this.workflowMode = null;
+
+    // Import validation state
+    this.importValidated = false;
+    this.importedModelConfig = null;
 
     // Component references
     this.stepNavigator = null;
@@ -226,6 +235,16 @@ class DLDenoisingModule extends BaseModule {
     document.getElementById('presetSelector')?.addEventListener('change', (e) => {
       this.onPresetChange(e.target.value);
     });
+
+    // Workflow section toggle handlers
+    document.querySelectorAll('.workflow-header').forEach(header => {
+      header.addEventListener('click', (e) => {
+        const workflow = header.dataset.workflow;
+        if (workflow) {
+          this.fileHandler.onWorkflowSectionToggle(workflow);
+        }
+      });
+    });
   }
 
   async checkGPU() {
@@ -367,6 +386,14 @@ class DLDenoisingModule extends BaseModule {
    */
   nextStep() {
     return this.navigationHandler.nextStep();
+  }
+
+  /**
+   * Navigate to previous step
+   * Delegated to NavigationHandler
+   */
+  previousStep() {
+    return this.navigationHandler.previousStep();
   }
 
   /**
@@ -727,6 +754,9 @@ class DLDenoisingModule extends BaseModule {
     this.methodSelected = false;
     this.configSaved = false;
     this.trainingComplete = false;
+    this.workflowMode = null;
+    this.importValidated = false;
+    this.importedModelConfig = null;
     this.uploadedFile = null;
     this.selectedFile = null;
     this.selectedMethod = null;
@@ -750,6 +780,15 @@ class DLDenoisingModule extends BaseModule {
     // Clear method selection
     document.querySelectorAll('input[name="dl-method"]').forEach(radio => {
       radio.checked = false;
+    });
+
+    // Hide workflow selection section and reset workflow sections
+    const workflowSection = document.getElementById('workflowSelectionSection');
+    if (workflowSection) {
+      workflowSection.style.display = 'none';
+    }
+    document.querySelectorAll('.workflow-section').forEach(section => {
+      section.classList.remove('active');
     });
 
     // Clear validation display

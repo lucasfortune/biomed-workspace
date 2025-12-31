@@ -673,7 +673,8 @@ class DenoisingService {
    * @param {object} io - Socket.IO instance
    */
   async runInference(params, io) {
-    const { inferenceId, modelPath, inputPath, outputDir, modelConfig, stage } = params;
+    const { inferenceId, modelPath, inputPath, outputDir, modelConfig, stage, method,
+            sessionId, workspacePath, inputFileId } = params;
 
     if (!this.pythonPath) {
       this._emitInferenceError(io, inferenceId, 'Python path not configured');
@@ -691,7 +692,8 @@ class DenoisingService {
         input_path: inputPath,
         output_dir: outputDir,
         model_config: modelConfig,
-        stage: stage || 'stage1'
+        stage: stage || 'stage1',
+        method: method || 'n2v'
       }, null, 2));
     } catch (err) {
       this._emitInferenceError(io, inferenceId, `Failed to write config: ${err.message}`);
@@ -728,6 +730,12 @@ class DenoisingService {
         } else if (line.startsWith('DENOISING_RESULT:')) {
           try {
             const resultData = JSON.parse(line.substring(17));
+
+            // Track the output file in workspace metadata
+            this._trackInferenceOutput(resultData, {
+              sessionId, workspacePath, inputFileId, method, inferenceId
+            });
+
             io.to(roomName).emit('denoising-inference-complete', resultData);
           } catch (e) {
             // Ignore parse errors
@@ -772,6 +780,413 @@ class DenoisingService {
     if (this.logger) {
       this.logger.error(`Inference error:`, message);
     }
+  }
+
+  /**
+   * Track inference output file in workspace metadata
+   * @private
+   * @param {object} resultData - Result from Python inference
+   * @param {object} trackingInfo - Tracking context
+   */
+  _trackInferenceOutput(resultData, trackingInfo) {
+    const { sessionId, workspacePath, inputFileId, method, inferenceId } = trackingInfo;
+
+    // Check if we have required info for tracking
+    if (!sessionId || !workspacePath || !this.workspaceManager) {
+      if (this.logger) {
+        this.logger.debug('Skipping file tracking - missing sessionId, workspacePath, or workspaceManager');
+      }
+      return;
+    }
+
+    const outputPath = resultData.outputPath;
+    if (!outputPath || !fs.existsSync(outputPath)) {
+      if (this.logger) {
+        this.logger.warn(`Cannot track inference output - file not found: ${outputPath}`);
+      }
+      return;
+    }
+
+    try {
+      // Get relative path from workspace
+      const relativePath = path.relative(workspacePath, outputPath);
+      const stats = fs.statSync(outputPath);
+
+      // Build lineage information
+      const lineage = {
+        operation: `denoising-${method || 'dl'}-inference`,
+        inferenceId: inferenceId,
+        timestamp: new Date().toISOString()
+      };
+
+      // Add input file reference if available
+      if (inputFileId) {
+        lineage.sourceFileId = inputFileId;
+      }
+
+      // Add to workspace metadata
+      this.workspaceManager.addFileToMetadata(sessionId, {
+        name: path.basename(outputPath),
+        path: relativePath,
+        category: 'denoised_images',
+        size: stats.size,
+        folderId: null,
+        lineage: lineage
+      });
+
+      if (this.logger) {
+        this.logger.info(`Tracked inference output: ${relativePath} (lineage: ${JSON.stringify(lineage)})`);
+      }
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error('Error tracking inference output:', error);
+      }
+    }
+  }
+
+  /**
+   * Run sequential inference for autoStructN2V (Stage 1 -> Stage 2)
+   * @param {object} params - Inference parameters
+   * @param {object} io - Socket.IO instance
+   */
+  async runSequentialInference(params, io) {
+    const { inferenceId, modelPaths, configPath, fullConfig, inputPath, outputDir, modelConfig,
+            sessionId, workspacePath, inputFileId } = params;
+
+    if (!this.pythonPath) {
+      this._emitInferenceError(io, inferenceId, 'Python path not configured');
+      return;
+    }
+
+    const roomName = `denoising-inference-${inferenceId}`;
+
+    // Use stage2 config from shared config file
+    let stage2Config = { ...modelConfig };
+    if (fullConfig?.stage2) {
+      const stageConfig = fullConfig.stage2;
+      stage2Config = {
+        features: stageConfig.features || modelConfig.features,
+        num_layers: stageConfig.num_layers || modelConfig.num_layers,
+        patch_size: stageConfig.patch_size || modelConfig.patch_size,
+        use_resize_conv: stageConfig.use_resize_conv !== false,
+        upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
+      };
+    } else if (this.logger) {
+      this.logger.warn('No stage2 config in shared config, using stage1 config');
+    }
+
+    // Write sequential inference config for Python script
+    const inferenceConfigPath = path.join(outputDir, `sequential_config_${inferenceId}.json`);
+
+    try {
+      await fsp.mkdir(outputDir, { recursive: true });
+      await fsp.writeFile(inferenceConfigPath, JSON.stringify({
+        inference_id: inferenceId,
+        mode: 'sequential',
+        stage1_model_path: modelPaths.stage1,
+        stage2_model_path: modelPaths.stage2,
+        input_path: inputPath,
+        output_dir: outputDir,
+        stage1_config: modelConfig,
+        stage2_config: stage2Config
+      }, null, 2));
+    } catch (err) {
+      this._emitInferenceError(io, inferenceId, `Failed to write config: ${err.message}`);
+      return;
+    }
+
+    if (this.logger) {
+      this.logger.info(`Starting sequential inference ${inferenceId}`);
+    }
+
+    // Spawn Python process for sequential inference
+    const pythonScript = spawn(this.pythonPath, [
+      'python/autostructn2v_wrapper.py',
+      '--config', inferenceConfigPath,
+      '--mode', 'inference_sequential'
+    ]);
+
+    let outputBuffer = '';
+    let stderrBuffer = '';
+
+    pythonScript.stdout.on('data', (data) => {
+      const output = data.toString();
+      outputBuffer += output;
+
+      const lines = outputBuffer.split('\n');
+      outputBuffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.startsWith('DENOISING_PROGRESS:')) {
+          try {
+            const progressData = JSON.parse(line.substring(19));
+            io.to(roomName).emit('denoising-inference-progress', progressData);
+          } catch (e) {
+            // Ignore parse errors
+          }
+        } else if (line.startsWith('DENOISING_RESULT:')) {
+          try {
+            const resultData = JSON.parse(line.substring(17));
+
+            // Track the output file in workspace metadata
+            this._trackInferenceOutput(resultData, {
+              sessionId, workspacePath, inputFileId, method: 'autostructn2v', inferenceId
+            });
+
+            io.to(roomName).emit('denoising-inference-complete', resultData);
+          } catch (e) {
+            // Ignore parse errors
+          }
+        } else if (line.startsWith('DENOISING_ERROR:')) {
+          try {
+            const errorData = JSON.parse(line.substring(16));
+            io.to(roomName).emit('denoising-error', errorData);
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+      }
+    });
+
+    pythonScript.stderr.on('data', (data) => {
+      stderrBuffer += data.toString();
+      if (this.logger) {
+        this.logger.debug('Sequential inference stderr:', data.toString());
+      }
+    });
+
+    pythonScript.on('close', (code) => {
+      if (code !== 0) {
+        io.to(roomName).emit('denoising-inference-complete', {
+          success: false,
+          error: 'Sequential inference failed',
+          details: stderrBuffer
+        });
+      }
+
+      // Clean up
+      fsp.unlink(inferenceConfigPath).catch(() => {});
+    });
+
+    pythonScript.on('error', (err) => {
+      this._emitInferenceError(io, inferenceId, `Failed to spawn process: ${err.message}`);
+    });
+  }
+
+  // ===========================================================================
+  // MODEL IMPORT & RECENT RESULTS (Phase 7)
+  // ===========================================================================
+
+  /**
+   * Get recent completed training results for model import
+   * @param {string} sessionId - User session ID
+   * @returns {array} Array of completed training results with model paths
+   */
+  getRecentTrainingResults(sessionId) {
+    const results = [];
+
+    for (const [trainingId, session] of this.denoisingSessions) {
+      // Only return completed sessions for this user
+      if (session.sessionId === sessionId && session.status === 'completed') {
+        // Shared config path at the training level
+        const configPath = session.experimentDir ? path.join(session.experimentDir, 'config.json') : null;
+
+        const result = {
+          trainingId: session.id,
+          method: session.method,
+          completedAt: session.endTime,
+          inputFile: session.config?.input_dir ? path.basename(session.config.input_dir) : null,
+          experimentDir: session.experimentDir,
+          configPath: configPath,  // Shared config file for both stages
+          stage1: null,
+          stage2: null
+        };
+
+        // Add Stage 1 model info if available
+        if (session.stage1?.modelPath && fs.existsSync(session.stage1.modelPath)) {
+          result.stage1 = {
+            modelPath: session.stage1.modelPath
+          };
+        }
+
+        // Add Stage 2 model info if available (autoStructN2V)
+        if (session.method === 'autostructn2v' && session.stage2?.modelPath && fs.existsSync(session.stage2.modelPath)) {
+          result.stage2 = {
+            modelPath: session.stage2.modelPath
+          };
+        }
+
+        results.push(result);
+      }
+    }
+
+    // Sort by completion time (newest first)
+    results.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+    return results;
+  }
+
+  /**
+   * Validate imported model files
+   * @param {object} params - Validation parameters
+   * @param {string} params.modelPath - Path to .pth model file
+   * @param {string} params.configPath - Path to .json config file
+   * @param {string} params.stage - 'stage1' or 'stage2'
+   * @returns {Promise<object>} Validation result
+   */
+  async validateImportedModel(params) {
+    const { modelPath, configPath, stage } = params;
+
+    const result = {
+      valid: false,
+      modelInfo: {
+        exists: false,
+        readable: false,
+        path: modelPath
+      },
+      configInfo: {
+        exists: false,
+        valid: false,
+        path: configPath,
+        method: null,
+        stage: stage
+      },
+      errors: []
+    };
+
+    // Check model file
+    if (!modelPath) {
+      result.errors.push('Model path is required');
+    } else if (!fs.existsSync(modelPath)) {
+      result.errors.push(`Model file not found: ${path.basename(modelPath)}`);
+    } else {
+      result.modelInfo.exists = true;
+      try {
+        // Check if file is readable and has content
+        const stats = fs.statSync(modelPath);
+        result.modelInfo.readable = stats.size > 0;
+        result.modelInfo.size = stats.size;
+        result.modelInfo.sizeFormatted = this._formatFileSize(stats.size);
+
+        if (!result.modelInfo.readable) {
+          result.errors.push('Model file is empty');
+        }
+      } catch (err) {
+        result.errors.push(`Cannot read model file: ${err.message}`);
+      }
+    }
+
+    // Check config file
+    if (!configPath) {
+      result.errors.push('Config path is required');
+    } else if (!fs.existsSync(configPath)) {
+      result.errors.push(`Config file not found: ${path.basename(configPath)}`);
+    } else {
+      result.configInfo.exists = true;
+      try {
+        const configContent = fs.readFileSync(configPath, 'utf8');
+        const config = JSON.parse(configContent);
+
+        result.configInfo.valid = true;
+        result.configInfo.method = config.method || (config.stage2 ? 'autostructn2v' : 'n2v');
+        result.configInfo.features = config.stage1?.features || config.features || 64;
+        result.configInfo.numLayers = config.stage1?.num_layers || config.num_layers || 2;
+        result.configInfo.patchSize = config.stage1?.patch_size || config.patch_size || 64;
+
+        // For autoStructN2V, check if this is a stage1 or stage2 config
+        if (stage === 'stage2' && config.stage2) {
+          result.configInfo.features = config.stage2.features || result.configInfo.features;
+          result.configInfo.numLayers = config.stage2.num_layers || result.configInfo.numLayers;
+          result.configInfo.patchSize = config.stage2.patch_size || result.configInfo.patchSize;
+        }
+
+      } catch (err) {
+        result.errors.push(`Invalid config file: ${err.message}`);
+      }
+    }
+
+    // Overall validation
+    result.valid = result.modelInfo.exists &&
+                   result.modelInfo.readable &&
+                   result.configInfo.exists &&
+                   result.configInfo.valid;
+
+    return result;
+  }
+
+  /**
+   * Validate and parse a config file for import
+   * @param {string} configPath - Path to .json config file
+   * @returns {Promise<object>} Validation result with parsed config data
+   */
+  async validateConfig(configPath) {
+    const result = {
+      valid: false,
+      configData: null,
+      errors: []
+    };
+
+    // Check if file exists
+    if (!configPath) {
+      result.errors.push('Config path is required');
+      return result;
+    }
+
+    if (!fs.existsSync(configPath)) {
+      result.errors.push(`Config file not found: ${path.basename(configPath)}`);
+      return result;
+    }
+
+    try {
+      // Read and parse config file
+      const configContent = fs.readFileSync(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+
+      // Validate config structure
+      if (!config.method && !config.stage1) {
+        result.errors.push('Invalid config: missing method or stage1 configuration');
+        return result;
+      }
+
+      // Determine method from config
+      const method = config.method || (config.stage2 ? 'autostructn2v' : 'n2v');
+
+      // For autoStructN2V, check that stage2 config exists
+      if (method === 'autostructn2v' && !config.stage2) {
+        result.errors.push('Invalid autoStructN2V config: missing stage2 configuration');
+        return result;
+      }
+
+      // Store parsed config data
+      result.configData = {
+        method,
+        stage1: config.stage1 || {},
+        stage2: config.stage2 || null,
+        // Store paths from config if available
+        stage1ModelPath: config.stage1_model_path,
+        stage2MaskPath: config.mask_path,
+        experimentDir: config.experiment_dir,
+        trainingId: config.training_id
+      };
+
+      result.valid = true;
+
+    } catch (err) {
+      result.errors.push(`Invalid config file: ${err.message}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Format file size for display
+   * @private
+   */
+  _formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   }
 
   // ===========================================================================

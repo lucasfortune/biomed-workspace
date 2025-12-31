@@ -20,9 +20,20 @@ class NavigationHandler {
   canNavigateToStep(stepNumber) {
     switch (stepNumber) {
       case 1: return true;
-      case 2: return this.module.fileValidated && this.module.methodSelected;
-      case 3: return this.module.configSaved;
-      case 4: return this.module.trainingComplete;
+      case 2:
+        // For import workflow, Step 2 is not accessible
+        if (this.module.workflowMode === 'import') return false;
+        return this.module.fileValidated && this.module.methodSelected;
+      case 3:
+        // For import workflow, Step 3 is not accessible
+        if (this.module.workflowMode === 'import') return false;
+        return this.module.configSaved;
+      case 4:
+        // For import workflow, check import validation
+        if (this.module.workflowMode === 'import') {
+          return this.module.importValidated;
+        }
+        return this.module.trainingComplete;
       default: return false;
     }
   }
@@ -47,6 +58,71 @@ class NavigationHandler {
     // Initialize Step 3 when navigating to it
     if (stepNumber === 3) {
       this.initializeStep3();
+    }
+
+    // Initialize Step 4 when navigating to it
+    if (stepNumber === 4) {
+      this.initializeStep4();
+    }
+  }
+
+  /**
+   * Initialize Step 4 (Additional Processing / Inference)
+   */
+  initializeStep4() {
+    console.log('[NavigationHandler] Initializing Step 4...');
+
+    if (this.module.workflowMode === 'import') {
+      this.initializeStep4ForImport();
+    } else {
+      this.initializeStep4ForTraining();
+    }
+  }
+
+  /**
+   * Initialize Step 4 for import workflow
+   * Sets up inference with imported model paths
+   */
+  initializeStep4ForImport() {
+    console.log('[NavigationHandler] Setting up Step 4 for import workflow...');
+
+    // Get import config from FileHandler
+    const importConfig = this.module.fileHandler.getImportConfig();
+    if (!importConfig) {
+      this.module.state.notify('error', 'Import configuration not found');
+      return;
+    }
+
+    // Store imported model paths
+    this.module.importedModelConfig = importConfig;
+
+    // Set trainingComplete to true (import skips training)
+    this.module.trainingComplete = true;
+
+    // Render Step 4 content for inference
+    this.renderStep4InferenceUI();
+  }
+
+  /**
+   * Initialize Step 4 for training workflow
+   * Uses trained model paths from completed training
+   */
+  initializeStep4ForTraining() {
+    console.log('[NavigationHandler] Setting up Step 4 for training workflow...');
+
+    // Render Step 4 content for inference
+    this.renderStep4InferenceUI();
+  }
+
+  /**
+   * Render Step 4 inference UI
+   */
+  renderStep4InferenceUI() {
+    console.log('[NavigationHandler] Initializing Step 4 inference UI...');
+
+    // Delegate to InferenceHandler
+    if (this.module.inferenceHandler) {
+      this.module.inferenceHandler.initializeStep4UI();
     }
   }
 
@@ -129,13 +205,36 @@ class NavigationHandler {
    */
   nextStep() {
     if (this.module.currentStep === 1) {
-      if (!this.module.fileValidated) {
-        this.module.state.notify('error', 'Please select a file first');
-        return;
-      }
+      // Validate method selection
       if (!this.module.methodSelected) {
         this.module.state.notify('error', 'Please select a denoising method');
         return;
+      }
+
+      // Validate based on workflow mode
+      if (!this.module.workflowMode) {
+        this.module.state.notify('error', 'Please select a workflow (Train or Import)');
+        return;
+      }
+
+      // For import workflow: validate import and skip to Step 4
+      if (this.module.workflowMode === 'import') {
+        if (!this.module.importValidated) {
+          this.module.state.notify('error', 'Please select all required model files');
+          return;
+        }
+        // Skip Steps 2-3, go directly to Step 4
+        console.log('[NavigationHandler] Import workflow: skipping to Step 4');
+        this.goToStep(4);
+        return;
+      }
+
+      // For train workflow: validate file
+      if (this.module.workflowMode === 'train') {
+        if (!this.module.fileValidated) {
+          this.module.state.notify('error', 'Please select and validate a file first');
+          return;
+        }
       }
     }
 
@@ -147,6 +246,22 @@ class NavigationHandler {
 
     // Call parent class method via module
     this.module.constructor.prototype.__proto__.nextStep.call(this.module);
+  }
+
+  /**
+   * Navigate to previous step
+   * For import workflow, go back to Step 1 from Step 4
+   */
+  previousStep() {
+    // For import workflow on Step 4, go back to Step 1
+    if (this.module.currentStep === 4 && this.module.workflowMode === 'import') {
+      console.log('[NavigationHandler] Import workflow: returning to Step 1');
+      this.goToStep(1);
+      return;
+    }
+
+    // Call parent class method via module
+    this.module.constructor.prototype.__proto__.previousStep.call(this.module);
   }
 }
 

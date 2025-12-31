@@ -709,24 +709,24 @@ function createDenoisingRoutes(dependencies) {
   });
 
   /**
-   * Run inference with trained model
+   * Run inference with trained or imported model
    * POST /api/denoising/dl/run-inference
    *
-   * Body:
+   * Body (Training workflow):
    *   - trainingId: Training ID to use model from
    *   - inputPath: Path to input TIFF file
    *   - stage: 'stage1' or 'stage2' (which model to use)
+   *
+   * Body (Import workflow):
+   *   - modelPaths: { stage1: string, stage2?: string }
+   *   - configPath: Path to shared config file (.json)
+   *   - inputPath: Path to input TIFF file
+   *   - method: 'n2v' or 'autostructn2v'
+   *   - isImported: true
    */
   router.post('/dl/run-inference', requireAuth, async (req, res) => {
-    const { trainingId, inputPath, inputFileId, stage } = req.body;
+    const { trainingId, inputPath, inputFileId, stage, modelPaths, configPath, method, isImported } = req.body;
     const sessionId = req.session.id;
-
-    if (!trainingId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Training ID is required'
-      });
-    }
 
     try {
       const { denoisingService, io } = dependencies;
@@ -738,32 +738,14 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      // Get training session to find model
-      const trainSession = denoisingService.getSession(trainingId);
-      if (!trainSession) {
-        return res.status(404).json({
-          success: false,
-          error: 'Training session not found'
-        });
-      }
-
-      // Determine which model to use
-      const useStage = stage || (trainSession.method === 'autostructn2v' && trainSession.stage2?.modelPath ? 'stage2' : 'stage1');
-      const modelPath = useStage === 'stage2' ? trainSession.stage2?.modelPath : trainSession.stage1?.modelPath;
-
-      if (!modelPath || !fs.existsSync(modelPath)) {
-        return res.status(400).json({
-          success: false,
-          error: `${useStage} model not found. Training may not be complete.`
-        });
-      }
-
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
       // Resolve input path
       let absoluteInputPath;
       if (inputPath) {
-        absoluteInputPath = path.join(workspacePath, inputPath);
+        absoluteInputPath = path.isAbsolute(inputPath)
+          ? inputPath
+          : path.join(workspacePath, inputPath);
       } else if (inputFileId) {
         const metadata = workspaceManager.loadMetadata(sessionId);
         const inputFile = metadata?.files?.find(f => f.id === inputFileId);
@@ -788,40 +770,167 @@ function createDenoisingRoutes(dependencies) {
       const outputDir = path.join(workspacePath, 'results', 'denoising', inferenceId);
       fs.mkdirSync(outputDir, { recursive: true });
 
-      // Get model config from training session
-      const stageConfig = trainSession.config?.[useStage] || {};
-      const modelConfig = {
-        features: stageConfig.features || 64,
-        num_layers: stageConfig.num_layers || 2,
-        patch_size: stageConfig.patch_size || 64,
-        use_resize_conv: stageConfig.use_resize_conv !== false,
-        upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
-      };
+      let inferenceParams;
 
-      // Start inference
-      denoisingService.runInference({
-        inferenceId,
-        modelPath,
-        inputPath: absoluteInputPath,
-        outputDir,
-        modelConfig,
-        stage: useStage
-      }, io);
+      if (isImported && modelPaths) {
+        // Import workflow: use directly provided model paths with shared config
+        // Resolve model paths to absolute paths
+        const stage1ModelPath = modelPaths.stage1
+          ? (path.isAbsolute(modelPaths.stage1) ? modelPaths.stage1 : path.join(workspacePath, modelPaths.stage1))
+          : null;
+        const stage2ModelPath = modelPaths.stage2
+          ? (path.isAbsolute(modelPaths.stage2) ? modelPaths.stage2 : path.join(workspacePath, modelPaths.stage2))
+          : null;
 
-      if (logger) {
-        logger.info('[Denoising] Started DL inference:', {
-          sessionId,
+        // Resolve config path
+        const absoluteConfigPath = configPath
+          ? (path.isAbsolute(configPath) ? configPath : path.join(workspacePath, configPath))
+          : null;
+
+        // Load config to get model parameters
+        let modelConfig = {
+          features: 64,
+          num_layers: 2,
+          patch_size: 64,
+          use_resize_conv: true,
+          upsampling_mode: 'bilinear'
+        };
+
+        let fullConfig = null;
+
+        if (absoluteConfigPath && fs.existsSync(absoluteConfigPath)) {
+          try {
+            fullConfig = JSON.parse(fs.readFileSync(absoluteConfigPath, 'utf8'));
+            const stageConfig = fullConfig.stage1 || fullConfig;
+            modelConfig = {
+              features: stageConfig.features || 64,
+              num_layers: stageConfig.num_layers || 2,
+              patch_size: stageConfig.patch_size || 64,
+              use_resize_conv: stageConfig.use_resize_conv !== false,
+              upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
+            };
+          } catch (e) {
+            console.warn('Could not parse config file, using defaults');
+          }
+        }
+
+        // For autoStructN2V with imported models, run sequential pipeline
+        if (method === 'autostructn2v' && stage2ModelPath) {
+          inferenceParams = {
+            inferenceId,
+            modelPaths: {
+              stage1: stage1ModelPath,
+              stage2: stage2ModelPath
+            },
+            configPath: absoluteConfigPath,  // Shared config
+            fullConfig,  // Full parsed config
+            inputPath: absoluteInputPath,
+            outputDir,
+            modelConfig,
+            method: 'autostructn2v',
+            sequential: true,
+            // For file tracking
+            sessionId,
+            workspacePath,
+            inputFileId
+          };
+
+          // Use sequential inference
+          denoisingService.runSequentialInference(inferenceParams, io);
+        } else {
+          // Single stage inference
+          inferenceParams = {
+            inferenceId,
+            modelPath: stage1ModelPath,
+            inputPath: absoluteInputPath,
+            outputDir,
+            modelConfig,
+            stage: 'stage1',
+            method,
+            // For file tracking
+            sessionId,
+            workspacePath,
+            inputFileId
+          };
+
+          denoisingService.runInference(inferenceParams, io);
+        }
+
+        if (logger) {
+          logger.info('[Denoising] Started DL inference (imported):', {
+            sessionId,
+            inferenceId,
+            method,
+            sequential: method === 'autostructn2v' && !!stage2ModelPath
+          });
+        }
+
+      } else if (trainingId) {
+        // Training workflow: get model from training session
+        const trainSession = denoisingService.getSession(trainingId);
+        if (!trainSession) {
+          return res.status(404).json({
+            success: false,
+            error: 'Training session not found'
+          });
+        }
+
+        // Determine which model to use
+        const useStage = stage || (trainSession.method === 'autostructn2v' && trainSession.stage2?.modelPath ? 'stage2' : 'stage1');
+        const modelPath = useStage === 'stage2' ? trainSession.stage2?.modelPath : trainSession.stage1?.modelPath;
+
+        if (!modelPath || !fs.existsSync(modelPath)) {
+          return res.status(400).json({
+            success: false,
+            error: `${useStage} model not found. Training may not be complete.`
+          });
+        }
+
+        // Get model config from training session
+        const stageConfig = trainSession.config?.[useStage] || {};
+        const modelConfig = {
+          features: stageConfig.features || 64,
+          num_layers: stageConfig.num_layers || 2,
+          patch_size: stageConfig.patch_size || 64,
+          use_resize_conv: stageConfig.use_resize_conv !== false,
+          upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
+        };
+
+        // Start inference
+        denoisingService.runInference({
           inferenceId,
-          trainingId,
-          stage: useStage
+          modelPath,
+          inputPath: absoluteInputPath,
+          outputDir,
+          modelConfig,
+          stage: useStage,
+          method: trainSession.method || 'n2v',
+          // For file tracking
+          sessionId,
+          workspacePath,
+          inputFileId
+        }, io);
+
+        if (logger) {
+          logger.info('[Denoising] Started DL inference:', {
+            sessionId,
+            inferenceId,
+            trainingId,
+            stage: useStage
+          });
+        }
+
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Either trainingId or modelPaths (with isImported: true) is required'
         });
       }
 
       res.json({
         success: true,
         inferenceId,
-        trainingId,
-        stage: useStage,
+        trainingId: trainingId || null,
         message: 'Inference started. Join Socket.IO room for progress updates.'
       });
 
@@ -1278,6 +1387,167 @@ function createDenoisingRoutes(dependencies) {
     } catch (error) {
       if (logger) {
         logger.error('[Denoising] Error extracting slice:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // ===========================================================================
+  // MODEL IMPORT & RECENT RESULTS (Phase 7)
+  // ===========================================================================
+
+  /**
+   * Get recent training results for model import
+   * GET /api/denoising/dl/recent-results
+   *
+   * Returns completed training sessions with model paths for import.
+   */
+  router.get('/dl/recent-results', requireAuth, async (req, res) => {
+    const sessionId = req.session.id;
+
+    try {
+      const { denoisingService } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Get all completed trainings for this session
+      const results = denoisingService.getRecentTrainingResults(sessionId);
+
+      res.json({
+        success: true,
+        results
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error getting recent results:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Validate and parse config file for import
+   * POST /api/denoising/dl/validate-config
+   *
+   * Body:
+   *   - configPath: Path to .json config file
+   *
+   * Returns validation result with parsed config data.
+   */
+  router.post('/dl/validate-config', requireAuth, async (req, res) => {
+    const { configPath } = req.body;
+    const sessionId = req.session.id;
+
+    if (!configPath) {
+      return res.status(400).json({
+        success: false,
+        error: 'configPath is required'
+      });
+    }
+
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const { denoisingService } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Resolve path
+      const absoluteConfigPath = path.isAbsolute(configPath)
+        ? configPath
+        : path.join(workspacePath, configPath);
+
+      // Validate and parse the config file
+      const result = await denoisingService.validateConfig(absoluteConfigPath);
+
+      res.json({
+        success: true,
+        ...result
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error validating config:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Validate model files for import
+   * POST /api/denoising/dl/validate-model
+   *
+   * Body:
+   *   - modelPath: Path to .pth model file
+   *   - configPath: Path to .json config file
+   *   - stage: 'stage1' or 'stage2' (optional)
+   *
+   * Returns validation result with model/config info.
+   */
+  router.post('/dl/validate-model', requireAuth, async (req, res) => {
+    const { modelPath, configPath, stage } = req.body;
+    const sessionId = req.session.id;
+
+    if (!modelPath || !configPath) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both modelPath and configPath are required'
+      });
+    }
+
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const { denoisingService } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Resolve paths
+      const absoluteModelPath = path.isAbsolute(modelPath)
+        ? modelPath
+        : path.join(workspacePath, modelPath);
+      const absoluteConfigPath = path.isAbsolute(configPath)
+        ? configPath
+        : path.join(workspacePath, configPath);
+
+      // Validate the model files
+      const result = await denoisingService.validateImportedModel({
+        modelPath: absoluteModelPath,
+        configPath: absoluteConfigPath,
+        stage: stage || 'stage1'
+      });
+
+      res.json({
+        success: true,
+        ...result
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error validating model:', error);
       }
       res.status(500).json({
         success: false,

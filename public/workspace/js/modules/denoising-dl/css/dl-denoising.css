@@ -1969,3 +1969,418 @@
     flex-direction: column;
   }
 }
+
+/* ============================================
+   WORKFLOW SELECTION SECTION (Step 1)
+   ============================================ */
+
+.dl-denoising-module .workflow-selection-section {
+  margin-top: var(--module-spacing-lg);
+}
+
+.dl-denoising-module .workflow-selection-section > h4 {
+  margin-bottom: var(--module-spacing-sm);
+  color: var(--module-text-primary);
+}
+
+.dl-denoising-module .workflow-hint {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+  margin-bottom: var(--module-spacing-md);
+  font-style: italic;
+}
+
+/* Workflow Section Card */
+.dl-denoising-module .workflow-section {
+  background: var(--module-card-bg);
+  border: 2px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  margin-bottom: var(--module-spacing-md);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dl-denoising-module .workflow-section:last-child {
+  margin-bottom: 0;
+}
+
+.dl-denoising-module .workflow-section.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.dl-denoising-module .workflow-section.active {
+  border-color: var(--module-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+/* Workflow Header */
+.dl-denoising-module .workflow-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-md);
+  padding: var(--module-spacing-md);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.dl-denoising-module .workflow-header:hover {
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.dl-denoising-module .workflow-section.active .workflow-header {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.dl-denoising-module .workflow-icon {
+  font-size: 12px;
+  color: var(--module-text-secondary);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dl-denoising-module .workflow-section.active .workflow-icon {
+  transform: rotate(90deg);
+  color: var(--module-primary);
+}
+
+.dl-denoising-module .workflow-header-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dl-denoising-module .workflow-title {
+  font-weight: 600;
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-md);
+}
+
+.dl-denoising-module .workflow-subtitle {
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+/* Workflow Body */
+.dl-denoising-module .workflow-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease-out;
+}
+
+.dl-denoising-module .workflow-section.active .workflow-body {
+  max-height: 2000px;
+  overflow: visible;
+}
+
+.dl-denoising-module .section-card-inner {
+  padding: var(--module-spacing-md);
+  border-top: 1px solid var(--module-border);
+}
+
+.dl-denoising-module .section-card-inner h5 {
+  margin: 0 0 var(--module-spacing-md);
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-md);
+}
+
+/* Import Model Section Placeholder */
+.dl-denoising-module .import-placeholder {
+  text-align: center;
+  padding: var(--module-spacing-lg);
+  color: var(--module-text-secondary);
+}
+
+/* Import Model Panels (for Phase 7.3) */
+.dl-denoising-module .import-stage-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--module-border);
+  border-radius: var(--module-radius-md);
+  padding: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-md);
+}
+
+.dl-denoising-module .import-stage-panel:last-child {
+  margin-bottom: 0;
+}
+
+.dl-denoising-module .import-stage-panel h5 {
+  margin: 0 0 var(--module-spacing-sm);
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-sm);
+  font-weight: 600;
+}
+
+.dl-denoising-module .import-stage-panel .file-row {
+  display: flex;
+  gap: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .import-stage-panel .file-row:last-child {
+  margin-bottom: 0;
+}
+
+.dl-denoising-module .import-stage-panel .file-input-group {
+  flex: 1;
+}
+
+.dl-denoising-module .import-stage-panel .file-input-group label {
+  display: block;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  margin-bottom: 4px;
+}
+
+/* Import Validation Display */
+.dl-denoising-module .import-validation {
+  margin-top: var(--module-spacing-md);
+  min-height: 24px;
+}
+
+.dl-denoising-module .import-hint {
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-md);
+}
+
+.dl-denoising-module .validation-loading {
+  color: var(--module-text-secondary);
+  font-style: italic;
+  font-size: var(--module-font-size-sm);
+}
+
+.dl-denoising-module .validation-success {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  padding: var(--module-spacing-sm);
+  background: rgba(72, 187, 120, 0.1);
+  border: 1px solid rgba(72, 187, 120, 0.3);
+  border-radius: var(--module-radius-md);
+}
+
+.dl-denoising-module .validation-success .validation-icon {
+  color: #48bb78;
+  font-weight: bold;
+}
+
+.dl-denoising-module .validation-success .validation-text {
+  color: #48bb78;
+  font-weight: 500;
+}
+
+.dl-denoising-module .validation-success .validation-details {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-xs);
+  width: 100%;
+  margin-left: 24px;
+}
+
+.dl-denoising-module .validation-error {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  padding: var(--module-spacing-sm);
+  background: rgba(245, 101, 101, 0.1);
+  border: 1px solid rgba(245, 101, 101, 0.3);
+  border-radius: var(--module-radius-md);
+}
+
+.dl-denoising-module .validation-error .validation-icon {
+  color: #f56565;
+  font-weight: bold;
+}
+
+.dl-denoising-module .validation-error .validation-text {
+  color: #f56565;
+  font-size: var(--module-font-size-sm);
+}
+
+.dl-denoising-module .validation-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  padding: var(--module-spacing-sm);
+  background: rgba(236, 201, 75, 0.1);
+  border: 1px solid rgba(236, 201, 75, 0.3);
+  border-radius: var(--module-radius-md);
+}
+
+.dl-denoising-module .validation-warning .validation-icon {
+  color: #ecc94b;
+  font-weight: bold;
+}
+
+.dl-denoising-module .validation-warning .validation-text {
+  color: #d69e2e;
+  font-size: var(--module-font-size-sm);
+}
+
+/* ============================================
+   STEP 4: INFERENCE / ADDITIONAL PROCESSING
+   ============================================ */
+
+/* Model Info Card */
+.dl-denoising-module .model-info-card {
+  background: rgba(102, 126, 234, 0.05);
+  border-color: rgba(102, 126, 234, 0.2);
+}
+
+.dl-denoising-module .model-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .model-source {
+  font-weight: 600;
+  color: var(--module-primary);
+  margin-bottom: var(--module-spacing-xs);
+}
+
+.dl-denoising-module .model-detail {
+  display: flex;
+  gap: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .model-detail .detail-label {
+  color: var(--module-text-secondary);
+  min-width: 80px;
+}
+
+.dl-denoising-module .model-detail .detail-value {
+  color: var(--module-text-primary);
+}
+
+/* Inference Actions */
+.dl-denoising-module .inference-actions {
+  display: flex;
+  justify-content: center;
+  padding: var(--module-spacing-lg) 0;
+}
+
+/* Inference Progress */
+.dl-denoising-module .inference-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--module-spacing-sm);
+  padding: var(--module-spacing-md);
+}
+
+.dl-denoising-module .inference-status {
+  color: var(--module-text-primary);
+  font-weight: 500;
+  text-align: center;
+}
+
+.dl-denoising-module .progress-bar-container {
+  width: 100%;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--module-radius-md);
+  overflow: hidden;
+}
+
+.dl-denoising-module .inference-progress .progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--module-primary), #8b5cf6);
+  border-radius: var(--module-radius-md);
+  transition: width 0.3s ease;
+}
+
+.dl-denoising-module .progress-text {
+  text-align: center;
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+}
+
+/* Success Card */
+.dl-denoising-module .success-card {
+  background: rgba(72, 187, 120, 0.1);
+  border-color: rgba(72, 187, 120, 0.3);
+}
+
+.dl-denoising-module .success-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-md);
+}
+
+.dl-denoising-module .success-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #48bb78;
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+}
+
+.dl-denoising-module .success-title {
+  font-size: var(--module-font-size-lg);
+  font-weight: 600;
+  color: #48bb78;
+}
+
+.dl-denoising-module .result-info {
+  margin-bottom: var(--module-spacing-lg);
+  padding: var(--module-spacing-md);
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: var(--module-radius-md);
+}
+
+.dl-denoising-module .result-detail {
+  display: flex;
+  gap: var(--module-spacing-sm);
+  margin-bottom: var(--module-spacing-xs);
+}
+
+.dl-denoising-module .result-detail:last-child {
+  margin-bottom: 0;
+}
+
+.dl-denoising-module .result-label {
+  color: var(--module-text-secondary);
+  min-width: 140px;
+}
+
+.dl-denoising-module .result-value {
+  color: var(--module-text-primary);
+  font-weight: 500;
+}
+
+.dl-denoising-module .success-actions {
+  display: flex;
+  gap: var(--module-spacing-md);
+  justify-content: center;
+}
+
+/* Section Hint */
+.dl-denoising-module .section-hint {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+  margin-bottom: var(--module-spacing-md);
+}
+
+/* Responsive - Workflow Sections */
+@media (max-width: 768px) {
+  .dl-denoising-module .workflow-header {
+    padding: var(--module-spacing-sm);
+  }
+
+  .dl-denoising-module .import-stage-panel .file-row {
+    flex-direction: column;
+  }
+
+  .dl-denoising-module .success-actions {
+    flex-direction: column;
+  }
+}
