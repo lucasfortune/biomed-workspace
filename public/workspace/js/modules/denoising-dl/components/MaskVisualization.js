@@ -155,9 +155,6 @@ class MaskVisualization {
             <button class="btn secondary small" onclick="window.dlDenoisingModule?.skipStage2()">
               Use N2V Results (Skip Stage 2)
             </button>
-            <button class="btn small" onclick="window.dlDenoisingModule?.showMaskParameters()">
-              Adjust Parameters
-            </button>
           </div>
         </div>
       </div>

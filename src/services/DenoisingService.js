@@ -818,31 +818,68 @@ class DenoisingService {
       throw new Error('Could not find Stage 1 denoised images for mask extraction');
     }
 
+    // Look for saved denoised patches from initial training
+    // This ensures regeneration uses exact same patches as initial mask
+    let denoisedPatchesPath = null;
+    const possiblePatchPaths = [
+      path.join(stage1Dir, 'stage2', 'model', 'denoised_patches_for_mask.npy'),
+      path.join(stage1Dir, 'stage2_model', 'denoised_patches_for_mask.npy')
+    ];
+
+    for (const p of possiblePatchPaths) {
+      if (fs.existsSync(p)) {
+        denoisedPatchesPath = p;
+        if (this.logger) {
+          this.logger.info(`Found saved denoised patches at: ${p}`);
+        }
+        break;
+      }
+    }
+
+    if (!denoisedPatchesPath && this.logger) {
+      this.logger.warn('No saved denoised patches found - will sample from denoised output');
+    }
+
     const outputDir = stage1Dir;
 
     // Write config to temp file
     const configPath = path.join(outputDir, `mask_config_${Date.now()}.json`);
 
     // Map frontend parameter names to Python StructuralNoiseExtractor param names
+    // Include ALL parameters to match training mode exactly
     const extractorParams = {
-      // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
-      adapt_autocorr: parameters.adaptive_thresholding !== false,
+      // Core extraction parameters
       norm_autocorr: true,
       log_autocorr: true,
+      crop_autocorr: true,
+      // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
+      adapt_autocorr: parameters.adaptive_thresholding !== false,
+      adapt_CB: 50.0,
+      adapt_DF: 0.95,
+      center_size: 10,
       base_percentile: parameters.base_percentile || 50,
       percentile_decay: parameters.percentile_decay || 1.15,
+      center_ratio_threshold: 0.3,
+      use_center_proximity: true,
+      center_proximity_threshold: 0.95,
+      keep_center_component_only: true,
       // Map frontend 'max_masked_pixels' to Python 'max_true_pixels'
       max_true_pixels: parameters.max_masked_pixels || 25
     };
 
     try {
       await fsp.mkdir(outputDir, { recursive: true });
-      await fsp.writeFile(configPath, JSON.stringify({
+      const maskConfig = {
         input_path: inputPath,
         output_dir: outputDir,
         extractor: extractorParams,
         patch_size: 64
-      }, null, 2));
+      };
+      // Include saved patches path if available for exact match with training
+      if (denoisedPatchesPath) {
+        maskConfig.denoised_patches_path = denoisedPatchesPath;
+      }
+      await fsp.writeFile(configPath, JSON.stringify(maskConfig, null, 2));
     } catch (err) {
       throw new Error(`Failed to write config: ${err.message}`);
     }

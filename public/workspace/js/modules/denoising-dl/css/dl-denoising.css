@@ -1435,28 +1435,12 @@
   align-items: center;
   gap: var(--module-spacing-sm);
   padding: var(--module-spacing-sm) var(--module-spacing-md);
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.mask-parameter-panel .panel-header:hover {
-  background: rgba(155, 89, 182, 0.1);
-}
-
-.mask-parameter-panel .panel-icon {
-  color: #9B59B6;
-  font-size: 10px;
 }
 
 .mask-parameter-panel .panel-title {
   font-weight: 600;
   color: #9B59B6;
   flex: 1;
-}
-
-.mask-parameter-panel .panel-hint {
-  font-size: var(--module-font-size-xs);
-  color: var(--module-text-secondary);
 }
 
 .mask-parameter-panel .panel-body {

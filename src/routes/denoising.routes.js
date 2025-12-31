@@ -541,18 +541,29 @@ function createDenoisingRoutes(dependencies) {
       };
 
       // Helper to map frontend mask extractor params to Python param names
+      // Include ALL parameters to match regenerate mode exactly
       const mapExtractorConfig = (extractorConfig) => {
         if (!extractorConfig) return {};
         return {
-          // Map frontend names to Python StructuralNoiseExtractor params
-          base_percentile: extractorConfig.base_percentile || 50,
-          percentile_decay: extractorConfig.percentile_decay || 1.15,
-          // Frontend uses 'max_masked_pixels', Python expects 'max_true_pixels'
-          max_true_pixels: extractorConfig.max_masked_pixels || 25,
-          // These are Python defaults, include them for completeness
+          // Core extraction parameters
           norm_autocorr: extractorConfig.norm_autocorr !== false,
           log_autocorr: extractorConfig.log_autocorr !== false,
-          adapt_autocorr: extractorConfig.adaptive_thresholding !== false
+          crop_autocorr: extractorConfig.crop_autocorr !== false,
+          // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
+          adapt_autocorr: extractorConfig.adaptive_thresholding !== false,
+          adapt_CB: extractorConfig.adapt_CB || 50.0,
+          adapt_DF: extractorConfig.adapt_DF || 0.95,
+          center_size: extractorConfig.center_size || 10,
+          // User-adjustable parameters
+          base_percentile: extractorConfig.base_percentile || 50,
+          percentile_decay: extractorConfig.percentile_decay || 1.15,
+          // Center proximity parameters
+          center_ratio_threshold: extractorConfig.center_ratio_threshold || 0.3,
+          use_center_proximity: extractorConfig.use_center_proximity !== false,
+          center_proximity_threshold: extractorConfig.center_proximity_threshold || 0.95,
+          keep_center_component_only: extractorConfig.keep_center_component_only !== false,
+          // Frontend uses 'max_masked_pixels', Python expects 'max_true_pixels'
+          max_true_pixels: extractorConfig.max_masked_pixels || 25
         };
       };
 

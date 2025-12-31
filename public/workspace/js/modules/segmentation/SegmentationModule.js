@@ -608,6 +608,11 @@ class SegmentationModule extends BaseModule {
     }
     this.uploadedFiles[type] = uploadedFileInfo;
 
+    // Refresh workspace file browser to show uploaded file
+    if (window.workspace?.fileBrowser) {
+      window.workspace.fileBrowser.refresh();
+    }
+
     // Log pending files state for debugging
     console.log(`[SegmentationModule] Pending files state:`, {
       keys: Object.keys(this.pendingFiles),
@@ -676,6 +681,11 @@ class SegmentationModule extends BaseModule {
 
         // Save state to persist uploaded files
         this.saveState();
+
+        // Refresh workspace file browser to show test data files
+        if (window.workspace?.fileBrowser) {
+          window.workspace.fileBrowser.refresh();
+        }
 
         this.state.notify('success', 'Test data loaded and validated successfully');
       } else {

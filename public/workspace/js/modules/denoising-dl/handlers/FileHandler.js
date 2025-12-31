@@ -54,6 +54,11 @@ class FileHandler {
             isTestData: true
           };
 
+          // Refresh workspace file browser
+          if (window.workspace?.fileBrowser) {
+            window.workspace.fileBrowser.refresh();
+          }
+
           // Validate the test data file
           await this.validateFile(result.file.path);
         } else {
@@ -86,6 +91,11 @@ class FileHandler {
       path: uploadedFile.path,
       isTestData: false
     };
+
+    // Refresh workspace file browser
+    if (window.workspace?.fileBrowser) {
+      window.workspace.fileBrowser.refresh();
+    }
 
     // Validate the uploaded file
     await this.validateFile(uploadedFile.path);

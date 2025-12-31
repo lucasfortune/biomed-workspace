@@ -17,6 +17,7 @@ import json
 import argparse
 import traceback
 import time
+import glob
 from pathlib import Path
 from datetime import datetime
 
@@ -563,6 +564,13 @@ def run_training(config: dict):
             )
 
             struct_mask, autocorr_data = extractor.extract_mask(denoised_patches, verbose)
+
+            # Save the denoised patches used for mask extraction
+            # This allows regeneration to use the exact same patches
+            denoised_patches_path = os.path.join(dirs['stage2']['model'], 'denoised_patches_for_mask.npy')
+            os.makedirs(os.path.dirname(denoised_patches_path), exist_ok=True)
+            np.save(denoised_patches_path, denoised_patches)
+            print(f"Saved {len(denoised_patches)} denoised patches for mask regeneration to {denoised_patches_path}")
 
             # Create full mask
             full_mask, prediction_kernel = create_full_mask(
@@ -1258,46 +1266,76 @@ def run_inference(config: dict):
 # =============================================================================
 
 def extract_mask(config: dict):
-    """Extract structural noise mask from images."""
+    """Extract structural noise mask from images.
+
+    If denoised_patches_path is provided and exists, uses those exact patches
+    (same as initial training). Otherwise falls back to sampling from images.
+    """
     try:
         input_path = config['input_path']
         output_dir = config['output_dir']
         extractor_params = config.get('extractor', {})
+        denoised_patches_path = config.get('denoised_patches_path')
 
         emit_progress('mask', {"status": "loading"})
 
-        # Load images
-        import tifffile
-        images = tifffile.imread(input_path)
-        if images.ndim == 2:
-            images = images[np.newaxis, ...]
+        patches = None
 
-        # Extract patches
-        patch_size = config.get('patch_size', 64)
-        patches = []
+        # First try to load saved denoised patches (for exact match with training)
+        if denoised_patches_path and os.path.exists(denoised_patches_path):
+            print(f"Loading saved denoised patches from {denoised_patches_path}")
+            patches = np.load(denoised_patches_path)
+            print(f"Loaded {len(patches)} patches (same as initial training)")
+        else:
+            # Fallback: sample patches from Stage 1 denoised output
+            print(f"No saved patches found, sampling from {input_path}")
+            import tifffile
+            images = tifffile.imread(input_path)
+            if images.ndim == 2:
+                images = images[np.newaxis, ...]
 
-        for img in images[:min(len(images), 10)]:  # Use up to 10 slices
-            img_norm = (img - img.min()) / (img.max() - img.min() + 1e-8)
-            h, w = img_norm.shape
+            # Use a fixed random seed for deterministic patch sampling
+            np.random.seed(42)
 
-            for _ in range(20):  # 20 patches per image
-                if h >= patch_size and w >= patch_size:
-                    top = np.random.randint(0, h - patch_size + 1)
-                    left = np.random.randint(0, w - patch_size + 1)
-                    patch = img_norm[top:top+patch_size, left:left+patch_size]
-                    patches.append(patch)
+            # Extract patches - use more patches to better match training (500 vs 200)
+            patch_size = config.get('patch_size', 64)
+            patches_list = []
+            patches_per_slice = 50  # 50 patches per slice
 
-        patches = np.array(patches)
+            for img in images[:min(len(images), 10)]:  # Use up to 10 slices
+                img_norm = (img - img.min()) / (img.max() - img.min() + 1e-8)
+                h, w = img_norm.shape
+
+                for _ in range(patches_per_slice):
+                    if h >= patch_size and w >= patch_size:
+                        top = np.random.randint(0, h - patch_size + 1)
+                        left = np.random.randint(0, w - patch_size + 1)
+                        patch = img_norm[top:top+patch_size, left:left+patch_size]
+                        patches_list.append(patch)
+
+            patches = np.array(patches_list)
+            print(f"Sampled {len(patches)} patches from denoised output")
+
+            # Reset random state
+            np.random.seed(None)
 
         emit_progress('mask', {"status": "extracting", "numPatches": len(patches)})
 
-        # Create extractor
+        # Create extractor with all parameters matching training mode
         extractor = StructuralNoiseExtractor(
             norm_autocorr=extractor_params.get('norm_autocorr', True),
             log_autocorr=extractor_params.get('log_autocorr', True),
+            crop_autocorr=extractor_params.get('crop_autocorr', True),
             adapt_autocorr=extractor_params.get('adapt_autocorr', True),
+            adapt_CB=extractor_params.get('adapt_CB', 50.0),
+            adapt_DF=extractor_params.get('adapt_DF', 0.95),
+            center_size=extractor_params.get('center_size', 10),
             base_percentile=extractor_params.get('base_percentile', 50),
             percentile_decay=extractor_params.get('percentile_decay', 1.15),
+            center_ratio_threshold=extractor_params.get('center_ratio_threshold', 0.3),
+            use_center_proximity=extractor_params.get('use_center_proximity', True),
+            center_proximity_threshold=extractor_params.get('center_proximity_threshold', 0.95),
+            keep_center_component_only=extractor_params.get('keep_center_component_only', True),
             max_true_pixels=extractor_params.get('max_true_pixels', 25)
         )
 
@@ -1376,6 +1414,8 @@ def run_stage2_only(config: dict):
                     config[key] = value
 
         config = sanitize_config(config)
+        # Validate config to ensure all defaults are set (including masking_strategy)
+        config = validate_config(config)
         verbose = config.get('verbose', False)
 
         # Set device

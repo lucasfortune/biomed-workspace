@@ -35,7 +35,8 @@ class MaskHandler {
       this.module.maskVisualization = new MaskVisualization({
         containerId: 'maskVisualizationContainer'
       });
-      vizContainer.innerHTML = this.module.maskVisualization.render();
+      // Use outerHTML to replace placeholder, avoiding duplicate IDs
+      vizContainer.outerHTML = this.module.maskVisualization.render();
     }
 
     // Initialize mask parameter panel
@@ -47,7 +48,8 @@ class MaskHandler {
         onRegenerateMask: () => this.regenerateMask(),
         onParameterChange: (name, value) => this.updateMaskParameter(name, value)
       });
-      paramContainer.innerHTML = this.module.maskParameterPanel.render();
+      // Use outerHTML to replace placeholder, avoiding duplicate IDs
+      paramContainer.outerHTML = this.module.maskParameterPanel.render();
     }
   }
 
@@ -133,35 +135,15 @@ class MaskHandler {
   }
 
   /**
-   * Toggle mask parameters panel
-   */
-  toggleMaskParameters() {
-    if (this.module.maskParameterPanel) {
-      this.module.maskParameterPanel.toggle();
-    }
-  }
-
-  /**
-   * Show mask parameters panel (from warning)
-   */
-  showMaskParameters() {
-    if (this.module.maskParameterPanel) {
-      this.module.maskParameterPanel.expand();
-    }
-  }
-
-  /**
    * Update a mask parameter
    * @param {string} name - Parameter name
    * @param {*} value - Parameter value
    */
   updateMaskParameter(name, value) {
-    console.log('[MaskHandler] Updating mask parameter:', name, value);
-
     // Update local config
     this.module.trainingConfig.maskExtractor[name] = value;
 
-    // Update parameter panel
+    // Update parameter panel's value display
     if (this.module.maskParameterPanel) {
       this.module.maskParameterPanel.updateParameter(name, value);
     }
@@ -222,6 +204,12 @@ class MaskHandler {
           pattern: maskResult.pattern,
           isEmpty: maskResult.activePixels < 2
         });
+
+        // Refresh workspace file browser to show regenerated mask file
+        if (window.workspace?.fileBrowser) {
+          window.workspace.fileBrowser.refresh();
+        }
+
         this.module.state.notify('success', 'Mask regenerated');
       } else {
         throw new Error(result.error || 'Failed to regenerate mask');

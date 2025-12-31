@@ -203,6 +203,11 @@ class ProgressHandler {
     if (this.module.resultsDisplay) {
       this.module.resultsDisplay.setResults(this.module.trainingResult);
     }
+
+    // Refresh workspace file browser to show new output files
+    if (window.workspace?.fileBrowser) {
+      window.workspace.fileBrowser.refresh();
+    }
   }
 
   /**
@@ -288,6 +293,11 @@ class ProgressHandler {
     } else {
       // For autoStructN2V, update mask status to show it's starting
       this.module.updateStageStatus('mask', 'training', 'Extracting...');
+    }
+
+    // Refresh workspace file browser to show Stage 1 output files
+    if (window.workspace?.fileBrowser) {
+      window.workspace.fileBrowser.refresh();
     }
   }
 
@@ -458,6 +468,11 @@ class ProgressHandler {
     }
 
     this.module.state.notify('success', 'Stage 2 training complete, finalizing output...');
+
+    // Refresh workspace file browser to show Stage 2 output files
+    if (window.workspace?.fileBrowser) {
+      window.workspace.fileBrowser.refresh();
+    }
   }
 
   /**
@@ -498,6 +513,11 @@ class ProgressHandler {
 
     // Disconnect socket
     this.disconnectSocket();
+
+    // Refresh workspace file browser to show new output files
+    if (window.workspace?.fileBrowser) {
+      window.workspace.fileBrowser.refresh();
+    }
 
     this.module.state.notify('success', 'Denoising complete! Your images are ready.');
   }

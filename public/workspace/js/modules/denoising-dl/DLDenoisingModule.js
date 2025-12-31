@@ -681,22 +681,6 @@ class DLDenoisingModule extends BaseModule {
   }
 
   /**
-   * Toggle mask parameters panel
-   * Delegated to MaskHandler
-   */
-  toggleMaskParameters() {
-    return this.maskHandler.toggleMaskParameters();
-  }
-
-  /**
-   * Show mask parameters panel (from warning)
-   * Delegated to MaskHandler
-   */
-  showMaskParameters() {
-    return this.maskHandler.showMaskParameters();
-  }
-
-  /**
    * Update a mask parameter
    * Delegated to MaskHandler
    */

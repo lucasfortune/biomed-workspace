@@ -45,7 +45,7 @@ class ConfigHandler {
           patches_per_image: 100,
           batch_size: 4,
           mask_percentage: 15,
-          use_augmentation: true,
+          use_augmentation: false,
           features: 64,
           num_layers: 2,
           learning_rate: 0.0001,
@@ -339,11 +339,6 @@ class ConfigHandler {
             <input type="number" id="${stage}_mask_percentage" data-param="mask_percentage"
                    value="${config.mask_percentage || (isStage1 ? 15 : 10)}" min="5" max="30" step="1">
           </div>
-          <div class="form-field checkbox-field">
-            <input type="checkbox" id="${stage}_use_augmentation" data-param="use_augmentation"
-                   ${config.use_augmentation !== false ? 'checked' : ''}>
-            <label for="${stage}_use_augmentation">Apply Data Augmentation</label>
-          </div>
         </div>
 
         <div class="config-group">
@@ -418,7 +413,13 @@ class ConfigHandler {
                      value="${config.roi_threshold || 0.5}" min="0.3" max="0.7" step="0.1"
                      ${config.use_roi === false ? 'disabled' : ''}>
             </div>
-            ` : ''}
+            ` : `
+            <div class="form-field checkbox-field">
+              <input type="checkbox" id="${stage}_use_augmentation" data-param="use_augmentation"
+                     ${config.use_augmentation !== false ? 'checked' : ''}>
+              <label for="${stage}_use_augmentation">Apply Data Augmentation</label>
+            </div>
+            `}
             <div class="form-field checkbox-field">
               <input type="checkbox" id="${stage}_use_resize_conv" data-param="use_resize_conv"
                      ${config.use_resize_conv !== false ? 'checked' : ''}>
@@ -632,6 +633,10 @@ class ConfigHandler {
     if (this.module.selectedMethod === 'autostructn2v') {
       this.readConfigFromForm('stage2');
       this.readMaskConfigFromForm();
+
+      // For autoStructN2V, Stage 1 should NOT use data augmentation
+      // (augmentation can interfere with structural noise pattern detection)
+      this.module.trainingConfig.stage1.use_augmentation = false;
     }
 
     console.log('[ConfigHandler] Configuration after reading from form:', JSON.stringify(this.module.trainingConfig, null, 2));
