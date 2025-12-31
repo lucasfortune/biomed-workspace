@@ -2,7 +2,7 @@
 
 **Document Type:** Bug Report
 **Status:** Living Document (Updated Regularly)
-**Last Updated:** 2025-12-30
+**Last Updated:** 2025-12-31
  
 ---
 
@@ -15,31 +15,44 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 ## open Bugs/Issues:
 
+- issue: add "physics of parasitism"-logo and "dfg"-logo in visible spot on workspace main page
+    -prio 5
+    - compl. 1
+
 - issue: educational content: all modules that contain novel processesing methods should contain explanations
     - prio 3
     - compl. 4
 
-- issue: documentation. many new things are created and documentation is not up to date
+- issue: user manual needed. functionality is exploding. users need to have reference files / manual to look up how stuff works
     - prio 3
     - compl. 3
 
-- issue: new module: pipeline module
-    - for setting up a pipeline and letting it run completely autonomously
+- issue: documentation. many new things are created and documentation is not up to date
     - prio 2
-    - compl. 4
+    - compl. 3
 
-- issue: design: color scheme consistent with "Pyhsics of parasitism"-color scheme
-    - include claude frontend skill
+- issue: download full workspace (.zip) & upload full workspace (.zip) necessary
+    - should download all files, filestructure & workspace_metadata.json!
+    - to recreate a session since no backend storage exists and will never exist.
+    - prio 2
+    - compl. 2
+
+- issue: segmentation modul: step 3 design of top section should match step 3 design of dl denoising module
+    - more minimal 
+    - prio 2
+    - compl. 1
+
+- issue: kill of classic version when workspace version is ready
+    - classic version no longer needed
     - prio 1
     - compl. 3
 
-- issue: dl denoising module: when autostructn2v method: stage 1 should not have augmentation option & should be off by default.
-    - needs to be removed from config section
-    - stage 2 augmentation toggle should be moved to advanced options section
-    - prio 3
-    - compl. 1
 
 ## CLOSED
+
+- issue: design: color scheme consistent with "Physics of parasitism"-color scheme
+    - FIXED: Updated workspace CSS with PoP colors (Red #EB1F17, Green #1DA924), replaced emoji icons with filled SVGs, added light/dark mode toggle
+    - prio 1
 
 - bug: mesh generation & 3d visualization module: original data not available when navigating directly from mesh gen
     - FIXED: Path mismatch - MeshModule was using absolute path, backend stores relative. Fixed path construction and added path fallback in lineage lookup.
@@ -130,3 +143,16 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 - 3d vis module: reset view does not reset range slider but should
     - prio 1 
+
+
+- issue: dl denoising module: when autostructn2v method: stage 1 should not have augmentation option & should be off by default.
+    - needs to be removed from config section
+    - stage 2 augmentation toggle should be moved to advanced options section
+    - prio 3
+    - compl. 1
+
+- segmentation module: result folder structure not great. results are saved in results/segmentation/<segmentationID>/segmented/
+    - should be results/segmentation/segm<segmentationID>/ instead
+    - folder structure of models also not consistent with denoising models save path is models/segmentation/<id>/ should be models/segmentation/segm<segmentationID>/
+    - prio 3
+    - compl. 1

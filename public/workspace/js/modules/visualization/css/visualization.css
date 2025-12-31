@@ -349,6 +349,32 @@
   min-width: 60px;
   height: 4px;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, var(--module-primary) 0%, var(--module-primary) 80%, var(--module-border) 80%, var(--module-border) 100%);
+  border-radius: 2px;
+}
+
+.viz-module .class-opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--module-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.viz-module .class-opacity-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--module-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .viz-module .class-opacity-value,

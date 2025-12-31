@@ -881,6 +881,16 @@ class VisualizationModule extends BaseModule {
       if (this.originalDataFile && this.originalDataMetadata?.numSlices > 1) {
         this.updateOriginalDataRangeFill();
       }
+
+      // Initialize opacity slider fills
+      for (const classId of this.availableClasses) {
+        // Class sliders default to 80% (value 80, min 10, max 100)
+        this.updateOpacitySliderFill(`classOpacity${classId}`, ((80 - 10) / (100 - 10)) * 100);
+      }
+      if (this.originalDataFile) {
+        // Original data slider defaults to 30% (value 30, min 5, max 100)
+        this.updateOpacitySliderFill('originalDataOpacity', ((30 - 5) / (100 - 5)) * 100);
+      }
     });
   }
 
@@ -1000,6 +1010,16 @@ class VisualizationModule extends BaseModule {
   }
 
   /**
+   * Update opacity slider gradient fill
+   */
+  updateOpacitySliderFill(sliderId, percent) {
+    const slider = document.getElementById(sliderId);
+    if (slider) {
+      slider.style.background = `linear-gradient(to right, var(--module-primary) 0%, var(--module-primary) ${percent}%, var(--module-border) ${percent}%, var(--module-border) 100%)`;
+    }
+  }
+
+  /**
    * Set original data opacity
    */
   setOriginalDataOpacityValue(opacity) {
@@ -1007,6 +1027,15 @@ class VisualizationModule extends BaseModule {
     const valueSpan = document.getElementById('originalDataOpacityValue');
     if (valueSpan) {
       valueSpan.textContent = `${Math.round(opacity * 100)}%`;
+    }
+
+    // Update slider fill
+    const slider = document.getElementById('originalDataOpacity');
+    if (slider) {
+      const min = parseInt(slider.min);
+      const max = parseInt(slider.max);
+      const percent = ((opacity * 100 - min) / (max - min)) * 100;
+      this.updateOpacitySliderFill('originalDataOpacity', percent);
     }
 
     // Apply opacity
@@ -1217,6 +1246,16 @@ class VisualizationModule extends BaseModule {
     const valueSpan = document.getElementById(`classOpacityValue${classId}`);
     if (valueSpan) {
       valueSpan.textContent = `${Math.round(opacity * 100)}%`;
+    }
+
+    // Update slider fill
+    const sliderId = `classOpacity${classId}`;
+    const slider = document.getElementById(sliderId);
+    if (slider) {
+      const min = parseInt(slider.min);
+      const max = parseInt(slider.max);
+      const percent = ((opacity * 100 - min) / (max - min)) * 100;
+      this.updateOpacitySliderFill(sliderId, percent);
     }
   }
 

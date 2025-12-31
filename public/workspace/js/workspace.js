@@ -11,7 +11,36 @@ class Workspace {
     this.fileBrowser = null;  // File browser component (Phase 3.2)
     this.initialized = false;
 
+    // Initialize theme before DOM fully loads to prevent flash
+    this.initTheme();
+
     console.log('[Workspace] Initializing...');
+  }
+
+  /**
+   * Initialize theme from localStorage or default to light
+   */
+  initTheme() {
+    const savedTheme = localStorage.getItem('workspace-theme') || 'light';
+    if (savedTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }
+
+  /**
+   * Toggle between light and dark themes
+   */
+  toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('workspace-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('workspace-theme', 'dark');
+    }
   }
 
   /**
@@ -172,6 +201,12 @@ class Workspace {
         sidebar.classList.toggle('collapsed');
         this.state.update('ui.sidebarCollapsed', isCollapsed);
       });
+    }
+
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => this.toggleTheme());
     }
 
     // Global return to hub function
