@@ -69,6 +69,38 @@
   color: var(--module-text-primary);
 }
 
+/* Section header with help icon */
+.filter-denoising-module .section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  margin-bottom: var(--module-spacing-md);
+}
+
+.filter-denoising-module .section-header h4 {
+  margin: 0;
+  flex: 1;
+}
+
+.filter-denoising-module .section-header .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.filter-denoising-module .section-header .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.filter-denoising-module .section-header .help-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
 .filter-denoising-module .method-option {
   display: flex;
   align-items: flex-start;

@@ -41,7 +41,8 @@ const moduleRegistry = [
         label: 'Filter-Based',
         sublabel: 'Gaussian / NLM',
         path: '/workspace/js/modules/denoising-filter/FilterDenoisingModule.js',
-        status: 'available'
+        status: 'available',
+        helpArticleId: 'denoising-filter'
       }
     ]
   },
