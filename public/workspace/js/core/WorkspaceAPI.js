@@ -100,6 +100,109 @@ class WorkspaceAPI {
   }
 
   // ===========================================================================
+  // Workspace Export/Import (ZIP)
+  // ===========================================================================
+
+  /**
+   * Download entire workspace as ZIP file
+   * Streams the zip file and triggers a browser download
+   * @returns {Promise<{success: boolean}>}
+   */
+  async downloadWorkspace() {
+    console.log('[WorkspaceAPI] Starting workspace download...');
+
+    const response = await fetch(`${this.baseURL}/api/workspace/download`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      // Try to parse error message
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Download failed: ${response.statusText}`);
+      } catch (e) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+    }
+
+    // Get filename from Content-Disposition header
+    const disposition = response.headers.get('Content-Disposition');
+    const filenameMatch = disposition?.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : 'workspace.zip';
+
+    // Trigger download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    console.log('[WorkspaceAPI] Workspace download complete:', filename);
+    return { success: true, filename };
+  }
+
+  /**
+   * Upload and restore workspace from ZIP file
+   * @param {File} zipFile - ZIP file to restore from
+   * @param {function} onProgress - Progress callback (0-100)
+   * @returns {Promise<object>} Result with fileCount and status
+   */
+  async restoreWorkspace(zipFile, onProgress = null) {
+    console.log('[WorkspaceAPI] Starting workspace restore...');
+
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('workspace', zipFile);
+
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const result = JSON.parse(xhr.responseText);
+            console.log('[WorkspaceAPI] Workspace restore complete:', result);
+            resolve(result);
+          } catch (e) {
+            reject(new Error('Invalid response from server'));
+          }
+        } else {
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            reject(new Error(errorData.error || `Restore failed: ${xhr.statusText}`));
+          } catch (e) {
+            reject(new Error(`Restore failed: ${xhr.statusText}`));
+          }
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Network error during workspace restore'));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Workspace restore was cancelled'));
+      });
+
+      xhr.open('POST', `${this.baseURL}/api/workspace/restore`);
+      xhr.withCredentials = true;
+      xhr.send(formData);
+    });
+  }
+
+  // ===========================================================================
   // File Management
   // ===========================================================================
 

@@ -275,6 +275,7 @@ class FileBrowser {
             <option value="annotations">🎨 Annotations</option>
             <option value="inference_data">🔬 Inference Data</option>
             <option value="imported_models">🧠 Model Files</option>
+            <option value="workspace" class="fb-option-workspace">📦 Restore Workspace (ZIP)</option>
           </select>
           <button class="fb-btn-upload" id="fb-upload-btn" title="Upload file" disabled>
             <span class="fb-upload-icon">⬆️</span>
@@ -283,7 +284,7 @@ class FileBrowser {
         </div>
 
         <input type="file" id="fb-file-input" class="fb-file-input-hidden"
-               accept=".tif,.tiff,.pth,.json" multiple style="display: none;">
+               accept=".tif,.tiff,.pth,.json,.zip" multiple style="display: none;">
 
         <div class="fb-upload-progress" id="fb-upload-progress" style="display: none;">
           <div class="fb-progress-bar">
@@ -1395,10 +1396,15 @@ class FileBrowser {
     const fileInput = this.container.querySelector('#fb-file-input');
     if (!fileInput) return;
 
-    if (category === 'imported_models') {
+    if (category === 'workspace') {
+      fileInput.accept = '.zip';
+      fileInput.multiple = false; // Only one workspace zip at a time
+    } else if (category === 'imported_models') {
       fileInput.accept = '.pth,.json';
+      fileInput.multiple = true;
     } else {
       fileInput.accept = '.tif,.tiff';
+      fileInput.multiple = true;
     }
   }
 
@@ -1495,7 +1501,98 @@ class FileBrowser {
       return;
     }
 
+    // Special handling for workspace restore
+    if (category === 'workspace') {
+      await this.handleWorkspaceRestore(files[0]);
+      return;
+    }
+
     await this.uploadFiles(Array.from(files), category);
+  }
+
+  /**
+   * Handle workspace restore from ZIP file
+   * @param {File} zipFile - ZIP file to restore from
+   */
+  async handleWorkspaceRestore(zipFile) {
+    // Show confirmation dialog
+    const confirmed = await this.showRestoreConfirmation();
+    if (!confirmed) {
+      this.state.notify('info', 'Workspace restore cancelled');
+      return;
+    }
+
+    const uploadBtn = this.container.querySelector('#fb-upload-btn');
+    const categoryDropdown = this.container.querySelector('#fb-upload-category');
+    const progressContainer = this.container.querySelector('#fb-upload-progress');
+    const progressFill = this.container.querySelector('#fb-progress-fill');
+    const progressText = this.container.querySelector('#fb-progress-text');
+
+    try {
+      // Disable upload controls
+      if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.querySelector('.fb-upload-text').textContent = 'Restoring...';
+        uploadBtn.classList.add('uploading');
+      }
+      if (categoryDropdown) {
+        categoryDropdown.disabled = true;
+      }
+
+      // Show progress
+      if (progressContainer) {
+        progressContainer.style.display = 'block';
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Uploading workspace...';
+      }
+
+      // Upload and restore workspace
+      const result = await this.api.restoreWorkspace(zipFile, (progress) => {
+        if (progressFill) {
+          progressFill.style.width = `${progress}%`;
+        }
+        if (progressText) {
+          progressText.textContent = `Uploading... ${progress}%`;
+        }
+      });
+
+      // Show extracting state
+      if (progressText) {
+        progressText.textContent = 'Extracting and restoring...';
+        progressFill.style.width = '100%';
+      }
+
+      // Refresh file browser
+      await this.refresh();
+
+      // Hide progress
+      if (progressContainer) {
+        progressContainer.style.display = 'none';
+      }
+
+      this.state.notify('success', `Workspace restored: ${result.fileCount} files, ${result.folderCount || 0} folders`);
+
+    } catch (error) {
+      console.error('[FileBrowser] Workspace restore error:', error);
+      this.state.notify('error', `Restore failed: ${error.message}`);
+
+      // Hide progress
+      if (progressContainer) {
+        progressContainer.style.display = 'none';
+      }
+
+    } finally {
+      // Re-enable upload controls
+      if (uploadBtn) {
+        uploadBtn.disabled = false;
+        uploadBtn.querySelector('.fb-upload-text').textContent = 'Upload';
+        uploadBtn.classList.remove('uploading');
+      }
+      if (categoryDropdown) {
+        categoryDropdown.disabled = false;
+        categoryDropdown.value = ''; // Reset selection
+      }
+    }
   }
 
   /**
@@ -1509,6 +1606,22 @@ class FileBrowser {
 
     if (fileArray.length === 0) {
       return { valid: false, error: 'No files selected' };
+    }
+
+    // Workspace ZIP validation
+    if (category === 'workspace') {
+      if (fileArray.length !== 1) {
+        return { valid: false, error: 'Please select exactly one workspace ZIP file' };
+      }
+      const file = fileArray[0];
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        return { valid: false, error: 'Only ZIP files are allowed for workspace restore' };
+      }
+      // Warn for large files but don't block
+      if (file.size > 1024 * 1024 * 1024) { // > 1GB
+        this.state.notify('info', 'Large workspace file detected. Upload may take several minutes.', 5000);
+      }
+      return { valid: true };
     }
 
     if (category === 'imported_models') {
@@ -1543,7 +1656,7 @@ class FileBrowser {
       }
     }
 
-    // Check file sizes (200MB limit)
+    // Check file sizes (200MB limit for non-workspace files)
     const maxSize = 200 * 1024 * 1024;
     const oversizedFiles = fileArray.filter(f => f.size > maxSize);
 
@@ -1640,6 +1753,112 @@ class FileBrowser {
         }
       }, 2000);
     }
+  }
+
+  // ===========================================================================
+  // WORKSPACE CONFIRMATION DIALOGS
+  // ===========================================================================
+
+  /**
+   * Show confirmation dialog for workspace restore
+   * @returns {Promise<boolean>} True if user confirms
+   */
+  showRestoreConfirmation() {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'workspace-confirm-modal';
+      modal.innerHTML = `
+        <div class="workspace-confirm-overlay"></div>
+        <div class="workspace-confirm-content">
+          <h3>Restore Workspace</h3>
+          <p>This will <strong>replace</strong> your current workspace with the contents of the ZIP file.</p>
+          <p class="warning-text">All existing files will be deleted. This cannot be undone.</p>
+          <div class="workspace-confirm-actions">
+            <button class="btn-cancel">Cancel</button>
+            <button class="btn-confirm btn-danger">Replace Workspace</button>
+          </div>
+        </div>
+      `;
+
+      const closeModal = (result) => {
+        modal.remove();
+        resolve(result);
+      };
+
+      // Event handlers
+      modal.querySelector('.workspace-confirm-overlay').addEventListener('click', () => closeModal(false));
+      modal.querySelector('.btn-cancel').addEventListener('click', () => closeModal(false));
+      modal.querySelector('.btn-confirm').addEventListener('click', () => closeModal(true));
+
+      // ESC key to cancel
+      const handleKeydown = (e) => {
+        if (e.key === 'Escape') {
+          document.removeEventListener('keydown', handleKeydown);
+          closeModal(false);
+        }
+      };
+      document.addEventListener('keydown', handleKeydown);
+
+      document.body.appendChild(modal);
+    });
+  }
+
+  /**
+   * Show confirmation dialog for workspace download
+   * @param {object} stats - Workspace statistics
+   * @returns {Promise<boolean>} True if user confirms
+   */
+  showDownloadConfirmation(stats) {
+    return new Promise((resolve) => {
+      const sizeDisplay = stats?.totalSizeMB ? `${stats.totalSizeMB} MB` : 'Unknown size';
+      const fileCount = stats?.fileCount || 0;
+
+      const modal = document.createElement('div');
+      modal.className = 'workspace-confirm-modal';
+      modal.innerHTML = `
+        <div class="workspace-confirm-overlay"></div>
+        <div class="workspace-confirm-content">
+          <h3>Download Workspace</h3>
+          <p>This will create a ZIP file containing your entire workspace.</p>
+          <div class="workspace-stats-info">
+            <div class="stat-row">
+              <span class="stat-label">Files:</span>
+              <span class="stat-value">${fileCount}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Estimated size:</span>
+              <span class="stat-value">${sizeDisplay}</span>
+            </div>
+          </div>
+          <p class="info-text">Large workspaces may take several minutes to download.</p>
+          <div class="workspace-confirm-actions">
+            <button class="btn-cancel">Cancel</button>
+            <button class="btn-confirm">Download ZIP</button>
+          </div>
+        </div>
+      `;
+
+      const closeModal = (result) => {
+        modal.remove();
+        resolve(result);
+      };
+
+      // Event handlers
+      modal.querySelector('.workspace-confirm-overlay').addEventListener('click', () => closeModal(false));
+      modal.querySelector('.btn-cancel').addEventListener('click', () => closeModal(false));
+      modal.querySelector('.btn-confirm').addEventListener('click', () => closeModal(true));
+
+      // ESC key to cancel
+      const handleKeydown = (e) => {
+        if (e.key === 'Escape') {
+          document.removeEventListener('keydown', handleKeydown);
+          closeModal(false);
+        }
+      };
+      document.addEventListener('keydown', handleKeydown);
+
+      document.body.appendChild(modal);
+    });
   }
 }
 

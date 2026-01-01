@@ -214,6 +214,109 @@ function createWorkspaceRoutes(dependencies) {
   });
 
   // ===========================================================================
+  // WORKSPACE EXPORT/IMPORT (ZIP)
+  // ===========================================================================
+
+  /**
+   * Download workspace as ZIP file
+   * GET /api/workspace/download
+   *
+   * Streams a zip file containing all workspace files (excluding cache directories).
+   * Cache directories (.thumbnails, .slices, .mesh-previews) are excluded.
+   */
+  router.get('/download', requireAuth, async (req, res) => {
+    try {
+      const sessionId = req.session.id;
+
+      // Set extended timeout for large workspaces (10 minutes)
+      req.setTimeout(600000);
+      res.setTimeout(600000);
+
+      await workspaceService.exportWorkspace(
+        sessionId,
+        res,
+        req.session.user?.username
+      );
+
+      // Note: response is handled by exportWorkspace (streaming)
+    } catch (error) {
+      if (logger) {
+        logger.error('Workspace download error:', error);
+      }
+      // Only send error if headers haven't been sent yet
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    }
+  });
+
+  /**
+   * Restore workspace from ZIP file
+   * POST /api/workspace/restore
+   *
+   * Accepts a zip file upload and restores the workspace from it.
+   * Clears existing workspace, extracts zip, updates session ID in metadata.
+   */
+  router.post('/restore', requireAuth, dependencies.uploadWorkspaceZip.single('workspace'), async (req, res) => {
+    try {
+      const sessionId = req.session.id;
+
+      // Check approval status - only active users can restore workspaces
+      if (req.session.user.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          error: 'Workspace restore requires account approval',
+          status: req.session.user.status,
+          message: 'Your account is pending approval.'
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file uploaded'
+        });
+      }
+
+      // Validate file is a zip
+      if (!req.file.originalname.toLowerCase().endsWith('.zip')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Only ZIP files are allowed for workspace restore'
+        });
+      }
+
+      // Restore workspace from zip buffer
+      const result = await workspaceService.restoreWorkspace(
+        sessionId,
+        req.file.buffer,
+        fileService,
+        req.session.user?.username
+      );
+
+      res.json({
+        success: true,
+        message: 'Workspace restored successfully',
+        fileCount: result.fileCount,
+        folderCount: result.folderCount,
+        originalSessionId: result.originalSessionId
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('Workspace restore error:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // ===========================================================================
   // THUMBNAILS
   // ===========================================================================
 

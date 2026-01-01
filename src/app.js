@@ -284,7 +284,7 @@ function configureApp(app, dependencies) {
   app.use('/api/workspace', createFilesRoutes({ workspaceManager, workspaceService, activityLogger, logger }));
 
   // Configure multer for file uploads
-  const { upload, uploadImport } = createUploadMiddleware(workspaceManager, logger);
+  const { upload, uploadImport, uploadWorkspaceZip } = createUploadMiddleware(workspaceManager, logger);
 
   // Workspace routes at /api/workspace
   app.use('/api/workspace', createWorkspaceRoutes({
@@ -293,7 +293,8 @@ function configureApp(app, dependencies) {
     fileService,
     activityLogger,
     logger,
-    upload
+    upload,
+    uploadWorkspaceZip
   }));
 
   // ML pipeline routes

@@ -129,6 +129,18 @@ function modelFileFilter(req, file, cb) {
 }
 
 /**
+ * Workspace ZIP file filter - accepts only .zip files
+ */
+function workspaceZipFileFilter(req, file, cb) {
+  const fileName = file.originalname.toLowerCase();
+  if (fileName.endsWith('.zip')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only ZIP files are allowed for workspace restore!'), false);
+  }
+}
+
+/**
  * Create upload middleware instances
  * @param {object} workspaceManager - WorkspaceManager instance
  * @param {object} logger - Logger instance
@@ -156,9 +168,19 @@ function createUploadMiddleware(workspaceManager, logger) {
     }
   });
 
+  // Workspace ZIP upload middleware (memory storage for buffer access, 5GB limit)
+  const uploadWorkspaceZip = multer({
+    storage: multer.memoryStorage(),
+    fileFilter: workspaceZipFileFilter,
+    limits: {
+      fileSize: UPLOAD_LIMITS.workspaceZipFileSize || 5 * 1024 * 1024 * 1024 // 5GB default
+    }
+  });
+
   return {
     upload,
-    uploadImport
+    uploadImport,
+    uploadWorkspaceZip
   };
 }
 
@@ -200,5 +222,6 @@ module.exports = {
   workspaceFileFilter,
   tiffFileFilter,
   modelFileFilter,
+  workspaceZipFileFilter,
   handleMulterError
 };

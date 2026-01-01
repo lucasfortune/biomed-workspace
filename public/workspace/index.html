@@ -37,7 +37,14 @@
 
         <!-- Workspace Stats -->
         <div class="sidebar-section workspace-stats">
-          <h3>Workspace</h3>
+          <div class="workspace-header">
+            <h3>Workspace</h3>
+            <button class="btn-workspace-download" id="btn-download-workspace" title="Download workspace as ZIP">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+              </svg>
+            </button>
+          </div>
           <div class="stat-item">
             <span class="stat-label">Files:</span>
             <span class="stat-value" id="file-count">0</span>

@@ -7,6 +7,8 @@
 
 const path = require('path');
 const fs = require('fs');
+const archiver = require('archiver');
+const unzipper = require('unzipper');
 
 class WorkspaceService {
   /**
@@ -296,6 +298,219 @@ class WorkspaceService {
    */
   getThumbnailPath(sessionId, fileId) {
     return path.join(this.getThumbnailsDir(sessionId), `${fileId}.jpg`);
+  }
+
+  // ===========================================================================
+  // WORKSPACE EXPORT/IMPORT (ZIP)
+  // ===========================================================================
+
+  /**
+   * Export workspace to a zip file stream
+   * Excludes cache directories (.thumbnails, .slices, .mesh-previews)
+   * @param {string} sessionId - Session ID
+   * @param {object} res - Express response object to stream to
+   * @param {string} username - Username for logging
+   * @returns {Promise<void>}
+   */
+  async exportWorkspace(sessionId, res, username = null) {
+    const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
+
+    if (!fs.existsSync(workspacePath)) {
+      throw new Error(`Workspace not found for session: ${sessionId}`);
+    }
+
+    // Cache directories to exclude
+    const excludeDirs = ['.thumbnails', '.slices', '.mesh-previews'];
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `workspace_${timestamp}.zip`;
+
+    // Set response headers for download
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Create archive
+    const archive = archiver('zip', {
+      zlib: { level: 6 } // Compression level (0-9)
+    });
+
+    // Handle archive errors
+    archive.on('error', (err) => {
+      if (this.logger) {
+        this.logger.error(`Archive error for session ${sessionId}:`, err);
+      }
+      throw err;
+    });
+
+    // Pipe archive to response
+    archive.pipe(res);
+
+    // Add files to archive, excluding cache directories
+    const addDirectory = (dirPath, archivePath = '') => {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const entryArchivePath = archivePath ? `${archivePath}/${entry.name}` : entry.name;
+
+        // Skip excluded directories at any level
+        if (entry.isDirectory() && excludeDirs.includes(entry.name)) {
+          continue;
+        }
+
+        if (entry.isDirectory()) {
+          addDirectory(fullPath, entryArchivePath);
+        } else {
+          archive.file(fullPath, { name: entryArchivePath });
+        }
+      }
+    };
+
+    addDirectory(workspacePath);
+
+    // Log activity
+    if (this.activityLogger && username) {
+      const stats = this.workspaceManager.getWorkspaceStats(sessionId);
+      this.activityLogger.logActivity(username, 'workspace_exported', {
+        sessionId,
+        fileCount: stats?.fileCount || 0,
+        totalSizeMB: stats?.totalSizeMB || '0'
+      });
+    }
+
+    if (this.logger) {
+      this.logger.info(`Exporting workspace for session: ${sessionId}`);
+    }
+
+    // Finalize archive
+    await archive.finalize();
+  }
+
+  /**
+   * Restore workspace from a zip buffer
+   * Clears existing workspace and extracts zip contents
+   * Updates session ID in metadata
+   * @param {string} sessionId - Session ID
+   * @param {Buffer} zipBuffer - Zip file buffer
+   * @param {object} fileService - FileService instance for thumbnail regeneration
+   * @param {string} username - Username for logging
+   * @returns {Promise<object>} Result with file count and status
+   */
+  async restoreWorkspace(sessionId, zipBuffer, fileService = null, username = null) {
+    const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
+
+    // Ensure workspace exists
+    if (!fs.existsSync(workspacePath)) {
+      this.workspaceManager.initializeWorkspace(sessionId);
+    }
+
+    // First, validate that the zip contains metadata.json
+    const hasMetadata = await this.validateWorkspaceZip(zipBuffer);
+    if (!hasMetadata) {
+      throw new Error('Invalid workspace zip: missing metadata.json');
+    }
+
+    // Clear existing workspace
+    const clearResult = this.workspaceManager.clearWorkspace(sessionId);
+    if (this.logger) {
+      this.logger.info(`Cleared ${clearResult.clearedFileCount} files before restore`);
+    }
+
+    // Extract zip to workspace
+    await new Promise((resolve, reject) => {
+      const stream = require('stream');
+      const bufferStream = new stream.PassThrough();
+      bufferStream.end(zipBuffer);
+
+      bufferStream
+        .pipe(unzipper.Extract({ path: workspacePath }))
+        .on('close', resolve)
+        .on('error', reject);
+    });
+
+    // Load the imported metadata and update session ID
+    let importedMetadata;
+    try {
+      importedMetadata = this.workspaceManager.loadMetadata(sessionId);
+    } catch (error) {
+      // If metadata failed to load after extraction, something went wrong
+      throw new Error('Failed to load metadata from extracted workspace');
+    }
+
+    // Update session ID in metadata
+    const updatedMetadata = this.workspaceManager.updateMetadataSessionId(sessionId, importedMetadata);
+
+    // Regenerate thumbnails for TIFF files (async, don't block response)
+    if (fileService) {
+      const tiffFiles = this.workspaceManager.getTiffFiles(sessionId);
+      if (tiffFiles.length > 0 && this.logger) {
+        this.logger.info(`Regenerating thumbnails for ${tiffFiles.length} TIFF files`);
+      }
+
+      // Regenerate thumbnails asynchronously
+      for (const file of tiffFiles) {
+        const filePath = path.join(workspacePath, file.path);
+        if (fs.existsSync(filePath)) {
+          fileService.generateThumbnailAsync(sessionId, filePath, file.id);
+        }
+      }
+    }
+
+    // Log activity
+    if (this.activityLogger && username) {
+      this.activityLogger.logActivity(username, 'workspace_restored', {
+        sessionId,
+        fileCount: updatedMetadata.files?.length || 0,
+        originalSessionId: updatedMetadata.originalSessionId
+      });
+    }
+
+    if (this.logger) {
+      this.logger.info(`Workspace restored for session: ${sessionId} (${updatedMetadata.files?.length || 0} files)`);
+    }
+
+    return {
+      success: true,
+      fileCount: updatedMetadata.files?.length || 0,
+      folderCount: updatedMetadata.folders?.length || 0,
+      originalSessionId: updatedMetadata.originalSessionId
+    };
+  }
+
+  /**
+   * Validate that a zip buffer contains a valid workspace structure
+   * @param {Buffer} zipBuffer - Zip file buffer
+   * @returns {Promise<boolean>} True if valid workspace zip
+   */
+  async validateWorkspaceZip(zipBuffer) {
+    return new Promise((resolve, reject) => {
+      const stream = require('stream');
+      const bufferStream = new stream.PassThrough();
+      bufferStream.end(zipBuffer);
+
+      let hasMetadata = false;
+
+      bufferStream
+        .pipe(unzipper.Parse())
+        .on('entry', (entry) => {
+          if (entry.path === 'metadata.json') {
+            hasMetadata = true;
+          }
+          entry.autodrain();
+        })
+        .on('close', () => resolve(hasMetadata))
+        .on('error', reject);
+    });
+  }
+
+  /**
+   * Get TIFF files in workspace (for thumbnail regeneration)
+   * @param {string} sessionId - Session ID
+   * @returns {Array} Array of TIFF file objects
+   */
+  getTiffFiles(sessionId) {
+    return this.workspaceManager.getTiffFiles(sessionId);
   }
 }
 

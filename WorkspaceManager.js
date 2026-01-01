@@ -782,6 +782,148 @@ class WorkspaceManager {
   }
 
   /**
+   * Clear all workspace files for restore operation
+   * Deletes all files and directories except cache dirs (.thumbnails, .slices, .mesh-previews)
+   * Resets metadata to empty state
+   * @param {string} sessionId - Session ID
+   * @returns {object} Result with cleared file count
+   */
+  clearWorkspace(sessionId) {
+    const workspacePath = this.getWorkspacePath(sessionId);
+
+    if (!fs.existsSync(workspacePath)) {
+      throw new Error(`Workspace not found for session: ${sessionId}`);
+    }
+
+    // Directories to preserve (will be recreated if needed)
+    const cacheDirectories = ['.thumbnails', '.slices', '.mesh-previews'];
+
+    // Get current file count for reporting
+    const metadata = this.loadMetadata(sessionId);
+    const previousFileCount = metadata.files.length;
+
+    // Delete all contents except cache directories
+    const deleteRecursive = (dirPath, isRoot = false) => {
+      if (!fs.existsSync(dirPath)) return;
+
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+
+        // Skip cache directories at root level
+        if (isRoot && cacheDirectories.includes(entry.name)) {
+          continue;
+        }
+
+        // Skip metadata.json - we'll reset it separately
+        if (entry.name === 'metadata.json') {
+          continue;
+        }
+
+        if (entry.isDirectory()) {
+          // Recursively delete directory contents
+          fs.rmSync(fullPath, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    };
+
+    deleteRecursive(workspacePath, true);
+
+    // Recreate standard directory structure
+    const directories = [
+      'uploads/raw',
+      'uploads/annotations',
+      'uploads/unfinished_annotations',
+      'uploads/imported_models',
+      'uploads/inference_data',
+      'results/segmentation',
+      'results/denoising',
+      'results/meshes',
+      'results/visualizations',
+      'models/segmentation',
+      'models/denoising',
+      'models/configs'
+    ];
+
+    directories.forEach(dir => {
+      const dirPath = path.join(workspacePath, dir);
+      fs.mkdirSync(dirPath, { recursive: true });
+    });
+
+    // Reset metadata (keeping session ID and timestamps)
+    const newMetadata = {
+      sessionId: sessionId,
+      createdAt: metadata.createdAt || new Date().toISOString(),
+      lastAccessed: new Date().toISOString(),
+      version: '1.1.0',
+      files: [],
+      folders: [],
+      modules: {
+        segmentation: { runs: [] },
+        denoising: { runs: [] },
+        annotation: { runs: [] },
+        mesh: { runs: [] }
+      }
+    };
+
+    this.saveMetadata(sessionId, newMetadata);
+
+    console.log(`[WorkspaceManager] Cleared workspace for session: ${sessionId} (${previousFileCount} files removed)`);
+
+    return {
+      success: true,
+      clearedFileCount: previousFileCount
+    };
+  }
+
+  /**
+   * Update session ID in metadata (for workspace restore)
+   * @param {string} sessionId - Current session ID (the new one)
+   * @param {object} importedMetadata - Metadata object from imported workspace
+   * @returns {object} Updated metadata
+   */
+  updateMetadataSessionId(sessionId, importedMetadata) {
+    const workspacePath = this.getWorkspacePath(sessionId);
+
+    if (!fs.existsSync(workspacePath)) {
+      throw new Error(`Workspace not found for session: ${sessionId}`);
+    }
+
+    // Update session ID and timestamps
+    const updatedMetadata = {
+      ...importedMetadata,
+      sessionId: sessionId,
+      lastAccessed: new Date().toISOString(),
+      // Preserve original creation date but add import timestamp
+      importedAt: new Date().toISOString(),
+      originalSessionId: importedMetadata.sessionId
+    };
+
+    this.saveMetadata(sessionId, updatedMetadata);
+
+    console.log(`[WorkspaceManager] Updated metadata session ID from ${importedMetadata.sessionId} to ${sessionId}`);
+
+    return updatedMetadata;
+  }
+
+  /**
+   * Get all TIFF files in workspace for thumbnail regeneration
+   * @param {string} sessionId - Session ID
+   * @returns {array} Array of file objects with TIFF extension
+   */
+  getTiffFiles(sessionId) {
+    const metadata = this.loadMetadata(sessionId);
+
+    return metadata.files.filter(file => {
+      const ext = path.extname(file.name).toLowerCase();
+      return ext === '.tif' || ext === '.tiff';
+    });
+  }
+
+  /**
    * Get workspace statistics
    */
   getWorkspaceStats(sessionId) {

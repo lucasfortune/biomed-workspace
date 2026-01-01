@@ -28,9 +28,10 @@ const DIRECTORIES = {
 
 // File upload limits
 const UPLOAD_LIMITS = {
-  tiffFileSize: 200 * 1024 * 1024,      // 200MB for TIFF stacks
-  modelFileSize: 2 * 1024 * 1024 * 1024, // 2GB for model files
-  maxModelFiles: 2                        // Maximum 2 files (model + config)
+  tiffFileSize: 200 * 1024 * 1024,        // 200MB for TIFF stacks
+  modelFileSize: 2 * 1024 * 1024 * 1024,  // 2GB for model files
+  maxModelFiles: 2,                        // Maximum 2 files (model + config)
+  workspaceZipFileSize: 5 * 1024 * 1024 * 1024  // 5GB for workspace ZIP files
 };
 
 // Session configuration

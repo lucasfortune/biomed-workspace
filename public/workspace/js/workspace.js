@@ -226,8 +226,47 @@ class Workspace {
       }
     });
 
+    // Workspace download button
+    const downloadBtn = document.getElementById('btn-download-workspace');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', () => this.downloadWorkspace());
+    }
+
     // Global return to hub function
     window.backToHub = () => this.returnToHub();
+  }
+
+  /**
+   * Download current workspace as ZIP file
+   */
+  async downloadWorkspace() {
+    try {
+      // Get stats for confirmation dialog
+      const statsResponse = await this.api.getWorkspaceStats();
+      const stats = statsResponse.success ? statsResponse.stats : null;
+
+      // Show confirmation dialog (using FileBrowser's method)
+      const confirmed = await this.fileBrowser.showDownloadConfirmation(stats);
+      if (!confirmed) {
+        this.state.notify('info', 'Download cancelled');
+        return;
+      }
+
+      // Show loading state
+      this.state.update('ui.loading', true);
+      this.state.notify('info', 'Preparing workspace download...', 3000);
+
+      // Download workspace
+      await this.api.downloadWorkspace();
+
+      this.state.notify('success', 'Workspace download started');
+
+    } catch (error) {
+      console.error('[Workspace] Download error:', error);
+      this.state.notify('error', `Download failed: ${error.message}`);
+    } finally {
+      this.state.update('ui.loading', false);
+    }
   }
 
   /**

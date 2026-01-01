@@ -1852,3 +1852,207 @@ body {
 .module-card:hover .module-icon svg {
   fill: var(--accent-muted);
 }
+
+/* ============================================================================
+   WORKSPACE HEADER & DOWNLOAD BUTTON
+   ============================================================================ */
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.workspace-header h3 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.btn-workspace-download {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+}
+
+.btn-workspace-download:hover {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.btn-workspace-download svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* ============================================================================
+   WORKSPACE CONFIRMATION MODALS
+   ============================================================================ */
+
+.workspace-confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.workspace-confirm-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.workspace-confirm-content {
+  position: relative;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlideIn 0.2s ease-out;
+}
+
+.workspace-confirm-content h3 {
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.workspace-confirm-content p {
+  margin: 0 0 12px 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.workspace-confirm-content .warning-text {
+  color: var(--danger-color);
+  font-weight: 500;
+}
+
+.workspace-confirm-content .info-text {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.workspace-stats-info {
+  background-color: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.workspace-stats-info .stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.workspace-stats-info .stat-label {
+  color: var(--text-secondary);
+}
+
+.workspace-stats-info .stat-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.workspace-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.workspace-confirm-actions .btn-cancel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.workspace-confirm-actions .btn-cancel:hover {
+  background: var(--bg-tertiary);
+}
+
+.workspace-confirm-actions .btn-confirm {
+  background: var(--accent-primary);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.workspace-confirm-actions .btn-confirm:hover {
+  background: var(--accent-hover);
+}
+
+.workspace-confirm-actions .btn-danger {
+  background: var(--danger-color);
+}
+
+.workspace-confirm-actions .btn-danger:hover {
+  background: #c82333;
+}
+
+/* Workspace option separator in dropdown */
+.fb-category-dropdown option.fb-option-workspace {
+  border-top: 1px solid var(--border-color);
+  font-style: italic;
+}
+
+/* Modal animations */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
