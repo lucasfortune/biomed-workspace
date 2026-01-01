@@ -1017,7 +1017,12 @@ body {
   height: 24px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.15s ease;
+  opacity: 0;
+  transition: color 0.15s ease, opacity 0.2s ease;
+}
+
+.module-card:hover .module-card-help .help-icon {
+  opacity: 1;
 }
 
 .module-card-help .help-icon:hover {
@@ -1862,6 +1867,7 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+  gap: 6px;
 }
 
 .workspace-header h3 {
@@ -1871,6 +1877,27 @@ body {
   color: var(--text-secondary);
   font-weight: 600;
   letter-spacing: 0.5px;
+  flex: 1;
+}
+
+.workspace-help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.workspace-help-icon:hover {
+  color: var(--accent-primary);
+}
+
+.workspace-help-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }
 
 .btn-workspace-download {

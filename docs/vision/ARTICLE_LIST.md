@@ -18,7 +18,7 @@ This document contains a list of all proposed elements that should be documented
 - ✅ **IMAGE VIEWER MODULE**
 - ✅ **SURFACE MESH GENERATION MODULE**
 - ✅ **3D VISUALIZATION MODULE**
-- ⏳ **FILE BROWSER**
+- ✅ **FILE BROWSER**
 
 ## IMPORTANT:
 
@@ -187,7 +187,16 @@ I will handle the info article list for the denoising modules separately:
 	- what: explain each ui element
 
 
-# File browser  (PENDING ⏳)
-- general: 
+# File browser  (COMPLETE ✅)
+- general:
     - where: below the user section, next to the "workspace" header
     - what: explanation of the file browser panel functionality (all, in detail)
+    - implemented articles:
+        - file-browser: Main overview of file browser functionality
+        - fb-uploading: How to upload files
+        - fb-categories: Understanding file categories
+        - fb-operations: File operations (rename, delete, download, view info)
+        - fb-batch-operations: Batch operations for multiple files
+        - fb-search-filter: Search and filter functionality
+        - fb-workspace-backup: Workspace backup and restore (critical for session persistence)
+        - fb-tree-navigation: Tree navigation and folder structure

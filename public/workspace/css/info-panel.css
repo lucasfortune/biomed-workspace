@@ -363,6 +363,39 @@
   margin-bottom: 0;
 }
 
+/* Section Headers within article body */
+.ip-article-body h4.ip-section-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 16px 0 8px;
+  padding: 0;
+}
+
+.ip-article-body h4.ip-section-header:first-child {
+  margin-top: 0;
+}
+
+/* Lists within article body */
+.ip-article-body ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.ip-article-body ul:last-child {
+  margin-bottom: 0;
+}
+
+.ip-article-body li {
+  margin: 0 0 6px;
+  padding: 0;
+  line-height: 1.5;
+}
+
+.ip-article-body li:last-child {
+  margin-bottom: 0;
+}
+
 /* Parameter Impact Callout */
 .ip-article-impact {
   margin: 16px 0;

@@ -127,18 +127,116 @@ class InfoArticle {
   }
 
   /**
-   * Format article body text (paragraph splitting)
+   * Format article body text with support for:
+   * - Paragraphs (double newlines)
+   * - Lists (lines starting with -, •, *)
+   * - Section headers (lines ending with :)
+   * - Line breaks within paragraphs
    * @param {string} body - Raw body text
    */
   formatBody(body) {
     if (!body) return '';
 
-    // Split by double newlines for paragraphs
-    const paragraphs = body.split(/\n\n+/);
+    // Split by double newlines for blocks
+    const blocks = body.split(/\n\n+/);
+    const result = [];
 
-    return paragraphs
-      .map(p => `<p>${this.escapeHtml(p.trim())}</p>`)
-      .join('');
+    for (const block of blocks) {
+      const trimmedBlock = block.trim();
+      if (!trimmedBlock) continue;
+
+      const lines = trimmedBlock.split('\n');
+
+      // Check if this block is a list (most lines start with list markers)
+      const listLines = lines.filter(l => /^[\-\•\*]\s/.test(l.trim()));
+      const isListBlock = listLines.length > 0 && listLines.length >= lines.length * 0.5;
+
+      if (isListBlock) {
+        // Process as a mixed block with potential header and list
+        result.push(this.formatListBlock(lines));
+      } else {
+        // Process as regular paragraph(s)
+        result.push(this.formatParagraphBlock(lines));
+      }
+    }
+
+    return result.join('');
+  }
+
+  /**
+   * Format a block that contains list items
+   * @param {Array} lines - Lines in the block
+   */
+  formatListBlock(lines) {
+    let html = '';
+    let inList = false;
+    let listItems = [];
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // Check if line is a list item
+      const listMatch = trimmedLine.match(/^[\-\•\*]\s+(.+)$/);
+
+      if (listMatch) {
+        if (!inList) {
+          inList = true;
+          listItems = [];
+        }
+        listItems.push(listMatch[1]);
+      } else {
+        // Not a list item - could be a header or regular text
+        if (inList && listItems.length > 0) {
+          // Close the previous list
+          html += '<ul>' + listItems.map(item => `<li>${this.escapeHtml(item)}</li>`).join('') + '</ul>';
+          listItems = [];
+          inList = false;
+        }
+
+        // Check if it's a section header (ends with :)
+        if (trimmedLine.endsWith(':')) {
+          html += `<h4 class="ip-section-header">${this.escapeHtml(trimmedLine)}</h4>`;
+        } else {
+          html += `<p>${this.escapeHtml(trimmedLine)}</p>`;
+        }
+      }
+    }
+
+    // Close any remaining list
+    if (inList && listItems.length > 0) {
+      html += '<ul>' + listItems.map(item => `<li>${this.escapeHtml(item)}</li>`).join('') + '</ul>';
+    }
+
+    return html;
+  }
+
+  /**
+   * Format a paragraph block (non-list content)
+   * @param {Array} lines - Lines in the block
+   */
+  formatParagraphBlock(lines) {
+    let html = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Check if it's a section header (ends with : and is short, or followed by list/content)
+      const isHeader = line.endsWith(':') && (
+        line.length < 50 ||
+        (i + 1 < lines.length && /^[\-\•\*]\s/.test(lines[i + 1].trim()))
+      );
+
+      if (isHeader) {
+        html += `<h4 class="ip-section-header">${this.escapeHtml(line)}</h4>`;
+      } else {
+        // Regular text - check for inline formatting
+        html += `<p>${this.escapeHtml(line)}</p>`;
+      }
+    }
+
+    return html;
   }
 
   /**
