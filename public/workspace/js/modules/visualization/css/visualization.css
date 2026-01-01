@@ -538,6 +538,28 @@
   margin: 0;
   font-size: var(--module-font-size-md);
   color: var(--module-text-primary);
+  flex: 1;
+}
+
+/* Help icon in controls header */
+.viz-module .controls-header .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+  margin-right: var(--module-spacing-sm);
+}
+
+.viz-module .controls-header .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.viz-module .controls-header .help-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 /* Collapse button - hidden in normal mode */

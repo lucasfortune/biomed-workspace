@@ -17,7 +17,7 @@ This document contains a list of all proposed elements that should be documented
 - ✅ **ANNOTATION MODULE**
 - ✅ **IMAGE VIEWER MODULE**
 - ✅ **SURFACE MESH GENERATION MODULE**
-- ⏳ **3D VISUALIZATION MOULE**
+- ✅ **3D VISUALIZATION MODULE**
 - ⏳ **FILE BROWSER**
 
 ## IMPORTANT:
@@ -171,7 +171,7 @@ I will handle the info article list for the denoising modules separately:
 	- where: right next to the "output options" header in the output options section
 	- what: explain each option
 
-# 3d visualization module  (PENDING ⏳)
+# 3d visualization module (COMPLETE ✅)
 ## main page:
 - where: module card top right corner
 - what: overview of what this module does and how it works

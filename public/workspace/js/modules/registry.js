@@ -102,7 +102,8 @@ const moduleRegistry = [
     inputs: ['mesh_file'],
     outputs: [],
     color: '#E67E22',
-    status: 'available'
+    status: 'available',
+    helpArticleId: 'visualization'
   }
 ];
 
