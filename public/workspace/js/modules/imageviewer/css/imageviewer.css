@@ -256,6 +256,26 @@
   font-weight: 500;
 }
 
+/* Help icon in viewer toolbar */
+.viewer-toolbar > .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: var(--module-transition-fast);
+}
+
+.viewer-toolbar > .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.viewer-toolbar > .help-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
 /* View Container */
 .view-container {
   flex: 1;

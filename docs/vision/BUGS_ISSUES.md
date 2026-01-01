@@ -19,10 +19,6 @@ This document contains bugs and/or issues reported by the developer and/or users
     - prio 3
     - compl. 4
 
-- issue: user manual needed. functionality is exploding. users need to have reference files / manual to look up how stuff works
-    - prio 3
-    - compl. 3
-
 - issue: documentation. many new things are created and documentation is not up to date
     - prio 2
     - compl. 3

@@ -15,7 +15,7 @@ This document contains a list of all proposed elements that should be documented
 - ⏳ **DL DENOISING MODULE**
 - ⏳ **FILTER BASED  DENOISING MODULE**
 - ⏳ **ANNOTATION MODULE**
-- ⏳ **IMAGE VIEWER MODULE**
+- ✅ **IMAGE VIEWER MODULE**
 - ⏳ **SURFACE MESH GENERATION MODULE**
 - ⏳ **3D VISUALIZATION MOULE**
 
@@ -140,7 +140,7 @@ I will handle the info article list for the denoising modules separately:
 	- where: tool section has 4 sub sections: tools, brush size, history and classes. ? icons should be placed in the top right corner of all subsections.
 	- what: explain each element in the sections
 
-# image viewer module  (PENDING ⏳)
+# image viewer module (COMPLETE ✅)
 ## main page:
 - where: module card top right corner
 - what: overview of what this module does and how it works

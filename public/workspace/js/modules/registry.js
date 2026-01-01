@@ -77,7 +77,8 @@ const moduleRegistry = [
     inputs: ['image_stack', 'segmented_stack'],
     outputs: [],
     color: '#6C757D',
-    status: 'available'
+    status: 'available',
+    helpArticleId: 'imageviewer'
   },
   {
     id: 'mesh',
