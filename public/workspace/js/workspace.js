@@ -366,6 +366,8 @@ class Workspace {
    * Render a multi-launch module card with dual buttons
    */
   renderMultiLaunchCard(module) {
+    const helpIcon = module.helpArticleId ? this.renderHelpIcon(module.helpArticleId) : '';
+
     const buttons = module.launchOptions.map(opt => {
       if (opt.status === 'coming_soon') {
         return `
@@ -387,6 +389,7 @@ class Workspace {
       <div class="module-card"
            style="--card-color: ${module.color}"
            data-module-id="${module.id}">
+        ${helpIcon ? `<div class="module-card-help">${helpIcon}</div>` : ''}
         <div class="module-icon">${module.icon}</div>
         <h3>${module.name}</h3>
         <p>${module.description}</p>
