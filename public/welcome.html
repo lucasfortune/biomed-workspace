@@ -3,164 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biomedical Image Segmentation Visualizer</title>
+    <title>Biomedical Image Processing Platform</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="css/base.css">
-    <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/welcome.css">
-    <link rel="stylesheet" href="css/modals.css">
+</head>
 <body>
-        <!-- User Info Bar - Must be FIRST for top positioning -->
-    <div class="user-info-bar-welcome" id="userInfoBar">
-        <!-- Will be populated by JavaScript -->
-    </div>
-
-    <!-- Login button -->
-    <div class="login-button-container" id="loginButtonContainer">
-        <!-- Will be populated by JavaScript -->
-    </div>
-
-
-    <div class="logo-container">
-        <a href="https://www.uni-wuerzburg.de/forschung/physics-of-parasitism/" target="_blank" rel="noopener noreferrer">
-            <img src="imgs/pop_logo.svg" alt="Research Group Logo" class="research-logo">
+    <!-- Logo Row: Top-right corner -->
+    <div class="logo-row">
+        <a href="https://www.uni-wuerzburg.de/forschung/physics-of-parasitism/"
+           target="_blank" rel="noopener noreferrer" class="logo-link">
+            <img src="imgs/pop_transpBG.svg" alt="Physics of Parasitism" class="logo">
+        </a>
+        <a href="https://www.dfg.de/"
+           target="_blank" rel="noopener noreferrer" class="logo-link">
+            <img src="imgs/dfg_transpBG.svg" alt="Deutsche Forschungsgemeinschaft" class="logo">
         </a>
     </div>
-    
-    <div class="welcome-container">
+
+    <!-- Theme Toggle: Top-left corner -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <!-- Sun icon (shown in dark mode) -->
+        <svg class="theme-icon sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <!-- Moon icon (shown in light mode) -->
+        <svg class="theme-icon moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+    </button>
+
+    <!-- Main Container -->
+    <main class="welcome-main">
+        <!-- Header -->
         <header class="welcome-header">
-            <h1>Biomedical Image Processing Platform</h1>
-            <p class="subtitle">A complete web-based machine learning pipeline for biomedical image analysis</p>
+            <h1>Biomedical image processing platform</h1>
+            <p class="tagline">A complete web-based machine learning pipeline for biomedical image analysis</p>
         </header>
 
-        <main class="welcome-content">
-            <!-- Version Selection Section -->
-            <section class="version-selection">
-                <h2>Choose Your Interface</h2>
-                <div class="version-cards">
-                    <div class="version-card recommended">
-                        <div class="version-badge">🚀 NEW</div>
-                        <h3>Workspace (Modular)</h3>
-                        <p>IDE-like interface with multiple processing modules. Perfect for complex workflows.</p>
-                        <ul class="version-features">
-                            <li>✓ Modular architecture</li>
-                            <li>✓ File browser & workspace</li>
-                            <li>✓ Multiple processing tools</li>
-                            <li>✓ Persistent sessions</li>
-                        </ul>
-                        <a href="/workspace" class="btn primary">Launch Workspace</a>
-                    </div>
+        <!-- Auth Container (shown when NOT authenticated) -->
+        <div class="auth-container" id="authContainer">
+            <!-- Tab Navigation -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Login</button>
+                <button class="auth-tab" data-tab="register">Register</button>
+            </div>
 
-                    <div class="version-card">
-                        <h3>Classic Version</h3>
-                        <p>Linear workflow optimized for U-Net segmentation. Simple and straightforward.</p>
-                        <ul class="version-features">
-                            <li>✓ Step-by-step wizard</li>
-                            <li>✓ U-Net training</li>
-                            <li>✓ Inference & visualization</li>
-                            <li>✓ Proven & stable</li>
-                        </ul>
-                        <a href="/classic" class="btn secondary">Launch Classic App</a>
-                    </div>
-                </div>
-            </section>
+            <!-- Login Form -->
+            <form class="auth-form" id="loginForm" data-form="login">
+                <div id="loginError" class="error-message"></div>
 
-            <section class="app-description">
-                <h2>What this application does</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <h3>1. Data Upload</h3>
-                        <p>Upload TIF image stacks and annotations for training</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>2. U-Net Parameters</h3>
-                        <p>Configure parameters for network and training</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>3. Model Training</h3>
-                        <p>Train custom neural networks with real-time progress tracking</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>4. Inference</h3>
-                        <p>Run segmentation on new data using your trained models</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>5. 3D Visualization</h3>
-                        <p>Interactive visualization of your segmentation results</p>
-                    </div>
-                </div>
-            </section>
-
-            <section class="action-section">
-                <h2>Choose how to get started</h2>
-                <div class="action-buttons">
-                    <button class="btn primary large" onclick="startWithTestData()">
-                        Use Test Dataset
-                        <span class="btn-description">Try the app with sample data</span>
-                    </button>
-                    <button class="btn secondary large" onclick="startWithCustomData()">
-                        Upload Your Own Data
-                        <span class="btn-description">Use your own TIFF images</span>
-                    </button>
-                    <button class="btn secondary large" onclick="toggleImportModel()">
-                        Import Pre-trained Model
-                        <span class="btn-description">Skip training with your own model</span>
-                    </button>
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" name="username" required autocomplete="username">
                 </div>
 
-                <!-- NEW: Import Model Section (initially hidden) -->
-                <div id="importModelSection" class="import-section" style="display: none;">
-                    <h3>Import Pre-trained Model</h3>
-                    <p>Upload a previously trained model and its configuration to skip the training step.</p>
-                    
-                    <div class="import-uploads">
-                        <div class="upload-section" id="modelUploadSection">
-                            <div class="upload-text">
-                                <h3>Model File (.pth)</h3>
-                                <p>Drag and drop your best_model.pth file here</p>
-                            </div>
-                            <input type="file" id="modelInput" class="file-input" accept=".pth">
-                            <button class="btn" onclick="document.getElementById('modelInput').click()">
-                                Choose Model File
-                            </button>
-                        </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" name="password" required autocomplete="current-password">
+                </div>
 
-                        <div class="upload-section" id="configUploadSection">
-                            <div class="upload-text">
-                                <h3>Config File (.json)</h3>
-                                <p>Drag and drop your training_config.json file here</p>
-                            </div>
-                            <input type="file" id="configInput" class="file-input" accept=".json">
-                            <button class="btn" onclick="document.getElementById('configInput').click()">
-                                Choose Config File
-                            </button>
-                        </div>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+
+            <!-- Register Form (hidden by default) -->
+            <form class="auth-form hidden" id="registerForm" data-form="register">
+                <div id="registerError" class="error-message"></div>
+                <div id="registerSuccess" class="success-message"></div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="registerUsername">Username</label>
+                        <input type="text" id="registerUsername" name="username" required
+                               pattern="[a-zA-Z0-9_]{3,20}" autocomplete="username">
+                        <small>3-20 characters, alphanumeric and underscore</small>
                     </div>
 
-                    <div id="importValidationResult"></div>
-
-                    <div class="import-actions">
-                        <button class="btn" id="proceedWithImportBtn" onclick="proceedWithImportedModel()" disabled>
-                            Proceed to Inference
-                        </button>
-                        <button class="btn secondary" onclick="toggleImportModel()">
-                            Cancel
-                        </button>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" name="email" required autocomplete="email">
                     </div>
                 </div>
-            </section>
-        </main>
-    </div>
-<!-- Loading Overlay (ADDED) -->
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="registerPassword">Password</label>
+                        <input type="password" id="registerPassword" name="password" required
+                               minlength="8" autocomplete="new-password">
+                        <small>Minimum 8 characters</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerConfirmPassword">Confirm Password</label>
+                        <input type="password" id="registerConfirmPassword" name="confirmPassword" required
+                               minlength="8" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="registerFullName">Full Name</label>
+                        <input type="text" id="registerFullName" name="fullName" required autocomplete="name">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerInstitution">Institution</label>
+                        <input type="text" id="registerInstitution" name="institution" required autocomplete="organization">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">Register</button>
+            </form>
+        </div>
+
+        <!-- Authenticated Container (shown when authenticated) -->
+        <div class="authenticated-container hidden" id="authenticatedContainer">
+            <p class="welcome-user">Welcome back, <span id="userName"></span></p>
+            <a href="/workspace" class="btn-primary btn-launch">Launch Workspace</a>
+            <button class="btn-logout" id="logoutBtn">Logout</button>
+            <a href="/admin" class="admin-link hidden" id="adminLink">Admin Dashboard</a>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-content">
             <div class="spinner"></div>
-            <h3 id="loadingText">Processing...</h3>
-            <p id="loadingDescription">Please wait while we process your request.</p>
+            <p id="loadingText">Processing...</p>
         </div>
     </div>
 
-    <script src="js/utils.js"></script>
     <script src="js/welcome.js"></script>
 </body>
 </html>
