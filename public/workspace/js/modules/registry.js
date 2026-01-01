@@ -28,6 +28,7 @@ const moduleRegistry = [
     outputs: ['denoised_stack'],
     color: '#1DA924',
     cardType: 'multi-launch',
+    helpArticleId: 'denoising',
     launchOptions: [
       {
         id: 'denoising-dl',

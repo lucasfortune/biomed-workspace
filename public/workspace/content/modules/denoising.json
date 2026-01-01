@@ -1,0 +1,29 @@
+{
+  "module": "denoising",
+  "version": "1.0.0",
+  "articles": [
+    {
+      "id": "denoising",
+      "title": "Denoising Module",
+      "category": "module",
+      "tags": ["denoising", "noise-reduction", "image-processing", "deep-learning", "filter"],
+      "contentType": "full",
+      "content": {
+        "summary": "Remove noise from TIFF image stacks using either traditional filter-based methods or self-supervised deep learning approaches.",
+        "body": "The Denoising module provides two complementary approaches for removing noise from microscopy images. Choose the method that best fits your noise type and requirements.\n\nDeep Learning (N2V / autoStructN2V)\nSelf-supervised neural networks that learn noise patterns directly from your images — no clean reference data required.\n\n• Noise2Void (N2V): Fast single-stage training for random, uncorrelated noise like Gaussian or Poisson noise\n• autoStructN2V: Two-stage approach for structured noise patterns like scan lines or periodic artifacts\n• Best for: Complex noise patterns, when you need optimal quality\n• Trade-off: Requires training time (5-30 minutes typically)\n\nFilter-Based (Gaussian / NLM)\nTraditional mathematical filters that apply smoothing operations to reduce noise.\n\n• Gaussian: Fast weighted averaging based on pixel distance\n• Non-Local Means (NLM): Compares similar patches to preserve edges while denoising\n• Best for: Quick results, simple noise patterns\n• Trade-off: May blur fine details, less effective on structured noise\n\nWhich should I choose?\n• Start with Filter-Based if you need quick results or have simple random noise\n• Use Deep Learning for best quality, structured noise, or when filter methods leave artifacts\n• Both methods work on multi-page TIFF stacks and preserve bit depth"
+      },
+      "seeAlsoManual": ["denoising-dl", "denoising-filter"],
+      "seeAlsoTags": ["denoising", "noise-reduction"]
+    }
+  ],
+  "glossary": {
+    "denoising": {
+      "term": "Denoising",
+      "definition": "The process of removing unwanted noise from images while preserving important features and details"
+    },
+    "self-supervised": {
+      "term": "Self-Supervised Learning",
+      "definition": "A training approach where the model learns from the data itself without requiring manually labeled ground truth or clean reference images"
+    }
+  }
+}
