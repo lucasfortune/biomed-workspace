@@ -56,7 +56,6 @@ class Templates {
                 <span class="method-content">
                   <span class="method-name">
                     Noise2Void (N2V)
-                    <span class="method-badge recommended">Recommended</span>
                   </span>
                   <span class="method-desc">
                     Fast single-stage training. Best for random, uncorrelated noise (Gaussian, Poisson).
@@ -69,11 +68,10 @@ class Templates {
                 <span class="method-content">
                   <span class="method-name">
                     autoStructN2V
-                    <span class="method-badge advanced">Advanced</span>
                   </span>
                   <span class="method-desc">
-                    Two-stage training with automatic structured noise detection.
-                    Best for periodic artifacts, scan lines, or camera-specific patterns.
+                    Two-stage training with automatic structured noise analysis.
+                    Best for periodic tomography artifacts, scan lines, or camera-specific patterns.
                   </span>
                 </span>
               </label>

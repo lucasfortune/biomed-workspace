@@ -8,6 +8,7 @@
 
   <!-- Workspace CSS -->
   <link rel="stylesheet" href="/workspace/css/workspace.css">
+  <link rel="stylesheet" href="/workspace/css/info-panel.css">
 
   <!-- External Libraries (CDN) -->
   <script src="https://unpkg.com/mitt@3.0.0/dist/mitt.umd.js"></script>
@@ -101,10 +102,10 @@
             <!-- Partner Logos -->
             <div class="partner-logos">
               <a href="https://www.physics-of-parasitism.org/" target="_blank" rel="noopener noreferrer" title="Physics of Parasitism">
-                <img src="/imgs/pop_logo.svg" alt="Physics of Parasitism Logo" class="logo-pop">
+                <img src="/imgs/pop_transpBG.svg" alt="Physics of Parasitism Logo" class="logo-pop">
               </a>
               <a href="https://www.dfg.de/" target="_blank" rel="noopener noreferrer" title="Deutsche Forschungsgemeinschaft">
-                <img src="/imgs/dfg_logo.jpg" alt="DFG Logo" class="logo-dfg">
+                <img src="/imgs/dfg_transpBG.svg" alt="DFG Logo" class="logo-dfg">
               </a>
             </div>
           </footer>
@@ -116,6 +117,21 @@
         <!-- Active module content will be rendered here -->
       </div>
     </main>
+
+    <!-- Info Panel (Right Side) -->
+    <aside id="info-panel" class="ip-panel collapsed">
+      <div class="ip-toggle" id="info-panel-toggle" title="Toggle help panel">
+        <!-- Help icon SVG per ADR-005 -->
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+        </svg>
+      </div>
+      <div class="ip-content">
+        <div id="info-panel-container">
+          <!-- InfoPanel component renders here -->
+        </div>
+      </div>
+    </aside>
   </div>
 
   <!-- Notification Container -->
@@ -133,6 +149,11 @@
   <script src="/workspace/js/core/WorkspaceAPI.js"></script>
   <script src="/workspace/js/components/ContextMenu.js"></script>
   <script src="/workspace/js/components/FileBrowser.js"></script>
+  <script src="/workspace/js/services/InfoContentService.js"></script>
+  <script src="/workspace/js/core/components/InfoArticle.js"></script>
+  <script src="/workspace/js/core/components/InfoSearch.js"></script>
+  <script src="/workspace/js/core/components/InfoGlossary.js"></script>
+  <script src="/workspace/js/core/components/InfoPanel.js"></script>
   <script src="/workspace/js/modules/registry.js"></script>
   <script src="/workspace/js/workspace.js"></script>
 </body>

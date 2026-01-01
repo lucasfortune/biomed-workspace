@@ -35,7 +35,8 @@ class ModuleLoader {
       color,
       status,
       cardType,
-      launchOptions
+      launchOptions,
+      helpArticleId
     } = moduleConfig;
 
     // Handle multi-launch cards (register each launch option as a loadable module)
@@ -99,6 +100,7 @@ class ModuleLoader {
       outputs: outputs || [],
       color: color || '#4A90E2',
       status: status || 'available',
+      helpArticleId: helpArticleId || null,
       loaded: false,
       instance: null,
       loadedAt: null
@@ -274,7 +276,8 @@ class ModuleLoader {
         loaded: module.loaded,
         active: this.activeModule?.id === id,
         cardType: module.cardType,
-        launchOptions: module.launchOptions
+        launchOptions: module.launchOptions,
+        helpArticleId: module.helpArticleId
       });
     }
 

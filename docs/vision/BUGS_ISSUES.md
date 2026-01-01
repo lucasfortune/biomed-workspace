@@ -15,10 +15,6 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 ## open Bugs/Issues:
 
-- issue: add "physics of parasitism"-logo and "dfg"-logo in visible spot on workspace main page
-    -prio 5
-    - compl. 1
-
 - issue: educational content: all modules that contain novel processesing methods should contain explanations
     - prio 3
     - compl. 4
@@ -155,4 +151,8 @@ This document contains bugs and/or issues reported by the developer and/or users
     - should be results/segmentation/segm<segmentationID>/ instead
     - folder structure of models also not consistent with denoising models save path is models/segmentation/<id>/ should be models/segmentation/segm<segmentationID>/
     - prio 3
+    - compl. 1
+
+- issue: add "physics of parasitism"-logo and "dfg"-logo in visible spot on workspace main page
+    - prio 5
     - compl. 1

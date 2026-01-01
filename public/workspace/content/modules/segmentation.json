@@ -1,0 +1,274 @@
+{
+  "module": "segmentation",
+  "version": "1.0.0",
+  "articles": [
+    {
+      "id": "segmentation",
+      "title": "U-Net Segmentation Module",
+      "category": "module",
+      "tags": ["segmentation", "u-net", "deep-learning", "training", "inference"],
+      "contentType": "full",
+      "content": {
+        "summary": "Train and run U-Net segmentation models on biomedical images. This module provides a complete pipeline from data upload through training to inference.",
+        "body": "The U-Net Segmentation module provides a 4-step workflow for training deep learning models to segment biomedical images.\n\nU-Net is a convolutional neural network architecture designed specifically for biomedical image segmentation. It uses an encoder-decoder structure with skip connections that preserve spatial information, making it particularly effective at segmenting objects in microscopy images.\n\nStep 1: Upload your training images and corresponding annotation masks, or choose to use a pretrained model if you already have one.\n\nStep 2: Configure training parameters like patch size, batch size, learning rate, and number of epochs. These settings control how the model learns from your data.\n\nStep 3: Monitor training progress with real-time loss charts and Dice score metrics. Watch for convergence and potential overfitting.\n\nStep 4: Run inference on new images using your trained model to generate segmentation masks."
+      },
+      "seeAlsoManual": ["segmentation.step1", "segmentation.step1.workflow-choice"],
+      "seeAlsoTags": ["training", "inference"]
+    },
+    {
+      "id": "segmentation.step1.workflow-choice",
+      "title": "Workflow Options",
+      "category": "process",
+      "tags": ["segmentation", "workflow", "training", "pretrained", "import"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Choose between training a new model from scratch or using a previously trained model.",
+        "body": "You have two options for how to proceed with segmentation:\n\nTrain from Scratch: Choose this option when you have training data (images with corresponding annotation masks) and want to train a new model specifically for your data. This is the best choice when your images have unique characteristics that differ from standard datasets, or when you need optimal accuracy for your specific use case. Training requires labeled examples but produces a model tailored to your data.\n\nUse Pretrained Model: Choose this option when you already have a trained model (.pth file) and its configuration (.json file) from a previous training session. This allows you to skip the training process entirely and go directly to running inference. This is useful when you want to apply a previously trained model to new data, or when sharing models between team members."
+      },
+      "seeAlsoManual": ["segmentation.step1", "segmentation.step1.raw-images"],
+      "seeAlsoTags": ["workflow", "training"]
+    },
+    {
+      "id": "segmentation.step1.raw-images",
+      "title": "Raw Training Images",
+      "category": "data",
+      "tags": ["segmentation", "upload", "training-data", "tiff", "images"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Upload your raw microscopy images as a TIFF stack for training the segmentation model.",
+        "body": "Raw training images are the microscopy images you want the model to learn to segment. These should be representative examples of the type of data you will later run inference on.\n\nFile Requirements:\n- Format: TIFF stack (multi-page TIFF with multiple slices)\n- Bit depth: 8-bit or 16-bit grayscale (16-bit will be automatically normalized)\n- Dimensions: Must match your annotation images exactly (same width, height, and number of slices)\n\nBest Practices:\n- Include diverse examples that cover the range of conditions in your data (different staining intensities, object sizes, background variations)\n- More training images generally lead to better model generalization\n- Ensure images are properly focused and representative of your typical acquisition conditions\n- The model will learn patterns from these images, so include examples of all the structures you want to segment"
+      },
+      "seeAlsoManual": ["segmentation.step1.annotations", "segmentation.step1"],
+      "seeAlsoTags": ["upload", "training-data"]
+    },
+    {
+      "id": "segmentation.step1.annotations",
+      "title": "Annotation Masks",
+      "category": "data",
+      "tags": ["segmentation", "upload", "annotations", "labels", "masks"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Upload annotation masks that label the structures you want the model to segment.",
+        "body": "Annotation masks are labeled versions of your training images where each pixel is assigned a class value. These teach the model what to segment.\n\nFile Requirements:\n- Format: TIFF stack (multi-page TIFF)\n- Bit depth: 8-bit or 16-bit (will be converted to 8-bit if needed)\n- Dimensions: Must exactly match your raw images (same width, height, and number of slices)\n\nPixel Values:\n- 0 = Background (areas not to segment)\n- 1, 2, 3... = Object classes (each unique value represents a different class)\n\nAnnotation Guidelines:\n- Be consistent in how you label structures across all slices\n- Ensure object boundaries are accurately traced\n- Include examples of objects at different sizes, orientations, and positions\n- Label all instances of structures you want to detect — unlabeled objects will be treated as background\n- The quality of your annotations directly affects model accuracy"
+      },
+      "seeAlsoManual": ["segmentation.step1.raw-images", "segmentation.step1"],
+      "seeAlsoTags": ["upload", "annotations"]
+    },
+    {
+      "id": "segmentation.step1.config-file",
+      "title": "Model Configuration File",
+      "category": "data",
+      "tags": ["segmentation", "import", "config", "pretrained", "json"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select the JSON configuration file that defines the architecture of your pretrained model.",
+        "body": "The configuration file (.json) contains the architectural settings used when training the model. It must match the model weights file exactly — using mismatched files will cause errors.\n\nWhat the config file contains:\n- Number of input and output channels\n- Number of feature maps at each layer\n- Number of encoder/decoder layers\n- Training parameters used (for reference)\n\nWhere to find it:\nWhen you train a model, the configuration file is automatically saved alongside the model weights in the training results folder. Both files share the same training ID.\n\nThe configuration file ensures the model architecture is reconstructed exactly as it was during training. Without it, the system cannot correctly load the model weights."
+      },
+      "seeAlsoManual": ["segmentation.step1.model-file", "segmentation.step1.workflow-choice"],
+      "seeAlsoTags": ["import", "pretrained"]
+    },
+    {
+      "id": "segmentation.step1.model-file",
+      "title": "Model Weights File",
+      "category": "data",
+      "tags": ["segmentation", "import", "model", "pretrained", "weights"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select the PyTorch model weights file (.pth) containing your trained U-Net model.",
+        "body": "The model weights file (.pth) contains the learned parameters of your trained U-Net model. This is the actual \"knowledge\" the model acquired during training.\n\nFile Requirements:\n- Format: PyTorch state dictionary (.pth)\n- Must be paired with the matching configuration file (.json) from the same training session\n\nWhere to find it:\nAfter training completes, the best-performing model is saved as 'best_model.pth' in your training results folder. This is the model checkpoint with the lowest validation loss during training.\n\nImportant Notes:\n- Always use the best_model.pth file, not intermediate checkpoints\n- The model file and config file must come from the same training run\n- Model files can be shared between users as long as the matching config file is included"
+      },
+      "seeAlsoManual": ["segmentation.step1.config-file", "segmentation.step1.workflow-choice"],
+      "seeAlsoTags": ["import", "pretrained"]
+    },
+    {
+      "id": "segmentation.step1",
+      "title": "Data Upload (Step 1)",
+      "category": "process",
+      "tags": ["segmentation", "upload", "workflow", "training-data", "annotations"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Upload training images and annotations, or import a pretrained model to skip training.",
+        "body": "In Step 1, you have two workflow options:\n\nTrain New Model: Upload your training images (TIFF stack) and corresponding annotation masks. The annotation masks should have the same dimensions as your training images, with each pixel value representing a class label (0 for background, 1+ for objects).\n\nUse Pretrained Model: Import a previously trained model (.pth file) along with its configuration (.json file) to skip directly to inference."
+      },
+      "seeAlsoManual": ["segmentation", "segmentation.training-data"],
+      "seeAlsoTags": ["upload", "annotations"]
+    },
+    {
+      "id": "segmentation.config.patch-size",
+      "title": "Patch Size",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "patch", "configuration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Controls the size of image patches extracted during training.",
+        "body": "The patch size determines the dimensions of square image regions used to train the network. During training, random patches of this size are extracted from your training images.\n\nSmaller patches (e.g., 64x64) train faster and use less memory, but may miss larger structures in your images.\n\nLarger patches (e.g., 256x256) capture more context and can better segment large structures, but require more GPU memory and train more slowly.",
+        "parameterImpact": "Larger values capture more context but require more memory and training time. Smaller values train faster but may miss large structures. Typical values range from 64 to 256 pixels."
+      },
+      "seeAlsoManual": ["segmentation.config.batch-size"],
+      "seeAlsoTags": ["training", "configuration"]
+    },
+    {
+      "id": "segmentation.config.batch-size",
+      "title": "Batch Size",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "batch", "configuration", "memory"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Number of image patches processed simultaneously during each training step.",
+        "body": "Batch size controls how many patches are processed together before updating the model weights. This affects both training stability and memory usage.\n\nLarger batch sizes generally provide more stable training gradients but require more GPU memory. Smaller batch sizes use less memory but may result in noisier training.",
+        "parameterImpact": "Larger values provide more stable training but require more memory. Smaller values use less memory but may result in noisier updates. Start with 4-8 and adjust based on your GPU memory."
+      },
+      "seeAlsoManual": ["segmentation.config.patch-size", "segmentation.config.learning-rate"],
+      "seeAlsoTags": ["training", "configuration"]
+    },
+    {
+      "id": "segmentation.config.learning-rate",
+      "title": "Learning Rate",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "learning-rate", "configuration", "optimization"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Controls how quickly the model adapts to the training data.",
+        "body": "The learning rate determines the step size when updating model weights during training. This is one of the most important hyperparameters affecting training success.\n\nA learning rate that's too high can cause training to diverge (loss increases or oscillates wildly). A learning rate that's too low will result in very slow training that may get stuck.",
+        "parameterImpact": "Higher values train faster but risk instability. Lower values are more stable but train slowly. The default value of 0.001 works well for most cases. Reduce if training is unstable."
+      },
+      "seeAlsoManual": ["segmentation.config.batch-size"],
+      "seeAlsoTags": ["training", "optimization"]
+    },
+    {
+      "id": "segmentation.config.patches-per-image",
+      "title": "Patches per Image",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "patches", "configuration", "dataset"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Number of random patches extracted from each training image.",
+        "body": "This parameter controls how many patches are randomly sampled from each image in your training set during dataset creation.\n\nMore patches per image means a larger training dataset, which can improve model performance but increases training time. Fewer patches trains faster but may not capture all the variability in your images.",
+        "parameterImpact": "More patches increase training data diversity but also training time. Start with 50 patches per image. Increase for complex images with many different structures, decrease for simpler images."
+      },
+      "seeAlsoManual": ["segmentation.config.patch-size", "segmentation.config.batch-size"],
+      "seeAlsoTags": ["training", "dataset"]
+    },
+    {
+      "id": "segmentation.config.augmentation",
+      "title": "Data Augmentation",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "augmentation", "configuration", "dataset"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Apply random transformations to training images to improve model robustness.",
+        "body": "Data augmentation applies random transformations (rotations, flips, brightness/contrast changes) to training patches during training. This artificially increases training data diversity and helps the model generalize better to new images.\n\nAugmentation is especially useful when you have limited training data. The transformations are applied on-the-fly during training, so your original images are not modified.",
+        "parameterImpact": "Enable augmentation to improve model generalization, especially with limited training data. Disable only if your images require very specific orientations or if augmentation causes artifacts."
+      },
+      "seeAlsoManual": ["segmentation.config.patches-per-image"],
+      "seeAlsoTags": ["training", "dataset"]
+    },
+    {
+      "id": "segmentation.config.num-features",
+      "title": "Number of Features",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "architecture", "configuration", "model"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Base number of convolutional filters in the U-Net model.",
+        "body": "This controls the initial number of feature maps (filters) in the first layer of the U-Net. The number of features doubles at each encoding stage and halves at each decoding stage.\n\nMore features allow the model to learn more complex patterns but require more GPU memory and training time. Fewer features create a lighter model that trains faster but may miss subtle details.",
+        "parameterImpact": "Higher values (128, 256) create more powerful models but need more memory. Lower values (32, 64) train faster and use less memory. Start with 64 for most biomedical images."
+      },
+      "seeAlsoManual": ["segmentation.config.num-layers"],
+      "seeAlsoTags": ["architecture", "model"]
+    },
+    {
+      "id": "segmentation.config.num-layers",
+      "title": "Number of Layers",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "architecture", "configuration", "model"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Depth of the U-Net encoder/decoder structure.",
+        "body": "This sets how many encoding/decoding stages the U-Net has. Each encoding stage downsamples the image by half, while each decoding stage upsamples back to the original resolution.\n\nMore layers allow the model to capture larger-scale context but increase memory usage and training time. Fewer layers create a shallower model that may miss global patterns but trains faster.",
+        "parameterImpact": "4 layers is the standard U-Net depth. Use 3 for small images or limited memory. Use 5-6 for very large images where global context matters. Match to your image size."
+      },
+      "seeAlsoManual": ["segmentation.config.num-features", "segmentation.config.patch-size"],
+      "seeAlsoTags": ["architecture", "model"]
+    },
+    {
+      "id": "segmentation.config.num-epochs",
+      "title": "Number of Epochs",
+      "category": "parameter",
+      "tags": ["segmentation", "training", "epochs", "configuration", "duration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "How many complete passes through the training data.",
+        "body": "An epoch is one complete pass through all training patches. More epochs give the model more opportunities to learn from the data, but too many can lead to overfitting (memorizing the training data rather than learning general patterns).\n\nThe training process includes early stopping, which automatically stops if validation performance stops improving, so you can set a high number of epochs as an upper limit.",
+        "parameterImpact": "100 epochs is a reasonable default. The model saves checkpoints and uses early stopping, so training may end sooner if convergence is reached. Use fewer epochs (50) for quick experiments."
+      },
+      "seeAlsoManual": ["segmentation.config.learning-rate"],
+      "seeAlsoTags": ["training", "duration"]
+    },
+    {
+      "id": "segmentation.step3",
+      "title": "Training Progress",
+      "category": "process",
+      "tags": ["segmentation", "training", "progress", "neural-network", "optimization"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Monitor your model as it learns to segment your images through iterative optimization.",
+        "body": "During training, the model iteratively adjusts its internal parameters to better match your annotations. This process involves:\n\nForward Pass: The model processes training patches and produces predicted segmentation masks.\n\nLoss Calculation: The predictions are compared to your annotations using a loss function that measures how different they are.\n\nBackward Pass: The error is propagated back through the network to compute gradients — directions to adjust each parameter.\n\nWeight Update: Parameters are adjusted in the direction that reduces the loss, controlled by the learning rate.\n\nThis cycle repeats for every batch of patches in each epoch. Over time, the loss should decrease as the model learns to produce predictions that match your annotations more closely."
+      },
+      "seeAlsoManual": ["segmentation.step3.loss-curves", "segmentation.step3.dice-score"],
+      "seeAlsoTags": ["training", "metrics"]
+    },
+    {
+      "id": "segmentation.step3.loss-curves",
+      "title": "Loss Curves",
+      "category": "metric",
+      "tags": ["segmentation", "training", "loss", "metrics", "convergence"],
+      "contentType": "medium",
+      "content": {
+        "summary": "The loss measures how different the model's predictions are from your annotations — lower is better.",
+        "body": "Loss is a numerical measure of prediction error. The chart shows two curves:\n\nTraining Loss (red): Error on the patches used for learning. Should decrease steadily as the model learns.\n\nValidation Loss (blue): Error on held-out patches not used for training. Shows how well the model generalizes to unseen data.\n\nWhat to look for:\n\nHealthy Training: Both curves decrease together and eventually flatten. The validation loss may be slightly higher than training loss.\n\nOverfitting: Training loss continues to decrease but validation loss starts increasing. The model is memorizing training data rather than learning generalizable patterns. Consider reducing epochs or adding more training data.\n\nUnderfitting: Both losses remain high and don't decrease much. The model isn't learning effectively. Try increasing model capacity (more features/layers) or training longer.\n\nInstability: Losses jump around erratically. Try reducing the learning rate for smoother optimization."
+      },
+      "seeAlsoManual": ["segmentation.step3.dice-score", "segmentation.step3"],
+      "seeAlsoTags": ["training", "metrics"]
+    },
+    {
+      "id": "segmentation.step3.dice-score",
+      "title": "Dice Score",
+      "category": "metric",
+      "tags": ["segmentation", "training", "dice", "metrics", "accuracy"],
+      "contentType": "medium",
+      "content": {
+        "summary": "The Dice score measures segmentation accuracy by comparing overlap between predictions and annotations — higher is better.",
+        "body": "The Dice coefficient (also called F1 score for segmentation) measures how well the predicted segmentation overlaps with the ground truth annotations. It ranges from 0 to 1:\n\n0.0 = No overlap at all (complete failure)\n0.5 = Partial overlap\n1.0 = Perfect overlap (predictions exactly match annotations)\n\nThe chart shows:\n\nTraining Dice (teal): Accuracy on training patches.\n\nValidation Dice (purple): Accuracy on held-out validation patches. This is the more important metric as it shows real-world performance.\n\nWhat to look for:\n\nGood Progress: Both curves increase over time, with validation Dice reaching 0.7+ for typical biomedical segmentation tasks.\n\nGap Between Curves: A large gap where training Dice is much higher than validation Dice indicates overfitting.\n\nPlateau: When curves flatten, the model has converged. Further training is unlikely to improve results significantly.\n\nTypical Values: Dice scores of 0.8-0.9 are considered good for many biomedical applications. Scores above 0.9 indicate excellent segmentation quality."
+      },
+      "seeAlsoManual": ["segmentation.step3.loss-curves", "segmentation.step3"],
+      "seeAlsoTags": ["training", "metrics"]
+    },
+    {
+      "id": "segmentation.step4",
+      "title": "Running Inference",
+      "category": "process",
+      "tags": ["segmentation", "inference", "prediction", "output"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Apply your trained model to new images to generate segmentation masks.",
+        "body": "Inference is the process of using your trained model to segment new images that weren't part of the training data. Unlike training, inference only involves the forward pass — no learning occurs.\n\nHow it works:\n\n1. Your input image is processed slice by slice\n2. Each slice is divided into overlapping patches\n3. The model predicts a segmentation mask for each patch\n4. Overlapping predictions are blended together for smooth results\n5. The final segmentation mask is saved as a TIFF stack\n\nThe output segmentation mask has the same dimensions as your input and contains integer values corresponding to class labels (0 for background, 1+ for detected objects).\n\nInference is much faster than training since no gradient computation or weight updates are needed."
+      },
+      "seeAlsoManual": ["segmentation.step4.inference-data", "segmentation.step3"],
+      "seeAlsoTags": ["inference", "output"]
+    },
+    {
+      "id": "segmentation.step4.inference-data",
+      "title": "Inference Data",
+      "category": "data",
+      "tags": ["segmentation", "inference", "upload", "input", "tiff"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Upload the images you want to segment using your trained model.",
+        "body": "Inference data are the new images you want to segment. The model will apply what it learned during training to generate segmentation masks for these images.\n\nFile Requirements:\n- Format: TIFF stack (multi-page TIFF)\n- Bit depth: Should match your training data (8-bit or 16-bit grayscale)\n- Size: Can be any dimensions — the model processes images in patches\n\nBest Practices:\n- Use images acquired under similar conditions to your training data (same microscope, magnification, staining)\n- The model performs best on images similar to what it was trained on\n- Very different image characteristics (brightness, contrast, resolution) may reduce accuracy\n- You can run inference on images of any size — large images just take longer to process\n\nOutput:\nThe segmentation results will be saved as a TIFF stack with the same dimensions as your input, where each pixel value indicates the predicted class."
+      },
+      "seeAlsoManual": ["segmentation.step4", "segmentation.step1.raw-images"],
+      "seeAlsoTags": ["inference", "upload"]
+    }
+  ]
+}

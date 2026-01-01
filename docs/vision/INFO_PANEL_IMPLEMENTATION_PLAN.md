@@ -105,6 +105,105 @@ All classes prefixed with `ip-`:
 
 ---
 
+## Design System Alignment (ADR-005)
+
+**Reference:** `/docs/decisions/005_design_system_color_scheme.md`
+
+### Required: Use CSS Custom Properties
+
+**Never hardcode colors.** Always use design tokens:
+
+```css
+/* Correct */
+.ip-panel {
+  background-color: var(--bg-tertiary);
+  border-left: 1px solid var(--border-color);
+}
+
+/* Wrong */
+.ip-panel {
+  background-color: #E9ECEF;
+  border-left: 1px solid #DEE2E6;
+}
+```
+
+### Token Mapping for Info Panel
+
+| Element | Token | Rationale |
+|---------|-------|-----------|
+| Panel background | `--bg-tertiary` | Matches sidebar |
+| Panel border | `--border-color` | Default borders |
+| Header text | `--text-primary` | Main headings |
+| Article body text | `--text-primary` | Readable content |
+| Secondary text (meta) | `--text-secondary` | Labels, categories |
+| Search input bg | `--bg-secondary` | Form inputs |
+| Search input border | `--border-color` | Default borders |
+| Search highlight | `--accent-muted` | Subtle highlight |
+| Glossary term hover | `--accent-muted` | Consistent hover |
+| See Also links | `--accent-primary` | Clickable links |
+| See Also hover | `--accent-hover` | Link hover state |
+| Category badges | `--bg-secondary` + `--text-secondary` | Subtle badges |
+| Parameter impact box | `--info-color` (border) | Informational callout |
+
+### Light/Dark Mode Support
+
+Dark mode is applied via `data-theme="dark"` on `<html>`. CSS automatically inherits correct values:
+
+```css
+/* No theme-specific code needed - tokens handle it */
+.ip-article-title {
+  color: var(--text-primary);  /* #343A40 in light, #F8F9FA in dark */
+}
+```
+
+### Help Icon: SVG Required
+
+Per ADR-005, use inline SVG icons (not emoji or text "?"):
+
+```html
+<!-- Help icon SVG (question mark in circle) -->
+<span class="help-icon" data-info-id="article.id" title="Learn more">
+  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+  </svg>
+</span>
+```
+
+**Icon styling:**
+```css
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.help-icon:hover {
+  color: var(--accent-primary);
+}
+```
+
+### Toggle Button Icon
+
+Use SVG for panel toggle (book/info icon), matching sidebar toggle pattern:
+
+```css
+.ip-toggle {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.ip-toggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-muted);
+}
+```
+
+---
+
 ## Content JSON Schema
 
 ```json
@@ -132,7 +231,10 @@ Add to `index.html` after `<main id="main-content">`:
 ```html
 <aside id="info-panel" class="ip-panel collapsed">
   <div class="ip-toggle" id="info-panel-toggle" title="Toggle info panel">
-    <span class="toggle-icon">?</span>
+    <!-- Book/help icon SVG per ADR-005 -->
+    <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+    </svg>
   </div>
   <div class="ip-content">
     <div id="info-panel-container"></div>
@@ -208,7 +310,7 @@ document.addEventListener('click', (e) => {
 - Write remaining segmentation articles (~25-45)
 - Implement "See Also" section (manual + auto-generated)
 - Add loading states and error handling
-- Dark mode theming
+- Verify light/dark mode (should work automatically via tokens)
 - Performance optimization
 
 **Deliverable:** Complete info panel system
@@ -256,6 +358,7 @@ Custom weighted scoring (no external library):
 
 ## Testing Checklist
 
+### Functional
 - [ ] Panel expands/collapses via toggle button
 - [ ] Help icon click opens panel and shows correct article
 - [ ] Search finds articles by title, summary, tags, body
@@ -263,5 +366,12 @@ Custom weighted scoring (no external library):
 - [ ] Glossary expands and shows all terms
 - [ ] Clicking glossary term navigates to article
 - [ ] "See Also" shows manual + auto-generated links
-- [ ] Works in both light and dark mode
 - [ ] Panel width matches sidebar (280px)
+
+### Design System Compliance (ADR-005)
+- [ ] No hardcoded colors in CSS (all use tokens)
+- [ ] Light mode: all text readable, proper contrast
+- [ ] Dark mode: all text readable, proper contrast
+- [ ] Icons are SVG (not emoji/text)
+- [ ] Hover states use `--accent-muted` or `--accent-hover`
+- [ ] Panel styling mirrors sidebar visually

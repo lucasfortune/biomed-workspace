@@ -47,6 +47,12 @@ class StateManager {
         loading: false,
         notifications: []
       },
+      infoPanel: {
+        isOpen: false,
+        currentArticleId: null,
+        glossaryExpanded: false,
+        searchQuery: ''
+      },
       user: {
         username: null,
         fullName: null,

@@ -9,6 +9,7 @@ class Workspace {
     this.api = null;
     this.socket = null;
     this.fileBrowser = null;  // File browser component (Phase 3.2)
+    this.infoPanel = null;    // Info panel component
     this.initialized = false;
 
     // Initialize theme before DOM fully loads to prevent flash
@@ -72,6 +73,10 @@ class Workspace {
       // Initialize file browser (Phase 3.2)
       this.fileBrowser = new FileBrowser(this.state, this.api);
       await this.fileBrowser.initialize('file-tree-container');
+
+      // Initialize info panel
+      this.infoPanel = new InfoPanel(this.state);
+      await this.infoPanel.initialize('info-panel-container');
 
       // Set up UI
       this.setupUI();
@@ -209,6 +214,18 @@ class Workspace {
       themeToggle.addEventListener('click', () => this.toggleTheme());
     }
 
+    // Global help icon click handler
+    document.addEventListener('click', (e) => {
+      const helpIcon = e.target.closest('.help-icon');
+      if (helpIcon && this.infoPanel) {
+        const articleId = helpIcon.dataset.infoId;
+        if (articleId) {
+          e.preventDefault();
+          this.infoPanel.onHelpIconClick(articleId);
+        }
+      }
+    });
+
     // Global return to hub function
     window.backToHub = () => this.returnToHub();
   }
@@ -268,13 +285,27 @@ class Workspace {
   }
 
   /**
+   * Render a help icon for info panel integration
+   */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
+  /**
    * Render a standard single-launch module card
    */
   renderSingleLaunchCard(module) {
+    const helpIcon = module.helpArticleId ? this.renderHelpIcon(module.helpArticleId) : '';
+
     return `
       <div class="module-card ${module.status === 'coming_soon' ? 'coming-soon' : ''}"
            style="--card-color: ${module.color}"
            data-module-id="${module.id}">
+        ${helpIcon ? `<div class="module-card-help">${helpIcon}</div>` : ''}
         <div class="module-icon">${module.icon}</div>
         <h3>${module.name}</h3>
         <p>${module.description}</p>

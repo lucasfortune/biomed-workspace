@@ -32,6 +32,7 @@ class FileSelector {
    * @param {string} [config.id] - Unique identifier
    * @param {string} [config.title='Select File'] - Display title
    * @param {string} [config.icon='📁'] - Emoji icon
+   * @param {string} [config.helpIconHtml=''] - HTML for help icon (from renderHelpIcon)
    * @param {string} [config.fileType] - File type for categorization (raw_images, annotations, etc.)
    * @param {string} [config.accept='.tif,.tiff'] - Accepted file extensions
    * @param {boolean} [config.showTestData=true] - Show test data optgroup
@@ -52,6 +53,7 @@ class FileSelector {
     this.id = config.id || `file-selector-${Date.now()}`;
     this.title = config.title || 'Select File';
     this.icon = config.icon || '📁';
+    this.helpIconHtml = config.helpIconHtml || '';
     this.fileType = config.fileType || 'file';
     this.accept = config.accept || '.tif,.tiff';
     this.showTestData = config.showTestData !== false;
@@ -96,7 +98,7 @@ class FileSelector {
     return `
       <div class="file-selector-card" id="${this.id}" data-component="file-selector">
         <div class="file-selector-header">
-          <h3>${this.icon} ${this.title}</h3>
+          <h3>${this.icon} ${this.title} ${this.helpIconHtml}</h3>
         </div>
 
         <div class="file-selector-body">

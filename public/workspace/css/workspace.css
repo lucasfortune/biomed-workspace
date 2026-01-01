@@ -929,6 +929,7 @@ body {
 .partner-logos .logo-dfg {
   height: 64px;
   width: auto;
+  border-radius: 4px;
 }
 
 .welcome-header {
@@ -998,6 +999,35 @@ body {
 .module-card.coming-soon:hover {
   transform: none;
   box-shadow: none;
+}
+
+/* Help icon in module card (top right corner) */
+.module-card-help {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+
+.module-card-help .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.module-card-help .help-icon:hover {
+  color: var(--accent-primary);
+}
+
+.module-card-help .help-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 .module-icon {

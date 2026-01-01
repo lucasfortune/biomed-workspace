@@ -65,7 +65,8 @@ const moduleRegistry = [
     inputs: ['image_stack', 'annotations'],
     outputs: ['segmented_stack', 'trained_model'],
     color: '#17A2B8',
-    status: 'available'
+    status: 'available',
+    helpArticleId: 'segmentation'
   },
   {
     id: 'imageviewer',
