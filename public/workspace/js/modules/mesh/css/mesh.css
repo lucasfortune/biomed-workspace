@@ -222,6 +222,38 @@
   color: var(--module-text-primary);
 }
 
+/* Options header with help icon */
+.mesh-module .options-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  margin-bottom: var(--module-spacing-md);
+}
+
+.mesh-module .options-header h4 {
+  margin: 0;
+  flex: 1;
+}
+
+.mesh-module .options-header .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.mesh-module .options-header .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.mesh-module .options-header .help-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
 .mesh-module .form-field {
   margin-bottom: var(--module-spacing-md);
 }

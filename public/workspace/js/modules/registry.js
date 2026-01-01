@@ -90,7 +90,8 @@ const moduleRegistry = [
     inputs: ['segmented_stack', 'annotations'],
     outputs: ['mesh_file'],
     color: '#9B59B6',
-    status: 'available'
+    status: 'available',
+    helpArticleId: 'mesh'
   },
   {
     id: 'visualization',

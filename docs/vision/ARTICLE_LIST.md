@@ -16,8 +16,9 @@ This document contains a list of all proposed elements that should be documented
 - ⏳ **FILTER BASED  DENOISING MODULE**
 - ✅ **ANNOTATION MODULE**
 - ✅ **IMAGE VIEWER MODULE**
-- ⏳ **SURFACE MESH GENERATION MODULE**
+- ✅ **SURFACE MESH GENERATION MODULE**
 - ⏳ **3D VISUALIZATION MOULE**
+- ⏳ **FILE BROWSER**
 
 ## IMPORTANT:
 
@@ -155,7 +156,7 @@ I will handle the info article list for the denoising modules separately:
 	- where: in the top section above the filename & slice count
 	- what: explain the ui
 
-# surface mesh generation module (PENDING ⏳)
+# surface mesh generation module (COMPLETE ✅)
 ## main page:
 - where: module card top right corner
 - what: overview of what this module does and how it works

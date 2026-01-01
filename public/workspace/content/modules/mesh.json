@@ -1,0 +1,71 @@
+{
+  "module": "mesh",
+  "version": "1.0.0",
+  "articles": [
+    {
+      "id": "mesh",
+      "title": "Surface Mesh Generation Module",
+      "category": "module",
+      "tags": ["mesh", "3d", "surface", "marching-cubes", "visualization"],
+      "contentType": "full",
+      "content": {
+        "summary": "Convert segmented image stacks into 3D surface meshes for visualization and export. Generate meshes in multiple formats for different applications.",
+        "body": "The Surface Mesh Generation module transforms segmented TIFF image stacks into 3D surface meshes using the Marching Cubes algorithm. These meshes can be visualized in the 3D Visualization module or exported for use in external software.\n\nKey Features:\n• Multi-format output: Three.js JSON, OBJ, STL\n• Per-class mesh generation with separate surfaces\n• Real-time progress tracking during generation\n• Direct integration with 3D Visualization module\n\nSupported Input:\n• Segmentation results from U-Net inference\n• Annotation masks from the Annotation Tool\n• Any labeled TIFF stack with class values 1-255\n\nWorkflow:\n1. Select Data: Choose segmentation results or annotation data\n2. Configure Options: Select output formats and target classes\n3. Generate: Watch real-time progress as meshes are created\n4. View or Export: Open in 3D viewer or download mesh files"
+      },
+      "seeAlsoManual": ["mesh.step1.segmentation-data", "mesh.step2.output-options"],
+      "seeAlsoTags": ["mesh", "3d"]
+    },
+    {
+      "id": "mesh.step1.segmentation-data",
+      "title": "Segmentation Data Selection",
+      "category": "data",
+      "tags": ["mesh", "input", "segmentation", "annotations"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select the segmented image stack to convert into a 3D mesh. Use results from segmentation inference or annotation masks.",
+        "body": "Compatible Data Sources:\n\n• Segmentation Results: Output from U-Net inference (Recent Results section)\n• Annotation Masks: Completed annotations from the Annotation Tool\n• Uploaded Files: Any labeled TIFF stack with class values\n\nFile Requirements:\n• Format: Multi-page TIFF (.tif, .tiff)\n• Pixel Values: Integer class labels (0=background, 1-255=classes)\n• Bit Depth: 8-bit recommended (16-bit supported but converted)\n\nClass Detection:\nThe system automatically detects unique class values in your data and allows you to generate meshes for all classes or select specific ones.\n\nNote: Background pixels (value 0) are excluded from mesh generation. Only non-zero class values produce surfaces."
+      },
+      "seeAlsoManual": ["mesh", "mesh.step2.output-options"],
+      "seeAlsoTags": ["input", "segmentation"]
+    },
+    {
+      "id": "mesh.step2.output-options",
+      "title": "Output Options",
+      "category": "configuration",
+      "tags": ["mesh", "formats", "output", "export"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Configure output formats and select which classes to include in the generated mesh.",
+        "body": "Output Formats:\n\nThree.js JSON\nOptimized format for the built-in 3D Visualization module. Includes vertex colors and is loaded directly by the viewer. Recommended if you plan to view meshes in this application.\n\nOBJ (Wavefront)\nWidely supported 3D format compatible with most 3D modeling software (Blender, Maya, 3ds Max, etc.). Includes vertex positions and face definitions. Good for further editing or analysis.\n\nSTL (Stereolithography)\nStandard format for 3D printing. Contains only geometry without color information. Use this if you plan to 3D print your structures.\n\nClass Selection:\n• All Classes: Generate separate mesh surfaces for each detected class\n• Single Class: Generate mesh for only the selected class value\n\nTip: Select multiple formats to have options for different use cases. The Three.js JSON format is required for the built-in 3D viewer."
+      },
+      "seeAlsoManual": ["mesh", "mesh.step1.segmentation-data"],
+      "seeAlsoTags": ["formats", "export"]
+    }
+  ],
+  "glossary": {
+    "mesh": {
+      "term": "Surface Mesh",
+      "definition": "A 3D representation composed of vertices (points) and faces (triangles) that approximate the surface of an object"
+    },
+    "marching-cubes": {
+      "term": "Marching Cubes",
+      "definition": "An algorithm that extracts a polygonal mesh from a 3D scalar field (like a labeled image stack) by finding surface boundaries"
+    },
+    "vertices": {
+      "term": "Vertices",
+      "definition": "The corner points of triangles in a mesh, defined by X, Y, Z coordinates"
+    },
+    "faces": {
+      "term": "Faces",
+      "definition": "Triangular surfaces in a mesh, each defined by three vertices"
+    },
+    "obj": {
+      "term": "OBJ Format",
+      "definition": "Wavefront OBJ - a simple text-based 3D geometry format widely supported by 3D software"
+    },
+    "stl": {
+      "term": "STL Format",
+      "definition": "Stereolithography format - a common file format for 3D printing that stores triangle mesh geometry"
+    }
+  }
+}

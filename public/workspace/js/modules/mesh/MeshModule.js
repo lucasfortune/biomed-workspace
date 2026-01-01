@@ -91,6 +91,19 @@ class MeshModule extends BaseModule {
     this.onGenerationComplete = this.onGenerationComplete.bind(this);
   }
 
+  /**
+   * Render a help icon that opens the info panel with a specific article
+   * @param {string} articleId - The article ID to display
+   * @returns {string} HTML for the help icon
+   */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
   // ===========================================================================
   // RENDER METHOD
   // ===========================================================================
@@ -145,7 +158,10 @@ class MeshModule extends BaseModule {
 
               <!-- Generation Options (shown before generation) -->
               <div id="generationOptions" class="generation-options">
-                <h4>Output Options</h4>
+                <div class="options-header">
+                  <h4>Output Options</h4>
+                  ${this.renderHelpIcon('mesh.step2.output-options')}
+                </div>
 
                 <div class="form-field">
                   <label>Output Formats</label>
@@ -271,6 +287,7 @@ class MeshModule extends BaseModule {
         fileType: 'annotations', // Default file type for uploads
         title: 'Segmentation Data',
         icon: '🧩',
+        helpIconHtml: this.renderHelpIcon('mesh.step1.segmentation-data'),
         showTestData: false,
         showRecentResults: true, // Show segmentation results in "Recent Results" section
         stateManager: this.state,
