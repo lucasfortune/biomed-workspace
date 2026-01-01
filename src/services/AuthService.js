@@ -295,7 +295,8 @@ class AuthService {
       institution: user.institution,
       status: user.status,
       isAdmin: user.isAdmin,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      approvedAt: user.approvedAt || null
     }));
   }
 
@@ -321,6 +322,7 @@ class AuthService {
     }
 
     usersData.users[userIndex].status = 'active';
+    usersData.users[userIndex].approvedAt = new Date().toISOString();
     this.saveUsers(usersData);
 
     if (this.logger) {

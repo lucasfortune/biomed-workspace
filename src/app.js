@@ -28,6 +28,7 @@ const createMLRoutes = require('./routes/ml.routes');
 const createMeshRoutes = require('./routes/mesh.routes');
 const createAnnotationRoutes = require('./routes/annotation.routes');
 const createDenoisingRoutes = require('./routes/denoising.routes');
+const createAdminRoutes = require('./routes/admin.routes');
 
 // Python runner wrappers
 const {
@@ -344,6 +345,14 @@ function configureApp(app, dependencies) {
     logger,
     denoisingService,
     io
+  }));
+
+  // Admin routes
+  app.use('/admin', createAdminRoutes({
+    authService,
+    sessionTracker,
+    denoisingService,
+    logger
   }));
 
   // Ensure directories exist

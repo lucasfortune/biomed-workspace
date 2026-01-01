@@ -412,12 +412,8 @@ class Workspace {
     try {
       console.log(`[Workspace] Loading module: ${moduleId}`);
 
-      // Check if user is approved for modules requiring upload
-      const user = this.state.get('user');
-      if (user.status !== 'active' && moduleId !== 'segmentation') {
-        this.state.notify('warning', 'Your account is pending approval. You can use test data with segmentation module.');
-        return;
-      }
+      // Note: Pending users can access all modules but are restricted from custom file uploads
+      // (upload restrictions are handled by backend with user-friendly error messages)
 
       await this.moduleLoader.load(moduleId);
 

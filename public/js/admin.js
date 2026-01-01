@@ -405,8 +405,8 @@ async function loadActiveSessions() {
             throw new Error(data.error || 'Failed to load sessions');
         }
         
-        displayActiveSessions(data.training, data.inference);
-        
+        displayActiveSessions(data.training, data.inference, data.mesh || [], data.denoising || []);
+
     } catch (error) {
         console.error('Error loading sessions:', error);
         content.innerHTML = `<div class="empty-state"><p>Error loading sessions: ${error.message}</p></div>`;
@@ -416,15 +416,15 @@ async function loadActiveSessions() {
 /**
  * Display active sessions
  */
-function displayActiveSessions(training, inference) {
+function displayActiveSessions(training, inference, mesh = [], denoising = []) {
     const content = document.getElementById('sessionsContent');
-    
-    if (training.length === 0 && inference.length === 0) {
+
+    if (training.length === 0 && inference.length === 0 && mesh.length === 0 && denoising.length === 0) {
         content.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🔄</div>
                 <h3>No sessions found</h3>
-                <p>There are no training or inference sessions in the system.</p>
+                <p>There are no active sessions in the system.</p>
             </div>
         `;
         return;
@@ -495,7 +495,71 @@ function displayActiveSessions(training, inference) {
             `;
         });
     }
-    
+
+    if (mesh.length > 0) {
+        sessionsHTML += '<h3 style="margin-top: 20px;">🧊 Mesh Sessions</h3>';
+        mesh.forEach(session => {
+            sessionsHTML += `
+                <div class="session-card mesh">
+                    <div class="session-header">
+                        <div class="session-type">Mesh: ${session.meshId.substring(0, 8)}</div>
+                        <span class="session-status ${session.status}">${session.status}</span>
+                    </div>
+                    <div class="session-details">
+                        <div class="session-detail">
+                            <strong>User</strong>
+                            ${session.fullName || session.username || 'Unknown'}
+                        </div>
+                        <div class="session-detail">
+                            <strong>Started</strong>
+                            ${formatDateTime(session.startTime)}
+                        </div>
+                        <div class="session-detail">
+                            <strong>Progress</strong>
+                            ${session.currentClass || 0} / ${session.totalClasses || 0} classes
+                        </div>
+                    </div>
+                    ${session.totalClasses ? `
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" style="width: ${(session.currentClass / session.totalClasses) * 100}%"></div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        });
+    }
+
+    if (denoising.length > 0) {
+        sessionsHTML += '<h3 style="margin-top: 20px;">🔇 Denoising Sessions</h3>';
+        denoising.forEach(session => {
+            sessionsHTML += `
+                <div class="session-card denoising">
+                    <div class="session-header">
+                        <div class="session-type">Denoising: ${session.denoisingId ? session.denoisingId.substring(0, 8) : 'N/A'}</div>
+                        <span class="session-status ${session.status}">${session.status}</span>
+                    </div>
+                    <div class="session-details">
+                        <div class="session-detail">
+                            <strong>User</strong>
+                            ${session.username || 'Unknown'}
+                        </div>
+                        <div class="session-detail">
+                            <strong>Method</strong>
+                            ${session.method || 'N/A'}
+                        </div>
+                        <div class="session-detail">
+                            <strong>Stage</strong>
+                            ${session.stage || 'N/A'}
+                        </div>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" style="width: ${session.progress || 0}%"></div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
     content.innerHTML = sessionsHTML;
 }
 
