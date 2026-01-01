@@ -12,7 +12,7 @@
 This document contains a list of all proposed elements that should be documented in the info panel feature.
 
 - ✅ **UNET SEGMENTATION MODULE**
-- ⏳ **DL DENOISING MODULE**
+- ✅ **DL DENOISING MODULE**
 - ✅ **FILTER BASED DENOISING MODULE**
 - ✅ **ANNOTATION MODULE**
 - ✅ **IMAGE VIEWER MODULE**

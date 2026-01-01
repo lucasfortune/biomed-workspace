@@ -7,6 +7,19 @@
 
 class Templates {
   /**
+   * Render a help icon with the given article ID
+   * @param {string} articleId - The info article ID to link to
+   * @returns {string} HTML for the help icon
+   */
+  static renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
+  /**
    * Render the complete module HTML
    * @param {Function} renderHeader - Function to render module header
    * @param {Function} renderStepNav - Function to render step navigation
@@ -50,7 +63,10 @@ class Templates {
           <!-- Method Selection (always visible at top) -->
           <div class="section-card method-section">
             <div class="method-selector">
-              <h4>1. Select Denoising Method</h4>
+              <div class="section-header">
+                <h4>1. Select Denoising Method</h4>
+                ${this.renderHelpIcon('denoising-dl.step1.method')}
+              </div>
               <label class="method-option">
                 <input type="radio" name="dl-method" value="n2v">
                 <span class="method-content">
@@ -80,7 +96,10 @@ class Templates {
 
           <!-- Workflow Selection Section -->
           <div id="workflowSelectionSection" class="workflow-selection-section" style="display: none;">
-            <h4>2. Choose Workflow</h4>
+            <div class="section-header">
+              <h4>2. Choose Workflow</h4>
+              ${this.renderHelpIcon('denoising-dl.step1.workflow')}
+            </div>
             <p class="workflow-hint">Select one of the options below. Opening one will close the other.</p>
 
             <!-- Train from Scratch Section (collapsible) -->
@@ -94,7 +113,10 @@ class Templates {
               </div>
               <div class="workflow-body">
                 <div class="section-card-inner">
-                  <h5>Input Image</h5>
+                  <div class="section-header">
+                    <h5>Input Image</h5>
+                    ${this.renderHelpIcon('denoising-dl.step1.input')}
+                  </div>
                   <div id="fileSelectorContainer"></div>
                   <div id="validationResult"></div>
                 </div>
@@ -180,7 +202,10 @@ class Templates {
       <!-- Step 3: Run Denoising -->
       <div id="step3" class="step-content">
         <div class="step-inner">
-          <h3>Run Denoising</h3>
+          <div class="section-header step-title-header">
+            <h3>Run Denoising</h3>
+            ${this.renderHelpIcon('denoising-dl.step3.overview')}
+          </div>
           <p class="step-description">
             Train the denoising model on your image data. The training process will
             denoise your images - results are available once training completes.
@@ -244,7 +269,10 @@ class Templates {
             <!-- Chart + Metrics Grid -->
             <div class="training-display-grid">
               <div class="chart-container">
-                <h5>Loss Curves</h5>
+                <div class="section-header chart-header">
+                  <h5>Loss Curves</h5>
+                  ${this.renderHelpIcon('denoising-dl.step3.loss')}
+                </div>
                 <div class="chart-wrapper">
                   <canvas id="n2vLossChart"></canvas>
                 </div>
@@ -260,7 +288,10 @@ class Templates {
                 </div>
                 <div class="metric-card best-metric">
                   <div class="metric-value" id="n2vBestValLoss">--</div>
-                  <div class="metric-label">Best Val Loss</div>
+                  <div class="metric-label-row">
+                    <span class="metric-label">Best Val Loss</span>
+                    ${this.renderHelpIcon('denoising-dl.step3.best-val-loss')}
+                  </div>
                 </div>
               </div>
             </div>
@@ -320,7 +351,10 @@ class Templates {
           <!-- Chart + Metrics Grid -->
           <div class="training-display-grid">
             <div class="chart-container">
-              <h5>Loss Curves</h5>
+              <div class="section-header chart-header">
+                <h5>Loss Curves</h5>
+                ${this.renderHelpIcon('denoising-dl.step3.loss')}
+              </div>
               <div class="chart-wrapper">
                 <canvas id="stage1LossChart"></canvas>
               </div>
@@ -336,7 +370,10 @@ class Templates {
               </div>
               <div class="metric-card best-metric">
                 <div class="metric-value" id="stage1BestValLoss">--</div>
-                <div class="metric-label">Best Val Loss</div>
+                <div class="metric-label-row">
+                  <span class="metric-label">Best Val Loss</span>
+                  ${this.renderHelpIcon('denoising-dl.step3.best-val-loss')}
+                </div>
               </div>
             </div>
           </div>
@@ -412,7 +449,10 @@ class Templates {
           <!-- Chart + Metrics Grid -->
           <div class="training-display-grid">
             <div class="chart-container">
-              <h5>Loss Curves</h5>
+              <div class="section-header chart-header">
+                <h5>Loss Curves</h5>
+                ${this.renderHelpIcon('denoising-dl.step3.loss')}
+              </div>
               <div class="chart-wrapper">
                 <canvas id="stage2LossChart"></canvas>
               </div>
@@ -428,7 +468,10 @@ class Templates {
               </div>
               <div class="metric-card best-metric">
                 <div class="metric-value" id="stage2BestValLoss">--</div>
-                <div class="metric-label">Best Val Loss</div>
+                <div class="metric-label-row">
+                  <span class="metric-label">Best Val Loss</span>
+                  ${this.renderHelpIcon('denoising-dl.step3.best-val-loss')}
+                </div>
               </div>
             </div>
           </div>
@@ -525,7 +568,10 @@ class Templates {
       <!-- Step 4: Inference / Additional Processing -->
       <div id="step4" class="step-content">
         <div class="step-inner">
-          <h3>Process Additional Data</h3>
+          <div class="section-header step-title-header">
+            <h3>Process Additional Data</h3>
+            ${this.renderHelpIcon('denoising-dl.step4.overview')}
+          </div>
           <p class="step-description">
             Apply the trained model to denoise additional images.
           </p>
@@ -540,7 +586,10 @@ class Templates {
 
           <!-- Input Selection Section -->
           <div class="section-card">
-            <h4>Select Data to Process</h4>
+            <div class="section-header">
+              <h4>Select Data to Process</h4>
+              ${this.renderHelpIcon('denoising-dl.step4.data')}
+            </div>
             <p class="section-hint">Select a TIFF stack to denoise using the trained model.</p>
             <div id="inferenceFileSelectorContainer"></div>
             <div id="inferenceValidationResult"></div>

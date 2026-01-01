@@ -568,6 +568,80 @@
 }
 
 /* ============================================
+   SECTION HEADER WITH HELP ICON
+   ============================================ */
+
+.dl-denoising-module .section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .section-header h3,
+.dl-denoising-module .section-header h4,
+.dl-denoising-module .section-header h5 {
+  margin: 0;
+  flex: 1;
+}
+
+.dl-denoising-module .section-header.step-title-header {
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .section-header.chart-header {
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.dl-denoising-module .section-header.chart-header h5 {
+  text-align: center;
+}
+
+.dl-denoising-module .section-header .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.dl-denoising-module .section-header .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.dl-denoising-module .section-header .help-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* Metric label row with help icon */
+.dl-denoising-module .metric-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dl-denoising-module .metric-label-row .help-icon {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.dl-denoising-module .metric-label-row .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.dl-denoising-module .metric-label-row .help-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* ============================================
    SECTION DESCRIPTION
    ============================================ */
 

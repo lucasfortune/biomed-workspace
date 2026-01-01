@@ -34,7 +34,8 @@ const moduleRegistry = [
         label: 'Deep Learning',
         sublabel: 'N2V / autoN2V',
         path: '/workspace/js/modules/denoising-dl/DLDenoisingModule.js',
-        status: 'available'
+        status: 'available',
+        helpArticleId: 'denoising-dl'
       },
       {
         id: 'denoising-filter',

@@ -1,0 +1,357 @@
+{
+  "module": "denoising-dl",
+  "version": "1.0.0",
+  "articles": [
+    {
+      "id": "denoising-dl",
+      "title": "Deep Learning Denoising",
+      "category": "module",
+      "tags": ["denoising", "deep-learning", "n2v", "autostructn2v", "self-supervised"],
+      "contentType": "full",
+      "content": {
+        "summary": "Remove noise from TIFF image stacks using self-supervised deep learning methods that require no clean reference images.",
+        "body": "Deep learning denoising uses neural networks trained directly on your noisy images — no clean training data required. This is possible through self-supervised learning techniques.\n\nAvailable Methods:\n\nNoise2Void (N2V)\nA fast single-stage method ideal for random, uncorrelated noise like Gaussian or Poisson noise commonly found in microscopy images. N2V works by training a network to predict masked pixels from their surroundings.\n\nautoStructN2V\nA two-stage approach for structured noise patterns like scan lines, periodic artifacts from tomography, or camera-specific patterns. Stage 1 trains standard N2V, then analyzes residuals to detect noise patterns. Stage 2 uses these patterns to better preserve real structures while removing noise.\n\nWorkflow:\n1. Select Method & Data: Choose your denoising method and upload images\n2. Configure: Adjust training parameters or use presets\n3. Training: Train the model (images are denoised during training)\n4. Inference (Optional): Apply the model to additional images"
+      },
+      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoTags": ["denoising", "training"]
+    },
+    {
+      "id": "denoising-dl.step1.method",
+      "title": "Denoising Methods",
+      "category": "configuration",
+      "tags": ["denoising", "n2v", "autostructn2v", "method-selection"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Choose between N2V for random noise or autoStructN2V for structured noise patterns.",
+        "body": "Noise2Void (N2V)\nBest for: Random, uncorrelated noise (Gaussian, Poisson)\nSpeed: Fast single-stage training\nUse when: Your noise appears as random pixel variations without visible patterns\n\nautoStructN2V\nBest for: Structured noise patterns (scan lines, periodic artifacts)\nSpeed: Slower two-stage training with interactive mask review\nUse when: You can see repeating patterns, lines, or systematic artifacts in your noise\n\nNot sure which to choose?\nStart with N2V — it works well for most microscopy images. If you notice the denoised result still has visible patterns or artifacts, try autoStructN2V."
+      },
+      "seeAlsoManual": ["denoising-dl", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoTags": ["method-selection"]
+    },
+    {
+      "id": "denoising-dl.autostructn2v-detail",
+      "title": "autoStructN2V Explained",
+      "category": "concept",
+      "tags": ["denoising", "autostructn2v", "structured-noise", "two-stage"],
+      "contentType": "full",
+      "content": {
+        "summary": "A two-stage deep learning approach that automatically detects and removes structured noise patterns from images.",
+        "body": "autoStructN2V extends Noise2Void to handle structured (correlated) noise that standard N2V cannot fully remove.\n\nWhy Standard N2V Falls Short:\nN2V assumes noise is independent between pixels. When noise has structure — like horizontal scan lines or periodic patterns — neighboring pixels share correlated noise. N2V's masking strategy cannot distinguish this correlated noise from real image features.\n\nHow autoStructN2V Works:\n\nStage 1: Standard N2V Training\nFirst, a standard N2V model is trained. This removes most random noise but leaves structured patterns partially intact.\n\nMask Extraction\nThe system analyzes the difference between the original and denoised images in Fourier space. Periodic patterns appear as peaks in the frequency domain. These are automatically detected and converted into a spatial mask showing the noise structure.\n\nInteractive Mask Review\nYou can review and adjust the detected noise pattern before proceeding. This ensures the mask correctly captures the structured noise without including real image features.\n\nStage 2: Structure-Aware Training\nA second N2V model is trained using the noise mask. During training, pixels are masked according to the detected noise pattern, teaching the network to specifically remove that structure.\n\nWhen to Use autoStructN2V:\n- Visible line artifacts in EM tomography reconstructions\n- Periodic patterns from detector readout\n- Camera-specific fixed-pattern noise\n- Any noise with visible spatial correlation or structure"
+      },
+      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.step3.autostructn2v"],
+      "seeAlsoTags": ["autostructn2v", "structured-noise"]
+    },
+    {
+      "id": "denoising-dl.step1.workflow",
+      "title": "Workflow Options",
+      "category": "process",
+      "tags": ["denoising", "workflow", "training", "import"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Choose between training a new model from scratch or using a previously trained model.",
+        "body": "Train from Scratch\nUpload your noisy images and train a new denoising model. The model learns the noise characteristics specific to your data. Training also denoises your input images — you get results as soon as training completes.\n\nBest when:\n- This is your first time processing this type of data\n- Your images have different noise characteristics than previous datasets\n- You want optimal results tailored to your specific images\n\nImport Previously Trained Model\nUse an existing model to denoise new images without retraining. This is much faster since you skip the training step entirely.\n\nBest when:\n- You have a model from a previous training session\n- Your new images have similar noise characteristics to the original training data\n- You want quick results and already have a working model\n\nImportant: Imported models work best on images from the same acquisition conditions as the original training data."
+      },
+      "seeAlsoManual": ["denoising-dl.step1.input", "denoising-dl.step1.import.config"],
+      "seeAlsoTags": ["workflow", "training"]
+    },
+    {
+      "id": "denoising-dl.step1.input",
+      "title": "Input Image Stack",
+      "category": "data",
+      "tags": ["denoising", "input", "tiff", "upload"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select the noisy TIFF image stack you want to denoise.",
+        "body": "Your input images are used both for training the denoising model and as the data to be denoised. Unlike supervised methods, no clean reference images are needed.\n\nFile Requirements:\n- Format: Multi-page TIFF (.tif, .tiff)\n- Bit Depth: 8-bit or 16-bit grayscale\n- Content: Images with noise to be removed\n\nData Sources:\n- Workspace Files: TIFF stacks from your workspace\n- Test Data: Built-in noisy images for testing the module\n\nTips for Best Results:\n- Include multiple slices if available — more data generally improves the model\n- Images should be representative of all the data you want to denoise\n- The model learns noise patterns from these images, so ensure they contain typical noise for your acquisition setup"
+      },
+      "seeAlsoManual": ["denoising-dl.step1.workflow", "denoising-dl"],
+      "seeAlsoTags": ["input", "upload"]
+    },
+    {
+      "id": "denoising-dl.step1.import.config",
+      "title": "Model Configuration File",
+      "category": "data",
+      "tags": ["denoising", "import", "config", "json"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select the JSON configuration file from a previous training session.",
+        "body": "The configuration file (.json) contains all the settings used during training, including model architecture and training parameters. It must match the model weights file exactly.\n\nWhat the config contains:\n- Method type (N2V or autoStructN2V)\n- Model architecture (features, layers)\n- Training parameters used\n- Stage configurations for autoStructN2V\n\nWhere to find it:\nConfiguration files are saved automatically when training completes. Look in your downloads or workspace for files from previous training sessions.\n\nImportant: Using mismatched config and model files will cause errors. Always use files from the same training run."
+      },
+      "seeAlsoManual": ["denoising-dl.step1.import.model", "denoising-dl.step1.workflow"],
+      "seeAlsoTags": ["import", "config"]
+    },
+    {
+      "id": "denoising-dl.step1.import.model",
+      "title": "Model Weights File",
+      "category": "data",
+      "tags": ["denoising", "import", "model", "pth"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select the trained model weights file (.pth) for denoising.",
+        "body": "The model weights file (.pth) contains the learned parameters from training. This is the actual \"knowledge\" the model acquired about noise patterns.\n\nFor N2V:\nOne model file is needed — the trained N2V model.\n\nFor autoStructN2V:\nTwo model files are needed:\n- Stage 1 Model: The initial N2V model\n- Stage 2 Model: The structure-aware model trained with the noise mask\n\nFile Requirements:\n- Format: PyTorch state dictionary (.pth)\n- Must be paired with the matching config file\n\nWhere to find it:\nModel files are downloaded automatically when training completes. The files are named to indicate their purpose (e.g., stage1_model.pth, stage2_model.pth)."
+      },
+      "seeAlsoManual": ["denoising-dl.step1.import.config", "denoising-dl.step1.workflow"],
+      "seeAlsoTags": ["import", "model"]
+    },
+    {
+      "id": "denoising-dl.step2.overview",
+      "title": "Configuration Overview",
+      "category": "process",
+      "tags": ["denoising", "configuration", "parameters", "presets"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Configure training parameters using presets or customize individual settings.",
+        "body": "The configuration step lets you control how the denoising model is trained. You can use presets for quick setup or customize individual parameters.\n\nPresets:\n- Fast: Quick training for testing, lower quality\n- Balanced: Good trade-off for most use cases (recommended)\n- High Quality: Best results, longer training time\n\nParameter Groups:\n- Dataset Configuration: How training patches are extracted\n- Model Architecture: Network size and complexity\n- Training Parameters: Learning rate, epochs, early stopping\n- Advanced Options: Fine-tuning options for experienced users\n\nFor autoStructN2V:\nYou'll see two columns — one for each training stage. Stage 1 and Stage 2 can have different settings to optimize each phase of the training process."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.patch-size", "denoising-dl.step2.epochs"],
+      "seeAlsoTags": ["configuration", "parameters"]
+    },
+    {
+      "id": "denoising-dl.step2.patch-size",
+      "title": "Patch Size",
+      "category": "parameter",
+      "tags": ["denoising", "patch", "configuration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Size of image patches used for training the denoising network.",
+        "body": "During training, small square patches are extracted from your images. The patch size determines the dimensions of these regions.\n\nSmaller patches (32x32):\n- Train faster with less memory\n- Good for fine-grained noise\n- May miss larger noise patterns\n\nLarger patches (64-128):\n- Capture more context\n- Better for structured noise with larger periods\n- Require more GPU memory\n\nRecommendations:\n- Start with 32 or 64 for most images\n- Use larger patches if noise has visible structure spanning many pixels\n- Reduce if you encounter memory errors",
+        "parameterImpact": "Larger patches capture more context but require more memory. For random noise, smaller patches (32-64) work well. For structured noise, try larger patches (64-128)."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.patches-per-image", "denoising-dl.step2.batch-size"],
+      "seeAlsoTags": ["configuration", "patches"]
+    },
+    {
+      "id": "denoising-dl.step2.patches-per-image",
+      "title": "Patches per Image",
+      "category": "parameter",
+      "tags": ["denoising", "patches", "dataset", "configuration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Number of random patches extracted from each image slice for training.",
+        "body": "This controls how many training examples are generated from each image in your stack. More patches mean more training data.\n\nFewer patches (50-100):\n- Faster dataset creation and training\n- May not capture all variations in the image\n- Good for quick experiments\n\nMore patches (200-500):\n- More comprehensive coverage of image variations\n- Longer training time\n- Better for images with diverse content\n\nRecommendations:\n- 100 patches is a good starting point\n- Increase if your images have varied content\n- Decrease for quick testing or limited compute time",
+        "parameterImpact": "More patches provide better coverage of image content but increase training time proportionally. Balance based on image diversity and available time."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.patch-size", "denoising-dl.step2.batch-size"],
+      "seeAlsoTags": ["configuration", "dataset"]
+    },
+    {
+      "id": "denoising-dl.step2.batch-size",
+      "title": "Batch Size",
+      "category": "parameter",
+      "tags": ["denoising", "batch", "memory", "configuration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Number of patches processed together during each training step.",
+        "body": "Batch size controls how many patches are processed simultaneously before updating model weights.\n\nSmaller batches (1-4):\n- Use less GPU memory\n- Can lead to noisier training\n- Necessary for limited GPU memory\n\nLarger batches (8-32):\n- More stable training gradients\n- Require more GPU memory\n- Can train faster per epoch\n\nRecommendations:\n- Start with 4-8 and adjust based on GPU memory\n- Reduce if you see memory errors\n- Larger batches work better with larger learning rates",
+        "parameterImpact": "Larger batches provide more stable training but require more memory. If training seems unstable (erratic loss), try larger batches."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.learning-rate", "denoising-dl.step2.patch-size"],
+      "seeAlsoTags": ["configuration", "memory"]
+    },
+    {
+      "id": "denoising-dl.step2.mask-percentage",
+      "title": "Mask Percentage",
+      "category": "parameter",
+      "tags": ["denoising", "n2v", "mask", "blind-spot"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Percentage of pixels masked during N2V training.",
+        "body": "N2V works by masking random pixels and training the network to predict them from surrounding pixels. This parameter controls what fraction of pixels are masked in each patch.\n\nLower percentage (5-10%):\n- Fewer masked pixels per patch\n- Network sees more complete context\n- May need more training iterations\n\nHigher percentage (15-25%):\n- More masked pixels per training example\n- More training signal per patch\n- Risk of too many masked pixels near each other\n\nRecommendations:\n- 10-15% works well for most images\n- Use lower values for images with fine details\n- Use higher values if training seems slow to converge",
+        "parameterImpact": "Higher percentages provide more training signal per patch but may mask too much context. 10-15% is typical."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.patch-size"],
+      "seeAlsoTags": ["configuration", "n2v"]
+    },
+    {
+      "id": "denoising-dl.step2.features",
+      "title": "Number of Features",
+      "category": "parameter",
+      "tags": ["denoising", "architecture", "features", "model"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Base number of convolutional filters in the network.",
+        "body": "This controls the initial number of feature maps (filters) in the first layer of the U-Net. More features mean a more powerful model.\n\nFewer features (32-48):\n- Smaller, faster model\n- Less memory usage\n- May miss complex noise patterns\n\nMore features (64-128):\n- More powerful model\n- Better at learning complex patterns\n- Requires more GPU memory and training time\n\nRecommendations:\n- 64 is a good default\n- Reduce to 32 if memory is limited\n- Increase to 96-128 for complex structured noise",
+        "parameterImpact": "More features create a more powerful model but require more memory and time. 64 features balance capability and efficiency."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.num-layers"],
+      "seeAlsoTags": ["architecture", "model"]
+    },
+    {
+      "id": "denoising-dl.step2.num-layers",
+      "title": "Number of Layers",
+      "category": "parameter",
+      "tags": ["denoising", "architecture", "layers", "model"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Depth of the U-Net encoder/decoder structure.",
+        "body": "This sets how many encoding/decoding stages the network has. Each stage captures patterns at different scales.\n\nFewer layers (2):\n- Smaller receptive field\n- Faster training\n- Good for local noise patterns\n\nMore layers (3-4):\n- Larger receptive field\n- Better for patterns spanning many pixels\n- More memory and compute time\n\nRecommendations:\n- 2-3 layers for random noise\n- 3-4 layers for structured noise with larger patterns\n- Consider patch size — more layers need larger patches to be effective",
+        "parameterImpact": "More layers capture larger-scale patterns but need more memory. Match to your noise pattern size."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.features", "denoising-dl.step2.patch-size"],
+      "seeAlsoTags": ["architecture", "model"]
+    },
+    {
+      "id": "denoising-dl.step2.learning-rate",
+      "title": "Learning Rate",
+      "category": "parameter",
+      "tags": ["denoising", "training", "learning-rate", "optimization"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Controls how quickly the model adapts during training.",
+        "body": "The learning rate determines the step size when updating model weights. This is one of the most important hyperparameters.\n\nToo high:\n- Training may diverge (loss increases or oscillates)\n- Model fails to converge\n\nToo low:\n- Very slow training\n- May get stuck in poor solutions\n\nAvailable options:\n- 1e-5: Very conservative, stable\n- 5e-5: Good for fine-tuning\n- 1e-4: Standard default, works well for most cases\n- 2e-4: Faster training, slightly less stable\n\nRecommendations:\n- Start with 1e-4 (the default)\n- Reduce to 1e-5 if training is unstable\n- Stage 2 of autoStructN2V often benefits from a lower rate",
+        "parameterImpact": "Higher rates train faster but risk instability. Lower rates are more stable but slower. 1e-4 is a safe default."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.batch-size", "denoising-dl.step2.epochs"],
+      "seeAlsoTags": ["training", "optimization"]
+    },
+    {
+      "id": "denoising-dl.step2.epochs",
+      "title": "Number of Epochs",
+      "category": "parameter",
+      "tags": ["denoising", "training", "epochs", "duration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Maximum number of complete passes through the training data.",
+        "body": "An epoch is one complete pass through all training patches. More epochs give the model more opportunities to learn.\n\nFewer epochs (30-50):\n- Faster training\n- Good for quick experiments\n- May not fully converge\n\nMore epochs (100-200):\n- Better chance of convergence\n- Early stopping prevents wasted time\n- Recommended for final results\n\nEarly Stopping:\nWhen enabled, training automatically stops if validation loss doesn't improve for several epochs (set by patience). This prevents overtraining and saves time.\n\nRecommendations:\n- Use 100 epochs with early stopping enabled\n- The model will stop early if it converges sooner\n- Use 50 epochs for quick tests",
+        "parameterImpact": "More epochs allow better convergence. With early stopping enabled, you can set a high value and training will stop when optimal."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.early-stopping", "denoising-dl.step2.learning-rate"],
+      "seeAlsoTags": ["training", "duration"]
+    },
+    {
+      "id": "denoising-dl.step2.early-stopping",
+      "title": "Early Stopping",
+      "category": "parameter",
+      "tags": ["denoising", "training", "early-stopping", "convergence"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Automatically stop training when the model stops improving.",
+        "body": "Early stopping monitors validation loss during training and stops when improvement stalls. This prevents wasted computation and can prevent overfitting.\n\nHow it works:\n1. After each epoch, validation loss is calculated\n2. If loss doesn't improve for 'patience' epochs, training stops\n3. The best model (lowest validation loss) is saved\n\nPatience:\nThe number of epochs to wait for improvement before stopping. Higher patience allows for temporary plateaus but may waste time.\n\nRecommendations:\n- Keep early stopping enabled (default)\n- Patience of 10 works well for most cases\n- Increase patience to 15-20 if training seems to stop too early",
+        "parameterImpact": "Early stopping saves time and can improve results by preventing overtraining. Patience controls sensitivity to temporary plateaus."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.epochs", "denoising-dl.step3.loss"],
+      "seeAlsoTags": ["training", "convergence"]
+    },
+    {
+      "id": "denoising-dl.step3.overview",
+      "title": "Run Denoising",
+      "category": "process",
+      "tags": ["denoising", "training", "progress"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Train the denoising model on your images. The training process directly produces denoised images.",
+        "body": "Unlike segmentation where training and inference are separate, denoising training directly produces your results. During training, the model learns noise patterns and simultaneously denoises your input images.\n\nWhat happens during training:\n1. Patches are extracted from your images\n2. Random pixels are masked\n3. The network learns to predict masked pixels from context\n4. This learned prediction removes noise from the full images\n\nWhen training completes:\n- Your images have been denoised\n- A trained model is saved for processing additional images\n- Step 4 (Inference) is optional — use it only if you have more images to process\n\nTip: You can start viewing results as soon as training completes. Step 4 is only needed to denoise additional images not included in training."
+      },
+      "seeAlsoManual": ["denoising-dl.step3.n2v", "denoising-dl.step3.autostructn2v"],
+      "seeAlsoTags": ["training", "progress"]
+    },
+    {
+      "id": "denoising-dl.step3.n2v",
+      "title": "N2V Training Process",
+      "category": "process",
+      "tags": ["denoising", "n2v", "training", "single-stage"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Single-stage training for removing random, uncorrelated noise.",
+        "body": "N2V training is a straightforward single-stage process:\n\n1. Dataset Preparation\nPatches are extracted from your images according to your configuration (patch size, patches per image).\n\n2. Training Loop\nFor each epoch, the network processes all patches:\n- Random pixels are masked based on mask percentage\n- Network predicts masked pixel values from surrounding context\n- Loss measures prediction accuracy\n- Weights are updated to improve predictions\n\n3. Validation\nAfter each epoch, performance is evaluated on held-out patches. This validation loss guides early stopping.\n\n4. Denoising\nOnce trained, the model processes your full images to produce denoised results.\n\nWhat to expect:\n- Training typically takes 5-30 minutes depending on data size and GPU\n- Loss should decrease steadily during training\n- Results are available immediately when training completes"
+      },
+      "seeAlsoManual": ["denoising-dl.step3.loss", "denoising-dl.step3.best-val-loss"],
+      "seeAlsoTags": ["n2v", "training"]
+    },
+    {
+      "id": "denoising-dl.step3.autostructn2v",
+      "title": "autoStructN2V Training Process",
+      "category": "process",
+      "tags": ["denoising", "autostructn2v", "training", "two-stage"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Two-stage training with automatic structured noise detection and removal.",
+        "body": "autoStructN2V training has three phases:\n\nStage 1: Initial N2V Training\nStandard N2V training removes random noise. This produces an intermediate result where structured noise may still be visible.\n\nMask Extraction & Review\nAfter Stage 1:\n- The system analyzes residual noise patterns\n- A mask showing detected structure is generated\n- You can review and adjust the mask before proceeding\n- Options: Approve mask, regenerate with different settings, or skip Stage 2\n\nStage 2: Structure-Aware Training\nA second model is trained using the noise mask. Masking follows the detected noise structure, teaching the network to specifically remove those patterns.\n\nWhat to expect:\n- Total training time is roughly 2x single-stage N2V\n- Stage 1 and Stage 2 can have different configurations\n- The mask review step requires your input before Stage 2 begins\n- Final results combine both stages for optimal noise removal"
+      },
+      "seeAlsoManual": ["denoising-dl.autostructn2v-detail", "denoising-dl.step3.loss"],
+      "seeAlsoTags": ["autostructn2v", "training"]
+    },
+    {
+      "id": "denoising-dl.step3.loss",
+      "title": "Loss Curves",
+      "category": "metric",
+      "tags": ["denoising", "training", "loss", "metrics"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Loss measures how well the network predicts masked pixels — lower is better.",
+        "body": "The loss chart shows two curves:\n\nTraining Loss (typically red/orange)\nError on the patches used for learning. Should decrease steadily as the model learns.\n\nValidation Loss (typically blue/green)\nError on held-out patches not used for training. Shows how well the model generalizes.\n\nWhat to look for:\n\nHealthy Training:\nBoth curves decrease together, then flatten. A small gap between them is normal.\n\nOverfitting:\nTraining loss keeps decreasing but validation loss starts rising. The model is memorizing training data. Early stopping will typically catch this.\n\nUnderfitting:\nBoth losses stay high and don't decrease much. Try longer training, larger model, or different learning rate.\n\nInstability:\nLosses jump around erratically. Try reducing learning rate or increasing batch size.\n\nNote: Unlike segmentation, there's no Dice score for denoising. Loss is the primary metric — visual inspection of results is important."
+      },
+      "seeAlsoManual": ["denoising-dl.step3.best-val-loss", "denoising-dl.step2.learning-rate"],
+      "seeAlsoTags": ["metrics", "training"]
+    },
+    {
+      "id": "denoising-dl.step3.best-val-loss",
+      "title": "Best Validation Loss",
+      "category": "metric",
+      "tags": ["denoising", "training", "validation", "metrics"],
+      "contentType": "medium",
+      "content": {
+        "summary": "The lowest validation loss achieved during training — indicates the best model checkpoint.",
+        "body": "During training, the model checkpoint with the lowest validation loss is automatically saved. This \"best\" model is used for producing your final denoised images.\n\nWhy Best Val Loss Matters:\n- Validation loss measures performance on unseen data\n- The epoch with lowest validation loss typically produces the best denoising quality\n- Later epochs might overfit, making the early \"best\" checkpoint superior\n\nWhat the number means:\n- Lower is better\n- Typical values depend on your data and noise level\n- Compare relative values within your training run, not across different datasets\n\nHow it's used:\n- The model checkpoint at this loss value is saved\n- This checkpoint denoises your images when training completes\n- If you download the model, you get this best checkpoint"
+      },
+      "seeAlsoManual": ["denoising-dl.step3.loss", "denoising-dl.step2.early-stopping"],
+      "seeAlsoTags": ["metrics", "validation"]
+    },
+    {
+      "id": "denoising-dl.step4.overview",
+      "title": "Process Additional Data",
+      "category": "process",
+      "tags": ["denoising", "inference", "additional-data"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Apply your trained model to denoise additional images beyond the original training data.",
+        "body": "Step 4 is optional. If your only goal was to denoise the images you uploaded in Step 1, you're done — those images were denoised during training.\n\nUse Step 4 when:\n- You have additional images from the same experiment\n- You want to process more data without retraining\n- You're batch processing a large dataset\n\nHow it works:\n1. Select additional TIFF images to process\n2. The trained model denoises them (no training occurs)\n3. Download or view the denoised results\n\nThis is much faster than training since the model just applies what it already learned."
+      },
+      "seeAlsoManual": ["denoising-dl.step4.data", "denoising-dl.step3.overview"],
+      "seeAlsoTags": ["inference", "additional-data"]
+    },
+    {
+      "id": "denoising-dl.step4.data",
+      "title": "Select Data to Process",
+      "category": "data",
+      "tags": ["denoising", "inference", "input", "additional-data"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Select additional images to denoise using your trained model.",
+        "body": "When processing additional images, the trained model applies what it learned about noise patterns to new data.\n\nFile Requirements:\n- Format: Multi-page TIFF (.tif, .tiff)\n- Bit Depth: Should match training data (8-bit or 16-bit grayscale)\n- Size: Can be any dimensions — processed in patches\n\nCritical Consideration:\nThe model works best on images with the same noise characteristics as your training data. For optimal results:\n\n- Use images from the same acquisition session\n- Same microscope/camera settings\n- Same sample preparation method\n- Similar imaging conditions\n\nIf your new images have different noise patterns (different detector, different settings, etc.), the model may not perform as well. In that case, consider training a new model on the new data.\n\nWhat NOT to expect:\nA model trained on one type of noise won't effectively remove a different type of noise. Each noise source has unique characteristics the model must learn."
+      },
+      "seeAlsoManual": ["denoising-dl.step4.overview", "denoising-dl.step1.input"],
+      "seeAlsoTags": ["inference", "data"]
+    }
+  ],
+  "glossary": {
+    "n2v": {
+      "term": "Noise2Void (N2V)",
+      "definition": "A self-supervised denoising method that trains by predicting masked pixels from their surroundings, requiring no clean reference images"
+    },
+    "autostructn2v": {
+      "term": "autoStructN2V",
+      "definition": "A two-stage extension of N2V that automatically detects and removes structured noise patterns through Fourier analysis"
+    },
+    "self-supervised": {
+      "term": "Self-Supervised Learning",
+      "definition": "A training approach where the model learns from the data itself without requiring manually labeled ground truth"
+    },
+    "blind-spot": {
+      "term": "Blind-Spot Network",
+      "definition": "A network architecture that cannot see the center pixel when predicting it, preventing the trivial solution of copying noisy values"
+    },
+    "structured-noise": {
+      "term": "Structured Noise",
+      "definition": "Noise with spatial patterns or correlations, such as scan lines or periodic artifacts, as opposed to random pixel-independent noise"
+    },
+    "mask-extraction": {
+      "term": "Mask Extraction",
+      "definition": "The process of analyzing N2V residuals in Fourier space to detect periodic noise patterns for Stage 2 training"
+    },
+    "validation-loss": {
+      "term": "Validation Loss",
+      "definition": "Error measured on held-out data not used for training, indicating how well the model generalizes to new images"
+    }
+  }
+}
