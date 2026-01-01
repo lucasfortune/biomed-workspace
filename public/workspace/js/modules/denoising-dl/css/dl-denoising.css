@@ -212,11 +212,12 @@
    FORM ELEMENTS
    ============================================ */
 
-/* Form field inputs - ensure white background */
+/* Form field inputs - theme-aware background */
 .dl-denoising-module select,
 .dl-denoising-module input[type="text"],
 .dl-denoising-module input[type="number"] {
-  background: white;
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
 }
 
 .dl-denoising-module .field-hint {
@@ -294,7 +295,7 @@
   padding: 10px 12px;
   border: 1px solid var(--module-border);
   border-radius: var(--module-radius-sm);
-  background: white;
+  background: var(--module-card-bg);
   color: var(--module-text-primary);
   font-size: var(--module-font-size-sm);
   cursor: pointer;
@@ -308,7 +309,7 @@
 .dl-denoising-module .preset-dropdown:focus {
   outline: none;
   border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.1);
 }
 
 .dl-denoising-module .preset-desc {
@@ -1805,7 +1806,7 @@
 
 /* Progress Bar - Segmentation Style */
 .dl-denoising-module .training-progress-bar {
-  background: #e0e0e0;
+  background: var(--module-border);
   height: 24px;
   border-radius: var(--module-radius-xl);
   overflow: hidden;
@@ -1829,10 +1830,10 @@
 
 /* Chart Container */
 .dl-denoising-module .training-display-grid .chart-container {
-  background: white;
+  background: var(--module-card-bg);
   padding: 12px;
   border-radius: var(--module-radius-md);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--module-shadow-sm);
 }
 
 .dl-denoising-module .training-display-grid .chart-container h5 {
@@ -1861,8 +1862,8 @@
 }
 
 .dl-denoising-module .metrics-stack .metric-card {
-  background: white;
-  border: 2px solid #e0e0e0;
+  background: var(--module-card-bg);
+  border: 2px solid var(--module-border);
   border-radius: 8px;
   padding: 24px 12px;
   text-align: center;
@@ -1885,7 +1886,7 @@
 }
 
 .dl-denoising-module .metrics-stack .metric-label {
-  color: #666;
+  color: var(--module-text-secondary);
   margin-top: 2px;
   font-size: var(--module-font-size-xs);
 }
