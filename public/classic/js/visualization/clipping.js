@@ -355,8 +355,7 @@ export function updateSliceVisibility(sliceRange) {
                 if (mesh) {
                     const shouldBeVisible = (sliceIndex >= minSlice && sliceIndex <= maxSlice);
                     mesh.visible = shouldBeVisible;
-                    mesh.visible = shouldBeVisible && visible;
-                        }
+                }
             });
         }
     });

@@ -115,23 +115,23 @@ function displayUsers(users) {
             <div class="user-card-header">
                 <div class="user-info-main">
                     <div class="user-name">
-                        ${user.fullName}
+                        ${escapeHtml(user.fullName)}
                         ${user.isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}
                     </div>
-                    <div class="user-username">@${user.username}</div>
+                    <div class="user-username">@${escapeHtml(user.username)}</div>
                 </div>
-                <span class="status-badge ${user.status}">${getStatusText(user.status)}</span>
+                <span class="status-badge ${escapeHtml(user.status)}">${getStatusText(user.status)}</span>
             </div>
             <div class="user-meta">
-                <div class="user-meta-item"><strong>Email:</strong> ${user.email}</div>
-                <div class="user-meta-item"><strong>Institution:</strong> ${user.institution}</div>
+                <div class="user-meta-item"><strong>Email:</strong> ${escapeHtml(user.email)}</div>
+                <div class="user-meta-item"><strong>Institution:</strong> ${escapeHtml(user.institution)}</div>
                 <div class="user-meta-item"><strong>Registered:</strong> ${formatDate(user.createdAt)}</div>
                 ${user.approvedAt ? `<div class="user-meta-item"><strong>Approved:</strong> ${formatDate(user.approvedAt)}</div>` : ''}
             </div>
             ${user.status === 'pending' && !user.isAdmin ? `
                 <div class="user-actions">
-                    <button class="btn btn-primary" onclick="approveUser('${user.username}')">✅ Approve</button>
-                    <button class="btn btn-danger" onclick="rejectUser('${user.username}')">❌ Reject</button>
+                    <button class="btn btn-primary" onclick="approveUser('${escapeHtml(user.username)}')">Approve</button>
+                    <button class="btn btn-danger" onclick="rejectUser('${escapeHtml(user.username)}')">Reject</button>
                 </div>
             ` : ''}
         </div>
@@ -190,23 +190,23 @@ function displayPendingUsers(users) {
         <div class="user-card">
             <div class="user-card-header">
                 <div class="user-info-main">
-                    <div class="user-name">${user.fullName}</div>
-                    <div class="user-username">@${user.username}</div>
+                    <div class="user-name">${escapeHtml(user.fullName)}</div>
+                    <div class="user-username">@${escapeHtml(user.username)}</div>
                 </div>
-                <span class="status-badge pending">⏳ Pending</span>
+                <span class="status-badge pending">Pending</span>
             </div>
             <div class="user-meta">
-                <div class="user-meta-item"><strong>Email:</strong> ${user.email}</div>
-                <div class="user-meta-item"><strong>Institution:</strong> ${user.institution}</div>
+                <div class="user-meta-item"><strong>Email:</strong> ${escapeHtml(user.email)}</div>
+                <div class="user-meta-item"><strong>Institution:</strong> ${escapeHtml(user.institution)}</div>
                 <div class="user-meta-item"><strong>Registered:</strong> ${formatDate(user.createdAt)}</div>
             </div>
             <div class="user-actions">
-                <button class="btn btn-primary" onclick="approveUser('${user.username}')">✅ Approve User</button>
-                <button class="btn btn-danger" onclick="rejectUser('${user.username}')">❌ Reject</button>
+                <button class="btn btn-primary" onclick="approveUser('${escapeHtml(user.username)}')">Approve User</button>
+                <button class="btn btn-danger" onclick="rejectUser('${escapeHtml(user.username)}')">Reject</button>
             </div>
         </div>
     `).join('');
-    
+
     content.innerHTML = usersHTML;
 }
 
@@ -377,9 +377,9 @@ function displayActivityLogs(logs, users) {
                 ${logs.map(log => `
                     <tr>
                         <td class="timestamp">${formatDateTime(log.timestamp)}</td>
-                        <td><strong>${log.username}</strong></td>
+                        <td><strong>${escapeHtml(log.username)}</strong></td>
                         <td><span class="activity-type ${getActivityClass(log.action)}">${formatAction(log.action)}</span></td>
-                        <td>${formatDetails(log.details)}</td>
+                        <td>${escapeHtml(formatDetails(log.details))}</td>
                     </tr>
                 `).join('')}
             </tbody>

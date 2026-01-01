@@ -80,7 +80,7 @@ function updateUploadStatus(type, filename) {
     const uploadText = section.querySelector('.upload-text');
     
     uploadText.innerHTML = `
-        <h3>✅ ${filename}</h3>
+        <h3>${escapeHtml(filename)}</h3>
         <p>File uploaded successfully</p>
     `;
     section.style.borderColor = '#4CAF50';
@@ -197,8 +197,8 @@ function showValidationError(error) {
     const validationDiv = document.getElementById('validationResult');
     validationDiv.innerHTML = `
         <div class="validation-error">
-            <h3>❌ Validation Failed</h3>
-            <p>${error}</p>
+            <h3>Validation Failed</h3>
+            <p>${escapeHtml(error)}</p>
         </div>
     `;
 }

@@ -18,6 +18,8 @@ function createSessionMiddleware(env) {
     throw new Error('SESSION_SECRET is required for session middleware');
   }
 
+  const isProduction = process.env.NODE_ENV === 'production';
+
   return session({
     store: new FileStore({
       path: './sessions',
@@ -27,9 +29,11 @@ function createSessionMiddleware(env) {
     }),
     secret: env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false, // Don't create sessions for unauthenticated users
     cookie: {
-      secure: false, // Set to true in production with HTTPS
+      secure: isProduction, // Require HTTPS in production
+      httpOnly: true, // Prevent client-side JS access to cookie
+      sameSite: 'lax', // Protect against CSRF
       maxAge: SESSION_CONFIG.cookieMaxAge
     }
   });

@@ -57,9 +57,18 @@ def validate_model(model_path, config):
         # Check file exists and is readable
         if not os.path.exists(model_path):
             return False, "Model file does not exist"
-        
-        # Try to load the checkpoint with weights_only=False to handle numpy objects
-        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+
+        # Try safe loading first (weights_only=True), fall back if needed
+        try:
+            checkpoint = torch.load(model_path, map_location='cpu', weights_only=True)
+        except Exception:
+            # Fall back for legacy models with numpy objects - log warning
+            import warnings
+            warnings.warn(
+                f"Loading model with weights_only=False. Ensure {model_path} is from a trusted source.",
+                UserWarning
+            )
+            checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
         
         # Check if it's a valid checkpoint with model_state_dict
         if 'model_state_dict' not in checkpoint:

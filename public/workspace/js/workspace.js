@@ -1,4 +1,20 @@
 /**
+ * Escapes HTML special characters to prevent XSS attacks.
+ * Use this when inserting user-provided or server-provided data into innerHTML.
+ * @param {string|number|null|undefined} text - The text to escape
+ * @returns {string} The escaped HTML-safe string
+ */
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  const div = document.createElement('div');
+  div.textContent = String(text);
+  return div.innerHTML;
+}
+
+// Make escapeHtml globally available for modules
+window.escapeHtml = escapeHtml;
+
+/**
  * Workspace Application - Main entry point
  * Initializes state management, module loading, and UI
  */
@@ -475,8 +491,8 @@ class Workspace {
     if (!container) return;
 
     container.innerHTML = notifications.map(notif => `
-      <div class="notification ${notif.type}">
-        ${notif.message}
+      <div class="notification ${escapeHtml(notif.type)}">
+        ${escapeHtml(notif.message)}
       </div>
     `).join('');
   }

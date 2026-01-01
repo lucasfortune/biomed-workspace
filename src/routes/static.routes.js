@@ -80,7 +80,8 @@ function createStaticRoutes(dependencies) {
    * Serve test data files
    */
   router.get('/test_data/:filename', requireAuth, (req, res) => {
-    const filename = req.params.filename;
+    // Sanitize filename to prevent path traversal attacks
+    const filename = path.basename(req.params.filename);
     const filePath = path.join(__dirname, '../../test_data', filename);
 
     if (fs.existsSync(filePath)) {

@@ -45,6 +45,28 @@ except ImportError as e:
 
 
 # =============================================================================
+# Safe Model Loading
+# =============================================================================
+
+def safe_load_checkpoint(model_path, device='cpu'):
+    """
+    Safely load a PyTorch checkpoint with fallback for legacy models.
+
+    Tries weights_only=True first for security, falls back to weights_only=False
+    only if necessary (e.g., for models containing numpy objects).
+    """
+    import warnings
+    try:
+        return torch.load(model_path, map_location=device, weights_only=True)
+    except Exception:
+        warnings.warn(
+            f"Loading checkpoint with weights_only=False. Ensure {model_path} is from a trusted source.",
+            UserWarning
+        )
+        return torch.load(model_path, map_location=device, weights_only=False)
+
+
+# =============================================================================
 # Progress Emission Functions
 # =============================================================================
 
@@ -501,7 +523,7 @@ def run_training(config: dict):
                 upsampling_mode=config['stage1'].get('upsampling_mode', 'bilinear')
             ).to(device)
 
-            checkpoint = torch.load(stage1_checkpoint_path, map_location=device)
+            checkpoint = safe_load_checkpoint(stage1_checkpoint_path, device)
             stage1_trained_model.load_state_dict(checkpoint['model_state_dict'])
             stage1_trained_model.eval()
 
@@ -719,7 +741,7 @@ def run_training(config: dict):
                 upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
             ).to(device)
 
-            checkpoint = torch.load(results['stage2_model_path'], map_location=device)
+            checkpoint = safe_load_checkpoint(results['stage2_model_path'], device)
             stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
             stage2_trained_model.eval()
 
@@ -1178,7 +1200,7 @@ def run_inference(config: dict):
             upsampling_mode=model_config.get('upsampling_mode', 'bilinear')
         ).to(device)
 
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = safe_load_checkpoint(model_path, device)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.eval()
 
@@ -1321,7 +1343,7 @@ def run_sequential_inference(config: dict):
             upsampling_mode=stage1_config.get('upsampling_mode', 'bilinear')
         ).to(device)
 
-        checkpoint = torch.load(stage1_model_path, map_location=device)
+        checkpoint = safe_load_checkpoint(stage1_model_path, device)
         stage1_model.load_state_dict(checkpoint['model_state_dict'])
         stage1_model.eval()
 
@@ -1373,7 +1395,7 @@ def run_sequential_inference(config: dict):
             upsampling_mode=stage2_config.get('upsampling_mode', 'bilinear')
         ).to(device)
 
-        checkpoint = torch.load(stage2_model_path, map_location=device)
+        checkpoint = safe_load_checkpoint(stage2_model_path, device)
         stage2_model.load_state_dict(checkpoint['model_state_dict'])
         stage2_model.eval()
 
@@ -1748,7 +1770,7 @@ def run_stage2_only(config: dict):
             upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
         ).to(device)
 
-        checkpoint = torch.load(results['stage2_model_path'], map_location=device)
+        checkpoint = safe_load_checkpoint(results['stage2_model_path'], device)
         stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
         stage2_trained_model.eval()
 

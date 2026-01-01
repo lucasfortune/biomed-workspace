@@ -193,7 +193,7 @@ async function loadTestDataset() {
         const validationResult = document.getElementById('validationResult');
         if (validationResult) {
             validationResult.innerHTML = `
-                <p class="error">Failed to load test dataset: ${error.message}</p>
+                <p class="error">Failed to load test dataset: ${escapeHtml(error.message)}</p>
                 <p>Please try uploading your own data instead.</p>
             `;
         }
@@ -235,11 +235,11 @@ function setupImportedModelUI(modelInfo) {
     const modelInfoSection = document.querySelector('#step4 .model-info');
     if (modelInfoSection) {
         modelInfoSection.innerHTML = `
-            <h3>🤖 Imported Model Ready</h3>
+            <h3>Imported Model Ready</h3>
             <div class="imported-model-details">
-                <p><strong>Model:</strong> ${modelInfo.model_size}</p>
-                <p><strong>Architecture:</strong> ${modelInfo.config.features} features, ${modelInfo.config.num_layers} layers</p>
-                <p><strong>Patch Size:</strong> ${modelInfo.config.patch_size}px</p>
+                <p><strong>Model:</strong> ${escapeHtml(modelInfo.model_size)}</p>
+                <p><strong>Architecture:</strong> ${escapeHtml(modelInfo.config.features)} features, ${escapeHtml(modelInfo.config.num_layers)} layers</p>
+                <p><strong>Patch Size:</strong> ${escapeHtml(modelInfo.config.patch_size)}px</p>
                 <p><em>You can now run inference using this pre-trained model.</em></p>
             </div>
         `;
