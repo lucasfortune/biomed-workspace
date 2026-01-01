@@ -191,6 +191,19 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
+   * Render a help icon that opens the Info Panel
+   * @param {string} articleId - The article ID to display when clicked
+   * @returns {string} HTML string for the help icon
+   */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
+  /**
    * Render the complete segmentation UI
    */
   render() {
@@ -211,7 +224,7 @@ class SegmentationModule extends BaseModule {
 
             <!-- Workflow Selection Section -->
             <div class="workflow-selection-section">
-              <h4>Choose Workflow</h4>
+              <h4>Choose Workflow ${this.renderHelpIcon('segmentation.step1.workflow-choice')}</h4>
               <p class="workflow-hint">Select one option. Opening one will close the other.</p>
 
               <!-- Train from Scratch Section -->
@@ -265,31 +278,31 @@ class SegmentationModule extends BaseModule {
               <div class="config-group">
                 <h3>Dataset Configuration</h3>
                 <div class="form-field">
-                  <label for="patchSize">Patch Size</label>
+                  <label for="patchSize">Patch Size${this.renderHelpIcon('segmentation.config.patch-size')}</label>
                   <input type="number" id="patchSize" value="64" min="16" max="1024">
                 </div>
                 <div class="form-field">
-                  <label for="patchesPerImage">Patches per Image</label>
+                  <label for="patchesPerImage">Patches per Image${this.renderHelpIcon('segmentation.config.patches-per-image')}</label>
                   <input type="number" id="patchesPerImage" value="50" min="1" max="100">
                 </div>
                 <div class="form-field">
-                  <label for="batchSize">Batch Size</label>
+                  <label for="batchSize">Batch Size${this.renderHelpIcon('segmentation.config.batch-size')}</label>
                   <input type="number" id="batchSize" value="8" min="1" max="32">
                 </div>
                 <div class="form-field checkbox-field">
                   <input type="checkbox" id="augmentation" checked>
-                  <label for="augmentation">Apply Data Augmentation</label>
+                  <label for="augmentation">Apply Data Augmentation${this.renderHelpIcon('segmentation.config.augmentation')}</label>
                 </div>
               </div>
 
               <div class="config-group">
                 <h3>Model Architecture</h3>
                 <div class="form-field">
-                  <label for="numFeatures">Number of Features</label>
+                  <label for="numFeatures">Number of Features${this.renderHelpIcon('segmentation.config.num-features')}</label>
                   <input type="number" id="numFeatures" value="64" min="16" max="256" step="16">
                 </div>
                 <div class="form-field">
-                  <label for="numLayers">Number of Layers</label>
+                  <label for="numLayers">Number of Layers${this.renderHelpIcon('segmentation.config.num-layers')}</label>
                   <input type="number" id="numLayers" value="4" min="2" max="6">
                 </div>
               </div>
@@ -297,11 +310,11 @@ class SegmentationModule extends BaseModule {
               <div class="config-group">
                 <h3>Training Parameters</h3>
                 <div class="form-field">
-                  <label for="learningRate">Learning Rate</label>
+                  <label for="learningRate">Learning Rate${this.renderHelpIcon('segmentation.config.learning-rate')}</label>
                   <input type="number" id="learningRate" value="0.001" min="0.0001" max="0.1" step="0.0001">
                 </div>
                 <div class="form-field">
-                  <label for="numEpochs">Number of Epochs</label>
+                  <label for="numEpochs">Number of Epochs${this.renderHelpIcon('segmentation.config.num-epochs')}</label>
                   <input type="number" id="numEpochs" value="100" min="10" max="500">
                 </div>
               </div>
@@ -315,26 +328,30 @@ class SegmentationModule extends BaseModule {
 
           <!-- Step 3: Training Progress -->
           <div class="step-content" id="step3">
-            <h2>Step 3: Training Progress</h2>
+            <h2>Step 3: Training Progress ${this.renderHelpIcon('segmentation.step3')}</h2>
 
             <!-- Training Container: Shows button initially, then progress -->
             <div class="training-status">
               <!-- Initial state: Show start button -->
-              <div id="trainingActionContent">
-                <h2 style="margin-top: 0; color: #24292e;">Ready to Train Your Model</h2>
-                <p style="color: #586069; margin-bottom: 30px;">
+              <div id="trainingActionContent" class="training-start-section">
+                <h3 class="training-title">Ready to Train Your Model</h3>
+                <p class="training-subtitle">
                   Your configuration has been saved. Click below to start training your U-Net model.
                 </p>
-                <button class="btn btn-large" id="startTrainingBtn">
+                <button class="btn btn-large primary" id="startTrainingBtn">
+                  <span class="btn-icon">&#9658;</span>
                   Start Training
                 </button>
               </div>
 
               <!-- Training progress state: Hidden initially -->
               <div id="trainingProgressContent" style="display: none;">
-                <h3 id="trainingStatusText">Training started... Preparing data...</h3>
+                <div class="training-status-header">
+                  <h4 id="trainingStatusText">Training started... Preparing data...</h4>
+                  <span class="stage-status training" id="trainingStageStatus">Training</span>
+                </div>
                 <div class="training-progress">
-                  <div>Epoch <span id="currentEpoch">0</span> of <span id="totalEpochs">0</span></div>
+                  <div class="epoch-info">Epoch <span id="currentEpoch">0</span> of <span id="totalEpochs">0</span></div>
                   <div class="training-progress-bar">
                     <div class="training-progress-fill" id="trainingProgressFill"></div>
                   </div>
@@ -363,13 +380,13 @@ class SegmentationModule extends BaseModule {
 
             <div class="charts-container">
               <div class="chart-container">
-                <h4>Loss Curves</h4>
+                <h4>Loss Curves ${this.renderHelpIcon('segmentation.step3.loss-curves')}</h4>
                 <div style="position: relative; height: 220px; margin-top: 40px;">
                   <canvas id="lossChart"></canvas>
                 </div>
               </div>
               <div class="chart-container">
-                <h4>Dice Score</h4>
+                <h4>Dice Score ${this.renderHelpIcon('segmentation.step3.dice-score')}</h4>
                 <div style="position: relative; height: 220px; margin-top: 40px;">
                   <canvas id="diceChart"></canvas>
                 </div>
@@ -384,7 +401,7 @@ class SegmentationModule extends BaseModule {
 
           <!-- Step 4: Inference -->
           <div class="step-content" id="step4">
-            <h2>Step 4: Run Inference</h2>
+            <h2>Step 4: Run Inference ${this.renderHelpIcon('segmentation.step4')}</h2>
 
             <div class="model-info">
               <h3>Trained Model Ready</h3>
@@ -392,8 +409,6 @@ class SegmentationModule extends BaseModule {
             </div>
 
             <div class="inference-section" style="margin-top: 30px;">
-              <h3 style="margin-bottom: 20px; font-size: 18px; color: #24292e;">Select Data for Inference</h3>
-
               <!-- FileSelector component will be inserted here -->
               <div id="inferenceSelectorContainer"></div>
 
@@ -528,6 +543,7 @@ class SegmentationModule extends BaseModule {
       fileType: 'raw_images',
       title: 'Raw Images',
       icon: '📁',
+      helpIconHtml: this.renderHelpIcon('segmentation.step1.raw-images'),
       showTestData: true,
       stateManager: this.state,
       onSelect: (fileInfo) => this.onFileSelected('raw_images', fileInfo),
@@ -539,6 +555,7 @@ class SegmentationModule extends BaseModule {
       fileType: 'annotations',
       title: 'Annotations',
       icon: '🏷️',
+      helpIconHtml: this.renderHelpIcon('segmentation.step1.annotations'),
       showTestData: true,
       stateManager: this.state,
       onSelect: (fileInfo) => this.onFileSelected('annotations', fileInfo),
@@ -550,6 +567,7 @@ class SegmentationModule extends BaseModule {
       fileType: 'inference_data',
       title: 'Inference Data',
       icon: '📁',
+      helpIconHtml: this.renderHelpIcon('segmentation.step4.inference-data'),
       showTestData: true,
       stateManager: this.state,
       onSelect: (fileInfo) => this.onFileSelected('inference_data', fileInfo),
@@ -1108,6 +1126,7 @@ class SegmentationModule extends BaseModule {
         fileType: 'config',
         title: 'Select Config',
         icon: '⚙️',
+        helpIconHtml: this.renderHelpIcon('segmentation.step1.config-file'),
         showTestData: false,
         accept: '.json',
         stateManager: this.state,
@@ -1126,6 +1145,7 @@ class SegmentationModule extends BaseModule {
         fileType: 'models',
         title: 'Select Model',
         icon: '🧠',
+        helpIconHtml: this.renderHelpIcon('segmentation.step1.model-file'),
         showTestData: false,
         accept: '.pth',
         stateManager: this.state,
@@ -1149,24 +1169,14 @@ class SegmentationModule extends BaseModule {
         <div class="import-stage-panel">
           <h5>Configuration</h5>
           <p class="import-hint">Select the configuration file (.json) from a previous training.</p>
-          <div class="file-row">
-            <div class="file-input-group">
-              <label>Config File (.json)</label>
-              <div id="importConfigSelector"></div>
-            </div>
-          </div>
+          <div id="importConfigSelector"></div>
           <div id="importConfigValidation" class="import-validation"></div>
         </div>
 
         <div class="import-stage-panel">
           <h5>Model</h5>
           <p class="import-hint">Select the trained model file (.pth).</p>
-          <div class="file-row">
-            <div class="file-input-group">
-              <label>Model File (.pth)</label>
-              <div id="importModelSelector"></div>
-            </div>
-          </div>
+          <div id="importModelSelector"></div>
           <div id="importModelValidation" class="import-validation"></div>
         </div>
 

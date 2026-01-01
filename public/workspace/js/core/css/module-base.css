@@ -86,6 +86,50 @@
 }
 
 /* ============================================
+   DARK MODE OVERRIDES
+   ============================================ */
+
+[data-theme="dark"] {
+  /* Primary Colors (same accents) */
+  --module-primary: #EB1F17;
+  --module-primary-dark: #FF3B30;
+  --module-secondary: #28A745;
+
+  /* Status Colors - Dark Mode */
+  --module-success-bg: #1a3d1a;
+  --module-success-border: #28a745;
+  --module-success-text: #75d99a;
+
+  --module-error-bg: #3d1a1a;
+  --module-error-border: #dc3545;
+  --module-error-text: #f5a0a7;
+
+  --module-info-bg: #1a2d3d;
+  --module-info-border: #17a2b8;
+  --module-info-text: #7dd3e0;
+
+  --module-warning-bg: #3d3a1a;
+  --module-warning-border: #ffc107;
+  --module-warning-text: #ffe066;
+
+  /* Neutral Colors - Dark Mode */
+  --module-bg: #1A1A1A;
+  --module-card-bg: #2D2D2D;
+  --module-border: #4D4D4D;
+  --module-border-dark: #5D5D5D;
+  --module-text-primary: #F8F9FA;
+  --module-text-secondary: #ADB5BD;
+  --module-text-muted: #868e96;
+
+  /* Shadows - Dark Mode */
+  --module-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --module-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --module-shadow-lg: 0 4px 12px rgba(235, 31, 23, 0.25);
+  --module-shadow-button: 0 2px 4px rgba(235, 31, 23, 0.3);
+  --module-shadow-button-hover: 0 4px 12px rgba(235, 31, 23, 0.4);
+}
+
+/* ============================================
    MODULE CONTAINER
    ============================================ */
 
@@ -562,6 +606,8 @@
   border: 1px solid var(--module-border-dark);
   border-radius: var(--module-radius-sm);
   font-size: var(--module-font-size-sm);
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
   transition: var(--module-transition-fast);
 }
 
@@ -729,11 +775,11 @@
    ============================================ */
 
 .training-status {
-  background: linear-gradient(135deg, #eef1ff 0%, #f6f8ff 100%);
+  background: var(--module-card-bg);
   padding: var(--module-spacing-xl);
   border-radius: var(--module-radius-xl);
   margin-bottom: var(--module-spacing-xl);
-  border: 1px solid #d1d8e8;
+  border: 1px solid var(--module-border);
 }
 
 .training-status h3 {
@@ -808,7 +854,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--module-bg);
+  opacity: 0.97;
   display: flex;
   align-items: center;
   justify-content: center;

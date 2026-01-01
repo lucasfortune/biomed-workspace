@@ -63,6 +63,92 @@ body {
    TRAINING-SPECIFIC STYLES
    ============================================ */
 
+/* Training Start Section (matches DL Denoising module) */
+.segmentation-module .training-start-section {
+  text-align: center;
+  padding: var(--module-spacing-lg);
+}
+
+.segmentation-module .training-title {
+  margin: 0 0 var(--module-spacing-sm) 0;
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-lg);
+  font-weight: 600;
+}
+
+.segmentation-module .training-subtitle {
+  margin: 0 0 var(--module-spacing-lg) 0;
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+}
+
+.segmentation-module .btn-large {
+  padding: 16px 32px;
+  font-size: var(--module-font-size-md);
+}
+
+.segmentation-module .btn-large .btn-icon {
+  margin-right: var(--module-spacing-sm);
+}
+
+/* Training Status Header */
+.segmentation-module .training-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--module-spacing-md);
+}
+
+.segmentation-module .training-status-header h4 {
+  margin: 0;
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-md);
+}
+
+/* Stage Status Badge */
+.segmentation-module .stage-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.segmentation-module .stage-status.training {
+  background: rgba(74, 144, 226, 0.2);
+  color: #4A90E2;
+  animation: pulse 2s infinite;
+}
+
+.segmentation-module .stage-status.completed {
+  background: var(--module-success-bg);
+  color: var(--module-success-text);
+}
+
+.segmentation-module .stage-status.failed {
+  background: var(--module-error-bg);
+  color: var(--module-error-text);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Epoch Info */
+.segmentation-module .epoch-info {
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-xs);
+}
+
+.segmentation-module .epoch-info span {
+  color: var(--module-text-primary);
+  font-weight: 600;
+}
+
+/* Legacy training-action support */
 .training-action {
   background: var(--module-card-bg);
   border: 1px solid var(--module-border);
@@ -126,8 +212,8 @@ body {
   margin-bottom: var(--module-spacing-md);
   position: relative;
   overflow: hidden;
-  background: #f8f9fa;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--module-bg);
+  box-shadow: var(--module-shadow-sm);
 }
 
 .viz-controls {
@@ -165,10 +251,10 @@ body {
 
 .viz-error {
   padding: var(--module-spacing-md);
-  background: #ffeef0;
-  border: 1px solid #f85149;
+  background: var(--module-error-bg);
+  border: 1px solid var(--module-error-border);
   border-radius: var(--module-radius-md);
-  color: #d1242f;
+  color: var(--module-error-text);
   margin: var(--module-spacing-md);
 }
 
@@ -194,11 +280,12 @@ body {
 }
 
 .segmentation-module .btn.secondary {
-  background: #6c757d !important;
+  background: var(--module-border-dark) !important;
+  color: var(--module-text-primary) !important;
 }
 
 .segmentation-module .btn.secondary:hover {
-  background: #5a6268 !important;
+  background: var(--module-border) !important;
 }
 
 /* Override class control panel hover to match module theme */
@@ -210,18 +297,18 @@ body {
 
 .segmentation-module .class-control-panel:hover {
   border-color: var(--module-primary) !important;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15) !important;
+  box-shadow: var(--module-shadow-lg) !important;
 }
 
 /* Override upload section hover */
 .segmentation-module .upload-section:hover {
   border-color: var(--module-primary) !important;
-  background-color: #f6f8ff !important;
+  background-color: var(--module-bg) !important;
 }
 
 .segmentation-module .upload-section.dragover {
   border-color: var(--module-primary) !important;
-  background-color: #eef1ff !important;
+  background-color: var(--module-info-bg) !important;
 }
 
 /* Override config group borders */
@@ -233,13 +320,13 @@ body {
 .segmentation-module .form-field input:focus,
 .segmentation-module .form-field select:focus {
   border-color: var(--module-primary) !important;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.1) !important;
 }
 
 /* Override validation info */
 .segmentation-module .validation-info {
-  background: #eef1ff !important;
-  border-color: var(--module-primary) !important;
+  background: var(--module-info-bg) !important;
+  border-color: var(--module-info-border) !important;
 }
 
 /* ============================================
@@ -251,7 +338,7 @@ body {
 }
 
 .viz-controls-container {
-  background: #f8f9fa;
+  background: var(--module-card-bg);
   padding: var(--module-spacing-md);
   border-radius: var(--module-radius-lg);
   margin-top: var(--module-spacing-md);
@@ -260,7 +347,7 @@ body {
 .viz-controls-container h3 {
   margin-top: 0;
   margin-bottom: 15px;
-  color: #333;
+  color: var(--module-text-primary);
   font-size: 1.2em;
 }
 
@@ -274,14 +361,14 @@ body {
 
 .controls-title {
   margin: 0;
-  color: #333;
+  color: var(--module-text-primary);
   font-size: 1.2em;
 }
 
 /* Reset button styling */
 .btn-reset {
-  background: #6c757d !important;
-  color: white !important;
+  background: var(--module-border-dark) !important;
+  color: var(--module-text-primary) !important;
   border: none !important;
   padding: 8px 16px !important;
   border-radius: 5px !important;
@@ -292,7 +379,7 @@ body {
 }
 
 .btn-reset:hover {
-  background: #545b62 !important;
+  background: var(--module-border) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -312,9 +399,9 @@ body {
   gap: 20px;
   padding: 18px;
   background: var(--module-card-bg);
-  border: 1px solid #ddd;
+  border: 1px solid var(--module-border);
   border-radius: var(--module-radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--module-shadow-sm);
   transition: border-color var(--module-transition-fast);
 }
 
@@ -324,7 +411,7 @@ body {
 
 .class-control-panel.disabled {
   opacity: 0.6;
-  background: #f5f5f5;
+  background: var(--module-bg);
 }
 
 .class-checkbox-section {
@@ -353,7 +440,7 @@ body {
 
 .class-opacity-label {
   font-size: 13px;
-  color: #666;
+  color: var(--module-text-secondary);
   white-space: nowrap;
   min-width: 50px;
 }
@@ -364,7 +451,7 @@ body {
 
 .class-opacity-value {
   font-size: 13px;
-  color: #333;
+  color: var(--module-text-primary);
   min-width: 35px;
   font-weight: 500;
 }
@@ -379,7 +466,7 @@ body {
 
 .class-range-label {
   font-size: 13px;
-  color: #666;
+  color: var(--module-text-secondary);
   white-space: nowrap;
   min-width: 45px;
 }
@@ -396,7 +483,7 @@ body {
 
 .class-range-value {
   font-size: 12px;
-  color: #666;
+  color: var(--module-text-secondary);
   min-width: 70px;
   font-weight: 500;
 }
@@ -413,7 +500,7 @@ body {
   position: absolute;
   width: 100%;
   height: 4px;
-  background: #ddd;
+  background: var(--module-border);
   border-radius: 2px;
   top: 50%;
   transform: translateY(-50%);
@@ -470,11 +557,11 @@ body {
 }
 
 .dual-range-input:focus::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.3);
 }
 
 .dual-range-input:focus::-moz-range-thumb {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.3);
 }
 
 /* ============================================
@@ -510,7 +597,7 @@ body {
 
 .segmentation-module .workflow-section.active {
   border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.15);
 }
 
 /* Workflow Header */
@@ -519,18 +606,18 @@ body {
   align-items: center;
   gap: var(--module-spacing-md);
   padding: var(--module-spacing-md);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--module-bg);
   cursor: pointer;
   transition: background 0.2s ease;
   user-select: none;
 }
 
 .segmentation-module .workflow-header:hover {
-  background: rgba(102, 126, 234, 0.08);
+  background: rgba(235, 31, 23, 0.08);
 }
 
 .segmentation-module .workflow-section.active .workflow-header {
-  background: rgba(102, 126, 234, 0.1);
+  background: rgba(235, 31, 23, 0.1);
 }
 
 .segmentation-module .workflow-icon {
@@ -579,6 +666,28 @@ body {
   padding-top: 0;
 }
 
+/* File Upload Groups in Train from Scratch */
+.segmentation-module .file-upload-group {
+  margin-bottom: var(--module-spacing-md);
+}
+
+.segmentation-module .file-upload-group:last-of-type {
+  margin-bottom: 0;
+}
+
+.segmentation-module .file-upload-label {
+  display: flex;
+  align-items: center;
+  font-size: var(--module-font-size-sm);
+  font-weight: 500;
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-xs);
+}
+
+.segmentation-module .file-upload-label .help-icon {
+  margin-left: 6px;
+}
+
 /* ============================================
    IMPORT MODEL SECTION
    ============================================ */
@@ -589,7 +698,7 @@ body {
 }
 
 .segmentation-module .import-stage-panel {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--module-bg);
   border: 1px dashed var(--module-border);
   border-radius: var(--module-radius-md);
   padding: var(--module-spacing-md);
@@ -644,10 +753,10 @@ body {
   align-items: center;
   gap: var(--module-spacing-sm);
   padding: var(--module-spacing-sm) var(--module-spacing-md);
-  background: rgba(40, 167, 69, 0.1);
-  border: 1px solid rgba(40, 167, 69, 0.3);
+  background: var(--module-success-bg);
+  border: 1px solid var(--module-success-border);
   border-radius: var(--module-radius-sm);
-  color: #28a745;
+  color: var(--module-success-text);
   font-size: var(--module-font-size-sm);
 }
 
@@ -656,10 +765,10 @@ body {
   align-items: center;
   gap: var(--module-spacing-sm);
   padding: var(--module-spacing-sm) var(--module-spacing-md);
-  background: rgba(220, 53, 69, 0.1);
-  border: 1px solid rgba(220, 53, 69, 0.3);
+  background: var(--module-error-bg);
+  border: 1px solid var(--module-error-border);
   border-radius: var(--module-radius-sm);
-  color: #dc3545;
+  color: var(--module-error-text);
   font-size: var(--module-font-size-sm);
 }
 
@@ -668,10 +777,10 @@ body {
   align-items: center;
   gap: var(--module-spacing-sm);
   padding: var(--module-spacing-sm) var(--module-spacing-md);
-  background: rgba(102, 126, 234, 0.1);
-  border: 1px solid rgba(102, 126, 234, 0.3);
+  background: var(--module-info-bg);
+  border: 1px solid var(--module-info-border);
   border-radius: var(--module-radius-sm);
-  color: var(--module-primary);
+  color: var(--module-info-text);
   font-size: var(--module-font-size-sm);
 }
 
@@ -683,12 +792,12 @@ body {
 }
 
 .segmentation-module .overall-import-validation.success {
-  background: rgba(40, 167, 69, 0.1);
-  border: 1px solid rgba(40, 167, 69, 0.3);
+  background: var(--module-success-bg);
+  border: 1px solid var(--module-success-border);
 }
 
 .segmentation-module .overall-import-validation.error {
-  background: rgba(220, 53, 69, 0.1);
-  border: 1px solid rgba(220, 53, 69, 0.3);
+  background: var(--module-error-bg);
+  border: 1px solid var(--module-error-border);
 }
 
