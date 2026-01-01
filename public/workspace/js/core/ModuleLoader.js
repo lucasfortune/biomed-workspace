@@ -54,6 +54,7 @@ class ModuleLoader {
         status: 'multi-launch', // Special status for parent
         cardType: 'multi-launch',
         launchOptions,
+        helpArticleId: helpArticleId || null,
         loaded: false,
         instance: null,
         loadedAt: null,
