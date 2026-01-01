@@ -356,7 +356,7 @@ body {
 }
 
 .fb-btn-upload:hover:not(:disabled) {
-  background-color: var(--primary-hover, #357ABD);
+  background-color: var(--accent-hover);
 }
 
 .fb-btn-upload:disabled {
@@ -1675,7 +1675,7 @@ body {
   justify-content: space-between;
   padding: 4px 6px;
   background: var(--sidebar-bg);
-  color: white;
+  color: var(--text-primary);
   border: solid 2px;
   border-color: var(--primary-color);
   border-radius: 4px;

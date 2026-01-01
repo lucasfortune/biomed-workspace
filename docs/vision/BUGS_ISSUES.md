@@ -15,32 +15,24 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 ## open Bugs/Issues:
 
-- issue: educational content: all modules that contain novel processesing methods should contain explanations
-    - prio 3
-    - compl. 4
-
 - issue: documentation. many new things are created and documentation is not up to date
     - prio 2
     - compl. 3
 
-- issue: download full workspace (.zip) & upload full workspace (.zip) necessary
-    - should download all files, filestructure & workspace_metadata.json!
-    - to recreate a session since no backend storage exists and will never exist.
-    - prio 2
-    - compl. 2
-
-- issue: segmentation modul: step 3 design of top section should match step 3 design of dl denoising module
-    - more minimal 
-    - prio 2
-    - compl. 1
-
-- issue: kill of classic version when workspace version is ready
-    - classic version no longer needed
-    - prio 1
-    - compl. 3
-
-
 ## CLOSED
+
+- issue: image viewer module: step 2 gallery view background would be cool if reacted to light/dark mode
+    - FIXED: Changed hardcoded #f0f2f5 to var(--bg-tertiary) which adapts to light/dark mode
+    - prio 1
+
+- issue: light dark mode bugs:
+    - file browser: batch toolbar text is white in light mode. should be black in light mode
+    - FIXED: Changed hardcoded white to var(--text-primary) for proper light/dark mode support
+    - prio 1
+
+- issue: workspace file browser: upload button hover color is still blue, should be dark red
+    - FIXED: Changed hover color from blue (#357ABD) to var(--accent-hover) matching launch buttons
+    - prio 1
 
 - issue: design: color scheme consistent with "Physics of parasitism"-color scheme
     - FIXED: Updated workspace CSS with PoP colors (Red #EB1F17, Green #1DA924), replaced emoji icons with filled SVGs, added light/dark mode toggle
@@ -152,3 +144,23 @@ This document contains bugs and/or issues reported by the developer and/or users
 - issue: add "physics of parasitism"-logo and "dfg"-logo in visible spot on workspace main page
     - prio 5
     - compl. 1
+
+- issue: segmentation modul: step 3 design of top section should match step 3 design of dl denoising module
+    - more minimal 
+    - prio 2
+    - compl. 1
+
+- issue: download full workspace (.zip) & upload full workspace (.zip) necessary
+    - should download all files, filestructure & workspace_metadata.json!
+    - to recreate a session since no backend storage exists and will never exist.
+    - prio 2
+    - compl. 2
+
+- issue: educational content: all modules that contain novel processesing methods should contain explanations
+    - prio 3
+    - compl. 4
+
+- issue: kill of classic version when workspace version is ready
+    - classic version no longer needed
+    - prio 1
+    - compl. 3
