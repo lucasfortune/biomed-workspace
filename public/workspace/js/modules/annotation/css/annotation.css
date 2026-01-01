@@ -465,6 +465,45 @@
   border-bottom: 1px solid var(--module-border);
 }
 
+/* Toolbar section header with help icon */
+.annotation-module .toolbar-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+  margin-bottom: var(--module-spacing-xs);
+  padding-bottom: var(--module-spacing-xs);
+  border-bottom: 1px solid var(--module-border);
+}
+
+.annotation-module .toolbar-section-header h4 {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  flex: 1;
+}
+
+.annotation-module .toolbar-section-header .help-icon,
+.annotation-module .classes-header .help-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.annotation-module .toolbar-section-header .help-icon:hover,
+.annotation-module .classes-header .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.annotation-module .toolbar-section-header .help-icon svg,
+.annotation-module .classes-header .help-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 .annotation-module .toolbar-section .placeholder-content {
   padding: var(--module-spacing-sm);
   border: none;

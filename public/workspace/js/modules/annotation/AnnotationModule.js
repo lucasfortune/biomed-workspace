@@ -96,6 +96,19 @@ class AnnotationModule extends BaseModule {
     this.onFileUploaded = this.onFileUploaded.bind(this);
   }
 
+  /**
+   * Render a help icon that opens the info panel with a specific article
+   * @param {string} articleId - The article ID to display
+   * @returns {string} HTML for the help icon
+   */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
   // ===========================================================================
   // LIFECYCLE METHODS
   // ===========================================================================
@@ -216,7 +229,10 @@ class AnnotationModule extends BaseModule {
                 <div id="toolbar" class="annotation-toolbar">
                   <!-- Tools Section -->
                   <div class="toolbar-section">
-                    <h4>Tools</h4>
+                    <div class="toolbar-section-header">
+                      <h4>Tools</h4>
+                      ${this.renderHelpIcon('annotation.step2.tools')}
+                    </div>
                     <div class="tool-buttons">
                       <button id="toolBrush" class="tool-btn active" title="Brush (B)">
                         <span class="tool-icon">🖌️</span>
@@ -231,7 +247,10 @@ class AnnotationModule extends BaseModule {
 
                   <!-- Brush Size Section -->
                   <div class="toolbar-section">
-                    <h4>Brush Size</h4>
+                    <div class="toolbar-section-header">
+                      <h4>Brush Size</h4>
+                      ${this.renderHelpIcon('annotation.step2.brush-size')}
+                    </div>
                     <div class="brush-size-control">
                       <input type="range" id="brushSizeSlider" min="1" max="50" value="10"
                              class="brush-slider" title="Brush size">
@@ -239,9 +258,12 @@ class AnnotationModule extends BaseModule {
                     </div>
                   </div>
 
-                  <!-- History Section (placeholder for Phase 6) -->
+                  <!-- History Section -->
                   <div class="toolbar-section">
-                    <h4>History</h4>
+                    <div class="toolbar-section-header">
+                      <h4>History</h4>
+                      ${this.renderHelpIcon('annotation.step2.history')}
+                    </div>
                     <div class="history-buttons">
                       <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)" disabled>
                         <span class="tool-icon">↶</span>
@@ -266,6 +288,7 @@ class AnnotationModule extends BaseModule {
                   <div class="toolbar-section classes-section">
                     <div class="classes-header">
                       <h4>Classes</h4>
+                      ${this.renderHelpIcon('annotation.step2.classes')}
                       <button id="addClassBtn" class="btn-add-class" title="Add class">+</button>
                     </div>
                     <div id="classList" class="class-list">
@@ -332,6 +355,7 @@ class AnnotationModule extends BaseModule {
         fileType: 'raw_images',  // Default category for uploads
         title: 'Source Image',
         icon: '🖼️',
+        helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
         accept: '.tif,.tiff',
         showTestData: true,
         showRecentResults: true,

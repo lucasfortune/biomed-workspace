@@ -54,7 +54,8 @@ const moduleRegistry = [
     inputs: ['image_stack'],
     outputs: ['annotations'],
     color: '#EB1F17',
-    status: 'available'
+    status: 'available',
+    helpArticleId: 'annotation'
   },
   {
     id: 'segmentation',

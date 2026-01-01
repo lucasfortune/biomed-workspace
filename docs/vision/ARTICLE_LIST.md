@@ -14,7 +14,7 @@ This document contains a list of all proposed elements that should be documented
 - ✅ **UNET SEGMENTATION MODULE**
 - ⏳ **DL DENOISING MODULE**
 - ⏳ **FILTER BASED  DENOISING MODULE**
-- ⏳ **ANNOTATION MODULE**
+- ✅ **ANNOTATION MODULE**
 - ✅ **IMAGE VIEWER MODULE**
 - ⏳ **SURFACE MESH GENERATION MODULE**
 - ⏳ **3D VISUALIZATION MOULE**
@@ -126,7 +126,7 @@ I will handle the info article list for the denoising modules separately:
 	- addition: crucial to remind here that this only works if the images are from the same recording as the images that the model was trained on. 
 
 
-# annotation module (PENDING ⏳)
+# annotation module (COMPLETE ✅)
 ## main page:
 - where: module card top right corner
 - what: overview of what this module does and how it works
