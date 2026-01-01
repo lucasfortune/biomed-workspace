@@ -2,8 +2,8 @@
 
 **Document Type:** Phase-Based Development Plan
 **Status:** Living Document (Updated Regularly)
-**Current Phase:** Phase 3 Complete ✅, Phase 4 Planning
-**Last Updated:** 2025-12-18
+**Current Phase:** Phase 4 Complete ✅, Phase 5 Planning
+**Last Updated:** 2026-01-01
 
 ---
 
@@ -22,16 +22,18 @@ This roadmap outlines the development plan for the Biomedical Image Processing W
 ## Roadmap Timeline
 
 ```
-Phase 1 (✅ COMPLETE)   Phase 2 (✅ COMPLETE)   Phase 3 (✅ COMPLETE)  Phase 4 (📅 NEXT)
-Jan-Mar 2024           Jun-Nov 2024            Dec 2024              Jan-Jun 2025
+Phase 1 (✅ COMPLETE)   Phase 2 (✅ COMPLETE)   Phase 3 (✅ COMPLETE)  Phase 4 (✅ COMPLETE)
+Jan-Mar 2024           Jun-Nov 2024            Dec 2024              Jan 2025
 
 Classic Version        Workspace Foundation    File Browser &        Additional Modules
-- Auth System          - StateManager          Workspace Mgmt        - Denoising
-- Upload/Validation    - ModuleLoader          - File Browser        - Annotation
+- Auth System          - StateManager          Workspace Mgmt        - DL & Filter Denoising
+- Upload/Validation    - ModuleLoader          - File Browser        - Annotation Tool
 - Training Pipeline    - Module Registry       - Custom Upload Fix   - Mesh Generation
-- Inference            - First Module          - Search/Filter       - Visualization
-- 3D Visualization     (Segmentation)          - Batch Operations    - Pipeline Chaining
-- Admin Dashboard                              - Polish & UX
+- Inference            - First Module          - Search/Filter       - 3D Visualization
+- 3D Visualization     (Segmentation)          - Batch Operations    - Image Viewer
+- Admin Dashboard                              - ZIP Export/Restore  - Info Panel/Help System
+                                                                     - Design System (PoP)
+                                                                     - Admin API
 
 │                      │                        │                    │
 │                      │                        │                    │
@@ -446,82 +448,108 @@ Custom file upload now fully functional in workspace version with FileSelector c
 
 ---
 
-## Phase 4: Additional Modules & Pipeline Chaining 📅
+## Phase 4: Additional Modules & Platform Polish ✅
 
-**Duration:** March - June 2025 (4 months)
-**Status:** PLANNED
-**Goal:** Add denoising, annotation, mesh, visualization modules + pipeline editor
+**Duration:** December 2024 - January 2025 (2 months)
+**Status:** COMPLETE ✅
+**Goal:** Add processing modules, help system, design system, and admin features
 
 ### Objectives
 
-- [ ] Implement 4 new processing modules
-- [ ] Create visual pipeline editor
-- [ ] Enable module chaining (output → input)
-- [ ] Save and execute multi-step pipelines
-- [ ] Expand module registry
+- [x] Implement 6 new processing modules (Denoising DL/Filter, Annotation, Mesh, Visualization, Image Viewer)
+- [x] Create Info Panel / Help System with 200+ articles
+- [x] Implement Design System (Physics of Parasitism branding, light/dark mode)
+- [x] Add Admin API endpoints
+- [x] Implement data lineage tracking
+- [x] Add workspace ZIP export/restore
 
 ### Deliverables
 
-**New Modules:**
+**New Modules (6 total, all complete):**
 
-**1. Denoising Module**
-- [ ] Deep learning denoising (Noise2Noise architecture)
-- [ ] Upload noisy image stack
-- [ ] Configure training (epochs, patch size)
-- [ ] Train denoising model
-- [ ] Apply to new images
-- [ ] Before/after comparison UI
-- [ ] Export denoised TIFF
+**1. DL Denoising Module** ✅
+- [x] N2V/autoStructN2V deep learning denoising
+- [x] Multi-stage training (stage1, mask, stage2)
+- [x] Real-time progress via Socket.IO
+- [x] Before/after comparison
+- [x] Export denoised TIFF
+- [x] ~20 component/handler files in modular architecture
 
-**2. Annotation Module**
-- [ ] Interactive 2D slice annotation
-- [ ] Brush, eraser, polygon tools
-- [ ] Class labeling (assign colors/names)
-- [ ] Navigate slices (keyboard shortcuts)
-- [ ] Undo/redo
-- [ ] Save annotations as TIFF
-- [ ] Load existing annotations for editing
+**2. Filter Denoising Module** ✅
+- [x] Gaussian and Non-Local Means (NLM) filtering
+- [x] Parameter configuration UI
+- [x] Real-time preview
+- [x] Export denoised TIFF
 
-**3. Mesh Generation Module**
-- [ ] Load segmented TIFF
-- [ ] Generate 3D mesh (marching cubes)
-- [ ] Mesh smoothing (Laplacian, Taubin)
-- [ ] Mesh simplification (reduce polygons)
-- [ ] Preview mesh in 3D viewer
-- [ ] Export to STL, OBJ, PLY formats
-- [ ] Color by class
+**3. Annotation Module** ✅
+- [x] Interactive 2D slice annotation
+- [x] Brush and eraser tools with adjustable size
+- [x] Class labeling with colors
+- [x] Navigate slices
+- [x] Save annotations as TIFF (sparse encoding for efficiency)
+- [x] Load existing annotations for editing
 
-**4. Visualization Module**
-- [ ] Advanced 3D rendering (volume rendering, isosurfaces)
-- [ ] Multi-channel overlay
-- [ ] Time-series playback (4D data)
-- [ ] Adjustable transfer functions (opacity, color)
-- [ ] Lighting and shadows
-- [ ] Screenshot and video export
-- [ ] VR support (WebXR, optional)
+**4. Mesh Generation Module** ✅
+- [x] Load segmented TIFF
+- [x] Generate 3D mesh from segmentation
+- [x] Mesh smoothing options
+- [x] Preview mesh in 3D viewer
+- [x] Export to STL format
+- [x] Color by class
 
-**Pipeline System:**
-- [ ] Visual pipeline editor (drag-and-drop)
-- [ ] Module nodes (input/output ports)
-- [ ] Connect modules (define data flow)
-- [ ] Validate pipelines (type checking)
-- [ ] Execute pipeline (run all steps)
-- [ ] Progress visualization (which module running)
-- [ ] Save pipelines as templates
-- [ ] Share pipelines (export/import JSON)
+**5. 3D Visualization Module** ✅
+- [x] Interactive Three.js mesh viewer
+- [x] Import from mesh generation results
+- [x] Orbit controls (rotate, zoom, pan)
+- [x] Lighting controls
 
-**Example Pipelines:**
-```
-Pipeline 1: Denoise → Segment → Visualize
-Pipeline 2: Annotate → Train Segmentation → Mesh → Export STL
-Pipeline 3: Denoise → Segment → Quantify → Export CSV
-```
+**6. Image Viewer Module** ✅
+- [x] TIFF stack gallery view
+- [x] Slice navigation
+- [x] File metadata display
 
-**Backend:**
-- [ ] Python scripts for denoising (Noise2Noise training)
-- [ ] Python scripts for mesh generation (scikit-image marching cubes)
-- [ ] API endpoints for each module's operations
-- [ ] Pipeline execution engine (queue, orchestrate modules)
+**Info Panel / Help System** ✅
+- [x] InfoPanel.js - Container with tabs (articles, glossary, search)
+- [x] InfoArticle.js - Article rendering with markdown support
+- [x] InfoGlossary.js - Terminology definitions
+- [x] InfoSearch.js - Full-text search across all articles
+- [x] InfoContentService.js - Content loading and caching
+- [x] 200+ help articles organized by module
+- [x] Context-sensitive help via helpArticleId
+
+**Design System (Physics of Parasitism)** ✅
+- [x] Light/dark mode toggle with localStorage persistence
+- [x] Brand colors - Red (#EB1F17), Green (#1DA924)
+- [x] CSS custom properties for semantic color tokens
+- [x] SVG module icons (replaced emojis)
+- [x] Partner logos (PoP, DFG)
+- [x] Consistent hover states and transitions
+
+**Admin API** ✅
+- [x] GET /admin/users - List users with status filter
+- [x] POST /admin/approve-user - Approve pending user
+- [x] POST /admin/reject-user - Reject pending user
+- [x] GET /admin/logs - Activity log retrieval with filtering
+- [x] GET /admin/active-sessions - Monitor all active sessions
+
+**Data Lineage** ✅
+- [x] lineageHelpers.js - Create and query lineage records
+- [x] GET /api/workspace/lineage/:fileId - Get file processing history
+- [x] Track file transformations through processing pipeline
+
+**Workspace ZIP** ✅
+- [x] GET /api/workspace/download - Export workspace as ZIP
+- [x] POST /api/workspace/restore - Restore from ZIP backup
+- [x] Automatic session ID updates on restore
+
+**Backend (4 new route files, 1 new service):**
+- [x] denoising.routes.js (~1400 lines) - DL & filter denoising endpoints
+- [x] annotation.routes.js (~600 lines) - Annotation operations
+- [x] mesh.routes.js (~500 lines) - Mesh generation
+- [x] admin.routes.js (~300 lines) - Admin API
+- [x] DenoisingService.js (~1000 lines) - Denoising orchestration
+
+**Note:** Pipeline system (visual editor, module chaining) deferred to Phase 5
 
 **Documentation:**
 - [ ] Module specifications (detailed docs for each module)

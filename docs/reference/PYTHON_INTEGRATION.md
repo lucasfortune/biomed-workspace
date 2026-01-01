@@ -4,9 +4,9 @@
 
 This document provides comprehensive documentation for how Python scripts communicate with the Node.js server, including stdout protocols, script invocation patterns, and data exchange formats.
 
-**Last Updated:** 2025-11-27
-**Python Scripts Location:** `python/`
-**Node.js Integration:** `server.js`
+**Last Updated:** 2026-01-01
+**Python Scripts Location:** `python/` (16 scripts)
+**Node.js Integration:** `src/helpers/pythonRunner.js`
 
 ---
 
@@ -64,15 +64,32 @@ const PYTHON_PATH = path.join(__dirname, 'venv', 'bin', 'python');
 
 ## Python Scripts
 
-### Overview Table
+### Overview Table (16 scripts)
 
 | Script | Purpose | Inputs | Outputs | Protocol |
 |--------|---------|--------|---------|----------|
+| **Validation Scripts** |
 | `validate_tiff.py` | Validate training data | 2 TIFF paths | JSON result | Single JSON output |
 | `validate_inference_tiff.py` | Validate inference data | 1 TIFF path | JSON result | Single JSON output |
 | `validate_imported_model.py` | Validate imported model | Model + config paths | JSON result | Single JSON output |
+| `validate_dl_tiff.py` | Validate denoising TIFF | 1 TIFF path | JSON result | Single JSON output |
+| **ML Pipeline Scripts** |
 | `train_model.py` | Train U-Net model | Config, images, annotations | Model + results | PROGRESS: protocol |
 | `run_inference.py` | Run inference | Model, input, output | Segmentation + metadata | INFERENCE_PROGRESS: + FINAL_RESULT: protocols |
+| **Denoising Scripts** |
+| `filter_denoising.py` | Gaussian/NLM filtering | TIFF path, params | Denoised TIFF | Single JSON output |
+| `autostructn2v_wrapper.py` | N2V/autoStructN2V DL denoising | Config, TIFF path | Denoised TIFF + model | DENOISING_PROGRESS: protocol |
+| **Mesh & Visualization** |
+| `generate_mesh.py` | 3D mesh from segmentation | Seg TIFF, params | STL file | MESH_PROGRESS: protocol |
+| `downsample_for_web.py` | Downsample for web viz | TIFF path | JSON visualization data | Single JSON output |
+| **Annotation Scripts** |
+| `extract_raw_slice.py` | Get slice for annotation | TIFF path, slice index | PNG image | Binary output |
+| `read_annotation_tiff.py` | Read annotation data | TIFF path | JSON annotations | Single JSON output |
+| `create_annotation_tiff.py` | Create annotation TIFF | JSON data, output path | TIFF file | Single JSON output |
+| `convert_annotations.py` | Convert annotation formats | Input path, output path | Converted file | Single JSON output |
+| **Utility Scripts** |
+| `generate_thumbnail.py` | TIFF thumbnail generation | TIFF path, output path | JPEG thumbnail | Single JSON output |
+| `extract_slice.py` | Extract single slice | TIFF path, slice index | PNG image | Binary output |
 
 ---
 

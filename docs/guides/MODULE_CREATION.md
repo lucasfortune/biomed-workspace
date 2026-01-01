@@ -1,9 +1,10 @@
 # Module Creation Guide
 
-**Last Updated:** 2025-12-22
+**Last Updated:** 2026-01-01
 **Estimated Time:** 1-2 hours for first module (using framework)
 **Difficulty:** Intermediate
 **Target Audience:** Developers adding new processing modules to the Workspace version
+**8 Modules Implemented:** Segmentation, DL Denoising, Filter Denoising, Annotation, Mesh, Visualization, Image Viewer, Template
 
 ---
 
@@ -46,9 +47,30 @@
 - **StepNavigator** component for consistent step UI
 - **FileSelector** component for file selection with test data support
 - **ValidationDisplay** component for success/error messages
-- **Shared CSS variables** for consistent styling
+- **InfoPanel** component for context-sensitive help integration
+- **LoadingOverlay** component for processing states
+- **ProgressIndicator** component for long-running operations
+- **Shared CSS variables** for consistent styling (light/dark mode)
 
 For full documentation, see [Module Framework](MODULE_FRAMEWORK.md).
+
+### Available Core Components (11 total)
+
+Located in `/public/workspace/js/core/components/`:
+
+| Component | Purpose |
+|-----------|---------|
+| FileSelector | File selection with validation and help icons |
+| InfoPanel | Help panel container with tabs |
+| InfoArticle | Article rendering with markdown |
+| InfoGlossary | Terminology definitions |
+| InfoSearch | Full-text help search |
+| LoadingOverlay | Loading state display |
+| MetricCard | Statistics display |
+| NavigationButtons | Step navigation controls |
+| ProgressIndicator | Progress bar |
+| StepNavigator | Step-based workflow |
+| ValidationDisplay | Validation feedback |
 
 ---
 

@@ -1,7 +1,7 @@
 # Module System Architecture
 
-**Last Updated:** 2025-11-27
-**Status:** ✅ Complete
+**Last Updated:** 2026-01-01
+**Status:** ✅ Complete (Phase 4)
 **Target Audience:** Developers building or maintaining modules
 
 ---
@@ -122,19 +122,101 @@ See [ADR-004: Module System Design](../decisions/004_module_system_design.md) fo
 }
 ```
 
-**Current Modules:**
+**Current Modules (8 implemented):**
 
 | ID | Name | Status | Phase |
 |----|------|--------|-------|
 | `segmentation` | U-Net Segmentation | ✅ Available | Phase 2 |
-| `denoising` | Deep Learning Denoising | 📅 Coming Soon | Phase 4 |
-| `annotation` | Quick Annotation Tool | 📅 Coming Soon | Phase 4 |
-| `mesh` | Surface Mesh Generation | 📅 Coming Soon | Phase 4 |
-| `visualization` | 3D Visualization | 📅 Coming Soon | Phase 4+ |
+| `denoising-dl` | Deep Learning Denoising (N2V) | ✅ Available | Phase 4 |
+| `denoising-filter` | Filter-Based Denoising | ✅ Available | Phase 4 |
+| `annotation` | Quick Annotation Tool | ✅ Available | Phase 4 |
+| `mesh` | Surface Mesh Generation | ✅ Available | Phase 4 |
+| `visualization` | 3D Visualization | ✅ Available | Phase 4 |
+| `imageviewer` | TIFF Stack Gallery | ✅ Available | Phase 4 |
+| `template` | Module Starter Template | ✅ Available | Phase 4 |
 
 ---
 
-### 3. Module Interface
+### 3. BaseModule (Abstract Base Class)
+
+**Purpose:** Provides reusable functionality for all modules
+
+**File:** `/public/workspace/js/core/BaseModule.js`
+**Size:** ~600 lines
+
+**Key Features:**
+- Step-based navigation framework
+- CSS/script loading utilities
+- Lifecycle management helpers
+- Progress tracking and loading overlays
+- Help panel integration
+
+**Usage:**
+```javascript
+import BaseModule from '../../core/BaseModule.js';
+
+class MyModule extends BaseModule {
+  constructor(stateManager) {
+    super(stateManager, 'mymodule');
+    this.steps = ['select', 'configure', 'process', 'results'];
+  }
+
+  async activate() {
+    await super.activate();
+    // Additional activation logic
+  }
+
+  renderStep(stepIndex) {
+    // Render current step UI
+  }
+}
+```
+
+**Provided Methods:**
+- `loadCSS(path)` - Dynamically load module CSS
+- `loadScript(path)` - Dynamically load module scripts
+- `nextStep()` / `prevStep()` - Step navigation
+- `showLoading(message)` / `hideLoading()` - Loading overlay
+- `showProgress(percent, message)` - Progress indicator
+
+---
+
+### 4. Core UI Components
+
+**Purpose:** Reusable UI components shared across modules
+
+**Directory:** `/public/workspace/js/core/components/`
+
+| Component | Purpose |
+|-----------|---------|
+| `FileSelector.js` | File selection with validation and help integration |
+| `InfoPanel.js` | Help panel container with tabs |
+| `InfoArticle.js` | Article rendering with markdown support |
+| `InfoGlossary.js` | Terminology definitions |
+| `InfoSearch.js` | Full-text search across help articles |
+| `LoadingOverlay.js` | Loading state display |
+| `MetricCard.js` | Statistics display cards |
+| `NavigationButtons.js` | Step navigation controls |
+| `ProgressIndicator.js` | Progress bar component |
+| `StepNavigator.js` | Step-based workflow navigation |
+| `ValidationDisplay.js` | Validation feedback display |
+
+**Usage:**
+```javascript
+import { FileSelector } from '../../core/components/FileSelector.js';
+
+// In module's activate()
+this.fileSelector = new FileSelector({
+  container: this.container.querySelector('.file-select'),
+  onSelect: (file) => this.handleFileSelect(file),
+  fileTypes: ['tif', 'tiff'],
+  helpArticleId: 'segmentation-file-selection'
+});
+```
+
+---
+
+### 5. Module Interface
 
 **Purpose:** Contract that all modules must implement
 
@@ -1255,6 +1337,6 @@ deactivate() {
 
 ---
 
-**Document Status:** ✅ Complete
-**Last Updated:** 2025-11-27
+**Document Status:** ✅ Complete (Phase 4)
+**Last Updated:** 2026-01-01
 **Maintained By:** Development Team

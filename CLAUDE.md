@@ -8,7 +8,7 @@ This is a **biomedical image segmentation web application** that provides a comp
 
 **The application now exists in TWO versions:**
 1. **Classic Version** (`/public/classic/`) - Original linear workflow (stable, fully functional)
-2. **Workspace Version** (`/public/workspace/`) - New modular IDE-like interface (in development, Phase 1 complete)
+2. **Workspace Version** (`/public/workspace/`) - New modular IDE-like interface (Phase 4 complete, 8 modules implemented)
 
 **Tech Stack:**
 - Backend: Node.js/Express with Socket.IO for real-time updates
@@ -116,28 +116,45 @@ The application has been restructured to support **two parallel interfaces** wit
 │   │   ├── /js/               # app.js, training.js, inference.js, etc.
 │   │   └── /css/              # Classic styling
 │   │
-│   ├── /workspace/            # NEW MODULAR APP (Phase 1 complete)
+│   ├── /workspace/            # MODULAR APP (Phase 4 complete)
 │   │   ├── index.html         # Workspace interface
 │   │   ├── /js/
 │   │   │   ├── /core/         # Core functionality
 │   │   │   │   ├── StateManager.js      # Centralized state with events
 │   │   │   │   ├── ModuleLoader.js      # Dynamic module loading
-│   │   │   │   └── WorkspaceAPI.js      # Backend API client
-│   │   │   ├── /modules/      # Processing modules
+│   │   │   │   ├── WorkspaceAPI.js      # Backend API client
+│   │   │   │   ├── BaseModule.js        # Abstract base class for modules
+│   │   │   │   └── /components/         # Reusable UI components
+│   │   │   │       ├── FileSelector.js  # File selection with validation
+│   │   │   │       ├── InfoPanel.js     # Help panel container
+│   │   │   │       ├── StepNavigator.js # Step-based navigation
+│   │   │   │       └── ...              # 8 more UI components
+│   │   │   ├── /modules/      # Processing modules (8 total)
 │   │   │   │   ├── registry.js          # Module definitions
-│   │   │   │   └── segmentation/        # Segmentation module
-│   │   │   │       └── SegmentationModule.js
+│   │   │   │   ├── /segmentation/       # U-Net training & inference
+│   │   │   │   ├── /denoising-dl/       # Deep learning denoising (N2V)
+│   │   │   │   ├── /denoising-filter/   # Filter-based denoising
+│   │   │   │   ├── /annotation/         # Quick annotation tool
+│   │   │   │   ├── /mesh/               # 3D mesh generation
+│   │   │   │   ├── /visualization/      # Interactive 3D viewer
+│   │   │   │   ├── /imageviewer/        # TIFF stack gallery
+│   │   │   │   └── /template/           # Module starter template
+│   │   │   ├── /services/     # Frontend services
+│   │   │   │   └── InfoContentService.js# Help content delivery
 │   │   │   └── workspace.js   # Main app controller
-│   │   └── /css/
-│   │       └── workspace.css  # Workspace styling
+│   │   ├── /css/
+│   │   │   └── workspace.css  # Workspace styling (light/dark mode)
+│   │   └── /content/          # Help system content
+│   │       └── /modules/      # Module-specific help articles
 │   │
-│   ├── welcome.html           # Landing page (links to both versions)
+│   ├── welcome.html           # Landing page (embedded auth forms)
 │   ├── login.html
 │   ├── register.html
-│   └── admin.html
+│   └── admin.html             # Admin dashboard (PoP design system)
 │
 ├── server.js                  # Entry point (~160 lines) - creates server & starts
-├── /src/                      # MODULAR BACKEND (refactored from monolithic server.js)
+├── WorkspaceManager.js        # Workspace directory management (~1000 lines)
+├── /src/                      # MODULAR BACKEND
 │   ├── app.js                 # Express app configuration factory
 │   ├── /config/
 │   │   └── constants.js       # Python path, directories, validation
@@ -146,42 +163,92 @@ The application has been restructured to support **two parallel interfaces** wit
 │   │   ├── session.middleware.js
 │   │   ├── upload.middleware.js
 │   │   └── error.middleware.js
-│   ├── /routes/
+│   ├── /routes/               # 11 route files
+│   │   ├── index.js           # Route aggregator
 │   │   ├── static.routes.js   # HTML pages, static files
 │   │   ├── auth.routes.js     # Login, register, logout
 │   │   ├── folders.routes.js  # Folder CRUD
 │   │   ├── files.routes.js    # File operations
-│   │   ├── workspace.routes.js# Workspace management
-│   │   └── ml.routes.js       # Training, inference, model import
-│   ├── /services/
+│   │   ├── workspace.routes.js# Workspace management + ZIP export/restore
+│   │   ├── ml.routes.js       # Training, inference, model import
+│   │   ├── denoising.routes.js# DL & filter denoising (~1400 lines)
+│   │   ├── annotation.routes.js# Annotation save/load (~600 lines)
+│   │   ├── mesh.routes.js     # Mesh generation (~500 lines)
+│   │   └── admin.routes.js    # Admin API endpoints (~300 lines)
+│   ├── /services/             # 7 service files
 │   │   ├── AuthService.js     # User authentication logic
 │   │   ├── WorkspaceService.js# Workspace/session management
 │   │   ├── FileService.js     # File validation, thumbnails
 │   │   ├── TrainingService.js # ML training orchestration
 │   │   ├── InferenceService.js# ML inference orchestration
-│   │   └── SessionTracker.js  # Training/inference session maps
+│   │   ├── DenoisingService.js# Denoising orchestration (~1000 lines)
+│   │   └── SessionTracker.js  # Training/inference/denoising session maps
 │   ├── /sockets/
 │   │   └── index.js           # Socket.IO event handlers
 │   └── /helpers/
 │       ├── pythonRunner.js    # Python process spawning
 │       ├── validation.js      # Input validation helpers
 │       ├── pathHelpers.js     # Path utilities
-│       └── fileHelpers.js     # File system utilities
+│       ├── fileHelpers.js     # File system utilities
+│       └── lineageHelpers.js  # Data lineage tracking
 │
-├── /python/                   # ML scripts (shared by both versions)
+├── /python/                   # ML scripts (16 scripts, shared by both versions)
 ├── /utils/                    # Shared utilities (logger, env loader)
 └── package.json               # Dependencies include mitt, split.js
 ```
 
 **Important Routes:**
-- `/` → `welcome.html` (version selection)
+- `/` → `welcome.html` (version selection with embedded auth)
 - `/classic` → Classic segmentation app (requireAuth)
-- `/workspace` → New workspace interface (requireAuth)
-- `/api/workspace/*` → Workspace-specific API endpoints
+- `/workspace` → Workspace interface (requireAuth)
+- `/admin` → Admin dashboard (requireAdmin)
+- `/api/workspace/*` → Workspace management, file browser, ZIP export/restore
+- `/api/denoising/*` → DL & filter-based denoising endpoints
+- `/api/annotation/*` → Annotation save/load endpoints
+- `/api/mesh/*` → Mesh generation endpoints
+- `/admin/*` → Admin API (user management, logs, sessions)
 
-### Workspace Architecture (Phase 1)
+### Workspace Architecture (Phase 4 Complete)
 
-The new workspace version uses a **modular architecture** with the following core components:
+The workspace version uses a **modular architecture** with 8 implemented modules:
+
+#### Implemented Modules
+
+| Module | Directory | Description |
+|--------|-----------|-------------|
+| **Segmentation** | `modules/segmentation/` | U-Net training & inference pipeline |
+| **DL Denoising** | `modules/denoising-dl/` | Deep learning denoising (N2V/autoStructN2V) |
+| **Filter Denoising** | `modules/denoising-filter/` | Gaussian/NLM filter-based denoising |
+| **Annotation** | `modules/annotation/` | Quick annotation tool with brush engine |
+| **Mesh Generation** | `modules/mesh/` | 3D surface mesh creation from segmentation |
+| **3D Visualization** | `modules/visualization/` | Interactive Three.js mesh viewer |
+| **Image Viewer** | `modules/imageviewer/` | TIFF stack gallery browser |
+| **Template** | `modules/template/` | Module starter template for development |
+
+#### Core Framework
+
+##### BaseModule (`core/BaseModule.js`)
+
+Abstract base class that all workspace modules extend, providing:
+- Step-based navigation framework
+- CSS/script loading utilities
+- Lifecycle management (activate, deactivate, cleanup)
+- Progress tracking and loading overlays
+
+##### Core UI Components (`core/components/`)
+
+Reusable components shared across modules:
+- **FileSelector.js** - File selection with validation and help integration
+- **InfoPanel.js** - Help panel container with tabs
+- **InfoArticle.js** - Article rendering with markdown support
+- **InfoGlossary.js** - Terminology definitions
+- **InfoSearch.js** - Full-text search across articles
+- **LoadingOverlay.js** - Loading state display
+- **MetricCard.js** - Statistics display cards
+- **NavigationButtons.js** - Step navigation controls
+- **ProgressIndicator.js** - Progress bar component
+- **StepNavigator.js** - Step-based workflow navigation
+- **ValidationDisplay.js** - Validation feedback display
 
 #### 1. State Management (`StateManager.js`)
 
@@ -496,12 +563,19 @@ The application provides **built-in test data** for users awaiting approval:
 
 **Backend Core (Modular Architecture):**
 - `server.js` - Entry point (~160 lines): env setup, service creation, server start
+- `WorkspaceManager.js` - Workspace directory management, ZIP export/restore (~1000 lines)
 - `src/app.js` - Express app configuration: middleware, routes, error handling
+- `src/routes/index.js` - Route aggregator
 - `src/routes/ml.routes.js` - Training & inference endpoints
-- `src/routes/workspace.routes.js` - Workspace management endpoints
+- `src/routes/workspace.routes.js` - Workspace management, file browser, ZIP endpoints
+- `src/routes/denoising.routes.js` - DL & filter denoising endpoints (~1400 lines)
+- `src/routes/annotation.routes.js` - Annotation save/load endpoints (~600 lines)
+- `src/routes/mesh.routes.js` - Mesh generation endpoints (~500 lines)
+- `src/routes/admin.routes.js` - Admin API endpoints (~300 lines)
 - `src/routes/auth.routes.js` - Login, register, logout endpoints
-- `src/services/SessionTracker.js` - Training/inference session maps
+- `src/services/SessionTracker.js` - Training/inference/denoising session maps
 - `src/helpers/pythonRunner.js` - Centralized Python process spawning
+- `src/helpers/lineageHelpers.js` - Data lineage/provenance tracking
 
 **Backend Services:**
 - `src/services/AuthService.js` - User authentication and authorization
@@ -509,6 +583,7 @@ The application provides **built-in test data** for users awaiting approval:
 - `src/services/FileService.js` - File validation, thumbnails, operations
 - `src/services/TrainingService.js` - ML training orchestration
 - `src/services/InferenceService.js` - ML inference orchestration
+- `src/services/DenoisingService.js` - Denoising orchestration (~1000 lines)
 
 **Frontend (Classic):**
 - `public/classic/js/app.js` - Main application controller
@@ -521,13 +596,39 @@ The application provides **built-in test data** for users awaiting approval:
 - `public/workspace/js/workspace.js` - Main workspace controller
 - `public/workspace/js/core/StateManager.js` - Centralized state management
 - `public/workspace/js/core/WorkspaceAPI.js` - Backend API client
-- `public/workspace/js/modules/segmentation/SegmentationModule.js` - Segmentation module
+- `public/workspace/js/core/ModuleLoader.js` - Dynamic module loading
+- `public/workspace/js/core/BaseModule.js` - Abstract base class for modules
+- `public/workspace/js/core/components/FileSelector.js` - File selection component
+- `public/workspace/js/core/components/InfoPanel.js` - Help panel system
+- `public/workspace/js/services/InfoContentService.js` - Help content delivery
 
-**Python ML:**
+**Workspace Modules (8 total):**
+- `modules/segmentation/SegmentationModule.js` - U-Net training & inference
+- `modules/denoising-dl/DLDenoisingModule.js` - Deep learning denoising
+- `modules/denoising-filter/FilterDenoisingModule.js` - Filter-based denoising
+- `modules/annotation/AnnotationModule.js` - Quick annotation tool
+- `modules/mesh/MeshModule.js` - 3D mesh generation
+- `modules/visualization/VisualizationModule.js` - Interactive 3D viewer
+- `modules/imageviewer/ImageViewerModule.js` - TIFF stack gallery
+- `modules/template/TemplateModule.js` - Module starter template
+
+**Python ML & Processing Scripts (16 total):**
 - `python/train_model.py` - U-Net training with real-time progress
 - `python/run_inference.py` - Inference with progress and metadata generation
 - `python/validate_tiff.py` - TIFF validation and auto-conversion
 - `python/validate_imported_model.py` - Model import validation
+- `python/validate_inference_tiff.py` - Inference TIFF validation
+- `python/validate_dl_tiff.py` - Deep learning denoising TIFF validation
+- `python/filter_denoising.py` - Gaussian/NLM filter-based denoising
+- `python/autostructn2v_wrapper.py` - Deep learning denoising (N2V/autoStructN2V)
+- `python/generate_mesh.py` - 3D mesh generation from segmentation
+- `python/generate_thumbnail.py` - TIFF thumbnail generation
+- `python/downsample_for_web.py` - Visualization downsampling
+- `python/extract_slice.py` - Extract single slice from TIFF stack
+- `python/extract_raw_slice.py` - Extract raw slice for annotation
+- `python/read_annotation_tiff.py` - Read annotation TIFF data
+- `python/create_annotation_tiff.py` - Create annotation TIFF from mask data
+- `python/convert_annotations.py` - Convert annotation formats
 
 **User Management:**
 - `manageUsers.js` - CLI tool for user administration
@@ -549,6 +650,48 @@ The application provides **built-in test data** for users awaiting approval:
 **Session Configuration:**
 - Session middleware configured in `src/middleware/session.middleware.js`
 - For production, use environment variable for secret and enable `secure: true` for HTTPS
+
+## New Features (Phase 3-4)
+
+### Admin API (`/admin/*`)
+
+Backend API for admin dashboard functionality:
+- `GET /admin/users` - List all users with optional status filter
+- `POST /admin/approve-user` - Approve pending user
+- `POST /admin/reject-user` - Reject pending user
+- `GET /admin/logs` - Activity log retrieval with filtering
+- `GET /admin/active-sessions` - Monitor active training/inference/denoising sessions
+
+### Info Panel / Help System
+
+Educational help system integrated into the workspace:
+- **InfoPanel.js** - Container with tabs for articles, glossary, search
+- **InfoContentService.js** - Content loading and caching
+- 200+ help articles organized by module
+- Context-sensitive help via `helpArticleId` on components
+
+### Design System (Physics of Parasitism Branding)
+
+- **Light/Dark Mode** - Toggle with localStorage persistence
+- **Brand Colors** - Red (#EB1F17), Green (#1DA924)
+- **CSS Custom Properties** - Semantic color tokens for theming
+- **SVG Module Icons** - Consistent icon set replacing emojis
+
+### Workspace ZIP Export/Restore
+
+- `GET /api/workspace/download` - Stream workspace as ZIP archive
+- `POST /api/workspace/restore` - Restore workspace from ZIP upload
+- Excludes cache directories (.thumbnails, .slices, .mesh-previews)
+- Automatic session ID updates on restore
+- 5GB file size limit, 10-minute timeout
+
+### Data Lineage Tracking
+
+Track file processing history:
+- `src/helpers/lineageHelpers.js` - Create and query lineage records
+- `GET /api/workspace/lineage/:fileId` - Get processing history
+- Links inputs to outputs through transformations
+- Shows provenance chain (e.g., "Original → Denoised → Segmented → Mesh")
 
 ## Common Patterns
 
@@ -728,17 +871,28 @@ The admin dashboard (`/admin/active-sessions`) returns ALL sessions, not just ac
 - Welcome hub rendering modules
 - Backend API endpoints created
 
-**🚧 Phase 2 Next (Module System & Welcome Hub):**
-- Convert existing segmentation workflow into module
-- Fully integrate classic segmentation pipeline into workspace
-- Module switching and navigation
-- File browser placeholder functional
+**✅ Phase 2 Complete (Module System):**
+- Segmentation module fully integrated
+- Module switching and navigation working
+- Socket.IO connections in module context
 
-**📋 Key Phase 2 Tasks:**
-1. Wrap classic segmentation code in `SegmentationModule.js`
-2. Enable Socket.IO connections in module context
-3. Maintain session state when switching modules
-4. Test full segmentation workflow in workspace
+**✅ Phase 3 Complete (File Browser & Workspace):**
+- Complete file browser with tree structure
+- Batch operations (download ZIP, delete)
+- File metadata and thumbnails
+- Workspace ZIP export/restore
+
+**✅ Phase 4 Complete (Info Panel & Polish):**
+- Help system with 200+ articles
+- Design system (light/dark mode, PoP branding)
+- All 8 modules implemented
+- Admin API endpoints
+- Data lineage tracking
+
+**📋 Phase 5 Planned (Future):**
+- Batch processing workflows
+- Model zoo / pretrained models
+- Enhanced visualization features
 
 ### Important Considerations
 

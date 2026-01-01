@@ -4,8 +4,8 @@
 
 This document provides comprehensive documentation for all HTTP endpoints in the application. Endpoints are organized by category for easy navigation.
 
-**Last Updated:** 2025-11-27
-**API Version:** 1.0
+**Last Updated:** 2026-01-01
+**API Version:** 2.0
 **Base URL:** `http://localhost:3000`
 
 ---
@@ -15,7 +15,11 @@ This document provides comprehensive documentation for all HTTP endpoints in the
 | Category | Description |
 |----------|-------------|
 | [Authentication](#authentication-endpoints) | Login, registration, logout, and auth status |
-| [Workspace API](#workspace-api-endpoints) | Workspace-specific endpoints for new modular interface |
+| [Workspace API](#workspace-api-endpoints) | Workspace management, file browser, ZIP export/restore |
+| [Denoising API](#denoising-api-endpoints) | DL & filter-based image denoising |
+| [Annotation API](#annotation-api-endpoints) | Annotation save/load operations |
+| [Mesh API](#mesh-api-endpoints) | 3D mesh generation from segmentation |
+| [Admin API](#admin-api-endpoints) | User management, logs, session monitoring |
 | [Main Routes](#main-routes) | Page serving and static file routes |
 | [ML Pipeline - Training](#ml-pipeline-training-endpoints) | Upload data, configure training, start training |
 | [ML Pipeline - Inference](#ml-pipeline-inference-endpoints) | Run inference, import models, download results |
@@ -497,6 +501,647 @@ Get workspace statistics.
 - Uses `WorkspaceManager.getWorkspaceStats(sessionId)`
 - Returns aggregate statistics for workspace
 - Used to update sidebar stats display
+
+---
+
+### GET /api/workspace/download
+
+Download entire workspace as ZIP archive.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable (Phase 3)
+
+#### Request
+
+**Method:** `GET`
+**Endpoint:** `/api/workspace/download`
+
+#### Response
+
+**Success (200 OK):** Streams ZIP file
+
+**Content-Disposition:** `attachment; filename="workspace_<sessionId>.zip"`
+
+**Error (500):**
+```javascript
+{
+  "success": false,
+  "error": "Error message"
+}
+```
+
+#### Behavior
+
+- Streams workspace directory as ZIP archive
+- Excludes cache directories (.thumbnails, .slices, .mesh-previews)
+- 10-minute timeout for large workspaces
+- Uses archiver library for streaming
+
+---
+
+### POST /api/workspace/restore
+
+Restore workspace from uploaded ZIP archive.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable (Phase 3)
+
+#### Request
+
+**Method:** `POST`
+**Endpoint:** `/api/workspace/restore`
+**Content-Type:** `multipart/form-data`
+
+**Form Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| workspace | File | Yes | ZIP file containing workspace backup |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "message": "Workspace restored successfully",
+  "stats": {
+    "fileCount": 15,
+    "totalSize": 52428800
+  }
+}
+```
+
+**Error Responses:**
+
+| Status | Condition | Response |
+|--------|-----------|----------|
+| 400 | No file uploaded | `{ success: false, error: "No file uploaded" }` |
+| 400 | Invalid ZIP | `{ success: false, error: "Invalid ZIP file" }` |
+| 400 | File too large | `{ success: false, error: "File too large (max 5GB)" }` |
+| 500 | Extract error | `{ success: false, error: "Error message" }` |
+
+#### Behavior
+
+- Clears existing workspace before restore
+- Extracts ZIP to workspace directory
+- Updates session IDs in metadata files
+- Regenerates thumbnails asynchronously
+- 5GB file size limit
+- 10-minute timeout
+
+---
+
+### GET /api/workspace/lineage/:fileId
+
+Get data lineage/provenance for a file.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable (Phase 3)
+
+#### Request
+
+**Method:** `GET`
+**Endpoint:** `/api/workspace/lineage/:fileId`
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | File identifier |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "lineage": {
+    "fileId": "abc123",
+    "filename": "denoised_stack.tif",
+    "createdAt": "2026-01-01T12:00:00.000Z",
+    "sourceFiles": ["original_stack.tif"],
+    "operation": "denoising",
+    "parameters": { "method": "gaussian", "sigma": 1.5 },
+    "children": ["segmented_stack.tif", "mesh.stl"]
+  }
+}
+```
+
+**Error (404):**
+```javascript
+{
+  "success": false,
+  "error": "Lineage record not found"
+}
+```
+
+#### Behavior
+
+- Returns processing history for file
+- Shows source files and derived outputs
+- Includes operation parameters
+
+---
+
+## Denoising API Endpoints
+
+Endpoints for image denoising operations.
+
+### POST /api/denoising/filter/process
+
+Apply filter-based denoising (Gaussian or NLM).
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Request
+
+**Method:** `POST`
+**Endpoint:** `/api/denoising/filter/process`
+**Content-Type:** `application/json`
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | Input file ID |
+| method | string | Yes | 'gaussian' or 'nlm' |
+| sigma | number | No | Gaussian sigma (default: 1.0) |
+| h | number | No | NLM filter strength (default: 10) |
+| templateWindowSize | number | No | NLM template window (default: 7) |
+| searchWindowSize | number | No | NLM search window (default: 21) |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "result": {
+    "fileId": "denoised_abc123",
+    "path": "workspaces/.../results/denoised.tif",
+    "processingTime": 5.2
+  }
+}
+```
+
+---
+
+### POST /api/denoising/dl/start
+
+Start deep learning denoising (N2V/autoStructN2V).
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Request
+
+**Method:** `POST`
+**Endpoint:** `/api/denoising/dl/start`
+**Content-Type:** `application/json`
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | Input file ID |
+| method | string | Yes | 'n2v' or 'autostructn2v' |
+| epochs | number | No | Training epochs (default: 100) |
+| patchSize | number | No | Patch size (default: 64) |
+| batchSize | number | No | Batch size (default: 8) |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "denoisingId": "dn_abc123",
+  "message": "Denoising started. Join WebSocket room for progress."
+}
+```
+
+---
+
+### GET /api/denoising/dl/status/:denoisingId
+
+Get denoising session status.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "status": "training",
+  "stage": "stage1",
+  "progress": 45,
+  "currentEpoch": 45,
+  "totalEpochs": 100
+}
+```
+
+---
+
+## Annotation API Endpoints
+
+Endpoints for annotation operations.
+
+### GET /api/annotation/raw-slice/:fileId/:sliceIndex
+
+Get raw slice data for annotation canvas.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Request
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | TIFF file ID |
+| sliceIndex | number | Yes | Slice index (0-based) |
+
+#### Response
+
+**Success (200 OK):** PNG image data
+
+---
+
+### POST /api/annotation/save-progress
+
+Save annotation progress (sparse encoding).
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Request
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | Source file ID |
+| sliceIndex | number | Yes | Slice being annotated |
+| annotations | object | Yes | Sparse annotation data |
+| brushSize | number | No | Current brush size |
+| classId | number | No | Current class ID |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "message": "Progress saved"
+}
+```
+
+---
+
+### POST /api/annotation/create
+
+Create final annotation TIFF from annotation data.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Request
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | Source file ID |
+| outputName | string | No | Output filename |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "result": {
+    "fileId": "annotations_abc123",
+    "path": "workspaces/.../annotations/result.tif"
+  }
+}
+```
+
+---
+
+### GET /api/annotation/load/:fileId
+
+Load existing annotation data for editing.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "annotations": {
+    "slices": { /* sparse annotation data per slice */ },
+    "metadata": {
+      "numClasses": 3,
+      "shape": [100, 512, 512]
+    }
+  }
+}
+```
+
+---
+
+## Mesh API Endpoints
+
+Endpoints for 3D mesh generation.
+
+### GET /api/mesh/sources
+
+Get available segmentation results for mesh generation.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "sources": [
+    {
+      "fileId": "seg_abc123",
+      "filename": "segmentation_result.tif",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "numClasses": 3
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/mesh/metadata/:fileId
+
+Get TIFF metadata for mesh configuration.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "metadata": {
+    "shape": [100, 512, 512],
+    "dtype": "uint8",
+    "numClasses": 3,
+    "classLabels": [0, 1, 2]
+  }
+}
+```
+
+---
+
+### POST /api/mesh/generate
+
+Start mesh generation from segmentation.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Request
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| fileId | string | Yes | Segmentation file ID |
+| classId | number | Yes | Class to extract mesh for |
+| smoothing | number | No | Smoothing iterations (default: 10) |
+| simplifyRatio | number | No | Mesh simplification (default: 0.5) |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "generationId": "mesh_abc123",
+  "message": "Mesh generation started"
+}
+```
+
+---
+
+### GET /api/mesh/status/:generationId
+
+Get mesh generation status.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "status": "completed",
+  "progress": 100,
+  "result": {
+    "meshPath": "workspaces/.../meshes/mesh.stl",
+    "vertexCount": 50000,
+    "faceCount": 100000
+  }
+}
+```
+
+---
+
+### GET /api/mesh/download/:generationId
+
+Download generated mesh file.
+
+**Authentication:** `requireAuth`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):** STL file download
+
+---
+
+## Admin API Endpoints
+
+Endpoints for admin dashboard and user management.
+
+### GET /admin/users
+
+List all users with optional status filter.
+
+**Authentication:** `requireAdmin`
+**Status:** ✅ Stable
+
+#### Request
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| status | string | No | Filter by status: 'pending', 'active', 'rejected' |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "users": [
+    {
+      "username": "john_doe",
+      "fullName": "John Doe",
+      "email": "john@lab.edu",
+      "institution": "Research Lab",
+      "status": "pending",
+      "createdAt": "2026-01-01T10:00:00.000Z",
+      "isAdmin": false
+    }
+  ]
+}
+```
+
+---
+
+### POST /admin/approve-user
+
+Approve a pending user.
+
+**Authentication:** `requireAdmin`
+**Status:** ✅ Stable
+
+#### Request
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| username | string | Yes | Username to approve |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "message": "User approved successfully"
+}
+```
+
+---
+
+### POST /admin/reject-user
+
+Reject a pending user.
+
+**Authentication:** `requireAdmin`
+**Status:** ✅ Stable
+
+#### Request
+
+**Body Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| username | string | Yes | Username to reject |
+| reason | string | No | Rejection reason |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "message": "User rejected"
+}
+```
+
+---
+
+### GET /admin/logs
+
+Get activity logs with filtering.
+
+**Authentication:** `requireAdmin`
+**Status:** ✅ Stable
+
+#### Request
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| username | string | No | Filter by username |
+| action | string | No | Filter by action type |
+| startDate | string | No | ISO date string |
+| endDate | string | No | ISO date string |
+| limit | number | No | Max results (default: 100) |
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "logs": [
+    {
+      "timestamp": "2026-01-01T12:00:00.000Z",
+      "username": "john_doe",
+      "action": "training_started",
+      "details": { "trainingId": "abc123" }
+    }
+  ]
+}
+```
+
+---
+
+### GET /admin/active-sessions
+
+Get all active processing sessions.
+
+**Authentication:** `requireAdmin`
+**Status:** ✅ Stable
+
+#### Response
+
+**Success (200 OK):**
+```javascript
+{
+  "success": true,
+  "sessions": {
+    "training": [
+      { "id": "tr_123", "username": "john", "status": "running", "progress": 45 }
+    ],
+    "inference": [],
+    "denoising": [
+      { "id": "dn_456", "username": "jane", "status": "running", "stage": "stage2" }
+    ],
+    "mesh": []
+  }
+}
+```
 
 ---
 
@@ -1825,5 +2470,5 @@ req.session.importedModel = {
 ---
 
 **Status:** ✅ Complete
-**Coverage:** All 29 HTTP endpoints documented
-**Last Updated:** 2025-11-27
+**Coverage:** All 60+ HTTP endpoints documented
+**Last Updated:** 2026-01-01

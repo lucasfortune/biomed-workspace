@@ -35,11 +35,11 @@ Welcome to the Biomedical Image Processing Workspace documentation! This index w
 New to this project? Start here:
 1. **System Overview**: Read [Architecture Overview](architecture/OVERVIEW.md) - Comprehensive system design
 2. **Recent Work**: [Session Logs Index](sessions/INDEX.md) - Review latest sessions
-3. **API Reference**: [API Endpoints](reference/API_ENDPOINTS.md) - All 29 HTTP endpoints
+3. **API Reference**: [API Endpoints](reference/API_ENDPOINTS.md) - All 60+ HTTP endpoints
 4. **State System**: [State Architecture](architecture/STATE_ARCHITECTURE.md) - Complete state management
-5. **Module System**: [Module Architecture](architecture/MODULE_ARCHITECTURE.md) - Module system design
+5. **Module System**: [Module Architecture](architecture/MODULE_ARCHITECTURE.md) - 8 modules, BaseModule framework
 6. **Key Decisions**: [ADRs](decisions/) - Why we made key architectural choices
-7. **Known Issues**: [Troubleshooting](guides/TROUBLESHOOTING.md) - File upload category mismatch (Phase 3)
+7. **Roadmap**: [Roadmap](vision/ROADMAP.md) - Phase 4 complete, Phase 5 planning
 
 ### Common AI Tasks
 | Task | Resources |
@@ -81,23 +81,23 @@ Complete technical reference documentation - **All complete!** ✅
 
 | Reference | Description | Status |
 |-----------|-------------|--------|
-| [API Endpoints](reference/API_ENDPOINTS.md) | Complete HTTP endpoint catalog (29 endpoints) | ✅ 1,159 lines |
-| [State Management](reference/STATE_MANAGEMENT.md) | StateManager API reference | ✅ 787 lines |
-| [Module System](reference/MODULE_SYSTEM.md) | ModuleLoader API reference | ✅ 987 lines |
-| [Socket Protocol](reference/SOCKET_PROTOCOL.md) | Real-time communication protocol | ✅ 1,024 lines |
-| [Python Integration](reference/PYTHON_INTEGRATION.md) | Python script communication | ✅ 1,079 lines |
-| [File Structure](reference/FILE_STRUCTURE.md) | Codebase organization | ✅ 858 lines |
+| [API Endpoints](reference/API_ENDPOINTS.md) | Complete HTTP endpoint catalog (60+ endpoints) | ✅ Updated |
+| [State Management](reference/STATE_MANAGEMENT.md) | StateManager API reference | ✅ |
+| [Module System](reference/MODULE_SYSTEM.md) | ModuleLoader API reference | ✅ |
+| [Socket Protocol](reference/SOCKET_PROTOCOL.md) | Real-time communication protocol | ✅ |
+| [Python Integration](reference/PYTHON_INTEGRATION.md) | Python script communication (16 scripts) | ✅ Updated |
+| [File Structure](reference/FILE_STRUCTURE.md) | Codebase organization | ✅ Updated |
 
 ### 🏗️ Architecture (Understanding)
 System design and architectural decisions - **All complete!** ✅
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| [Overview](architecture/OVERVIEW.md) | High-level system architecture | ✅ ~920 lines |
-| [Dual Version Design](architecture/DUAL_VERSION_DESIGN.md) | Classic vs Workspace explanation | ✅ ~740 lines |
-| [State Architecture](architecture/STATE_ARCHITECTURE.md) | State management patterns | ✅ ~870 lines |
-| [Module Architecture](architecture/MODULE_ARCHITECTURE.md) | Module system design | ✅ ~850 lines |
-| [Authentication](architecture/AUTHENTICATION.md) | Auth system & permissions | ✅ ~870 lines |
+| [Overview](architecture/OVERVIEW.md) | High-level system architecture | ✅ |
+| [Dual Version Design](architecture/DUAL_VERSION_DESIGN.md) | Classic vs Workspace explanation | ✅ |
+| [State Architecture](architecture/STATE_ARCHITECTURE.md) | State management patterns | ✅ |
+| [Module Architecture](architecture/MODULE_ARCHITECTURE.md) | Module system (8 modules, BaseModule) | ✅ Updated |
+| [Authentication](architecture/AUTHENTICATION.md) | Auth system & permissions | ✅ |
 
 ### 📝 Sessions (Historical)
 Development session logs with detailed change records.

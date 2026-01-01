@@ -4,7 +4,7 @@
 
 This document provides a comprehensive overview of the project's file structure, explaining the purpose of each directory and key files.
 
-**Last Updated:** 2025-12-19
+**Last Updated:** 2026-01-01
 **Project Root:** `/home/lucas/Documents/phd/RKI_laue/viz_app/`
 
 ---
@@ -115,44 +115,52 @@ public/
 │   └── css/
 │       └── style.css        # Classic styles
 │
-└── workspace/               # Workspace version (Phase 1+, modular)
+└── workspace/               # Workspace version (Phase 4 complete)
     ├── index.html           # Workspace entry
     ├── js/
     │   ├── workspace.js     # Main controller
     │   ├── core/            # Core systems
     │   │   ├── StateManager.js    # State management
     │   │   ├── ModuleLoader.js    # Module system
-    │   │   └── WorkspaceAPI.js    # API client
-    │   └── modules/         # Processing modules
+    │   │   ├── WorkspaceAPI.js    # API client
+    │   │   ├── BaseModule.js      # Abstract base class for modules
+    │   │   └── components/        # Reusable UI components (11 files)
+    │   │       ├── FileSelector.js     # File selection with validation
+    │   │       ├── InfoPanel.js        # Help panel container
+    │   │       ├── InfoArticle.js      # Article rendering
+    │   │       ├── InfoGlossary.js     # Terminology definitions
+    │   │       ├── InfoSearch.js       # Full-text search
+    │   │       ├── StepNavigator.js    # Step navigation
+    │   │       └── ...                 # + 5 more components
+    │   ├── services/
+    │   │   └── InfoContentService.js   # Help content delivery
+    │   └── modules/         # Processing modules (8 total)
     │       ├── registry.js        # Module definitions
-    │       └── segmentation/      # Segmentation module
-    │           ├── SegmentationModule.js  # Module class
-    │           ├── SegmentationAPI.js     # Module API client
-    │           ├── training.js            # Training UI
-    │           ├── inference.js           # Inference UI
-    │           ├── charts.js              # Chart rendering
-    │           ├── navigation.js          # Step navigation
-    │           └── visualization/         # 3D visualization
-    │               ├── main.js            # Viz controller
-    │               ├── meshCreation.js    # Mesh generation
-    │               └── controls.js        # Viz controls
-    └── css/
-        ├── workspace.css              # Workspace layout
-        └── modules/
-            └── segmentation/
-                └── segmentation-modern.css  # Module styles
+    │       ├── segmentation/      # U-Net training & inference
+    │       ├── denoising-dl/      # DL denoising (20+ files)
+    │       ├── denoising-filter/  # Filter-based denoising
+    │       ├── annotation/        # Quick annotation tool
+    │       ├── mesh/              # 3D mesh generation
+    │       ├── visualization/     # Interactive 3D viewer
+    │       ├── imageviewer/       # TIFF stack gallery
+    │       └── template/          # Module starter template
+    ├── css/
+    │   └── workspace.css          # Workspace styling (light/dark mode)
+    └── content/                   # Help system content
+        └── modules/               # Module-specific help articles
 ```
 
 **Classic vs Workspace:**
 
 | Aspect | Classic | Workspace |
 |--------|---------|-----------|
-| **Status** | Stable, complete | Phase 2 complete |
+| **Status** | Stable, complete | Phase 4 complete |
 | **UI Pattern** | Single-page linear workflow | Multi-module IDE-like |
 | **State** | Local variables | Centralized StateManager |
-| **Modules** | Monolithic | Dynamic loading |
+| **Modules** | Monolithic | 8 modules, dynamic loading |
 | **Entry Point** | `/classic` | `/workspace` |
 | **File Structure** | Flat `/classic/js/` | Nested `/workspace/js/modules/` |
+| **Features** | Segmentation only | Segmentation, Denoising, Annotation, Mesh, Visualization |
 
 ---
 
@@ -179,22 +187,28 @@ viz_app/
 │   │   ├── upload.middleware.js   # Multer file upload configuration
 │   │   └── error.middleware.js    # Global error handler
 │   │
-│   ├── routes/
+│   ├── routes/                        # 11 route files
+│   │   ├── index.js               # Route aggregator
 │   │   ├── static.routes.js       # HTML pages, static files, workspace serving
 │   │   ├── auth.routes.js         # Login, register, logout, check-auth
 │   │   ├── folders.routes.js      # Folder CRUD operations
 │   │   ├── files.routes.js        # File operations (rename, delete, etc.)
-│   │   ├── workspace.routes.js    # Workspace init, status, upload, download
-│   │   └── ml.routes.js           # Training, inference, model import
+│   │   ├── workspace.routes.js    # Workspace init, status, upload, ZIP export/restore
+│   │   ├── ml.routes.js           # Training, inference, model import
+│   │   ├── denoising.routes.js    # DL & filter denoising (~1400 lines)
+│   │   ├── annotation.routes.js   # Annotation save/load (~600 lines)
+│   │   ├── mesh.routes.js         # Mesh generation (~500 lines)
+│   │   └── admin.routes.js        # Admin API endpoints (~300 lines)
 │   │
-│   ├── services/
+│   ├── services/                      # 7 service files
 │   │   ├── index.js               # Service exports
 │   │   ├── AuthService.js         # User authentication logic
 │   │   ├── WorkspaceService.js    # Workspace/session management
 │   │   ├── FileService.js         # File validation, thumbnails
 │   │   ├── TrainingService.js     # ML training orchestration
 │   │   ├── InferenceService.js    # ML inference orchestration
-│   │   └── SessionTracker.js      # Training/inference session maps
+│   │   ├── DenoisingService.js    # Denoising orchestration (~1000 lines)
+│   │   └── SessionTracker.js      # Training/inference/denoising session maps
 │   │
 │   ├── sockets/
 │   │   └── index.js               # Socket.IO event handlers
@@ -204,7 +218,8 @@ viz_app/
 │       ├── pythonRunner.js        # Python process spawning (~520 lines)
 │       ├── validation.js          # Input validation helpers
 │       ├── pathHelpers.js         # Path utilities
-│       └── fileHelpers.js         # File system utilities
+│       ├── fileHelpers.js         # File system utilities
+│       └── lineageHelpers.js      # Data lineage/provenance tracking
 │
 ├── utils/
 │   ├── logger.js            # Logging utility
