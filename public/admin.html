@@ -16,6 +16,14 @@
                 <h1>Admin Dashboard</h1>
                 <div class="header-actions">
                     <span id="adminUserInfo" class="admin-user-info"></span>
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                        <svg class="theme-icon sun" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 7a5 5 0 100 10 5 5 0 000-10zM12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                        </svg>
+                        <svg class="theme-icon moon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                        </svg>
+                    </button>
                     <a href="/" class="btn btn-secondary">Back to Home</a>
                     <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
                 </div>
@@ -115,6 +123,23 @@
         </div>
     </div>
 
+    <!-- Theme initialization (runs immediately to prevent flash) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('workspace-theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+        })();
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('workspace-theme', newTheme);
+        }
+    </script>
     <script src="js/utils.js"></script>
     <script src="js/admin.js"></script>
 </body>
