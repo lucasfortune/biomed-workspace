@@ -482,24 +482,10 @@ class Templates {
    */
   static renderN2VImportSection() {
     return `
-      <div class="import-content">
-        <div class="import-stage-panel">
-          <div class="file-row">
-            <div class="file-input-group">
-              <div id="importConfigSelector"></div>
-            </div>
-          </div>
-          <div id="importConfigValidation" class="import-validation"></div>
-        </div>
-
-        <div class="import-stage-panel">
-          <div class="file-row">
-            <div class="file-input-group">
-              <div id="importStage1ModelSelector"></div>
-            </div>
-          </div>
-          <div id="importStage1Validation" class="import-validation"></div>
-        </div>
+      <div class="section-card-inner">
+        <div id="importConfigSelector"></div>
+        <div id="importStage1ModelSelector"></div>
+        <div id="importValidationResult" class="validation-result"></div>
       </div>
     `;
   }
@@ -510,39 +496,11 @@ class Templates {
    */
   static renderAutoStructN2VImportSection() {
     return `
-      <div class="import-content">
-        <div class="import-stage-panel">
-          <h5>Configuration</h5>
-          <p class="import-hint">Select the configuration file (.json) containing settings for both stages.</p>
-          <div class="file-row">
-            <div class="file-input-group">
-              <div id="importConfigSelector"></div>
-            </div>
-          </div>
-          <div id="importConfigValidation" class="import-validation"></div>
-        </div>
-
-        <div class="import-stage-panel">
-          <h5>Stage 1 Model (N2V)</h5>
-          <p class="import-hint">Select the Stage 1 (N2V) model file.</p>
-          <div class="file-row">
-            <div class="file-input-group">
-              <div id="importStage1ModelSelector"></div>
-            </div>
-          </div>
-          <div id="importStage1Validation" class="import-validation"></div>
-        </div>
-
-        <div class="import-stage-panel">
-          <h5>Stage 2 Model (Struct-N2V)</h5>
-          <p class="import-hint">Select the Stage 2 (Struct-N2V) model file.</p>
-          <div class="file-row">
-            <div class="file-input-group">
-              <div id="importStage2ModelSelector"></div>
-            </div>
-          </div>
-          <div id="importStage2Validation" class="import-validation"></div>
-        </div>
+      <div class="section-card-inner">
+        <div id="importConfigSelector"></div>
+        <div id="importStage1ModelSelector"></div>
+        <div id="importStage2ModelSelector"></div>
+        <div id="importValidationResult" class="validation-result"></div>
       </div>
     `;
   }

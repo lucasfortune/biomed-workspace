@@ -1124,7 +1124,7 @@ class SegmentationModule extends BaseModule {
       this.importSelectors.config = new FileSelector({
         id: 'import_config',
         fileType: 'config',
-        title: 'Select Config',
+        title: 'Training Configuration',
         icon: '⚙️',
         helpIconHtml: this.renderHelpIcon('segmentation.step1.config-file'),
         showTestData: false,
@@ -1143,7 +1143,7 @@ class SegmentationModule extends BaseModule {
       this.importSelectors.model = new FileSelector({
         id: 'import_model',
         fileType: 'models',
-        title: 'Select Model',
+        title: 'Model Weights',
         icon: '🧠',
         helpIconHtml: this.renderHelpIcon('segmentation.step1.model-file'),
         showTestData: false,
@@ -1165,22 +1165,10 @@ class SegmentationModule extends BaseModule {
    */
   renderImportSectionContent() {
     return `
-      <div class="import-content">
-        <div class="import-stage-panel">
-          <h5>Configuration</h5>
-          <p class="import-hint">Select the configuration file (.json) from a previous training.</p>
-          <div id="importConfigSelector"></div>
-          <div id="importConfigValidation" class="import-validation"></div>
-        </div>
-
-        <div class="import-stage-panel">
-          <h5>Model</h5>
-          <p class="import-hint">Select the trained model file (.pth).</p>
-          <div id="importModelSelector"></div>
-          <div id="importModelValidation" class="import-validation"></div>
-        </div>
-
-        <div id="overallImportValidation"></div>
+      <div class="section-card-inner">
+        <div id="importConfigSelector"></div>
+        <div id="importModelSelector"></div>
+        <div id="importValidationResult" class="validation-result"></div>
       </div>
     `;
   }
@@ -1299,7 +1287,7 @@ class SegmentationModule extends BaseModule {
     this.importValidated = modelValid && configValid;
 
     // Update overall validation display
-    const overallContainer = document.getElementById('overallImportValidation');
+    const overallContainer = document.getElementById('importValidationResult');
     if (overallContainer) {
       if (this.importValidated) {
         const configInfo = this.importedModelConfig;

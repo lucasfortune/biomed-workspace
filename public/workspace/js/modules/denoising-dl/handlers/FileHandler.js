@@ -177,7 +177,7 @@ class FileHandler {
       this.importSelectors.config = new FileSelector({
         id: 'import_config',
         fileType: 'config',
-        title: 'Select Config',
+        title: 'Training Configuration',
         icon: '⚙️',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.config'),
         showTestData: false,
@@ -190,13 +190,14 @@ class FileHandler {
       this.importSelectors.config.init();
     }
 
-    // Stage 1 Model Selector
+    // Stage 1 Model Selector - title depends on method
+    const stage1Title = method === 'autostructn2v' ? 'Stage 1 Model (N2V)' : 'Model Weights';
     const stage1ModelContainer = document.getElementById('importStage1ModelSelector');
     if (stage1ModelContainer) {
       this.importSelectors.stage1Model = new FileSelector({
         id: 'import_stage1_model',
         fileType: 'models',
-        title: 'Select Model',
+        title: stage1Title,
         icon: '🧠',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
         showTestData: false,
@@ -216,7 +217,7 @@ class FileHandler {
         this.importSelectors.stage2Model = new FileSelector({
           id: 'import_stage2_model',
           fileType: 'models',
-          title: 'Select Model',
+          title: 'Stage 2 Model (Struct-N2V)',
           icon: '🧠',
           helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
           showTestData: false,

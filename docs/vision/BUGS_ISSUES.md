@@ -2,7 +2,7 @@
 
 **Document Type:** Bug Report
 **Status:** Living Document (Updated Regularly)
-**Last Updated:** 2025-12-31
+**Last Updated:** 2026-01-02
  
 ---
 
@@ -15,11 +15,18 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 ## open Bugs/Issues:
 
-- issue: documentation. many new things are created and documentation is not up to date
-    - prio 2
-    - compl. 3
 
 ## CLOSED
+
+- issue: 3d visulaizer module: mesh validation takes very long. why?
+    - can this be quicker?
+    - prio 1
+    - compl. ?
+
+- issue: documentation. many new things are created and documentation is not up to date
+    - FIXED: all documentation up to date
+    - prio 2
+    - compl. 3
 
 - issue: image viewer module: step 2 gallery view background would be cool if reacted to light/dark mode
     - FIXED: Changed hardcoded #f0f2f5 to var(--bg-tertiary) which adapts to light/dark mode

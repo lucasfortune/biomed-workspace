@@ -663,7 +663,6 @@ body {
 
 .segmentation-module .section-card-inner {
   padding: var(--module-spacing-md);
-  padding-top: 0;
 }
 
 /* File Upload Groups in Train from Scratch */
@@ -694,11 +693,10 @@ body {
 
 .segmentation-module .import-content {
   padding: var(--module-spacing-md);
-  padding-top: 0;
 }
 
 .segmentation-module .import-stage-panel {
-  background: var(--module-bg);
+  background: var(--module-card-bg);
   border: 1px dashed var(--module-border);
   border-radius: var(--module-radius-md);
   padding: var(--module-spacing-md);

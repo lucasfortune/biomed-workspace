@@ -2168,12 +2168,18 @@
   color: var(--module-text-secondary);
 }
 
-/* Import Model Panels (for Phase 7.3) */
+/* Import Model Content Container */
+.dl-denoising-module .import-content {
+  padding: var(--module-spacing-md);
+}
+
+/* Import Model Panels */
 .dl-denoising-module .import-stage-panel {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--module-card-bg);
   border: 1px dashed var(--module-border);
   border-radius: var(--module-radius-md);
   padding: var(--module-spacing-md);
+  margin-bottom: var(--module-spacing-md);
 }
 
 .dl-denoising-module .import-stage-panel:last-child {
