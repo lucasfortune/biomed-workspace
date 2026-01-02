@@ -322,10 +322,14 @@ class WorkspaceAPI {
   }
 
   /**
-   * Logout
+   * Logout user
+   * @param {Object} options - Logout options
+   * @param {boolean} options.deleteWorkspace - Whether to delete workspace files on logout
    */
-  async logout() {
-    return this.post('/logout', {});
+  async logout(options = {}) {
+    return this.post('/logout', {
+      deleteWorkspace: options.deleteWorkspace || false
+    });
   }
 
   // ===========================================================================

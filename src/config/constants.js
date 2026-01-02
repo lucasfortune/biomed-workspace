@@ -43,6 +43,13 @@ const SESSION_CONFIG = {
   cookieMaxAge: 86400000 * 7  // 7 days in milliseconds
 };
 
+// Cleanup service configuration
+const CLEANUP_CONFIG = {
+  intervalMs: 15 * 60 * 1000,    // Run cleanup every 15 minutes
+  gracePeriodMs: 60 * 60 * 1000, // 1 hour before considering a session abandoned
+  enableOnStartup: true          // Start cleanup service when server starts
+};
+
 // Allowed file types
 const ALLOWED_FILE_TYPES = {
   tiff: ['image/tiff', '.tif', '.tiff'],
@@ -126,6 +133,7 @@ module.exports = {
   DIRECTORIES,
   UPLOAD_LIMITS,
   SESSION_CONFIG,
+  CLEANUP_CONFIG,
   ALLOWED_FILE_TYPES,
   PYTHON_SCRIPTS,
   TRAINING_CONFIG_RANGES,

@@ -12,11 +12,13 @@ const express = require('express');
  * @param {object} dependencies.authService - AuthService instance
  * @param {object} dependencies.activityLogger - Activity logger instance
  * @param {object} dependencies.logger - Logger instance
+ * @param {object} dependencies.workspaceManager - WorkspaceManager instance (for cleanup on logout)
+ * @param {object} dependencies.sessionTracker - SessionTracker instance (for cleanup on logout)
  * @returns {Router} Express router
  */
 function createAuthRoutes(dependencies) {
   const router = express.Router();
-  const { authService, activityLogger, logger } = dependencies;
+  const { authService, activityLogger, logger, workspaceManager, sessionTracker } = dependencies;
 
   // ===========================================================================
   // AUTH STATUS
@@ -111,9 +113,44 @@ function createAuthRoutes(dependencies) {
   /**
    * Logout user
    * POST /logout
+   * @body {boolean} deleteWorkspace - Whether to delete workspace files on logout
    */
   router.post('/logout', (req, res) => {
     const username = req.session?.user?.username || 'unknown';
+    const sessionId = req.session?.id;
+    const deleteWorkspace = req.body?.deleteWorkspace === true;
+
+    // Delete workspace if requested
+    if (deleteWorkspace && sessionId && workspaceManager) {
+      try {
+        const deleted = workspaceManager.deleteWorkspace(sessionId);
+        if (logger && deleted) {
+          logger.info(`Workspace deleted for session ${sessionId} on logout`);
+        }
+        if (activityLogger) {
+          activityLogger.logActivity(username, 'workspace_deleted', {
+            sessionId,
+            reason: 'logout'
+          });
+        }
+      } catch (error) {
+        if (logger) {
+          logger.error(`Error deleting workspace on logout: ${error.message}`);
+        }
+        // Continue with logout even if workspace deletion fails
+      }
+    }
+
+    // Cleanup in-memory sessions (training, inference, etc.)
+    if (sessionTracker && sessionId) {
+      try {
+        sessionTracker.cleanupSessionById(sessionId);
+      } catch (error) {
+        if (logger) {
+          logger.error(`Error cleaning up session tracker: ${error.message}`);
+        }
+      }
+    }
 
     req.session.destroy((err) => {
       if (err) {
@@ -127,12 +164,13 @@ function createAuthRoutes(dependencies) {
       }
 
       if (logger) {
-        logger.info(`User logged out: ${username}`);
+        logger.info(`User logged out: ${username}${deleteWorkspace ? ' (workspace deleted)' : ''}`);
       }
 
       res.json({
         success: true,
-        message: 'Logged out successfully'
+        message: 'Logged out successfully',
+        workspaceDeleted: deleteWorkspace
       });
     });
   });

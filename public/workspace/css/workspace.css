@@ -204,6 +204,33 @@ body {
   border-radius: 8px;
 }
 
+/* Logout Button */
+.btn-logout {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover {
+  background: var(--danger-color);
+  border-color: var(--danger-color);
+  color: var(--text-on-accent);
+}
+
+.btn-logout svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 .user-avatar {
   width: 40px;
   height: 40px;

@@ -17,7 +17,7 @@ const socketIo = require('socket.io');
 const path = require('path');
 
 // Configuration
-const { PYTHON_PATH, validatePythonPath } = require('./src/config/constants');
+const { PYTHON_PATH, validatePythonPath, CLEANUP_CONFIG } = require('./src/config/constants');
 
 // Core modules
 const activityLogger = require('./activityLogger');
@@ -30,7 +30,8 @@ const {
   FileService,
   TrainingService,
   InferenceService,
-  DenoisingService
+  DenoisingService,
+  CleanupService
 } = require('./src/services');
 const sessionTracker = require('./src/services/SessionTracker');
 
@@ -100,6 +101,20 @@ const denoisingService = new DenoisingService({
   logger
 });
 
+// Cleanup service for abandoned workspaces
+const cleanupService = new CleanupService(
+  {
+    workspaceManager,
+    sessionTracker,
+    activityLogger,
+    logger
+  },
+  {
+    intervalMs: CLEANUP_CONFIG.intervalMs,
+    gracePeriodMs: CLEANUP_CONFIG.gracePeriodMs
+  }
+);
+
 // =============================================================================
 // CREATE EXPRESS APP, HTTP SERVER, AND SOCKET.IO
 // =============================================================================
@@ -147,6 +162,11 @@ const PORT = env.PORT;
 
 server.listen(PORT, () => {
   logger.info(`Server running on http://localhost:${PORT}`);
+
+  // Start cleanup service for abandoned workspaces
+  if (CLEANUP_CONFIG.enableOnStartup) {
+    cleanupService.start();
+  }
 });
 
 // =============================================================================
@@ -155,6 +175,7 @@ server.listen(PORT, () => {
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully...');
+  cleanupService.stop();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
@@ -163,6 +184,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully...');
+  cleanupService.stop();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

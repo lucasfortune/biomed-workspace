@@ -11,6 +11,7 @@ const TrainingService = require('./TrainingService');
 const InferenceService = require('./InferenceService');
 const DenoisingService = require('./DenoisingService');
 const SessionTracker = require('./SessionTracker');
+const CleanupService = require('./CleanupService');
 
 module.exports = {
   AuthService,
@@ -19,5 +20,6 @@ module.exports = {
   TrainingService,
   InferenceService,
   DenoisingService,
-  SessionTracker
+  SessionTracker,
+  CleanupService
 };

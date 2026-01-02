@@ -251,8 +251,55 @@ class Workspace {
       downloadBtn.addEventListener('click', () => this.downloadWorkspace());
     }
 
+    // Logout button
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => this.handleLogout());
+    }
+
     // Global return to hub function
     window.backToHub = () => this.returnToHub();
+  }
+
+  /**
+   * Handle logout with confirmation dialog
+   */
+  async handleLogout() {
+    try {
+      // Get workspace stats for confirmation dialog
+      const statsResponse = await this.api.getWorkspaceStats();
+      const stats = statsResponse.success ? statsResponse.stats : null;
+
+      const fileCount = stats?.fileCount || 0;
+      const size = stats?.totalSizeMB || '0';
+
+      // Show confirmation dialog
+      const confirmed = confirm(
+        `Logging out will permanently delete your workspace files.\n\n` +
+        `Current workspace:\n` +
+        `- ${fileCount} file(s)\n` +
+        `- ${size} MB total size\n\n` +
+        `This action cannot be undone. Do you want to continue?`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      // Show loading state
+      this.state.update('ui.loading', true);
+
+      // Logout and delete workspace
+      await this.api.logout({ deleteWorkspace: true });
+
+      // Redirect to welcome page
+      window.location.href = '/';
+
+    } catch (error) {
+      console.error('[Workspace] Logout error:', error);
+      this.state.update('ui.loading', false);
+      this.state.notify('error', 'Logout failed: ' + error.message);
+    }
   }
 
   /**

@@ -316,7 +316,13 @@ function configureApp(app, dependencies) {
   app.use(createStaticRoutes({ workspaceService }));
 
   // Auth routes (login, register, logout, check-auth)
-  app.use(createAuthRoutes({ authService, activityLogger, logger }));
+  app.use(createAuthRoutes({
+    authService,
+    activityLogger,
+    logger,
+    workspaceManager,
+    sessionTracker
+  }));
 
   // Files routes at /api/workspace
   app.use('/api/workspace', createFilesRoutes({ workspaceManager, workspaceService, activityLogger, logger }));
