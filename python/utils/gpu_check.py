@@ -9,6 +9,12 @@ Used by the web application to determine if GPU acceleration is available.
 import json
 import sys
 
+# Support both direct execution and module import
+try:
+    from .format_utils import format_memory
+except ImportError:
+    from format_utils import format_memory
+
 
 def check_gpu():
     """
@@ -75,18 +81,6 @@ def check_gpu():
         result['warning'] = f'Error checking GPU: {str(e)}'
 
     return result
-
-
-def format_memory(bytes_value):
-    """Format bytes as human-readable string."""
-    if bytes_value is None:
-        return None
-
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes_value < 1024:
-            return f'{bytes_value:.1f} {unit}'
-        bytes_value /= 1024
-    return f'{bytes_value:.1f} PB'
 
 
 def main():

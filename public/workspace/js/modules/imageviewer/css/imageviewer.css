@@ -445,11 +445,6 @@
   background: var(--module-primary);
   border-radius: 50%;
   cursor: pointer;
-  transition: transform var(--module-transition-fast);
-}
-
-.slice-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
 }
 
 .slice-slider::-moz-range-thumb {

@@ -12,9 +12,10 @@ Outputs:
 """
 
 import sys
-import numpy as np
-from PIL import Image
 import tifffile
+
+from utils import extract_middle_slice, extract_slice, save_thumbnail_jpeg
+
 
 def generate_thumbnail(input_path, output_path, slice_index=None):
     """
@@ -34,35 +35,14 @@ def generate_thumbnail(input_path, output_path, slice_index=None):
     # Load TIFF
     img = tifffile.imread(input_path)
 
-    # Handle 3D: extract slice
-    if len(img.shape) == 3:
-        if slice_index is None:
-            slice_index = img.shape[0] // 2
-        img = img[slice_index]
-
-    # Handle 2D images
-    if len(img.shape) != 2:
-        raise ValueError(f"Expected 2D or 3D image, got shape {img.shape}")
-
-    # Normalize to 0-255
-    img_min = img.min()
-    img_max = img.max()
-
-    if img_max > img_min:
-        img = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+    # Extract appropriate slice
+    if slice_index is not None:
+        img_2d = extract_slice(img, slice_index)
     else:
-        img = np.zeros_like(img, dtype=np.uint8)
+        img_2d = extract_middle_slice(img)
 
-    # Convert to PIL Image
-    pil_img = Image.fromarray(img)
-
-    # Resize to 120x120 (maintain aspect ratio, crop if needed)
-    pil_img.thumbnail((120, 120), Image.Resampling.LANCZOS)
-
-    # Save as JPEG
-    pil_img.save(output_path, "JPEG", quality=85)
-
-    return output_path
+    # Create and save thumbnail using shared utility
+    return save_thumbnail_jpeg(img_2d, output_path, size=120, quality=85)
 
 def main():
     if len(sys.argv) < 3:
