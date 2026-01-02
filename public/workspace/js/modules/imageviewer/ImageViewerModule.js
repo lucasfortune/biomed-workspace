@@ -57,9 +57,6 @@ class ImageViewerModule extends BaseModule {
     this.validationDisplay = null;
     this.imageSelector = null;
 
-    // Cache for loaded slices
-    this.sliceCache = new Map();
-
     // IntersectionObserver for lazy loading (stored for cleanup)
     this.imageObserver = null;
 
@@ -923,9 +920,6 @@ class ImageViewerModule extends BaseModule {
       this.imageObserver.disconnect();
       this.imageObserver = null;
     }
-
-    // Clear cache
-    this.sliceCache.clear();
 
     // Clear global reference
     window.imageViewerModule = null;

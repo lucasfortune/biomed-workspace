@@ -6,7 +6,6 @@
 
 const staticRoutes = require('./static.routes');
 const authRoutes = require('./auth.routes');
-const foldersRoutes = require('./folders.routes');
 const filesRoutes = require('./files.routes');
 const workspaceRoutes = require('./workspace.routes');
 const mlRoutes = require('./ml.routes');
@@ -35,9 +34,6 @@ function registerRoutes(app, dependencies) {
 
   // Workspace API routes
   app.use('/api/workspace', workspaceRoutes(dependencies));
-
-  // Folder routes (part of workspace API)
-  app.use('/api/workspace', foldersRoutes(dependencies));
 
   // File routes (part of workspace API)
   app.use('/api/workspace', filesRoutes(dependencies));

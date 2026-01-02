@@ -22,7 +22,6 @@ const { globalErrorHandler } = require('./middleware/error.middleware');
 // Routes
 const createStaticRoutes = require('./routes/static.routes');
 const createAuthRoutes = require('./routes/auth.routes');
-const createFoldersRoutes = require('./routes/folders.routes');
 const createFilesRoutes = require('./routes/files.routes');
 const createWorkspaceRoutes = require('./routes/workspace.routes');
 const createMLRoutes = require('./routes/ml.routes');
@@ -318,9 +317,6 @@ function configureApp(app, dependencies) {
 
   // Auth routes (login, register, logout, check-auth)
   app.use(createAuthRoutes({ authService, activityLogger, logger }));
-
-  // Folders routes at /api/workspace
-  app.use('/api/workspace', createFoldersRoutes({ workspaceService, activityLogger, logger }));
 
   // Files routes at /api/workspace
   app.use('/api/workspace', createFilesRoutes({ workspaceManager, workspaceService, activityLogger, logger }));

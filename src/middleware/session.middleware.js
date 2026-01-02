@@ -39,19 +39,6 @@ function createSessionMiddleware(env) {
   });
 }
 
-/**
- * Apply session middleware to Express app
- * @param {object} app - Express application instance
- * @param {object} env - Environment configuration
- * @returns {function} The session middleware that was applied
- */
-function applySessionMiddleware(app, env) {
-  const sessionMiddleware = createSessionMiddleware(env);
-  app.use(sessionMiddleware);
-  return sessionMiddleware;
-}
-
 module.exports = {
-  createSessionMiddleware,
-  applySessionMiddleware
+  createSessionMiddleware
 };

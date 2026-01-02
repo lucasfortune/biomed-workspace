@@ -392,13 +392,13 @@ export function createSliceBasedClassMeshes(data, scene, sliceCount = 20, sliceD
     const targetMaxSize = 8;
     const scaleFactor = targetMaxSize / maxOriginalDim;
     
-    // Determine slice parameters based on direction
-    let sliceDimension, sliceSize;
+    // Determine slice dimension based on direction
+    let sliceDimension;
     switch(sliceDirection) {
-        case 'x': 
+        case 'x':
             sliceDimension = width;
             break;
-        case 'y': 
+        case 'y':
             sliceDimension = height;
             break;
         case 'z':
