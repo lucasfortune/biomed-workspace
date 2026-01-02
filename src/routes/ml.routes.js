@@ -16,6 +16,7 @@ const path = require('path');
 const fs = require('fs');
 const uuid = require('uuid');
 const archiver = require('archiver');
+const { spawn } = require('child_process');
 const { requireAuth, requireApproved } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
 
@@ -1231,7 +1232,6 @@ function createMLRoutes(dependencies) {
    * GET /results/:inferenceId/tiff-info
    */
   router.get('/results/:inferenceId/tiff-info', requireAuth, (req, res) => {
-    const { spawn } = require('child_process');
     const inferenceId = req.params.inferenceId;
     const inference = inferenceSessions.get(inferenceId);
 
@@ -1310,7 +1310,6 @@ function createMLRoutes(dependencies) {
    *   - size: 'icon' (128px), 'gallery' (512px), or number (default: 512)
    */
   router.get('/results/:inferenceId/slice/:sliceIndex', requireAuth, (req, res) => {
-    const { spawn } = require('child_process');
     const { inferenceId, sliceIndex } = req.params;
     const size = req.query.size || 'gallery';
 

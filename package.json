@@ -35,6 +35,9 @@
     "unet",
     "tiff"
   ],
-  "author": "Your Name",
-  "license": "MIT"
+  "author": "Lucas Lange",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
