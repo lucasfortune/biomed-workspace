@@ -685,7 +685,13 @@ body {
   transform: scale(1.1);
 }
 
-/* Scrollbar */
+/* Scrollbar - Firefox */
+.fb-tree {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+/* Scrollbar - WebKit (Chrome, Safari, Edge) */
 .fb-tree::-webkit-scrollbar {
   width: 8px;
 }
@@ -697,10 +703,6 @@ body {
 .fb-tree::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
-}
-
-.fb-tree::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
 }
 
 /* Folder Node */

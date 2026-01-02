@@ -559,6 +559,15 @@
    Scrollbar Styling (matches sidebar)
    ========================================================================== */
 
+/* Firefox scrollbar styling */
+.ip-article,
+.ip-glossary-list,
+.ip-search-results {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+/* WebKit (Chrome, Safari, Edge) scrollbar styling */
 .ip-article::-webkit-scrollbar,
 .ip-glossary-list::-webkit-scrollbar,
 .ip-search-results::-webkit-scrollbar {
@@ -576,10 +585,4 @@
 .ip-search-results::-webkit-scrollbar-thumb {
   background-color: var(--border-color);
   border-radius: 4px;
-}
-
-.ip-article::-webkit-scrollbar-thumb:hover,
-.ip-glossary-list::-webkit-scrollbar-thumb:hover,
-.ip-search-results::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-muted);
 }
