@@ -22,17 +22,20 @@ export {
 // Mesh loading
 export {
     loadMeshFromJSON,
+    loadMeshFromJSONAsync,
     detectMeshFormat,
     disposeMeshes,
     setMeshVisibility,
     setMeshOpacity,
     getMeshBoundingBox,
-    centerMeshGroup
+    centerMeshGroup,
+    terminateMeshWorker
 } from './meshLoader.js';
 
 // Slice-based mesh creation (for VoxelSlices format)
 export {
     createSliceBasedClassMeshes,
+    createSliceBasedClassMeshesAsync,
     setClassSliceRange,
     setClassVisibility,
     setClassOpacity,

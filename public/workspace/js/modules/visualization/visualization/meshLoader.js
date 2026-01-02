@@ -7,7 +7,7 @@
  */
 
 import { getClassColorHex, createClassMaterial } from './utils.js';
-import { createSliceBasedClassMeshes, disposeSliceMeshes } from './meshCreation.js';
+import { createSliceBasedClassMeshes, createSliceBasedClassMeshesAsync, disposeSliceMeshes, terminateMeshWorker } from './meshCreation.js';
 
 /**
  * Detect the format of mesh JSON data
@@ -48,6 +48,32 @@ export function loadMeshFromJSON(jsonData, scene) {
 }
 
 /**
+ * Load mesh data from JSON asynchronously using Web Worker
+ * Keeps UI responsive during heavy processing
+ * @param {Object} jsonData - Parsed JSON mesh data
+ * @param {THREE.Scene} scene - Three.js scene to add meshes to
+ * @param {Function} onProgress - Optional progress callback (progress, message)
+ * @returns {Promise<Object>} - { meshGroup, classMeshes/sliceMeshes, availableClasses, metadata, format }
+ */
+export async function loadMeshFromJSONAsync(jsonData, scene, onProgress = null) {
+    console.log('[MeshLoader] Loading mesh from JSON (async)...');
+
+    // Detect format
+    const format = detectMeshFormat(jsonData);
+    console.log(`[MeshLoader] Detected format: ${format}`);
+
+    if (format === 'VoxelSlices') {
+        return loadVoxelSlicesFormatAsync(jsonData, scene, onProgress);
+    } else {
+        // BufferGeometry format is already fast, no async needed
+        return loadBufferGeometryFormat(jsonData, scene);
+    }
+}
+
+// Re-export terminateMeshWorker for cleanup
+export { terminateMeshWorker };
+
+/**
  * Load VoxelSlices format (slice-based meshes)
  * @param {Object} jsonData - Parsed JSON mesh data
  * @param {THREE.Scene} scene - Three.js scene to add meshes to
@@ -69,6 +95,42 @@ function loadVoxelSlicesFormat(jsonData, scene) {
 
     // Create slice-based meshes
     const result = createSliceBasedClassMeshes(jsonData, scene);
+
+    console.log(`[MeshLoader] Loaded VoxelSlices: ${result.availableClasses.length} classes, ${jsonData.sliceCount} slices each`);
+
+    return {
+        meshGroup: result.meshGroup,
+        sliceMeshes: result.sliceMeshes,
+        availableClasses: result.availableClasses,
+        metadata: jsonData.metadata || {},
+        sliceMetadata: result.sliceMetadata,
+        format: 'VoxelSlices'
+    };
+}
+
+/**
+ * Load VoxelSlices format asynchronously using Web Worker
+ * @param {Object} jsonData - Parsed JSON mesh data
+ * @param {THREE.Scene} scene - Three.js scene to add meshes to
+ * @param {Function} onProgress - Optional progress callback
+ * @returns {Promise<Object>} - { meshGroup, sliceMeshes, availableClasses, metadata, sliceMetadata, format }
+ */
+async function loadVoxelSlicesFormatAsync(jsonData, scene, onProgress = null) {
+    console.log('[MeshLoader] Loading VoxelSlices format (async)...');
+
+    // Validate required fields
+    if (!jsonData.data || !jsonData.shape) {
+        throw new Error('Invalid VoxelSlices JSON: missing data or shape');
+    }
+
+    // Performance info for large datasets
+    const voxelCount = jsonData.data.length;
+    if (voxelCount > 500000) {
+        console.log(`[MeshLoader] Large dataset (${voxelCount} voxels). Using Web Worker for processing.`);
+    }
+
+    // Create slice-based meshes using async worker
+    const result = await createSliceBasedClassMeshesAsync(jsonData, scene, onProgress);
 
     console.log(`[MeshLoader] Loaded VoxelSlices: ${result.availableClasses.length} classes, ${jsonData.sliceCount} slices each`);
 

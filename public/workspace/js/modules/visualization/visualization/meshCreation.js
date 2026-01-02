@@ -3,6 +3,11 @@
  *
  * Creates slice-based meshes from VoxelSlices JSON format.
  * Each class gets 20 slices for range slider control.
+ *
+ * OPTIMIZATIONS:
+ * 1. Slice-bounded loops - only iterate the slice region, not entire volume
+ * 2. Single-pass multi-class - process all classes in one volume scan per slice
+ * 3. Web Worker support - offload heavy computation to background thread
  */
 
 import {
@@ -12,6 +17,177 @@ import {
     centerAndScaleGeometry
 } from './utils.js';
 
+// Web Worker instance (lazy initialized)
+let meshWorker = null;
+
+/**
+ * Get or create the mesh processing Web Worker
+ * @returns {Worker|null} - Worker instance or null if not supported
+ */
+function getMeshWorker() {
+    if (meshWorker) return meshWorker;
+
+    if (typeof Worker === 'undefined') {
+        console.warn('[MeshCreation] Web Workers not supported, using synchronous processing');
+        return null;
+    }
+
+    try {
+        // Get the worker script path relative to the module
+        const workerPath = '/workspace/js/modules/visualization/visualization/meshWorker.js';
+        meshWorker = new Worker(workerPath);
+        console.log('[MeshCreation] Web Worker initialized');
+        return meshWorker;
+    } catch (e) {
+        console.warn('[MeshCreation] Failed to create Web Worker:', e);
+        return null;
+    }
+}
+
+/**
+ * Create slice-based meshes using Web Worker (async)
+ * Falls back to synchronous processing if workers unavailable
+ * @param {Object} data - VoxelSlices JSON data
+ * @param {THREE.Scene} scene - Three.js scene to add meshes to
+ * @param {Function} onProgress - Optional progress callback
+ * @returns {Promise<Object>} - { meshGroup, sliceMeshes, availableClasses, sliceMetadata }
+ */
+export async function createSliceBasedClassMeshesAsync(data, scene, onProgress = null) {
+    const worker = getMeshWorker();
+
+    if (!worker) {
+        // Fall back to synchronous processing
+        return createSliceBasedClassMeshes(data, scene);
+    }
+
+    console.log('[MeshCreation] Creating slice-based meshes (async with Web Worker)...');
+    const startTime = performance.now();
+
+    const voxelData = data.data;
+    const shape = data.shape;
+    const [depth, height, width] = shape;
+    const sliceCount = data.sliceCount || 20;
+    const sliceDirection = data.sliceDirection || 'z';
+    const sliceBoundaries = data.sliceBoundaries;
+    const availableClasses = data.classes || [...new Set(voxelData.map(v => v.value))].sort((a, b) => a - b);
+
+    console.log(`[MeshCreation] Shape: ${depth}x${height}x${width}, Classes: ${availableClasses}, Slices: ${sliceCount}`);
+
+    if (!voxelData || voxelData.length === 0) {
+        console.warn('[MeshCreation] No voxel data provided');
+        const meshGroup = new THREE.Group();
+        scene.add(meshGroup);
+        return {
+            meshGroup,
+            sliceMeshes: {},
+            availableClasses: [],
+            sliceMetadata: { sliceCount, sliceDirection, sliceBoundaries, shape, scaleFactor: 1 }
+        };
+    }
+
+    // Calculate scaling factor
+    const maxOriginalDim = Math.max(depth, height, width);
+    const targetMaxSize = 8;
+    const scaleFactor = targetMaxSize / maxOriginalDim;
+
+    return new Promise((resolve, reject) => {
+        const messageHandler = (e) => {
+            const { type, data: resultData, message, progress } = e.data;
+
+            if (type === 'progress') {
+                if (onProgress) onProgress(progress, message);
+                console.log(`[MeshCreation Worker] ${message || `Progress: ${progress}%`}`);
+            } else if (type === 'complete') {
+                worker.removeEventListener('message', messageHandler);
+
+                const { sliceData, timing } = resultData;
+                console.log(`[MeshCreation Worker] Complete - Sparse: ${timing.sparse.toFixed(1)}ms, Mesh: ${timing.mesh.toFixed(1)}ms, Total: ${timing.total.toFixed(1)}ms`);
+
+                // Create Three.js meshes from worker data
+                const meshGroup = new THREE.Group();
+                const sliceMeshes = {};
+
+                for (const classValue of availableClasses) {
+                    sliceMeshes[classValue] = new Array(sliceCount).fill(null);
+
+                    for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
+                        const meshData = sliceData[classValue]?.[sliceIndex];
+                        if (meshData && meshData.vertices.length > 0) {
+                            const mesh = createMeshFromVertexData(
+                                Array.from(meshData.vertices),
+                                Array.from(meshData.normals),
+                                classValue, shape, scaleFactor
+                            );
+                            mesh.userData = {
+                                classValue: classValue,
+                                sliceIndex: sliceIndex,
+                                originalOpacity: 0.8
+                            };
+                            sliceMeshes[classValue][sliceIndex] = mesh;
+                            meshGroup.add(mesh);
+                        }
+                    }
+
+                    const nonEmptySlices = sliceMeshes[classValue].filter(m => m !== null).length;
+                    console.log(`[MeshCreation] Class ${classValue}: ${nonEmptySlices}/${sliceCount} non-empty slices`);
+                }
+
+                scene.add(meshGroup);
+
+                const totalTime = performance.now() - startTime;
+                console.log(`[MeshCreation] Created slice meshes for ${availableClasses.length} classes in ${totalTime.toFixed(1)}ms (including worker overhead)`);
+
+                resolve({
+                    meshGroup,
+                    sliceMeshes,
+                    availableClasses,
+                    sliceMetadata: {
+                        sliceCount,
+                        sliceDirection,
+                        sliceBoundaries,
+                        shape,
+                        scaleFactor
+                    }
+                });
+            }
+        };
+
+        const errorHandler = (e) => {
+            worker.removeEventListener('message', messageHandler);
+            worker.removeEventListener('error', errorHandler);
+            console.error('[MeshCreation Worker] Error:', e);
+            reject(new Error('Web Worker error: ' + e.message));
+        };
+
+        worker.addEventListener('message', messageHandler);
+        worker.addEventListener('error', errorHandler);
+
+        // Send data to worker
+        worker.postMessage({
+            type: 'processVoxelData',
+            data: {
+                voxelData: voxelData,
+                shape: shape,
+                availableClasses: availableClasses,
+                sliceCount: sliceCount,
+                sliceDirection: sliceDirection,
+                sliceBoundaries: sliceBoundaries
+            }
+        });
+    });
+}
+
+/**
+ * Terminate the mesh worker (call when done with visualization)
+ */
+export function terminateMeshWorker() {
+    if (meshWorker) {
+        meshWorker.terminate();
+        meshWorker = null;
+        console.log('[MeshCreation] Web Worker terminated');
+    }
+}
+
 /**
  * Create slice-based meshes for each class from voxel data
  * @param {Object} data - VoxelSlices JSON data
@@ -19,7 +195,8 @@ import {
  * @returns {Object} - { meshGroup, sliceMeshes, availableClasses, sliceMetadata }
  */
 export function createSliceBasedClassMeshes(data, scene) {
-    console.log('[MeshCreation] Creating slice-based meshes...');
+    console.log('[MeshCreation] Creating slice-based meshes (optimized)...');
+    const startTime = performance.now();
 
     // Extract data from VoxelSlices format
     const voxelData = data.data;
@@ -62,10 +239,13 @@ export function createSliceBasedClassMeshes(data, scene) {
         console.error('[MeshCreation] Failed to allocate volume array (out of memory?):', e);
         throw new Error(`Dataset too large: ${volumeSize.toLocaleString()} voxels exceeds browser memory limits`);
     }
+
+    const sparseStartTime = performance.now();
     voxelData.forEach(voxel => {
         const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
         volume[index] = voxel.value;
     });
+    console.log(`[MeshCreation] Sparse-to-dense conversion: ${(performance.now() - sparseStartTime).toFixed(1)}ms`);
 
     // Calculate scaling factor (same as segmentation module)
     const maxOriginalDim = Math.max(depth, height, width);
@@ -76,31 +256,39 @@ export function createSliceBasedClassMeshes(data, scene) {
     const meshGroup = new THREE.Group();
     const sliceMeshes = {};
 
-    // Create slices for each class
+    // Initialize slice arrays for each class
     availableClasses.forEach(classValue => {
-        sliceMeshes[classValue] = [];
+        sliceMeshes[classValue] = new Array(sliceCount).fill(null);
+    });
 
-        for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
-            const sliceMesh = createSingleSlice(
-                volume, shape, classValue, sliceIndex,
-                sliceBoundaries, sliceDirection, scaleFactor
-            );
+    // OPTIMIZATION: Process all classes for each slice in a single pass
+    // Instead of (classes × slices) volume scans, we do just (slices) scans
+    const meshStartTime = performance.now();
+    for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
+        const sliceMeshData = createSliceForAllClasses(
+            volume, shape, availableClasses, sliceIndex,
+            sliceBoundaries, sliceDirection, scaleFactor
+        );
 
-            if (sliceMesh) {
-                sliceMesh.userData = {
+        // Create meshes for each class from the collected data
+        for (const classValue of availableClasses) {
+            const classData = sliceMeshData[classValue];
+            if (classData && classData.vertices.length > 0) {
+                const mesh = createMeshFromVertexData(classData.vertices, classData.normals, classValue, shape, scaleFactor);
+                mesh.userData = {
                     classValue: classValue,
                     sliceIndex: sliceIndex,
                     originalOpacity: 0.8
                 };
-
-                sliceMeshes[classValue][sliceIndex] = sliceMesh;
-                meshGroup.add(sliceMesh);
-            } else {
-                // Store null for empty slices
-                sliceMeshes[classValue][sliceIndex] = null;
+                sliceMeshes[classValue][sliceIndex] = mesh;
+                meshGroup.add(mesh);
             }
         }
+    }
+    console.log(`[MeshCreation] Mesh generation: ${(performance.now() - meshStartTime).toFixed(1)}ms`);
 
+    // Log stats per class
+    availableClasses.forEach(classValue => {
         const nonEmptySlices = sliceMeshes[classValue].filter(m => m !== null).length;
         console.log(`[MeshCreation] Class ${classValue}: ${nonEmptySlices}/${sliceCount} non-empty slices`);
     });
@@ -108,7 +296,8 @@ export function createSliceBasedClassMeshes(data, scene) {
     // Add mesh group to scene
     scene.add(meshGroup);
 
-    console.log(`[MeshCreation] Created slice meshes for ${availableClasses.length} classes`);
+    const totalTime = performance.now() - startTime;
+    console.log(`[MeshCreation] Created slice meshes for ${availableClasses.length} classes in ${totalTime.toFixed(1)}ms`);
 
     return {
         meshGroup,
@@ -122,6 +311,127 @@ export function createSliceBasedClassMeshes(data, scene) {
             scaleFactor
         }
     };
+}
+
+/**
+ * Create mesh data for ALL classes in a single slice with one volume scan
+ * OPTIMIZATION: Instead of scanning the volume once per class, scan once and bucket by class
+ * @param {Uint8Array} volume - Dense volume data
+ * @param {Array} shape - [depth, height, width]
+ * @param {Array} availableClasses - Array of class values to process
+ * @param {number} sliceIndex - Which slice (0 to sliceCount-1)
+ * @param {Array} sliceBoundaries - Array of slice boundary positions
+ * @param {string} sliceDirection - 'x', 'y', or 'z'
+ * @param {number} scaleFactor - Scaling factor for vertices
+ * @returns {Object} - Map of classValue -> { vertices: [], normals: [] }
+ */
+function createSliceForAllClasses(volume, shape, availableClasses, sliceIndex, sliceBoundaries, sliceDirection, scaleFactor) {
+    const [depth, height, width] = shape;
+
+    // Initialize vertex/normal arrays for each class
+    const classData = {};
+    for (const classValue of availableClasses) {
+        classData[classValue] = { vertices: [], normals: [] };
+    }
+
+    // Create a Set for O(1) class lookup
+    const classSet = new Set(availableClasses);
+
+    // Get slice boundaries from pre-computed array
+    const sliceStart = sliceBoundaries[sliceIndex];
+    const sliceEnd = sliceBoundaries[sliceIndex + 1];
+
+    // Calculate loop bounds based on slice direction
+    let xStart = 0, xEnd = width;
+    let yStart = 0, yEnd = height;
+    let zStart = 0, zEnd = depth;
+
+    switch (sliceDirection) {
+        case 'x':
+            xStart = sliceStart;
+            xEnd = sliceEnd;
+            break;
+        case 'y':
+            yStart = sliceStart;
+            yEnd = sliceEnd;
+            break;
+        case 'z':
+            zStart = sliceStart;
+            zEnd = sliceEnd;
+            break;
+    }
+
+    // Pre-define faces array (avoid repeated allocation)
+    const faces = [
+        { dx: 1, dy: 0, dz: 0, name: 'right' },
+        { dx: -1, dy: 0, dz: 0, name: 'left' },
+        { dx: 0, dy: 1, dz: 0, name: 'top' },
+        { dx: 0, dy: -1, dz: 0, name: 'bottom' },
+        { dx: 0, dy: 0, dz: 1, name: 'front' },
+        { dx: 0, dy: 0, dz: -1, name: 'back' }
+    ];
+
+    // Single pass through the slice region - process ALL classes at once
+    for (let z = zStart; z < zEnd; z++) {
+        for (let y = yStart; y < yEnd; y++) {
+            for (let x = xStart; x < xEnd; x++) {
+                const currentValue = getVoxelValue(volume, x, y, z, width, height, depth);
+
+                // Skip if not a class we care about (background = 0)
+                if (!classSet.has(currentValue)) continue;
+
+                const data = classData[currentValue];
+
+                // Check each face of the voxel
+                for (let i = 0; i < 6; i++) {
+                    const face = faces[i];
+                    const neighborValue = getVoxelValue(volume,
+                        x + face.dx, y + face.dy, z + face.dz,
+                        width, height, depth);
+
+                    // If neighbor is different class, this face is on the surface
+                    if (neighborValue !== currentValue) {
+                        addQuadFace(data.vertices, data.normals, x, y, z, face);
+                    }
+                }
+            }
+        }
+    }
+
+    return classData;
+}
+
+/**
+ * Create a Three.js mesh from pre-computed vertex/normal data
+ * @param {Array} vertices - Flat array of vertex coordinates
+ * @param {Array} normals - Flat array of normal coordinates
+ * @param {number} classValue - Class number for material color
+ * @param {Array} shape - [depth, height, width]
+ * @param {number} scaleFactor - Scaling factor
+ * @returns {THREE.Mesh}
+ */
+function createMeshFromVertexData(vertices, normals, classValue, shape, scaleFactor) {
+    const geometry = new THREE.BufferGeometry();
+    const vertexArray = new Float32Array(vertices);
+    const normalArray = new Float32Array(normals);
+
+    // Center and scale geometry
+    centerAndScaleGeometry(vertexArray, shape, scaleFactor);
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertexArray, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normalArray, 3));
+    geometry.computeBoundingBox();
+
+    // Create material with class-specific color
+    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
+    const material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(colorArray[0], colorArray[1], colorArray[2]),
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+    });
+
+    return new THREE.Mesh(geometry, material);
 }
 
 /**
@@ -144,35 +454,48 @@ function createSingleSlice(volume, shape, classValue, sliceIndex, sliceBoundarie
     const sliceStart = sliceBoundaries[sliceIndex];
     const sliceEnd = sliceBoundaries[sliceIndex + 1];
 
+    // OPTIMIZATION: Calculate loop bounds based on slice direction
+    // Instead of iterating entire volume and checking inSlice, only iterate the slice region
+    let xStart = 0, xEnd = width;
+    let yStart = 0, yEnd = height;
+    let zStart = 0, zEnd = depth;
+
+    switch (sliceDirection) {
+        case 'x':
+            xStart = sliceStart;
+            xEnd = sliceEnd;
+            break;
+        case 'y':
+            yStart = sliceStart;
+            yEnd = sliceEnd;
+            break;
+        case 'z':
+            zStart = sliceStart;
+            zEnd = sliceEnd;
+            break;
+    }
+
+    // Pre-define faces array outside the loop (avoid repeated allocation)
+    const faces = [
+        { dx: 1, dy: 0, dz: 0, name: 'right' },
+        { dx: -1, dy: 0, dz: 0, name: 'left' },
+        { dx: 0, dy: 1, dz: 0, name: 'top' },
+        { dx: 0, dy: -1, dz: 0, name: 'bottom' },
+        { dx: 0, dy: 0, dz: 1, name: 'front' },
+        { dx: 0, dy: 0, dz: -1, name: 'back' }
+    ];
+
     // Extract surface vertices for this class and slice
-    for (let z = 0; z < depth; z++) {
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-
-                // Check if this voxel is in our slice range
-                let inSlice = false;
-                switch (sliceDirection) {
-                    case 'x': inSlice = (x >= sliceStart && x < sliceEnd); break;
-                    case 'y': inSlice = (y >= sliceStart && y < sliceEnd); break;
-                    case 'z': inSlice = (z >= sliceStart && z < sliceEnd); break;
-                }
-
-                if (!inSlice) continue;
-
+    // Now only iterates over the slice region, not the entire volume
+    for (let z = zStart; z < zEnd; z++) {
+        for (let y = yStart; y < yEnd; y++) {
+            for (let x = xStart; x < xEnd; x++) {
                 const currentValue = getVoxelValue(volume, x, y, z, width, height, depth);
                 if (currentValue !== classValue) continue;
 
                 // Check each face of the voxel
-                const faces = [
-                    { dx: 1, dy: 0, dz: 0, name: 'right' },
-                    { dx: -1, dy: 0, dz: 0, name: 'left' },
-                    { dx: 0, dy: 1, dz: 0, name: 'top' },
-                    { dx: 0, dy: -1, dz: 0, name: 'bottom' },
-                    { dx: 0, dy: 0, dz: 1, name: 'front' },
-                    { dx: 0, dy: 0, dz: -1, name: 'back' }
-                ];
-
-                faces.forEach(face => {
+                for (let i = 0; i < 6; i++) {
+                    const face = faces[i];
                     const neighborValue = getVoxelValue(volume,
                         x + face.dx, y + face.dy, z + face.dz,
                         width, height, depth);
@@ -181,7 +504,7 @@ function createSingleSlice(volume, shape, classValue, sliceIndex, sliceBoundarie
                     if (neighborValue !== classValue) {
                         addQuadFace(classVertices, classNormals, x, y, z, face);
                     }
-                });
+                }
             }
         }
     }

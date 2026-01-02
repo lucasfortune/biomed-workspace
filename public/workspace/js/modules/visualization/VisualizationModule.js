@@ -680,10 +680,19 @@ class VisualizationModule extends BaseModule {
 
         if (meshResult.success && meshResult.data) {
           // Update overlay for mesh generation
-          this.updateLoadingOverlay('Generating 3D meshes...', `${meshResult.data.data?.length?.toLocaleString() || 'Unknown'} voxels`);
+          const voxelCount = meshResult.data.data?.length?.toLocaleString() || 'Unknown';
+          this.updateLoadingOverlay('Generating 3D meshes...', `${voxelCount} voxels`);
 
-          // Load mesh from JSON (auto-detects format)
-          const loadResult = vizModule.loadMeshFromJSON(meshResult.data, this.scene);
+          // Progress callback for async mesh loading
+          const onProgress = (progress, message) => {
+            if (progress !== undefined) {
+              this.updateLoadingOverlay('Generating 3D meshes...', `${progress}% complete`);
+            }
+          };
+
+          // Load mesh from JSON using async worker (auto-detects format)
+          // This keeps the UI responsive during heavy processing
+          const loadResult = await vizModule.loadMeshFromJSONAsync(meshResult.data, this.scene, onProgress);
 
           // Store common data
           this.meshGroup = loadResult.meshGroup;
@@ -1861,10 +1870,11 @@ class VisualizationModule extends BaseModule {
       });
     }
 
-    // Dispose scene
+    // Dispose scene and terminate mesh worker
     try {
       const vizModule = await import('./visualization/index.js');
       vizModule.disposeScene();
+      vizModule.terminateMeshWorker();
     } catch (e) {
       console.warn('[VisualizationModule] Could not dispose scene:', e);
     }
