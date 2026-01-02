@@ -164,6 +164,7 @@ class DLDenoisingModule extends BaseModule {
         fileType: 'raw_images',
         title: 'Input Image Stack',
         icon: '📁',
+        helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.input'),
         showTestData: true,
         testDataOptions: [
           {

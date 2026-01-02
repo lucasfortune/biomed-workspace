@@ -10,6 +10,7 @@
  */
 
 import { FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
+import Templates from '../templates/Templates.js';
 
 class InferenceHandler {
   /**
@@ -53,6 +54,7 @@ class InferenceHandler {
         fileType: 'raw_images',
         title: 'Input Image Stack',
         icon: '📁',
+        helpIconHtml: Templates.renderHelpIcon('denoising-dl.step4.data'),
         showTestData: true,
         testDataOptions: [
           {

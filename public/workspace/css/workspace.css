@@ -1893,7 +1893,7 @@ body {
 
 .workspace-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   margin-bottom: 12px;
   gap: 6px;
@@ -1906,7 +1906,6 @@ body {
   color: var(--text-secondary);
   font-weight: 600;
   letter-spacing: 0.5px;
-  flex: 1;
 }
 
 .workspace-help-icon {
@@ -1940,6 +1939,7 @@ body {
   justify-content: center;
   transition: all 0.2s;
   color: var(--text-secondary);
+  margin-left: auto;
 }
 
 .btn-workspace-download:hover {

@@ -113,10 +113,6 @@ class Templates {
               </div>
               <div class="workflow-body">
                 <div class="section-card-inner">
-                  <div class="section-header">
-                    <h5>Input Image</h5>
-                    ${this.renderHelpIcon('denoising-dl.step1.input')}
-                  </div>
                   <div id="fileSelectorContainer"></div>
                   <div id="validationResult"></div>
                 </div>
@@ -488,11 +484,8 @@ class Templates {
     return `
       <div class="import-content">
         <div class="import-stage-panel">
-          <h5>Configuration</h5>
-          <p class="import-hint">Select the configuration file (.json) from a previous training.</p>
           <div class="file-row">
             <div class="file-input-group">
-              <label>Config File (.json)</label>
               <div id="importConfigSelector"></div>
             </div>
           </div>
@@ -500,11 +493,8 @@ class Templates {
         </div>
 
         <div class="import-stage-panel">
-          <h5>Model</h5>
-          <p class="import-hint">Select the trained model file (.pth).</p>
           <div class="file-row">
             <div class="file-input-group">
-              <label>Model File (.pth)</label>
               <div id="importStage1ModelSelector"></div>
             </div>
           </div>
@@ -526,7 +516,6 @@ class Templates {
           <p class="import-hint">Select the configuration file (.json) containing settings for both stages.</p>
           <div class="file-row">
             <div class="file-input-group">
-              <label>Config File (.json)</label>
               <div id="importConfigSelector"></div>
             </div>
           </div>
@@ -538,7 +527,6 @@ class Templates {
           <p class="import-hint">Select the Stage 1 (N2V) model file.</p>
           <div class="file-row">
             <div class="file-input-group">
-              <label>Stage 1 Model (.pth)</label>
               <div id="importStage1ModelSelector"></div>
             </div>
           </div>
@@ -550,7 +538,6 @@ class Templates {
           <p class="import-hint">Select the Stage 2 (Struct-N2V) model file.</p>
           <div class="file-row">
             <div class="file-input-group">
-              <label>Stage 2 Model (.pth)</label>
               <div id="importStage2ModelSelector"></div>
             </div>
           </div>
@@ -586,11 +573,6 @@ class Templates {
 
           <!-- Input Selection Section -->
           <div class="section-card">
-            <div class="section-header">
-              <h4>Select Data to Process</h4>
-              ${this.renderHelpIcon('denoising-dl.step4.data')}
-            </div>
-            <p class="section-hint">Select a TIFF stack to denoise using the trained model.</p>
             <div id="inferenceFileSelectorContainer"></div>
             <div id="inferenceValidationResult"></div>
           </div>
