@@ -585,8 +585,9 @@ def main():
             import shutil
             if 'data_dirs' in locals() and 'temp_dir' in data_dirs:
                 shutil.rmtree(data_dirs['temp_dir'])
-        except:
-            pass
+        except Exception as cleanup_error:
+            # Silently ignore cleanup errors, already in error state
+            print(f"Cleanup warning: {cleanup_error}", file=sys.stderr, flush=True)
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -178,7 +178,18 @@ class StateManager {
         activeModule: null
       },
       modules: {
-        segmentation: { active: false, currentTask: null, history: [] },
+        segmentation: {
+          active: false,
+          currentTask: null,
+          history: [],
+          inferenceResults: null
+        },
+        imageviewer: {
+          active: false,
+          currentFile: null,
+          viewMode: 'gallery',
+          currentSlice: 0
+        },
         denoising: { active: false, currentTask: null, history: [] },
         annotation: { active: false, currentFile: null, history: [] },
         mesh: { active: false, currentTask: null, history: [] }
@@ -188,6 +199,12 @@ class StateManager {
         currentView: 'welcome',
         loading: false,
         notifications: []
+      },
+      infoPanel: {
+        isOpen: false,
+        currentArticleId: null,
+        glossaryExpanded: false,
+        searchQuery: ''
       },
       user: {
         username: null,

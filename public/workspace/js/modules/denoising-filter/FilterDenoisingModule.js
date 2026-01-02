@@ -46,6 +46,9 @@ class FilterDenoisingModule extends BaseModule {
     this.onFileSelected = this.onFileSelected.bind(this);
     this.onFileUploaded = this.onFileUploaded.bind(this);
     this.startProcessing = this.startProcessing.bind(this);
+
+    // Event listener references for cleanup
+    this.eventListeners = [];
   }
 
   /**
@@ -271,45 +274,50 @@ class FilterDenoisingModule extends BaseModule {
   }
 
   setupEventListeners() {
+    // Helper to add and track event listeners
+    const addListener = (element, event, handler) => {
+      if (element) {
+        element.addEventListener(event, handler);
+        this.eventListeners.push({ element, event, handler });
+      }
+    };
+
     // Back to Hub
-    const backButton = document.getElementById('backToHub');
-    if (backButton) {
-      backButton.addEventListener('click', () => window.workspace.returnToHub());
-    }
+    addListener(document.getElementById('backToHub'), 'click', () => window.workspace.returnToHub());
 
     // Step navigation buttons
-    document.getElementById('step1Next')?.addEventListener('click', () => this.nextStep());
-    document.getElementById('step2Back')?.addEventListener('click', () => this.previousStep());
-    document.getElementById('step2Next')?.addEventListener('click', () => this.nextStep());
-    document.getElementById('step3Back')?.addEventListener('click', () => this.previousStep());
+    addListener(document.getElementById('step1Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step2Back'), 'click', () => this.previousStep());
+    addListener(document.getElementById('step2Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step3Back'), 'click', () => this.previousStep());
 
     // Method selector
     document.querySelectorAll('input[name="denoise-method"]').forEach(radio => {
-      radio.addEventListener('change', (e) => this.onMethodChange(e.target.value));
+      addListener(radio, 'change', (e) => this.onMethodChange(e.target.value));
     });
 
     // Slider-input sync for Gaussian sigma
     const sigmaSlider = document.getElementById('sigma');
     const sigmaValue = document.getElementById('sigmaValue');
     if (sigmaSlider && sigmaValue) {
-      sigmaSlider.addEventListener('input', () => sigmaValue.value = sigmaSlider.value);
-      sigmaValue.addEventListener('input', () => sigmaSlider.value = sigmaValue.value);
+      addListener(sigmaSlider, 'input', () => sigmaValue.value = sigmaSlider.value);
+      addListener(sigmaValue, 'input', () => sigmaSlider.value = sigmaValue.value);
     }
 
     // Slider-input sync for NLM h
     const hSlider = document.getElementById('filterH');
     const hValue = document.getElementById('filterHValue');
     if (hSlider && hValue) {
-      hSlider.addEventListener('input', () => hValue.value = hSlider.value);
-      hValue.addEventListener('input', () => hSlider.value = hValue.value);
+      addListener(hSlider, 'input', () => hValue.value = hSlider.value);
+      addListener(hValue, 'input', () => hSlider.value = hValue.value);
     }
 
     // Start processing button
-    document.getElementById('startProcessingBtn')?.addEventListener('click', () => this.startProcessing());
+    addListener(document.getElementById('startProcessingBtn'), 'click', () => this.startProcessing());
 
     // Result buttons
-    document.getElementById('viewResultsBtn')?.addEventListener('click', () => this.viewResults());
-    document.getElementById('resetBtn')?.addEventListener('click', () => this.reset());
+    addListener(document.getElementById('viewResultsBtn'), 'click', () => this.viewResults());
+    addListener(document.getElementById('resetBtn'), 'click', () => this.reset());
   }
 
   onMethodChange(method) {
@@ -619,6 +627,12 @@ class FilterDenoisingModule extends BaseModule {
 
   async deactivate() {
     console.log('[FilterDenoisingModule] Deactivating...');
+
+    // Remove all event listeners
+    for (const { element, event, handler } of this.eventListeners) {
+      element.removeEventListener(event, handler);
+    }
+    this.eventListeners = [];
 
     // Clean up global references
     try { delete window.filterDenoisingModule; } catch (e) { window.filterDenoisingModule = undefined; }

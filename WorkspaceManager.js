@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 
 /**
@@ -20,12 +21,12 @@ class WorkspaceManager {
   }
 
   /**
-   * Generate unique ID with prefix
+   * Generate unique ID with prefix using cryptographically secure random bytes
    * @param {string} prefix - Prefix for the ID (e.g., 'file', 'folder')
    * @returns {string} Unique ID in format: prefix_timestamp_random
    */
   generateId(prefix) {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
   }
 
   /**

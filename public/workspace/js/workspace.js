@@ -28,6 +28,9 @@ class Workspace {
     this.infoPanel = null;    // Info panel component
     this.initialized = false;
 
+    // Store unsubscribe functions for cleanup
+    this.stateUnsubscribers = [];
+
     // Initialize theme before DOM fully loads to prevent flash
     this.initTheme();
 
@@ -290,7 +293,7 @@ class Workspace {
    */
   setupStateSubscriptions() {
     // Subscribe to workspace stats changes
-    this.state.subscribe('workspace.stats', (stats) => {
+    const unsubStats = this.state.subscribe('workspace.stats', (stats) => {
       if (stats) {
         const fileCountEl = document.getElementById('file-count');
         const workspaceSizeEl = document.getElementById('workspace-size');
@@ -305,19 +308,34 @@ class Workspace {
         }
       }
     });
+    this.stateUnsubscribers.push(unsubStats);
 
     // Subscribe to loading state
-    this.state.subscribe('ui.loading', (isLoading) => {
+    const unsubLoading = this.state.subscribe('ui.loading', (isLoading) => {
       const overlay = document.getElementById('loading-overlay');
       if (overlay) {
         overlay.style.display = isLoading ? 'flex' : 'none';
       }
     });
+    this.stateUnsubscribers.push(unsubLoading);
 
     // Subscribe to notifications
-    this.state.subscribe('ui.notifications', (notifications) => {
+    const unsubNotifications = this.state.subscribe('ui.notifications', (notifications) => {
       this.renderNotifications(notifications);
     });
+    this.stateUnsubscribers.push(unsubNotifications);
+  }
+
+  /**
+   * Clean up state subscriptions
+   */
+  cleanupStateSubscriptions() {
+    for (const unsubscribe of this.stateUnsubscribers) {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    }
+    this.stateUnsubscribers = [];
   }
 
   /**

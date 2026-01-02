@@ -60,6 +60,9 @@ class ImageViewerModule extends BaseModule {
     // Cache for loaded slices
     this.sliceCache = new Map();
 
+    // IntersectionObserver for lazy loading (stored for cleanup)
+    this.imageObserver = null;
+
     // Bind methods
     this.onFileSelect = this.onFileSelect.bind(this);
   }
@@ -853,18 +856,23 @@ class ImageViewerModule extends BaseModule {
   setupLazyLoading() {
     const cards = document.querySelectorAll('.thumbnail-card');
 
-    const observer = new IntersectionObserver((entries) => {
+    // Disconnect any previous observer
+    if (this.imageObserver) {
+      this.imageObserver.disconnect();
+    }
+
+    this.imageObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const sliceIndex = parseInt(entry.target.dataset.slice);
           this.loadThumbnail(sliceIndex, entry.target);
-          observer.unobserve(entry.target);
+          this.imageObserver.unobserve(entry.target);
         }
       });
     }, { rootMargin: '100px' });
 
     cards.forEach(card => {
-      observer.observe(card);
+      this.imageObserver.observe(card);
       card.addEventListener('click', () => {
         const sliceIndex = parseInt(card.dataset.slice);
         this.switchToGalleryMode(sliceIndex);
@@ -909,6 +917,12 @@ class ImageViewerModule extends BaseModule {
    */
   async deactivate() {
     console.log('[ImageViewerModule] Deactivating...');
+
+    // Disconnect IntersectionObserver to prevent memory leaks
+    if (this.imageObserver) {
+      this.imageObserver.disconnect();
+      this.imageObserver = null;
+    }
 
     // Clear cache
     this.sliceCache.clear();

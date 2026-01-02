@@ -32,4 +32,16 @@ function initializeSocketConnection() {
     socket.on('disconnect', function() {
         console.log('Disconnected from server');
     });
+
+    socket.on('error', function(error) {
+        console.error('Socket error:', error);
+    });
+
+    socket.on('connect_error', function(error) {
+        console.error('Socket connection error:', error);
+        // Show user-friendly message
+        if (typeof showError === 'function') {
+            showError('Connection error. Please check your network and refresh the page.');
+        }
+    });
 }

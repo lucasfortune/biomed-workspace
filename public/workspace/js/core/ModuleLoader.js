@@ -7,6 +7,7 @@ class ModuleLoader {
     this.modules = new Map();
     this.activeModule = null;
     this.container = null;
+    this.isLoading = false; // Prevent race conditions during module loading
 
     console.log('[ModuleLoader] Initialized');
   }
@@ -124,6 +125,12 @@ class ModuleLoader {
    * @returns {Promise} Module instance
    */
   async load(moduleId) {
+    // Prevent concurrent module loading
+    if (this.isLoading) {
+      console.warn('[ModuleLoader] Module load already in progress, ignoring request');
+      return null;
+    }
+
     const module = this.modules.get(moduleId);
 
     if (!module) {
@@ -136,6 +143,9 @@ class ModuleLoader {
     }
 
     console.log(`[ModuleLoader] Loading module: ${module.name}`);
+
+    // Set loading lock
+    this.isLoading = true;
 
     // Update UI state
     this.state.update('ui.loading', true);
@@ -177,6 +187,9 @@ class ModuleLoader {
       this.state.notify('error', `Failed to load ${module.name}: ${error.message}`);
       this.state.update('ui.loading', false);
       throw error;
+    } finally {
+      // Release loading lock
+      this.isLoading = false;
     }
   }
 

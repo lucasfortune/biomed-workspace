@@ -89,6 +89,9 @@ class MeshModule extends BaseModule {
     this.startGeneration = this.startGeneration.bind(this);
     this.onGenerationProgress = this.onGenerationProgress.bind(this);
     this.onGenerationComplete = this.onGenerationComplete.bind(this);
+
+    // Event listener references for cleanup
+    this.eventListeners = [];
   }
 
   /**
@@ -344,26 +347,25 @@ class MeshModule extends BaseModule {
   // ===========================================================================
 
   setupEventListeners() {
+    // Helper to add and track event listeners
+    const addListener = (element, event, handler) => {
+      if (element) {
+        element.addEventListener(event, handler);
+        this.eventListeners.push({ element, event, handler });
+      }
+    };
+
     // Back to Hub button
-    const backButton = document.getElementById('backToHub');
-    if (backButton) {
-      backButton.addEventListener('click', () => {
-        window.workspace.returnToHub();
-      });
-    }
+    addListener(document.getElementById('backToHub'), 'click', () => {
+      window.workspace.returnToHub();
+    });
 
     // Step 1 Next button
-    const step1Next = document.getElementById('step1Next');
-    if (step1Next) {
-      step1Next.addEventListener('click', () => this.nextStep());
-    }
+    addListener(document.getElementById('step1Next'), 'click', () => this.nextStep());
 
     // Format checkboxes
     ['formatJson', 'formatObj', 'formatStl'].forEach(id => {
-      const checkbox = document.getElementById(id);
-      if (checkbox) {
-        checkbox.addEventListener('change', () => this.updateGenerationOptions());
-      }
+      addListener(document.getElementById(id), 'change', () => this.updateGenerationOptions());
     });
   }
 
@@ -1038,6 +1040,12 @@ class MeshModule extends BaseModule {
 
     // Stop elapsed time timer
     this.stopElapsedTimer();
+
+    // Remove all tracked event listeners
+    for (const { element, event, handler } of this.eventListeners) {
+      element.removeEventListener(event, handler);
+    }
+    this.eventListeners = [];
 
     // Disconnect socket event handlers
     if (this.socket) {

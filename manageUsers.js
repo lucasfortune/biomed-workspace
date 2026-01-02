@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const path = require('path');
 
@@ -23,10 +24,10 @@ function saveUsers(usersData) {
 }
 
 /**
- * Generate unique user ID
+ * Generate unique user ID using cryptographically secure random bytes
  */
 function generateUserId() {
-  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  return crypto.randomUUID();
 }
 
 /**
