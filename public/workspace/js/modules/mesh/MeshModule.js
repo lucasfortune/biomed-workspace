@@ -1022,6 +1022,7 @@ class MeshModule extends BaseModule {
         } else if (status.status === 'failed') {
           // Generation failed - reset to options
           console.log('[MeshModule] Generation failed:', status.error);
+          this.stopElapsedTimer(); // Ensure timer is stopped on failure
           this.currentMeshId = null;
           this.state.notify('error', `Previous generation failed: ${status.error}`);
         }

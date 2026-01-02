@@ -27,7 +27,21 @@ class WorkspaceAPI {
       console.log(`[WorkspaceAPI] ${options.method || 'GET'} ${endpoint}`);
 
       const response = await fetch(url, config);
-      const data = await response.json();
+
+      // Handle non-JSON responses gracefully
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Non-JSON response - create error object
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        // Wrap non-JSON successful response
+        data = { success: true, message: text };
+      }
 
       if (!response.ok) {
         throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);

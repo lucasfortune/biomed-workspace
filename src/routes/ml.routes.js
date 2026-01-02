@@ -967,8 +967,8 @@ function createMLRoutes(dependencies) {
         if (!training_id || !trainingSessions.has(training_id)) {
           return res.status(400).json({
             error: 'No imported model found and training session not found',
-            training_id: training_id,
-            available_sessions: Array.from(trainingSessions.keys())
+            training_id: training_id
+            // Note: available_sessions removed to prevent information disclosure
           });
         }
 

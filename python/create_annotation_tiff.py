@@ -57,11 +57,19 @@ def decode_sparse(b64_data: str, width: int, height: int) -> np.ndarray:
     raw = base64.b64decode(b64_data)
     arr = np.zeros((height, width), dtype=np.uint8)
 
+    # Validate sparse data length is a multiple of 5 (x_lo, x_hi, y_lo, y_hi, class_id)
+    if len(raw) % 5 != 0:
+        raise ValueError(f"Invalid sparse data length: {len(raw)}, expected multiple of 5")
+
     for i in range(0, len(raw), 5):
         x = raw[i] | (raw[i + 1] << 8)
         y = raw[i + 2] | (raw[i + 3] << 8)
         class_id = raw[i + 4]
-        arr[y, x] = class_id
+
+        # Validate coordinates are within bounds
+        if 0 <= x < width and 0 <= y < height:
+            arr[y, x] = class_id
+        # Silently skip out-of-bounds coordinates (can happen with edge annotations)
 
     return arr
 

@@ -11,7 +11,10 @@ const fs = require('fs');
 const BASE_DIR = path.resolve(__dirname, '..', '..');
 
 // Python interpreter - use venv Python to ensure all dependencies are available
-const PYTHON_PATH = path.join(BASE_DIR, 'venv', 'bin', 'python');
+// Cross-platform: Windows uses Scripts\python.exe, Unix uses bin/python
+const PYTHON_PATH = process.platform === 'win32'
+  ? path.join(BASE_DIR, 'venv', 'Scripts', 'python.exe')
+  : path.join(BASE_DIR, 'venv', 'bin', 'python');
 
 // Directory structure
 const DIRECTORIES = {

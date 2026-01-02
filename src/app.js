@@ -7,6 +7,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
 
@@ -261,11 +262,51 @@ function configureApp(app, dependencies) {
   // MIDDLEWARE CONFIGURATION
   // =============================================================================
 
+  // Security headers with Helmet
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+        scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, etc.)
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false, // Required for loading external scripts
+    crossOriginResourcePolicy: { policy: "cross-origin" } // Allow loading resources
+  }));
+
   // Session middleware
   app.use(createSessionMiddleware(env));
 
-  // CORS and JSON parsing
-  app.use(cors());
+  // CORS configuration
+  const allowedOrigins = env.ALLOWED_ORIGINS
+    ? env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
+  app.use(cors({
+    origin: function(origin, callback) {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      // In development, allow all origins
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+  }));
+
+  // JSON parsing
   app.use(express.json({ limit: '100mb' }));
 
   // =============================================================================

@@ -205,3 +205,11 @@ function downloadModel() {
 }
 
 window.downloadModel = downloadModel;
+
+// Clean up polling interval when navigating away or closing page
+window.addEventListener('beforeunload', () => {
+    if (trainingPollInterval) {
+        clearInterval(trainingPollInterval);
+        trainingPollInterval = null;
+    }
+});
