@@ -11,7 +11,77 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadPendingUsers();
     loadActivityLogs();
     loadActiveSessions();
+
+    // Set up event listeners for static elements
+    setupEventListeners();
 });
+
+/**
+ * Toggle theme between light and dark
+ */
+function toggleTheme() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('workspace-theme', newTheme);
+}
+
+/**
+ * Set up event listeners for static elements
+ */
+function setupEventListeners() {
+    // Theme toggle
+    const themeToggle = document.querySelector('.theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+
+    // Logout button
+    const logoutBtn = document.querySelector('.btn-danger[data-action="logout"]');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    // Navigation tabs
+    document.querySelectorAll('.nav-tab[data-tab]').forEach(tab => {
+        tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    });
+
+    // User filter
+    const userFilter = document.getElementById('userFilter');
+    if (userFilter) {
+        userFilter.addEventListener('change', loadUsers);
+    }
+
+    // Activity filters
+    const activityUserFilter = document.getElementById('activityUserFilter');
+    if (activityUserFilter) {
+        activityUserFilter.addEventListener('change', loadActivityLogs);
+    }
+
+    const activityTypeFilter = document.getElementById('activityTypeFilter');
+    if (activityTypeFilter) {
+        activityTypeFilter.addEventListener('change', loadActivityLogs);
+    }
+
+    const activityLimit = document.getElementById('activityLimit');
+    if (activityLimit) {
+        activityLimit.addEventListener('change', loadActivityLogs);
+    }
+
+    // Refresh sessions button
+    const refreshSessionsBtn = document.querySelector('[data-action="refresh-sessions"]');
+    if (refreshSessionsBtn) {
+        refreshSessionsBtn.addEventListener('click', loadActiveSessions);
+    }
+
+    // Cancel modal button
+    const cancelBtn = document.getElementById('cancelBtn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeConfirmModal);
+    }
+}
 
 /**
  * Check if user has admin access

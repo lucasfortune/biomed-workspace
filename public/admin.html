@@ -16,7 +16,7 @@
                 <h1>Admin Dashboard</h1>
                 <div class="header-actions">
                     <span id="adminUserInfo" class="admin-user-info"></span>
-                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                    <button class="theme-toggle" title="Toggle theme">
                         <svg class="theme-icon sun" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 7a5 5 0 100 10 5 5 0 000-10zM12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
                         </svg>
@@ -25,22 +25,22 @@
                         </svg>
                     </button>
                     <a href="/" class="btn btn-secondary">Back to Home</a>
-                    <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
+                    <button class="btn btn-danger" data-action="logout">Logout</button>
                 </div>
             </div>
         </header>
 
         <nav class="admin-nav">
-            <button class="nav-tab active" data-tab="users" onclick="switchTab('users')">
+            <button class="nav-tab active" data-tab="users">
                 👥 Users
             </button>
-            <button class="nav-tab" data-tab="pending" onclick="switchTab('pending')">
+            <button class="nav-tab" data-tab="pending">
                 ⏳ Pending Approvals <span id="pendingCount" class="badge">0</span>
             </button>
-            <button class="nav-tab" data-tab="activity" onclick="switchTab('activity')">
+            <button class="nav-tab" data-tab="activity">
                 📊 Activity Logs
             </button>
-            <button class="nav-tab" data-tab="sessions" onclick="switchTab('sessions')">
+            <button class="nav-tab" data-tab="sessions">
                 🔄 Active Sessions
             </button>
         </nav>
@@ -51,7 +51,7 @@
                 <div class="content-header">
                     <h2>All Users</h2>
                     <div class="filter-controls">
-                        <select id="userFilter" onchange="loadUsers()">
+                        <select id="userFilter">
                             <option value="all">All Users</option>
                             <option value="active">Active Only</option>
                             <option value="pending">Pending Only</option>
@@ -80,17 +80,17 @@
                 <div class="content-header">
                     <h2>Activity Logs</h2>
                     <div class="filter-controls">
-                        <select id="activityUserFilter" onchange="loadActivityLogs()">
+                        <select id="activityUserFilter">
                             <option value="all">All Users</option>
                         </select>
-                        <select id="activityTypeFilter" onchange="loadActivityLogs()">
+                        <select id="activityTypeFilter">
                             <option value="all">All Actions</option>
                             <option value="login_success">Logins</option>
                             <option value="training_start">Training</option>
                             <option value="inference_start">Inference</option>
                             <option value="file_upload">Uploads</option>
                         </select>
-                        <input type="number" id="activityLimit" value="50" min="10" max="500" step="10" onchange="loadActivityLogs()" placeholder="Limit">
+                        <input type="number" id="activityLimit" value="50" min="10" max="500" step="10" placeholder="Limit">
                     </div>
                 </div>
                 <div id="activityContent" class="data-content">
@@ -102,7 +102,7 @@
             <div id="sessionsTab" class="tab-content">
                 <div class="content-header">
                     <h2>Active Training & Inference Sessions</h2>
-                    <button class="btn btn-primary" onclick="loadActiveSessions()">🔄 Refresh</button>
+                    <button class="btn btn-primary" data-action="refresh-sessions">🔄 Refresh</button>
                 </div>
                 <div id="sessionsContent" class="data-content">
                     <div class="loading-spinner">Loading sessions...</div>
@@ -118,7 +118,7 @@
             <p id="confirmMessage"></p>
             <div class="modal-actions">
                 <button class="btn btn-danger" id="confirmBtn">Confirm</button>
-                <button class="btn btn-secondary" id="cancelBtn" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
             </div>
         </div>
     </div>
@@ -131,14 +131,6 @@
                 document.documentElement.setAttribute('data-theme', savedTheme);
             }
         })();
-
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('workspace-theme', newTheme);
-        }
     </script>
     <script src="js/utils.js"></script>
     <script src="js/admin.js"></script>
