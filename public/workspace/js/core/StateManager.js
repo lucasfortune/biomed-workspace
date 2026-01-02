@@ -263,7 +263,12 @@ class StateManager {
   }
 }
 
-// Export for use in other modules
+// Make available globally (loaded as regular script, not ES6 module)
+if (typeof window !== 'undefined') {
+  window.StateManager = StateManager;
+}
+
+// Also support CommonJS for potential future use
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = StateManager;
 }

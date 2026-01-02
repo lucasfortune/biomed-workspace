@@ -9,11 +9,46 @@
 export let scene, camera, renderer;
 
 /**
+ * Check if WebGL is available
+ * @returns {Object} - { supported: boolean, message: string }
+ */
+export function checkWebGLSupport() {
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+            return { supported: true, message: 'WebGL is supported' };
+        }
+        return {
+            supported: false,
+            message: 'WebGL is not supported. Please use a modern browser with WebGL enabled.'
+        };
+    } catch (e) {
+        return {
+            supported: false,
+            message: 'WebGL check failed: ' + e.message
+        };
+    }
+}
+
+/**
  * Initialize the Three.js scene with enhanced lighting and settings
  * @param {HTMLElement} container - The DOM container for the Three.js canvas
- * @returns {Object} - Returns the initialized scene components
+ * @returns {Object} - Returns the initialized scene components or error info
  */
 export function initializeScene(container) {
+    // Check WebGL support before initializing
+    const webglCheck = checkWebGLSupport();
+    if (!webglCheck.supported) {
+        console.error('[Scene] WebGL not supported:', webglCheck.message);
+        return {
+            error: true,
+            message: webglCheck.message,
+            scene: null,
+            camera: null,
+            renderer: null
+        };
+    }
 
     // Initialize Three.js scene with better settings
     scene = new THREE.Scene();
