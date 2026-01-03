@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-01-04 (autoStructN2V 2.5D Implementation)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-04 | [autoStructN2V 2.5D Implementation](2026-01-04_autostructn2v_2.5d_implementation.md) | ✨ Feature | ~6 hrs | ✅ Complete |
+
 ### 2026-01-01 (Info Panel Implementation & Documentation Update)
 
 | Date | Session | Type | Duration | Status |
@@ -153,7 +159,8 @@ This index provides a chronological record of all development sessions. Sessions
 - [Workspace Path Consistency](2025-12-11_workspace_path_consistency.md) - Directory structure consistency
 - [Phase 3.1 Backend Infrastructure](2025-12-04_phase3_1_backend_infrastructure.md) - Backend infrastructure for file browser
 
-### ✨ Features (6)
+### ✨ Features (7)
+- [autoStructN2V 2.5D Implementation](2026-01-04_autostructn2v_2.5d_implementation.md) - Volumetric denoising mode
 - [Info Panel Implementation](2026-01-01_info_panel_implementation.md) - Educational help system
 - [Data Lineage Tracking](2025-12-23_data_lineage_tracking.md) - Processing history tracking
 - [Mesh Module Implementation](2025-12-22_mesh_module_implementation.md) - Surface mesh generation
@@ -177,21 +184,31 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 20 |
-| **Total Development Time** | ~99.5 hours |
-| **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Phase 4 Info Panel complete, Module Framework complete, Data Lineage complete, Annotation Module complete |
+| **Total Sessions** | 21 |
+| **Total Development Time** | ~105.5 hours |
+| **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Phase 4 Info Panel complete, Module Framework complete, Data Lineage complete, Annotation Module complete, 2.5D Denoising complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
-| **Bugs Fixed** | 38+ issues |
-| **Lines Added** | ~26,800+ (code) + ~37,000 (docs) |
-| **Lines Removed** | ~960+ (cleanup) |
-| **Files Created** | 85+ |
-| **Files Modified** | 78+ |
+| **Bugs Fixed** | 52+ issues |
+| **Lines Added** | ~27,600+ (code) + ~37,000 (docs) |
+| **Lines Removed** | ~1,010+ (cleanup) |
+| **Files Created** | 86+ |
+| **Files Modified** | 88+ |
 
 ---
 
 ## 📝 Recent Activity Summary
 
 ### What Was Accomplished (Latest First)
+
+**2026-01-04 - autoStructN2V 2.5D Implementation** ⭐ **2.5D DENOISING COMPLETE**
+- Added 2.5D volumetric processing mode to DL denoising module
+- Implemented triplet-based inference (z-1, z, z+1 → center slice)
+- Created 2D/2.5D toggle switch with minimum stack depth validation (20 slices)
+- Implemented tabbed 3D mask visualization for autoStructN2V
+- Fixed 14 bugs discovered during testing (normalization, shape mismatches, lineage)
+- Added comprehensive help article with glossary terms
+- Updated cross-links in 6 related help articles
+- 4 commits, 10 files changed, ~800 lines added
 
 **2026-01-01 - Info Panel Implementation** ⭐ **PHASE 4 COMPLETE**
 - Implemented comprehensive educational Info Panel system with search, glossary, and article display
@@ -391,6 +408,7 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Topic | Relevant Sessions |
 |-------|-------------------|
+| **DL Denoising / 2.5D** | autoStructN2V 2.5D Implementation |
 | **Info Panel / Help System** | Info Panel Implementation |
 | **Data Lineage** | Data Lineage Tracking |
 | **Module System** | Phase 2 Completion, Cleanup |
@@ -508,5 +526,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2026-01-01
-**Total Sessions Documented:** 20
+**Last Updated:** 2026-01-04
+**Total Sessions Documented:** 21
