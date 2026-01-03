@@ -49,6 +49,7 @@ class DenoisingService {
       id: trainingId,
       sessionId: sessionData.sessionId,
       method: sessionData.method, // 'n2v' or 'autostructn2v'
+      inputFileId: sessionData.inputFileId || null, // For lineage tracking
       status: 'pending',
       startTime: new Date(),
       endTime: null,
@@ -469,6 +470,24 @@ class DenoisingService {
     try {
       const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
 
+      // Get the session to find the input file ID for lineage
+      const session = this.getSession(trainingId);
+      const inputFileId = session?.inputFileId;
+
+      // Helper to create proper lineage object
+      const createLineageObj = (processType) => {
+        const lineage = {
+          processType: processType,
+          processedAt: new Date().toISOString(),
+          processId: trainingId
+        };
+        // Add input file reference if available
+        if (inputFileId) {
+          lineage.inputs = [inputFileId];
+        }
+        return lineage;
+      };
+
       // Track denoised TIFF stacks
       if (outputFiles.stage1_stack && fs.existsSync(outputFiles.stage1_stack)) {
         const relativePath = path.relative(workspacePath, outputFiles.stage1_stack);
@@ -479,10 +498,7 @@ class DenoisingService {
           category: 'denoised_images',
           size: stats.size,
           folderId: null,
-          lineage: {
-            operation: `denoising-${method}`,
-            trainingId: trainingId
-          }
+          lineage: createLineageObj('denoising')
         });
         if (this.logger) {
           this.logger.debug(`Tracked stage1 output: ${relativePath}`);
@@ -498,17 +514,14 @@ class DenoisingService {
           category: 'denoised_images',
           size: stats.size,
           folderId: null,
-          lineage: {
-            operation: `denoising-${method}-stage2`,
-            trainingId: trainingId
-          }
+          lineage: createLineageObj('denoising')
         });
         if (this.logger) {
           this.logger.debug(`Tracked stage2 output: ${relativePath}`);
         }
       }
 
-      // Track model files
+      // Track model files (models are outputs of training, linked to input data)
       if (outputFiles.stage1_model && fs.existsSync(outputFiles.stage1_model)) {
         const relativePath = path.relative(workspacePath, outputFiles.stage1_model);
         const stats = fs.statSync(outputFiles.stage1_model);
@@ -518,10 +531,7 @@ class DenoisingService {
           category: 'models',
           size: stats.size,
           folderId: null,
-          lineage: {
-            operation: `denoising-${method}-model`,
-            trainingId: trainingId
-          }
+          lineage: createLineageObj('denoising-training')
         });
       }
 
@@ -534,10 +544,7 @@ class DenoisingService {
           category: 'models',
           size: stats.size,
           folderId: null,
-          lineage: {
-            operation: `denoising-${method}-model-stage2`,
-            trainingId: trainingId
-          }
+          lineage: createLineageObj('denoising-training')
         });
       }
 

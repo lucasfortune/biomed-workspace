@@ -1423,6 +1423,49 @@
   margin: 0;
 }
 
+/* Mode badge (2D / 2.5D indicator) */
+.mask-visualization .mask-mode-badge {
+  display: inline-block;
+  font-size: var(--module-font-size-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--module-radius-sm);
+  background: var(--module-primary);
+  color: white;
+  margin-left: var(--module-spacing-sm);
+  vertical-align: middle;
+}
+
+/* Slice tabs for 3D mask (2.5D mode) */
+.mask-visualization .mask-tabs {
+  display: flex;
+  justify-content: center;
+  gap: var(--module-spacing-xs);
+  margin-bottom: var(--module-spacing-md);
+}
+
+.mask-visualization .mask-tab {
+  padding: var(--module-spacing-sm) var(--module-spacing-md);
+  border: 1px solid var(--module-border);
+  background: var(--module-bg-secondary);
+  color: var(--module-text-secondary);
+  border-radius: var(--module-radius-sm) var(--module-radius-sm) 0 0;
+  cursor: pointer;
+  font-size: var(--module-font-size-sm);
+  transition: var(--module-transition-fast);
+}
+
+.mask-visualization .mask-tab:hover {
+  background: var(--module-bg-hover);
+  color: var(--module-text-primary);
+}
+
+.mask-visualization .mask-tab.active {
+  background: var(--module-primary);
+  color: white;
+  border-color: var(--module-primary);
+}
+
 .mask-visualization .mask-content {
   display: flex;
   gap: var(--module-spacing-lg);

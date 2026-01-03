@@ -617,7 +617,8 @@ function createDenoisingRoutes(dependencies) {
         sessionId,
         method,
         mode,
-        config: fullConfig
+        config: fullConfig,
+        inputFileId: inputFileId || null  // Store for lineage tracking
       });
 
       // Start training asynchronously

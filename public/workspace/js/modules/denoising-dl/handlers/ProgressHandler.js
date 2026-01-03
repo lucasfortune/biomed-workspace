@@ -323,8 +323,18 @@ class ProgressHandler {
       // Use real maskArray if provided, otherwise create mock grid for visualization
       let maskData;
       if (data.maskArray && Array.isArray(data.maskArray)) {
-        // Convert to boolean 2D array for visualization
-        maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
+        // Check if it's a 3D mask (for 2.5D mode): array of 3 2D arrays
+        if (data.maskArray.length === 3 &&
+            Array.isArray(data.maskArray[0]) &&
+            Array.isArray(data.maskArray[0][0])) {
+          // 3D mask: convert each slice to boolean
+          maskData = data.maskArray.map(slice =>
+            slice.map(row => row.map(val => Boolean(val)))
+          );
+        } else {
+          // 2D mask: convert to boolean
+          maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
+        }
       } else {
         // Fallback to mock grid (for backwards compatibility)
         maskData = this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
@@ -366,8 +376,18 @@ class ProgressHandler {
     // Use real maskArray for visualization (this should always be present for pause workflow)
     let maskData;
     if (data.maskArray && Array.isArray(data.maskArray)) {
-      // Convert to boolean 2D array for visualization
-      maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
+      // Check if it's a 3D mask (for 2.5D mode): array of 3 2D arrays
+      if (data.maskArray.length === 3 &&
+          Array.isArray(data.maskArray[0]) &&
+          Array.isArray(data.maskArray[0][0])) {
+        // 3D mask: convert each slice to boolean
+        maskData = data.maskArray.map(slice =>
+          slice.map(row => row.map(val => Boolean(val)))
+        );
+      } else {
+        // 2D mask: convert to boolean
+        maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
+      }
     } else {
       // Fallback (shouldn't happen in normal pause workflow)
       console.warn('[ProgressHandler] No maskArray in paused data, using mock');

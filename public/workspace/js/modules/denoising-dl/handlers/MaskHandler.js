@@ -191,7 +191,18 @@ class MaskHandler {
         const maskResult = result.mask;
         let maskData;
         if (maskResult.maskArray && Array.isArray(maskResult.maskArray)) {
-          maskData = maskResult.maskArray.map(row => row.map(val => Boolean(val)));
+          // Check if it's a 3D mask (for 2.5D mode): array of 3 2D arrays
+          if (maskResult.maskArray.length === 3 &&
+              Array.isArray(maskResult.maskArray[0]) &&
+              Array.isArray(maskResult.maskArray[0][0])) {
+            // 3D mask: convert each slice to boolean
+            maskData = maskResult.maskArray.map(slice =>
+              slice.map(row => row.map(val => Boolean(val)))
+            );
+          } else {
+            // 2D mask: convert to boolean
+            maskData = maskResult.maskArray.map(row => row.map(val => Boolean(val)));
+          }
         } else {
           // Fallback to mock grid
           maskData = this.createMaskGrid(maskResult.kernelSize, maskResult.activePixels, maskResult.pattern);

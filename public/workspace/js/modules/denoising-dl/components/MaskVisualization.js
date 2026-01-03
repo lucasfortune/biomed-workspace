@@ -3,6 +3,7 @@
  *
  * Renders the structural noise mask as a visual pixel grid.
  * Shows active pixels (those that will be masked during Stage 2 training).
+ * Supports both 2D masks (single slice) and 3D masks (triplet for 2.5D mode).
  */
 
 class MaskVisualization {
@@ -16,11 +17,17 @@ class MaskVisualization {
     this.onRegenerateMask = options.onRegenerateMask;
 
     // Mask data
-    this.maskData = null;
+    this.maskData = null;      // Current 2D mask to display
+    this.maskData3D = null;    // Full 3D mask data (for 2.5D mode)
     this.kernelSize = 0;
     this.activePixels = 0;
     this.pattern = '';
     this.isEmpty = false;
+
+    // 3D mask state (for 2.5D mode)
+    this.is3D = false;
+    this.activeSlice = 1;      // Default to center slice (index 1)
+    this.sliceLabels = ['Z-1 (above)', 'Z (center)', 'Z+1 (below)'];
   }
 
   /**
@@ -38,19 +45,24 @@ class MaskVisualization {
       `;
     }
 
+    const tabsHtml = this.is3D ? this._renderTabs() : '';
     const gridHtml = this._renderGrid();
     const statsHtml = this._renderStats();
     const warningHtml = this.isEmpty ? this._renderEmptyWarning() : '';
 
+    const modeLabel = this.is3D ? '2.5D Triplet Mask' : '2D Mask';
+    const subtitle = this.is3D
+      ? 'This 3-slice pattern represents structured noise across the Z-axis triplet. Each tab shows the mask for a different slice position.'
+      : 'This pattern represents the detected structured noise in your images. Active pixels (purple) will be masked during Stage 2 training.';
+
     return `
       <div class="mask-visualization" id="${this.containerId}">
         <div class="mask-header">
-          <h4>Structural Noise Pattern</h4>
-          <p class="mask-subtitle">
-            This pattern represents the detected structured noise in your images.
-            Active pixels (purple) will be masked during Stage 2 training.
-          </p>
+          <h4>Structural Noise Pattern <span class="mask-mode-badge">${modeLabel}</span></h4>
+          <p class="mask-subtitle">${subtitle}</p>
         </div>
+
+        ${tabsHtml}
 
         <div class="mask-content">
           <div class="mask-grid-container">
@@ -171,15 +183,86 @@ class MaskVisualization {
   }
 
   /**
+   * Render tabs for 3D mask navigation (2.5D mode)
+   */
+  _renderTabs() {
+    return `
+      <div class="mask-tabs">
+        ${this.sliceLabels.map((label, i) => `
+          <button class="mask-tab ${i === this.activeSlice ? 'active' : ''}"
+                  data-slice-index="${i}"
+                  onclick="window.dlDenoisingModule?.maskVisualization?.switchSlice(${i})">
+            ${label}
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  /**
+   * Switch to a different slice in 3D mask view
+   * @param {number} sliceIndex - Index of slice (0, 1, or 2)
+   */
+  switchSlice(sliceIndex) {
+    if (!this.is3D || !this.maskData3D) return;
+    if (sliceIndex < 0 || sliceIndex >= this.maskData3D.length) return;
+
+    this.activeSlice = sliceIndex;
+    this.maskData = this.maskData3D[sliceIndex];
+    this._updateActivePixelCount();
+    this.refresh();
+  }
+
+  /**
+   * Update active pixel count for current slice
+   */
+  _updateActivePixelCount() {
+    if (!this.maskData) {
+      this.activePixels = 0;
+      return;
+    }
+
+    let count = 0;
+    for (let i = 0; i < this.maskData.length; i++) {
+      for (let j = 0; j < this.maskData[i].length; j++) {
+        if (this.maskData[i][j]) count++;
+      }
+    }
+    this.activePixels = count;
+  }
+
+  /**
    * Set mask data
    * @param {Object} data - Mask data from backend
    */
   setMaskData(data) {
-    this.maskData = data.mask || data.maskData || null;
-    this.kernelSize = data.kernelSize || (this.maskData ? this.maskData.length : 0);
+    const mask = data.mask || data.maskData || null;
+
+    // Detect 3D mask (array of 3 2D arrays for 2.5D mode)
+    if (mask && Array.isArray(mask) && mask.length === 3 &&
+        Array.isArray(mask[0]) && Array.isArray(mask[0][0])) {
+      // 3D mask detected
+      this.is3D = true;
+      this.maskData3D = mask;
+      this.activeSlice = 1;  // Default to center slice
+      this.maskData = mask[1];  // Show center slice by default
+      this.kernelSize = data.kernelSize || this.maskData.length;
+    } else {
+      // 2D mask
+      this.is3D = false;
+      this.maskData3D = null;
+      this.maskData = mask;
+      this.kernelSize = data.kernelSize || (this.maskData ? this.maskData.length : 0);
+    }
+
     this.activePixels = data.activePixels || 0;
     this.pattern = data.pattern || '';
     this.isEmpty = data.isEmpty || false;
+
+    // Recalculate active pixels for current slice if not provided
+    if (!data.activePixels && this.maskData) {
+      this._updateActivePixelCount();
+    }
   }
 
   /**
