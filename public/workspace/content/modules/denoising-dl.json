@@ -12,8 +12,21 @@
         "summary": "Remove noise from TIFF image stacks using self-supervised deep learning methods that require no clean reference images.",
         "body": "Deep learning denoising uses neural networks trained directly on your noisy images — no clean training data required. This is possible through self-supervised learning techniques.\n\nAvailable Methods:\n\nNoise2Void (N2V)\nA fast single-stage method ideal for random, uncorrelated noise like Gaussian or Poisson noise commonly found in microscopy images. N2V works by training a network to predict masked pixels from their surroundings.\n\nautoStructN2V\nA two-stage approach for structured noise patterns like scan lines, periodic artifacts from tomography, or camera-specific patterns. Stage 1 trains standard N2V, then analyzes residuals to detect noise patterns. Stage 2 uses these patterns to better preserve real structures while removing noise.\n\nWorkflow:\n1. Select Method & Data: Choose your denoising method and upload images\n2. Configure: Adjust training parameters or use presets\n3. Training: Train the model (images are denoised during training)\n4. Inference (Optional): Apply the model to additional images"
       },
-      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.step1.mode", "denoising-dl.autostructn2v-detail"],
       "seeAlsoTags": ["denoising", "training"]
+    },
+    {
+      "id": "denoising-dl.step1.mode",
+      "title": "2D vs 2.5D Processing Mode",
+      "category": "configuration",
+      "tags": ["denoising", "2.5d", "volumetric", "mode", "triplet"],
+      "contentType": "full",
+      "content": {
+        "summary": "Choose between 2D (slice-by-slice) or 2.5D (volumetric triplet) processing for your TIFF stacks.",
+        "body": "Processing Mode determines how the network uses spatial context from your image stack.\n\n2D Mode (Default)\nEach slice is processed independently. The network sees only a single 2D image at a time.\n\nBest for:\n- Images where noise is independent between slices\n- Stacks with fewer than 20 slices\n- When inter-slice correlation is not important\n- Faster processing with lower memory requirements\n\n2.5D Mode\nProcesses triplets of consecutive slices (z-1, z, z+1) to predict the center slice. The network leverages inter-slice context for better denoising.\n\nBest for:\n- Volumetric data with correlated structures across slices\n- EM tomography and confocal microscopy stacks\n- Noise patterns that span multiple slices\n- When preserving 3D structural continuity is important\n\nRequirements for 2.5D:\n- Minimum 20 slices in the stack\n- Slices should be spatially contiguous (not random samples)\n- More GPU memory required (3x input channels)\n\nHow 2.5D Works:\nThe network takes 3 consecutive slices as input and predicts only the center slice. This sliding window approach processes the entire stack while using neighboring slice information. Boundary slices (first and last) are copied from the original since they lack full triplet context.\n\nFor autoStructN2V in 2.5D:\nThe structural noise mask becomes 3-dimensional, capturing noise correlations across the triplet. The mask visualization shows three tabs (Z-1, Z center, Z+1) so you can inspect each slice's pattern."
+      },
+      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.step1.input", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoTags": ["2.5d", "volumetric"]
     },
     {
       "id": "denoising-dl.step1.method",
@@ -25,7 +38,7 @@
         "summary": "Choose between N2V for random noise or autoStructN2V for structured noise patterns.",
         "body": "Noise2Void (N2V)\nBest for: Random, uncorrelated noise (Gaussian, Poisson)\nSpeed: Fast single-stage training\nUse when: Your noise appears as random pixel variations without visible patterns\n\nautoStructN2V\nBest for: Structured noise patterns (scan lines, periodic artifacts)\nSpeed: Slower two-stage training with interactive mask review\nUse when: You can see repeating patterns, lines, or systematic artifacts in your noise\n\nNot sure which to choose?\nStart with N2V — it works well for most microscopy images. If you notice the denoised result still has visible patterns or artifacts, try autoStructN2V."
       },
-      "seeAlsoManual": ["denoising-dl", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoManual": ["denoising-dl", "denoising-dl.autostructn2v-detail", "denoising-dl.step1.mode"],
       "seeAlsoTags": ["method-selection"]
     },
     {
@@ -36,9 +49,9 @@
       "contentType": "full",
       "content": {
         "summary": "A two-stage deep learning approach that automatically detects and removes structured noise patterns from images.",
-        "body": "autoStructN2V extends Noise2Void to handle structured (correlated) noise that standard N2V cannot fully remove.\n\nWhy Standard N2V Falls Short:\nN2V assumes noise is independent between pixels. When noise has structure — like horizontal scan lines or periodic patterns — neighboring pixels share correlated noise. N2V's masking strategy cannot distinguish this correlated noise from real image features.\n\nHow autoStructN2V Works:\n\nStage 1: Standard N2V Training\nFirst, a standard N2V model is trained. This removes most random noise but leaves structured patterns partially intact.\n\nMask Extraction\nThe system analyzes the difference between the original and denoised images in Fourier space. Periodic patterns appear as peaks in the frequency domain. These are automatically detected and converted into a spatial mask showing the noise structure.\n\nInteractive Mask Review\nYou can review and adjust the detected noise pattern before proceeding. This ensures the mask correctly captures the structured noise without including real image features.\n\nStage 2: Structure-Aware Training\nA second N2V model is trained using the noise mask. During training, pixels are masked according to the detected noise pattern, teaching the network to specifically remove that structure.\n\nWhen to Use autoStructN2V:\n- Visible line artifacts in EM tomography reconstructions\n- Periodic patterns from detector readout\n- Camera-specific fixed-pattern noise\n- Any noise with visible spatial correlation or structure"
+        "body": "autoStructN2V extends Noise2Void to handle structured (correlated) noise that standard N2V cannot fully remove.\n\nWhy Standard N2V Falls Short:\nN2V assumes noise is independent between pixels. When noise has structure — like horizontal scan lines or periodic patterns — neighboring pixels share correlated noise. N2V's masking strategy cannot distinguish this correlated noise from real image features.\n\nHow autoStructN2V Works:\n\nStage 1: Standard N2V Training\nFirst, a standard N2V model is trained. This removes most random noise but leaves structured patterns partially intact.\n\nMask Extraction\nThe system analyzes the difference between the original and denoised images in Fourier space. Periodic patterns appear as peaks in the frequency domain. These are automatically detected and converted into a spatial mask showing the noise structure.\n\nInteractive Mask Review\nYou can review and adjust the detected noise pattern before proceeding. This ensures the mask correctly captures the structured noise without including real image features.\n\nStage 2: Structure-Aware Training\nA second N2V model is trained using the noise mask. During training, pixels are masked according to the detected noise pattern, teaching the network to specifically remove that structure.\n\nWhen to Use autoStructN2V:\n- Visible line artifacts in EM tomography reconstructions\n- Periodic patterns from detector readout\n- Camera-specific fixed-pattern noise\n- Any noise with visible spatial correlation or structure\n\n2.5D Mode:\nIn 2.5D mode, autoStructN2V extends its analysis to 3D, detecting noise correlations across consecutive slices. The mask becomes three-dimensional (Z-1, Z center, Z+1), allowing the network to learn inter-slice noise patterns. See the 2.5D Mode article for details."
       },
-      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.step3.autostructn2v"],
+      "seeAlsoManual": ["denoising-dl.step1.method", "denoising-dl.step1.mode", "denoising-dl.step3.autostructn2v"],
       "seeAlsoTags": ["autostructn2v", "structured-noise"]
     },
     {
@@ -62,9 +75,9 @@
       "contentType": "medium",
       "content": {
         "summary": "Select the noisy TIFF image stack you want to denoise.",
-        "body": "Your input images are used both for training the denoising model and as the data to be denoised. Unlike supervised methods, no clean reference images are needed.\n\nFile Requirements:\n- Format: Multi-page TIFF (.tif, .tiff)\n- Bit Depth: 8-bit or 16-bit grayscale\n- Content: Images with noise to be removed\n\nData Sources:\n- Workspace Files: TIFF stacks from your workspace\n- Test Data: Built-in noisy images for testing the module\n\nTips for Best Results:\n- Include multiple slices if available — more data generally improves the model\n- Images should be representative of all the data you want to denoise\n- The model learns noise patterns from these images, so ensure they contain typical noise for your acquisition setup"
+        "body": "Your input images are used both for training the denoising model and as the data to be denoised. Unlike supervised methods, no clean reference images are needed.\n\nFile Requirements:\n- Format: Multi-page TIFF (.tif, .tiff)\n- Bit Depth: 8-bit or 16-bit grayscale\n- Content: Images with noise to be removed\n\n2.5D Mode Requirements:\n- Minimum 20 slices required for triplet processing\n- Slices should be spatially contiguous (not random samples)\n- The toggle will show a warning if your stack is too shallow\n\nData Sources:\n- Workspace Files: TIFF stacks from your workspace\n- Test Data: Built-in noisy images for testing the module\n\nTips for Best Results:\n- Include multiple slices if available — more data generally improves the model\n- Images should be representative of all the data you want to denoise\n- The model learns noise patterns from these images, so ensure they contain typical noise for your acquisition setup"
       },
-      "seeAlsoManual": ["denoising-dl.step1.workflow", "denoising-dl"],
+      "seeAlsoManual": ["denoising-dl.step1.workflow", "denoising-dl.step1.mode", "denoising-dl"],
       "seeAlsoTags": ["input", "upload"]
     },
     {
@@ -253,9 +266,9 @@
       "contentType": "medium",
       "content": {
         "summary": "Single-stage training for removing random, uncorrelated noise.",
-        "body": "N2V training is a straightforward single-stage process:\n\n1. Dataset Preparation\nPatches are extracted from your images according to your configuration (patch size, patches per image).\n\n2. Training Loop\nFor each epoch, the network processes all patches:\n- Random pixels are masked based on mask percentage\n- Network predicts masked pixel values from surrounding context\n- Loss measures prediction accuracy\n- Weights are updated to improve predictions\n\n3. Validation\nAfter each epoch, performance is evaluated on held-out patches. This validation loss guides early stopping.\n\n4. Denoising\nOnce trained, the model processes your full images to produce denoised results.\n\nWhat to expect:\n- Training typically takes 5-30 minutes depending on data size and GPU\n- Loss should decrease steadily during training\n- Results are available immediately when training completes"
+        "body": "N2V training is a straightforward single-stage process:\n\n1. Dataset Preparation\nPatches are extracted from your images according to your configuration (patch size, patches per image).\n\n2. Training Loop\nFor each epoch, the network processes all patches:\n- Random pixels are masked based on mask percentage\n- Network predicts masked pixel values from surrounding context\n- Loss measures prediction accuracy\n- Weights are updated to improve predictions\n\n3. Validation\nAfter each epoch, performance is evaluated on held-out patches. This validation loss guides early stopping.\n\n4. Denoising\nOnce trained, the model processes your full images to produce denoised results.\n\n2.5D Mode Differences:\nIn 2.5D mode, the network takes 3 consecutive slices as input and predicts the center slice. This uses inter-slice context for better denoising of volumetric data. Boundary slices are copied from the original.\n\nWhat to expect:\n- Training typically takes 5-30 minutes depending on data size and GPU\n- Loss should decrease steadily during training\n- Results are available immediately when training completes"
       },
-      "seeAlsoManual": ["denoising-dl.step3.loss", "denoising-dl.step3.best-val-loss"],
+      "seeAlsoManual": ["denoising-dl.step3.loss", "denoising-dl.step3.best-val-loss", "denoising-dl.step1.mode"],
       "seeAlsoTags": ["n2v", "training"]
     },
     {
@@ -266,9 +279,9 @@
       "contentType": "medium",
       "content": {
         "summary": "Two-stage training with automatic structured noise detection and removal.",
-        "body": "autoStructN2V training has three phases:\n\nStage 1: Initial N2V Training\nStandard N2V training removes random noise. This produces an intermediate result where structured noise may still be visible.\n\nMask Extraction & Review\nAfter Stage 1:\n- The system analyzes residual noise patterns\n- A mask showing detected structure is generated\n- You can review and adjust the mask before proceeding\n- Options: Approve mask, regenerate with different settings, or skip Stage 2\n\nStage 2: Structure-Aware Training\nA second model is trained using the noise mask. Masking follows the detected noise structure, teaching the network to specifically remove those patterns.\n\nWhat to expect:\n- Total training time is roughly 2x single-stage N2V\n- Stage 1 and Stage 2 can have different configurations\n- The mask review step requires your input before Stage 2 begins\n- Final results combine both stages for optimal noise removal"
+        "body": "autoStructN2V training has three phases:\n\nStage 1: Initial N2V Training\nStandard N2V training removes random noise. This produces an intermediate result where structured noise may still be visible.\n\nMask Extraction & Review\nAfter Stage 1:\n- The system analyzes residual noise patterns\n- A mask showing detected structure is generated\n- You can review and adjust the mask before proceeding\n- Options: Approve mask, regenerate with different settings, or skip Stage 2\n\nStage 2: Structure-Aware Training\nA second model is trained using the noise mask. Masking follows the detected noise structure, teaching the network to specifically remove those patterns.\n\n2.5D Mode Differences:\nIn 2.5D mode, the mask becomes 3-dimensional, capturing noise correlations across consecutive slices. The mask visualization shows three tabs (Z-1, Z center, Z+1) so you can inspect each slice's pattern before approving.\n\nWhat to expect:\n- Total training time is roughly 2x single-stage N2V\n- Stage 1 and Stage 2 can have different configurations\n- The mask review step requires your input before Stage 2 begins\n- Final results combine both stages for optimal noise removal"
       },
-      "seeAlsoManual": ["denoising-dl.autostructn2v-detail", "denoising-dl.step3.loss"],
+      "seeAlsoManual": ["denoising-dl.autostructn2v-detail", "denoising-dl.step3.loss", "denoising-dl.step1.mode"],
       "seeAlsoTags": ["autostructn2v", "training"]
     },
     {
@@ -332,6 +345,14 @@
     "autostructn2v": {
       "term": "autoStructN2V",
       "definition": "A two-stage extension of N2V that automatically detects and removes structured noise patterns through Fourier analysis"
+    },
+    "2.5d": {
+      "term": "2.5D Processing",
+      "definition": "A volumetric processing mode that uses triplets of consecutive slices (z-1, z, z+1) as input to predict the center slice, leveraging inter-slice context for better denoising"
+    },
+    "triplet": {
+      "term": "Triplet (2.5D)",
+      "definition": "Three consecutive slices from a stack used as input in 2.5D mode: the slice above (z-1), the center slice (z), and the slice below (z+1)"
     },
     "self-supervised": {
       "term": "Self-Supervised Learning",
