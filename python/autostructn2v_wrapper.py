@@ -357,9 +357,13 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
             self.writer.add_scalar('LR', current_lr, epoch)
 
             # Log test images periodically
-            # Skip for 2.5D Stage 2 due to channel mismatch (model outputs 1ch, input is 3ch)
+            # Skip for 2.5D when model output channels != input channels:
+            # - Stage 2: always 3→1 (mismatch)
+            # - Stage 1 with run_stage2=False (N2V): 3→1 (mismatch)
+            # - Stage 1 with run_stage2=True: 3→3 (OK)
             mode = self.hparams.get('mode', '2d')
-            skip_test_images = (mode == '2.5d' and self.stage == 'stage2')
+            run_stage2 = self.hparams.get('run_stage2', False)
+            skip_test_images = (mode == '2.5d' and (self.stage == 'stage2' or not run_stage2))
             if test_loader and epoch % 5 == 0 and not skip_test_images:
                 patch_size = self._get_param('patch_size', 64)
                 stride = patch_size // 2
@@ -2205,13 +2209,19 @@ def run_stage2_only(config: dict):
 
         config = sanitize_config(config)
 
-        # For 2.5D mode, ensure only input_data is set (not input_dir)
-        # For 2D mode, ensure only input_dir is set (not input_data)
+        # For Stage 2 only mode, we need to set the input correctly for validate_config
+        # The data was already prepared during Stage 1 in experiment_dir/data/
         mode = config.get('mode', '2d')
+        data_dir = os.path.join(experiment_dir, 'data')
+
         if mode == '2.5d':
+            # For 2.5D, keep input_data (original stack path) and remove input_dir
             if 'input_dir' in config:
                 del config['input_dir']
         else:
+            # For 2D mode, point input_dir to the data directory (which is a valid directory)
+            # This satisfies validate_config's directory check
+            config['input_dir'] = data_dir
             if 'input_data' in config:
                 del config['input_data']
 
