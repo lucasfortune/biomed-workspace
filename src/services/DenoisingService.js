@@ -234,7 +234,7 @@ class DenoisingService {
    * @returns {Promise<void>}
    */
   async continueTraining(params, io) {
-    const { trainingId, session } = params;
+    const { trainingId, session, mode: explicitMode } = params;
 
     if (!this.pythonPath) {
       this._emitError(io, trainingId, 'stage2', 'Python path not configured');
@@ -246,16 +246,22 @@ class DenoisingService {
     session.stage = 'stage2';
     session.stage2.status = 'starting';
 
+    // Get mode from explicit param, session, or config
+    const mode = explicitMode || session.mode || session.config?.mode || '2d';
+
     // Build config for Stage 2 only
     const stage2Config = {
       training_id: trainingId,
       method: 'autostructn2v',
+      mode,  // '2d' or '2.5d'
       experiment_dir: session.experimentDir,
       mask_path: session.maskPath,
       stage1_model_path: session.stage1ModelPath,
       stage1_denoised_dir: session.stage1DenoisedDir,
       // Include original config for stage2 parameters
+      stage1: session.config?.stage1 || {},  // Needed for model creation
       stage2: session.config?.stage2 || {},
+      run_stage2: true,  // Needed for channel config
       input_dir: session.config?.input_dir,
       output_dir: session.config?.output_dir,
       workspace_dir: session.config?.workspace_dir,
@@ -674,7 +680,7 @@ class DenoisingService {
    */
   async runInference(params, io) {
     const { inferenceId, modelPath, inputPath, outputDir, modelConfig, stage, method,
-            sessionId, workspacePath, inputFileId } = params;
+            mode, sessionId, workspacePath, inputFileId } = params;
 
     if (!this.pythonPath) {
       this._emitInferenceError(io, inferenceId, 'Python path not configured');
@@ -693,7 +699,8 @@ class DenoisingService {
         output_dir: outputDir,
         model_config: modelConfig,
         stage: stage || 'stage1',
-        method: method || 'n2v'
+        method: method || 'n2v',
+        mode: mode || '2d'  // '2d' or '2.5d'
       }, null, 2));
     } catch (err) {
       this._emitInferenceError(io, inferenceId, `Failed to write config: ${err.message}`);
@@ -851,7 +858,7 @@ class DenoisingService {
    */
   async runSequentialInference(params, io) {
     const { inferenceId, modelPaths, configPath, fullConfig, inputPath, outputDir, modelConfig,
-            sessionId, workspacePath, inputFileId } = params;
+            mode, sessionId, workspacePath, inputFileId } = params;
 
     if (!this.pythonPath) {
       this._emitInferenceError(io, inferenceId, 'Python path not configured');
@@ -882,7 +889,7 @@ class DenoisingService {
       await fsp.mkdir(outputDir, { recursive: true });
       await fsp.writeFile(inferenceConfigPath, JSON.stringify({
         inference_id: inferenceId,
-        mode: 'sequential',
+        mode: mode || fullConfig?.mode || '2d',  // '2d' or '2.5d' processing mode
         stage1_model_path: modelPaths.stage1,
         stage2_model_path: modelPaths.stage2,
         input_path: inputPath,
@@ -1203,7 +1210,7 @@ class DenoisingService {
    * @returns {Promise<object>} Mask result data
    */
   async regenerateMask(params, io) {
-    const { trainingId, stage1Dir, parameters } = params;
+    const { trainingId, stage1Dir, parameters, mode } = params;
 
     if (!this.pythonPath) {
       throw new Error('Python path not configured');
@@ -1288,7 +1295,8 @@ class DenoisingService {
         input_path: inputPath,
         output_dir: outputDir,
         extractor: extractorParams,
-        patch_size: 64
+        patch_size: 64,
+        mode: mode || '2d'  // '2d' or '2.5d'
       };
       // Include saved patches path if available for exact match with training
       if (denoisedPatchesPath) {

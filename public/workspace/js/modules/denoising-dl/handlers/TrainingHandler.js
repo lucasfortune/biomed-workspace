@@ -29,10 +29,11 @@ class TrainingHandler {
     console.log('[TrainingHandler] Training config:', JSON.stringify(this.module.trainingConfig, null, 2));
 
     // Prepare training configuration in the format expected by backend
-    // Backend expects: { method, config, inputPath }
+    // Backend expects: { method, mode, config, inputPath }
     // For autoStructN2V, set pauseAfterMask to allow user to approve mask before Stage 2
     const trainingConfig = {
       method: this.module.selectedMethod,
+      mode: this.module.selectedMode, // '2d' or '2.5d'
       inputPath: this.module.uploadedFile.path,
       config: {
         stage1: this.module.trainingConfig.stage1,

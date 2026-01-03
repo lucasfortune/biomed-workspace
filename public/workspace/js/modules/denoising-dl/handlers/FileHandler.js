@@ -39,6 +39,9 @@ class FileHandler {
     this.parsedConfig = null;
   }
 
+  // Minimum stack depth for 2.5D mode (triplet processing needs sufficient context)
+  static MIN_STACK_DEPTH_2_5D = 20;
+
   /**
    * Handle denoising method change
    * @param {string} method - Selected method ('n2v' or 'autostructn2v')
@@ -58,6 +61,50 @@ class FileHandler {
     this.updateImportSectionContent(method);
 
     this.updateNextButton();
+  }
+
+  /**
+   * Handle mode change (2D / 2.5D)
+   * Re-validates file if one is already selected to check stack depth for 2.5D
+   * @param {string} mode - '2d' or '2.5d'
+   */
+  onModeChange(mode) {
+    console.log('[FileHandler] Mode changed:', mode);
+
+    // If a file was previously validated (successfully), re-check requirements for new mode
+    // Use validationResult.valid instead of fileValidated, since fileValidated may have been
+    // set to false by a previous mode switch (e.g., 2D valid -> 2.5D invalid)
+    if (this.module.validationResult && this.module.validationResult.valid) {
+      const numSlices = this.module.validationResult.info?.num_slices || 0;
+
+      if (mode === '2.5d' && numSlices < FileHandler.MIN_STACK_DEPTH_2_5D) {
+        // Show warning for insufficient stack depth
+        this.module.validationDisplay.showError(
+          'Insufficient Stack Depth for 2.5D',
+          `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices. ` +
+          `Your file has ${numSlices} slices. Please select a deeper stack or switch to 2D mode.`
+        );
+        this.module.fileValidated = false;
+        this.module.state.notify('warning',
+          `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices (current: ${numSlices})`,
+          8000
+        );
+      } else {
+        // Re-show valid state
+        const details = [
+          { label: 'Filename', value: this.module.validationResult.info?.filename || this.module.uploadedFile?.name },
+          { label: 'Dimensions', value: `${this.module.validationResult.info?.dimensions?.width} x ${this.module.validationResult.info?.dimensions?.height}` },
+          { label: 'Slices', value: this.module.validationResult.info?.num_slices?.toString() },
+          { label: 'Bit Depth', value: `${this.module.validationResult.info?.bit_depth}-bit` },
+          { label: 'File Size', value: this.module.validationResult.info?.file_size_formatted },
+          { label: 'Mode', value: mode.toUpperCase() }
+        ];
+        this.module.validationDisplay.showSuccess('File Valid', details);
+        this.module.fileValidated = true;
+      }
+
+      this.updateNextButton();
+    }
   }
 
   /**
@@ -639,13 +686,33 @@ class FileHandler {
       this.module.validationResult = result;
 
       if (result.valid) {
+        const numSlices = result.info?.num_slices || 0;
+        const mode = this.module.selectedMode;
+
+        // Check 2.5D stack depth requirement
+        if (mode === '2.5d' && numSlices < FileHandler.MIN_STACK_DEPTH_2_5D) {
+          this.module.validationDisplay.showError(
+            'Insufficient Stack Depth for 2.5D',
+            `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices. ` +
+            `Your file has ${numSlices} slices. Please select a deeper stack or switch to 2D mode.`
+          );
+          this.module.state.notify('warning',
+            `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices (current: ${numSlices})`,
+            8000
+          );
+          this.module.fileValidated = false;
+          this.updateNextButton();
+          return;
+        }
+
         // Build details array
         const details = [
           { label: 'Filename', value: result.info?.filename || this.module.uploadedFile?.name },
           { label: 'Dimensions', value: `${result.info?.dimensions?.width} x ${result.info?.dimensions?.height}` },
           { label: 'Slices', value: result.info?.num_slices?.toString() },
           { label: 'Bit Depth', value: `${result.info?.bit_depth}-bit` },
-          { label: 'File Size', value: result.info?.file_size_formatted }
+          { label: 'File Size', value: result.info?.file_size_formatted },
+          { label: 'Mode', value: mode.toUpperCase() }
         ];
 
         // Add warnings if any

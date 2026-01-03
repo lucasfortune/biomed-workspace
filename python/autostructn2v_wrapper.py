@@ -24,21 +24,28 @@ from datetime import datetime
 import torch
 import numpy as np
 
-# Add the autoStructN2V library to path
-AUTOSTRUCTN2V_PATH = Path(__file__).parent.parent / 'docs' / 'autoStructN2V' / 'codebase'
-sys.path.insert(0, str(AUTOSTRUCTN2V_PATH))
+# Add the autoStructN2V 2.5D library to path
+AUTOSTRUCTN2V_PATH = Path(__file__).parent.parent / 'docs' / 'autoStructN2V_2.5D' / 'autoStructN2V'
+sys.path.insert(0, str(AUTOSTRUCTN2V_PATH.parent))  # Add parent so 'autoStructN2V' package is importable
 
 try:
     from autoStructN2V.pipeline import run_pipeline
     from autoStructN2V.pipeline.config import validate_config, create_output_directories
-    from autoStructN2V.pipeline.data import split_dataset, create_dataloaders
-    from autoStructN2V.models import create_model
+    from autoStructN2V.pipeline.data import split_dataset, create_dataloaders, split_stack_indices
+    from autoStructN2V.models import create_model, create_model_from_config
     from autoStructN2V.trainers import AutoStructN2VTrainer
     from autoStructN2V.trainers.callbacks import EarlyStopping
-    from autoStructN2V.masking import StructuralNoiseExtractor, create_full_mask
+    from autoStructN2V.masking import (
+        StructuralNoiseExtractor,
+        create_full_mask,
+        # 2.5D specific imports
+        create_stage1_mask_kernel_3d,
+        create_full_mask_3d,
+        create_random_mask_3d
+    )
     from autoStructN2V.inference import AutoStructN2VPredictor
     from autoStructN2V.utils.training import set_seed
-    from autoStructN2V.utils.image import load_and_normalize_image
+    from autoStructN2V.utils.image import load_tiff_stack, save_tiff_stack
 except ImportError as e:
     print(f"DENOISING_ERROR:{json.dumps({'stage': 'init', 'message': f'Failed to import autoStructN2V: {str(e)}', 'details': traceback.format_exc()})}", flush=True)
     sys.exit(1)
@@ -308,18 +315,58 @@ def prepare_input_directory(config: dict) -> tuple:
     """
     Prepare input directory for training.
 
-    If input_dir points to a single TIFF file (stack), extract it.
-    If input_dir is already a directory, use it as-is.
+    For 2D mode:
+        - If input_dir points to a single TIFF file (stack), extract it to individual slices.
+        - If input_dir is already a directory, use it as-is.
+
+    For 2.5D mode:
+        - Pass the TIFF stack path directly (no extraction).
+        - The new library handles stack loading natively.
 
     Args:
         config: Training configuration
 
     Returns:
-        tuple: (path to directory containing training images, extracted_images_dir or None, num_slices or None)
+        tuple: (path to directory/file for training, extracted_images_dir or None, num_slices or None)
     """
     input_dir = config.get('input_dir', '')
     output_dir = config.get('output_dir', '')
+    mode = config.get('mode', '2d')
 
+    # For 2.5D mode, pass the TIFF stack directly - no extraction needed
+    if mode == '2.5d':
+        import tifffile
+
+        # Find the TIFF stack file
+        if os.path.isfile(input_dir):
+            stack_path = input_dir
+        elif os.path.isdir(input_dir):
+            tif_files = [f for f in os.listdir(input_dir) if f.lower().endswith(('.tif', '.tiff'))]
+            if len(tif_files) == 1:
+                stack_path = os.path.join(input_dir, tif_files[0])
+            else:
+                raise ValueError(f"2.5D mode requires a single TIFF stack, found {len(tif_files)} files in {input_dir}")
+        else:
+            raise ValueError(f"Invalid input path for 2.5D mode: {input_dir}")
+
+        # Get stack info for logging
+        stack = tifffile.imread(stack_path)
+        if stack.ndim == 2:
+            num_slices = 1
+        else:
+            num_slices = stack.shape[0]
+
+        emit_progress('data', {
+            "status": "stack_detected",
+            "mode": "2.5d",
+            "numSlices": num_slices,
+            "stackPath": stack_path
+        })
+
+        # Return the stack path directly - the library will load it
+        return stack_path, None, num_slices
+
+    # 2D mode: extract TIFF stack to individual slices
     # Check if input_dir is a file (TIFF stack)
     if os.path.isfile(input_dir):
         # It's a file - extract the stack
@@ -375,9 +422,11 @@ def run_training(config: dict):
     Run training with progress callbacks.
 
     This is a modified version of run_pipeline that emits progress.
+    Supports both 2D mode (directory of images) and 2.5D mode (TIFF stack).
     """
     training_id = config.get('training_id', f'train_{int(time.time())}')
     method = config.get('method', 'n2v')  # 'n2v' or 'autostructn2v'
+    mode = config.get('mode', '2d')  # '2d' or '2.5d'
 
     # Map method to stage flags
     run_stage1 = True
@@ -388,12 +437,21 @@ def run_training(config: dict):
     config['run_stage2'] = run_stage2
 
     try:
-        # Prepare input directory (extract TIFF stacks if needed)
+        # Prepare input directory (extract TIFF stacks if needed for 2D, or pass directly for 2.5D)
         # This must be done before validate_config since it may change input_dir
-        prepared_input_dir, extracted_images_dir, original_num_slices = prepare_input_directory(config)
-        config['input_dir'] = prepared_input_dir
+        prepared_input, extracted_images_dir, original_num_slices = prepare_input_directory(config)
 
-        print(f"[DEBUG] prepared_input_dir: {prepared_input_dir}")
+        # For 2.5D mode, use input_data instead of input_dir
+        if mode == '2.5d':
+            config['input_data'] = prepared_input  # Stack file path
+            # Remove input_dir to avoid confusion
+            if 'input_dir' in config:
+                del config['input_dir']
+        else:
+            config['input_dir'] = prepared_input
+
+        print(f"[DEBUG] mode: {mode}")
+        print(f"[DEBUG] prepared_input: {prepared_input}")
         print(f"[DEBUG] extracted_images_dir: {extracted_images_dir}")
         print(f"[DEBUG] original_num_slices: {original_num_slices}")
 
@@ -413,19 +471,45 @@ def run_training(config: dict):
             "training_id": training_id,
             "device": str(device),
             "method": method,
+            "mode": mode,
             "gpuAvailable": torch.cuda.is_available()
         })
 
-        # Split dataset
-        emit_progress('data', {"training_id": training_id, "status": "splitting"})
-        image_paths = split_dataset(
-            config['input_dir'],
-            dirs,
-            config['split_ratio'],
-            config['image_extension'],
-            config['random_seed'],
-            verbose=verbose
-        )
+        # Split dataset (different approach for 2D vs 2.5D)
+        emit_progress('data', {"training_id": training_id, "status": "splitting", "mode": mode})
+
+        if mode == '2.5d':
+            # 2.5D mode: Split by z-indices, load stack
+            import tifffile
+            stack = tifffile.imread(config['input_data'])
+            if stack.ndim == 2:
+                stack = stack[np.newaxis, ...]  # Add z dimension
+
+            num_slices = stack.shape[0]
+            slice_indices = split_stack_indices(
+                num_slices,
+                config['split_ratio'],
+                config['random_seed'],
+                verbose=verbose
+            )
+
+            # Store stack and indices for later use
+            loaded_stack = stack
+            image_paths = None  # Not used in 2.5D mode
+
+            print(f"[DEBUG] 2.5D mode: stack shape={stack.shape}, split indices: train={len(slice_indices['train'])}, val={len(slice_indices['val'])}, test={len(slice_indices['test'])}")
+        else:
+            # 2D mode: Split by files
+            image_paths = split_dataset(
+                config['input_dir'],
+                dirs,
+                config['split_ratio'],
+                config['image_extension'],
+                config['random_seed'],
+                verbose=verbose
+            )
+            loaded_stack = None
+            slice_indices = None
 
         # Save configuration
         config_path = os.path.join(dirs['experiment'], 'config.json')
@@ -459,21 +543,30 @@ def run_training(config: dict):
             emit_progress('stage1', {
                 "training_id": training_id,
                 "status": "starting",
+                "mode": mode,
                 "totalEpochs": config['stage1'].get('num_epochs', config.get('num_epochs', 100))
             })
 
-            # Create dataloaders
-            train_loader, val_loader, test_loader = create_dataloaders(
-                image_paths, config, "stage1", verbose=verbose
-            )
+            # Create dataloaders (different for 2D vs 2.5D)
+            if mode == '2.5d':
+                # 2.5D mode: stack-based dataloaders
+                train_loader, val_loader, test_loader = create_dataloaders(
+                    config=config,
+                    stage="stage1",
+                    stack=loaded_stack,
+                    slice_indices=slice_indices,
+                    verbose=verbose
+                )
+            else:
+                # 2D mode: path-based dataloaders
+                train_loader, val_loader, test_loader = create_dataloaders(
+                    image_paths, config, "stage1", verbose=verbose
+                )
 
-            # Create model
-            stage1_model = create_model(
-                'stage1',
-                features=config['stage1']['features'],
-                num_layers=config['stage1']['num_layers'],
-                use_resize_conv=config['stage1'].get('use_resize_conv', True),
-                upsampling_mode=config['stage1'].get('upsampling_mode', 'bilinear')
+            # Create model (mode-aware: 2.5D uses 3 input channels)
+            stage1_model = create_model_from_config(
+                config=config,
+                stage='stage1'
             )
 
             # Create optimizer and scheduler
@@ -512,48 +605,67 @@ def run_training(config: dict):
             results['stages_run'].append('stage1')
 
             # Run inference on training data with stage 1 model
-            emit_progress('stage1_inference', {"training_id": training_id, "status": "starting"})
+            emit_progress('stage1_inference', {"training_id": training_id, "status": "starting", "mode": mode})
 
-            # Load trained model for inference
-            stage1_trained_model = create_model(
-                'stage1',
-                features=config['stage1']['features'],
-                num_layers=config['stage1']['num_layers'],
-                use_resize_conv=config['stage1'].get('use_resize_conv', True),
-                upsampling_mode=config['stage1'].get('upsampling_mode', 'bilinear')
+            # Load trained model for inference (mode-aware)
+            stage1_trained_model = create_model_from_config(
+                config=config,
+                stage='stage1'
             ).to(device)
 
             checkpoint = safe_load_checkpoint(stage1_checkpoint_path, device)
             stage1_trained_model.load_state_dict(checkpoint['model_state_dict'])
             stage1_trained_model.eval()
 
-            # Create predictor and denoise
+            # Create predictor with mode (2.5D uses triplet sliding window)
             predictor = AutoStructN2VPredictor(
                 model=stage1_trained_model,
-                patch_size=config['stage1']['patch_size']
+                patch_size=config['stage1']['patch_size'],
+                mode=mode
             )
 
             stage1_denoised_dir = os.path.join(dirs['data'], 'stage1_denoised')
             os.makedirs(stage1_denoised_dir, exist_ok=True)
 
-            print(f"[DEBUG] stage1_denoised_dir: {stage1_denoised_dir}")
-            print(f"[DEBUG] image_paths structure: {[(name, len(paths)) for name, paths in zip(['train', 'val', 'test'], image_paths)]}")
+            if mode == '2.5d':
+                # 2.5D mode: Process entire stack
+                print(f"[DEBUG] 2.5D mode stage1 inference on stack shape={loaded_stack.shape}")
 
-            for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
-                split_output_dir = os.path.join(stage1_denoised_dir, split_name)
-                os.makedirs(split_output_dir, exist_ok=True)
-                input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
-                print(f"[DEBUG] Processing {split_name}: input_dir={input_split_dir}, output_dir={split_output_dir}, num_files={len(split_paths)}")
-                if input_split_dir and os.path.exists(input_split_dir):
-                    input_files = os.listdir(input_split_dir)
-                    print(f"[DEBUG] Files in {split_name} input dir: {input_files}")
-                    predictor.process_directory(input_split_dir, split_output_dir, show=False)
-                    output_files = os.listdir(split_output_dir)
-                    print(f"[DEBUG] Files in {split_name} output dir after processing: {output_files}")
+                # Denoise the stack
+                denoised_stack = predictor.denoise_stack(loaded_stack)
+
+                # Save denoised stack
+                stage1_denoised_path = os.path.join(stage1_denoised_dir, 'stage1_denoised_stack.tif')
+                save_tiff_stack(stage1_denoised_path, denoised_stack, dtype='float32')
+
+                results['stage1_denoised_stack_path'] = stage1_denoised_path
+                print(f"[DEBUG] Saved 2.5D denoised stack to {stage1_denoised_path}")
+
+                # Store denoised stack for mask extraction
+                denoised_stack_for_mask = denoised_stack
+
+            else:
+                # 2D mode: Process directory by directory
+                print(f"[DEBUG] stage1_denoised_dir: {stage1_denoised_dir}")
+                print(f"[DEBUG] image_paths structure: {[(name, len(paths)) for name, paths in zip(['train', 'val', 'test'], image_paths)]}")
+
+                for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
+                    split_output_dir = os.path.join(stage1_denoised_dir, split_name)
+                    os.makedirs(split_output_dir, exist_ok=True)
+                    input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
+                    print(f"[DEBUG] Processing {split_name}: input_dir={input_split_dir}, output_dir={split_output_dir}, num_files={len(split_paths)}")
+                    if input_split_dir and os.path.exists(input_split_dir):
+                        input_files = os.listdir(input_split_dir)
+                        print(f"[DEBUG] Files in {split_name} input dir: {input_files}")
+                        predictor.process_directory(input_split_dir, split_output_dir, show=False)
+                        output_files = os.listdir(split_output_dir)
+                        print(f"[DEBUG] Files in {split_name} output dir after processing: {output_files}")
+
+                denoised_stack_for_mask = None
 
             results['stage1_denoised_dir'] = stage1_denoised_dir
 
-            emit_progress('stage1_inference', {"training_id": training_id, "status": "complete"})
+            emit_progress('stage1_inference', {"training_id": training_id, "status": "complete", "mode": mode})
 
             # Cleanup
             del stage1_model, stage1_trainer, optimizer, scheduler
@@ -564,7 +676,7 @@ def run_training(config: dict):
         # Stage 2: Structured Noise2Void (if autoStructN2V)
         # =====================================================================
         if run_stage2:
-            emit_progress('mask', {"training_id": training_id, "status": "extracting"})
+            emit_progress('mask', {"training_id": training_id, "status": "extracting", "mode": mode})
 
             # Extract mask from denoised patches
             extractor_config = config['stage2']['extractor']
@@ -585,43 +697,81 @@ def run_training(config: dict):
                 max_true_pixels=extractor_config.get('max_true_pixels', 25)
             )
 
-            struct_mask, autocorr_data = extractor.extract_mask(denoised_patches, verbose)
+            # Extract mask (different method for 2D vs 2.5D)
+            if mode == '2.5d':
+                # 2.5D mode: Use 3D mask extraction from triplet patches
+                # For now, we'll extract triplet patches from the denoised stack
+                # and use extract_mask_3d
+                from autoStructN2V.utils.patching import extract_triplet_patches
+                triplet_patches = extract_triplet_patches(
+                    denoised_stack_for_mask,
+                    patch_size=config['stage2']['patch_size'],
+                    num_patches=config['stage2'].get('patches_per_image', 100) * 10
+                )
+                struct_mask, autocorr_data = extractor.extract_mask_3d(triplet_patches, verbose)
 
-            # Save the denoised patches used for mask extraction
-            # This allows regeneration to use the exact same patches
-            denoised_patches_path = os.path.join(dirs['stage2']['model'], 'denoised_patches_for_mask.npy')
-            os.makedirs(os.path.dirname(denoised_patches_path), exist_ok=True)
-            np.save(denoised_patches_path, denoised_patches)
-            print(f"Saved {len(denoised_patches)} denoised patches for mask regeneration to {denoised_patches_path}")
+                # Save the triplet patches for mask regeneration
+                denoised_patches_path = os.path.join(dirs['stage2']['model'], 'denoised_triplet_patches_for_mask.npy')
+                os.makedirs(os.path.dirname(denoised_patches_path), exist_ok=True)
+                np.save(denoised_patches_path, triplet_patches)
+                print(f"Saved {len(triplet_patches)} triplet patches for 2.5D mask regeneration to {denoised_patches_path}")
 
-            # Create full mask
-            full_mask, prediction_kernel = create_full_mask(
-                struct_mask,
-                config['stage2']['patch_size'],
-                config['stage2']['mask_percentage'],
-                verbose
-            )
+                # Create full 3D mask
+                full_mask, prediction_kernel = create_full_mask_3d(
+                    struct_mask,
+                    config['stage2']['patch_size'],
+                    config['stage2']['mask_percentage'],
+                    verbose
+                )
+            else:
+                # 2D mode: Standard 2D mask extraction
+                struct_mask, autocorr_data = extractor.extract_mask(denoised_patches, verbose)
 
-            # Save mask
+                # Save the denoised patches used for mask extraction
+                denoised_patches_path = os.path.join(dirs['stage2']['model'], 'denoised_patches_for_mask.npy')
+                os.makedirs(os.path.dirname(denoised_patches_path), exist_ok=True)
+                np.save(denoised_patches_path, denoised_patches)
+                print(f"Saved {len(denoised_patches)} denoised patches for mask regeneration to {denoised_patches_path}")
+
+                # Create full 2D mask
+                full_mask, prediction_kernel = create_full_mask(
+                    struct_mask,
+                    config['stage2']['patch_size'],
+                    config['stage2']['mask_percentage'],
+                    verbose
+                )
+
+            # Save mask (structure depends on mode)
             mask_save_path = os.path.join(dirs['stage2']['model'], 'stage2_mask.npy')
             os.makedirs(os.path.dirname(mask_save_path), exist_ok=True)
             np.save(mask_save_path, struct_mask)
 
             # Check for empty mask (only center pixel or < 2 active pixels)
-            active_pixels = int(np.sum(struct_mask))
-            kernel_size = int(struct_mask.shape[0])
-            center_only = bool(active_pixels == 1 and struct_mask[kernel_size//2, kernel_size//2])
-            is_empty = bool(active_pixels < 2 or center_only)
+            if mode == '2.5d':
+                # For 3D mask, check center slice
+                active_pixels = int(np.sum(struct_mask[1]))  # Center slice
+                kernel_size = int(struct_mask.shape[1])  # Spatial dimension
+                center_only = bool(active_pixels == 1 and struct_mask[1, kernel_size//2, kernel_size//2])
+                is_empty = bool(active_pixels < 2 or center_only)
+                # For 2.5D, maskArray is a list of 3 2D arrays
+                mask_array_for_viz = [s.astype(int).tolist() for s in struct_mask]
+            else:
+                active_pixels = int(np.sum(struct_mask))
+                kernel_size = int(struct_mask.shape[0])
+                center_only = bool(active_pixels == 1 and struct_mask[kernel_size//2, kernel_size//2])
+                is_empty = bool(active_pixels < 2 or center_only)
+                mask_array_for_viz = struct_mask.astype(int).tolist()
 
             emit_result('mask', {
                 "training_id": training_id,
+                "mode": mode,
                 "kernelSize": kernel_size,
                 "activePixels": active_pixels,
                 "centerOnly": center_only,
                 "isEmpty": is_empty,
                 "maskPath": mask_save_path,
-                "pattern": _detect_pattern(struct_mask),
-                "maskArray": struct_mask.astype(int).tolist()  # 2D boolean array for visualization
+                "pattern": _detect_pattern(struct_mask[1] if mode == '2.5d' else struct_mask),
+                "maskArray": mask_array_for_viz  # 2D or 3D array for visualization
             })
 
             results['mask_path'] = mask_save_path
@@ -636,14 +786,15 @@ def run_training(config: dict):
             if config.get('pauseAfterMask', False) and not is_empty:
                 emit_result('paused', {
                     "training_id": training_id,
+                    "mode": mode,
                     "reason": "awaiting_mask_approval",
                     "stage1ModelPath": results.get('stage1_model_path'),
                     "stage1DenoisedDir": results.get('stage1_denoised_dir'),
                     "maskPath": mask_save_path,
                     "kernelSize": kernel_size,
                     "activePixels": active_pixels,
-                    "pattern": _detect_pattern(struct_mask),
-                    "maskArray": struct_mask.astype(int).tolist()
+                    "pattern": _detect_pattern(struct_mask[1] if mode == '2.5d' else struct_mask),
+                    "maskArray": mask_array_for_viz
                 })
                 # Return here - Stage 2 will be triggered separately via continue-training
                 results['paused_at_mask'] = True
@@ -661,26 +812,37 @@ def run_training(config: dict):
                 emit_progress('stage2', {
                     "training_id": training_id,
                     "status": "starting",
+                    "mode": mode,
                     "totalEpochs": config['stage2'].get('num_epochs', config.get('num_epochs', 100))
                 })
 
-                # Create dataloaders with structured mask
-                stage2_train_loader, stage2_val_loader, stage2_test_loader = create_dataloaders(
-                    image_paths,
-                    config,
-                    "stage2",
-                    structured_mask=full_mask,
-                    prediction_kernel=prediction_kernel,
-                    verbose=verbose
-                )
+                # Create dataloaders with structured mask (different for 2D vs 2.5D)
+                if mode == '2.5d':
+                    # 2.5D mode: stack-based dataloaders
+                    stage2_train_loader, stage2_val_loader, stage2_test_loader = create_dataloaders(
+                        config=config,
+                        stage="stage2",
+                        stack=loaded_stack,
+                        slice_indices=slice_indices,
+                        structured_mask=full_mask,
+                        prediction_kernel=prediction_kernel,
+                        verbose=verbose
+                    )
+                else:
+                    # 2D mode: path-based dataloaders
+                    stage2_train_loader, stage2_val_loader, stage2_test_loader = create_dataloaders(
+                        image_paths,
+                        config,
+                        "stage2",
+                        structured_mask=full_mask,
+                        prediction_kernel=prediction_kernel,
+                        verbose=verbose
+                    )
 
-                # Create model
-                stage2_model = create_model(
-                    'stage2',
-                    features=config['stage2']['features'],
-                    num_layers=config['stage2']['num_layers'],
-                    use_resize_conv=config['stage2'].get('use_resize_conv', True),
-                    upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
+                # Create model (mode-aware: 2.5D uses 3 input channels, 1 output for Stage 2)
+                stage2_model = create_model_from_config(
+                    config=config,
+                    stage='stage2'
                 )
 
                 # Create optimizer and scheduler
@@ -730,40 +892,53 @@ def run_training(config: dict):
         # =====================================================================
         # After Stage 2 training, run inference on training data to get stage2 denoised output
         if run_stage2 and 'stage2' in results['stages_run']:
-            emit_progress('stage2_inference', {"training_id": training_id, "status": "starting"})
+            emit_progress('stage2_inference', {"training_id": training_id, "status": "starting", "mode": mode})
 
-            # Load stage 2 trained model for inference
-            stage2_trained_model = create_model(
-                'stage2',
-                features=config['stage2']['features'],
-                num_layers=config['stage2']['num_layers'],
-                use_resize_conv=config['stage2'].get('use_resize_conv', True),
-                upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
+            # Load stage 2 trained model for inference (mode-aware)
+            stage2_trained_model = create_model_from_config(
+                config=config,
+                stage='stage2'
             ).to(device)
 
             checkpoint = safe_load_checkpoint(results['stage2_model_path'], device)
             stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
             stage2_trained_model.eval()
 
-            # Create predictor and denoise
+            # Create predictor with mode (2.5D uses triplet sliding window)
             predictor = AutoStructN2VPredictor(
                 model=stage2_trained_model,
-                patch_size=config['stage2']['patch_size']
+                patch_size=config['stage2']['patch_size'],
+                mode=mode
             )
 
             stage2_denoised_dir = os.path.join(dirs['data'], 'stage2_denoised')
             os.makedirs(stage2_denoised_dir, exist_ok=True)
 
-            for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
-                split_output_dir = os.path.join(stage2_denoised_dir, split_name)
-                os.makedirs(split_output_dir, exist_ok=True)
-                input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
-                if input_split_dir and os.path.exists(input_split_dir):
-                    predictor.process_directory(input_split_dir, split_output_dir, show=False)
+            if mode == '2.5d':
+                # 2.5D mode: Process entire stack
+                print(f"[DEBUG] 2.5D mode stage2 inference on stack shape={loaded_stack.shape}")
+
+                # Denoise the original stack with stage 2 model
+                denoised_stack = predictor.denoise_stack(loaded_stack)
+
+                # Save denoised stack
+                stage2_denoised_path = os.path.join(stage2_denoised_dir, 'stage2_denoised_stack.tif')
+                save_tiff_stack(stage2_denoised_path, denoised_stack, dtype='float32')
+
+                results['stage2_denoised_stack_path'] = stage2_denoised_path
+                print(f"[DEBUG] Saved 2.5D stage2 denoised stack to {stage2_denoised_path}")
+            else:
+                # 2D mode: Process directory by directory
+                for split_name, split_paths in zip(['train', 'val', 'test'], image_paths):
+                    split_output_dir = os.path.join(stage2_denoised_dir, split_name)
+                    os.makedirs(split_output_dir, exist_ok=True)
+                    input_split_dir = os.path.dirname(split_paths[0]) if split_paths else None
+                    if input_split_dir and os.path.exists(input_split_dir):
+                        predictor.process_directory(input_split_dir, split_output_dir, show=False)
 
             results['stage2_denoised_dir'] = stage2_denoised_dir
 
-            emit_progress('stage2_inference', {"training_id": training_id, "status": "complete"})
+            emit_progress('stage2_inference', {"training_id": training_id, "status": "complete", "mode": mode})
 
             # Cleanup
             del stage2_trained_model
@@ -1169,7 +1344,11 @@ def finalize_training_output(config: dict, dirs: dict, results: dict, method: st
 # =============================================================================
 
 def run_inference(config: dict):
-    """Run inference with a trained model."""
+    """
+    Run inference with a trained model.
+
+    Supports both 2D mode (per-slice processing) and 2.5D mode (triplet sliding window).
+    """
     inference_id = config.get('inference_id', f'infer_{int(time.time())}')
 
     try:
@@ -1178,6 +1357,7 @@ def run_inference(config: dict):
         output_dir = config['output_dir']
         stage = config.get('stage', 'stage1')  # Which model to use
         method = config.get('method', 'n2v')  # 'n2v' or 'autostructn2v'
+        mode = config.get('mode', '2d')  # '2d' or '2.5d'
 
         # Get model config
         model_config = config.get('model_config', {})
@@ -1188,32 +1368,45 @@ def run_inference(config: dict):
         emit_progress('inference', {
             "inference_id": inference_id,
             "status": "loading_model",
+            "mode": mode,
             "device": str(device)
         })
 
-        # Load model
-        model = create_model(
-            stage,
-            features=model_config.get('features', 64),
-            num_layers=model_config.get('num_layers', 2),
-            use_resize_conv=model_config.get('use_resize_conv', True),
-            upsampling_mode=model_config.get('upsampling_mode', 'bilinear')
+        # Build config for create_model_from_config (needs stage-specific nested dict)
+        stage_params = {
+            'features': model_config.get('features', 64),
+            'num_layers': model_config.get('num_layers', 2),
+            'use_resize_conv': model_config.get('use_resize_conv', True),
+            'upsampling_mode': model_config.get('upsampling_mode', 'bilinear')
+        }
+        inference_config = {
+            'mode': mode,
+            'run_stage2': method == 'autostructn2v',
+            'stage1': stage_params,
+            'stage2': stage_params
+        }
+
+        # Load model (mode-aware)
+        model = create_model_from_config(
+            config=inference_config,
+            stage=stage
         ).to(device)
 
         checkpoint = safe_load_checkpoint(model_path, device)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.eval()
 
-        # Create predictor
+        # Create predictor with mode
         patch_size = model_config.get('patch_size', 64)
-        predictor = AutoStructN2VPredictor(model=model, patch_size=patch_size)
+        predictor = AutoStructN2VPredictor(model=model, patch_size=patch_size, mode=mode)
 
         # Load input
         import tifffile
 
         emit_progress('inference', {
             "inference_id": inference_id,
-            "status": "loading_data"
+            "status": "loading_data",
+            "mode": mode
         })
 
         input_stack = tifffile.imread(input_path)
@@ -1221,50 +1414,78 @@ def run_inference(config: dict):
             input_stack = input_stack[np.newaxis, ...]
 
         total_slices = len(input_stack)
-        output_stack = []
 
         emit_progress('inference', {
             "inference_id": inference_id,
             "status": "processing",
+            "mode": mode,
             "totalSlices": total_slices
         })
 
-        # Process each slice
-        for i, slice_img in enumerate(input_stack):
-            # Normalize
-            slice_norm = (slice_img - slice_img.min()) / (slice_img.max() - slice_img.min() + 1e-8)
-            slice_norm = slice_norm.astype(np.float32)
+        if mode == '2.5d':
+            # 2.5D mode: Use predictor's denoise_stack method (triplet sliding window)
+            # Normalize input
+            input_min, input_max = input_stack.min(), input_stack.max()
+            input_norm = (input_stack - input_min) / (input_max - input_min + 1e-8)
+            input_norm = input_norm.astype(np.float32)
 
-            # Convert to tensor and denoise
-            slice_tensor = torch.from_numpy(slice_norm).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
-            denoised_tensor = predictor.denoise_tensor(slice_tensor)
-            denoised = denoised_tensor.squeeze().cpu().numpy()
+            # Denoise using 2.5D sliding window
+            output_stack = predictor.denoise_stack(input_norm)
 
             # Rescale to original range
-            denoised_rescaled = denoised * (slice_img.max() - slice_img.min()) + slice_img.min()
-            output_stack.append(denoised_rescaled.astype(slice_img.dtype))
+            output_stack = output_stack * (input_max - input_min) + input_min
+            output_stack = output_stack.astype(input_stack.dtype)
 
-            # Emit progress
-            if (i + 1) % 5 == 0 or i == total_slices - 1:
-                emit_progress('inference', {
-                    "inference_id": inference_id,
-                    "currentSlice": i + 1,
-                    "totalSlices": total_slices,
-                    "progressPercent": round((i + 1) / total_slices * 100, 1)
-                })
+            emit_progress('inference', {
+                "inference_id": inference_id,
+                "currentSlice": total_slices,
+                "totalSlices": total_slices,
+                "progressPercent": 100.0,
+                "mode": mode
+            })
+        else:
+            # 2D mode: Process each slice independently
+            output_stack = []
+
+            for i, slice_img in enumerate(input_stack):
+                # Normalize
+                slice_norm = (slice_img - slice_img.min()) / (slice_img.max() - slice_img.min() + 1e-8)
+                slice_norm = slice_norm.astype(np.float32)
+
+                # Convert to tensor and denoise
+                slice_tensor = torch.from_numpy(slice_norm).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
+                denoised_tensor = predictor.denoise_tensor(slice_tensor)
+                denoised = denoised_tensor.squeeze().cpu().numpy()
+
+                # Rescale to original range
+                denoised_rescaled = denoised * (slice_img.max() - slice_img.min()) + slice_img.min()
+                output_stack.append(denoised_rescaled.astype(slice_img.dtype))
+
+                # Emit progress
+                if (i + 1) % 5 == 0 or i == total_slices - 1:
+                    emit_progress('inference', {
+                        "inference_id": inference_id,
+                        "currentSlice": i + 1,
+                        "totalSlices": total_slices,
+                        "progressPercent": round((i + 1) / total_slices * 100, 1),
+                        "mode": mode
+                    })
+
+            output_stack = np.array(output_stack)
 
         # Save output with proper naming convention
         os.makedirs(output_dir, exist_ok=True)
         method_prefix = 'n2v' if method == 'n2v' else 'asn2v'
-        output_filename = f'{method_prefix}_denoised_{inference_id}.tif'
+        mode_suffix = '_2.5d' if mode == '2.5d' else ''
+        output_filename = f'{method_prefix}{mode_suffix}_denoised_{inference_id}.tif'
         output_path = os.path.join(output_dir, output_filename)
-        output_stack = np.array(output_stack)
         tifffile.imwrite(output_path, output_stack)
 
         # Save metadata
         metadata = {
             "inference_id": inference_id,
             "method": method,
+            "mode": mode,
             "input_path": input_path,
             "output_path": output_path,
             "model_path": model_path,
@@ -1282,7 +1503,8 @@ def run_inference(config: dict):
             "outputPath": output_path,
             "metadataPath": metadata_path,
             "totalSlices": total_slices,
-            "method": method
+            "method": method,
+            "mode": mode
         })
 
     except Exception as e:
@@ -1295,7 +1517,7 @@ def run_sequential_inference(config: dict):
     Run sequential inference for autoStructN2V: Stage 1 (N2V) -> Stage 2 (Struct-N2V).
 
     This processes input data through both stages, using the output of Stage 1
-    as input to Stage 2.
+    as input to Stage 2. Supports both 2D and 2.5D modes.
     """
     inference_id = config.get('inference_id', f'infer_seq_{int(time.time())}')
 
@@ -1304,6 +1526,7 @@ def run_sequential_inference(config: dict):
         stage2_model_path = config['stage2_model_path']
         input_path = config['input_path']
         output_dir = config['output_dir']
+        mode = config.get('mode', '2d')  # '2d' or '2.5d'
 
         stage1_config = config.get('stage1_config', {})
         stage2_config = config.get('stage2_config', {})
@@ -1317,7 +1540,8 @@ def run_sequential_inference(config: dict):
         emit_progress('inference', {
             "inference_id": inference_id,
             "stage": "stage1",
-            "status": "loading_data"
+            "status": "loading_data",
+            "mode": mode
         })
 
         input_stack = tifffile.imread(input_path)
@@ -1326,21 +1550,37 @@ def run_sequential_inference(config: dict):
 
         total_slices = len(input_stack)
 
+        # Build config for create_model_from_config (needs stage-specific nested dicts)
+        inference_config = {
+            'mode': mode,
+            'run_stage2': True,  # Sequential means we have Stage 2
+            'stage1': {
+                'features': stage1_config.get('features', 64),
+                'num_layers': stage1_config.get('num_layers', 2),
+                'use_resize_conv': stage1_config.get('use_resize_conv', True),
+                'upsampling_mode': stage1_config.get('upsampling_mode', 'bilinear')
+            },
+            'stage2': {
+                'features': stage2_config.get('features', 64),
+                'num_layers': stage2_config.get('num_layers', 2),
+                'use_resize_conv': stage2_config.get('use_resize_conv', True),
+                'upsampling_mode': stage2_config.get('upsampling_mode', 'bilinear')
+            }
+        }
+
         # =========== Stage 1: N2V ===========
         emit_progress('inference', {
             "inference_id": inference_id,
             "stage": "stage1",
             "status": "loading_model",
+            "mode": mode,
             "device": str(device)
         })
 
-        # Load Stage 1 model
-        stage1_model = create_model(
-            'stage1',
-            features=stage1_config.get('features', 64),
-            num_layers=stage1_config.get('num_layers', 2),
-            use_resize_conv=stage1_config.get('use_resize_conv', True),
-            upsampling_mode=stage1_config.get('upsampling_mode', 'bilinear')
+        # Load Stage 1 model (mode-aware)
+        stage1_model = create_model_from_config(
+            config=inference_config,
+            stage='stage1'
         ).to(device)
 
         checkpoint = safe_load_checkpoint(stage1_model_path, device)
@@ -1348,51 +1588,64 @@ def run_sequential_inference(config: dict):
         stage1_model.eval()
 
         patch_size = stage1_config.get('patch_size', 64)
-        stage1_predictor = AutoStructN2VPredictor(model=stage1_model, patch_size=patch_size)
+        stage1_predictor = AutoStructN2VPredictor(model=stage1_model, patch_size=patch_size, mode=mode)
+
+        # Normalize input
+        input_min, input_max = input_stack.min(), input_stack.max()
+        input_normalized = (input_stack - input_min) / (input_max - input_min + 1e-8)
+        input_normalized = input_normalized.astype(np.float32)
 
         # Process Stage 1
-        stage1_output = []
-        for i, img in enumerate(input_stack):
-            # Normalize
-            img_normalized = (img - img.min()) / (img.max() - img.min() + 1e-8)
-            img_normalized = img_normalized.astype(np.float32)
+        if mode == '2.5d':
+            # 2.5D mode: Use predictor's denoise_stack method
+            stage1_output = stage1_predictor.denoise_stack(input_normalized)
 
-            # Convert to tensor and denoise
-            img_tensor = torch.from_numpy(img_normalized).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
-            denoised_tensor = stage1_predictor.denoise_tensor(img_tensor)
-            denoised = denoised_tensor.squeeze().cpu().numpy()
-            stage1_output.append(denoised)
-
-            progress_percent = ((i + 1) / total_slices) * 50  # Stage 1 is 0-50%
             emit_progress('inference', {
                 "inference_id": inference_id,
                 "stage": "stage1",
                 "status": "processing",
-                "current_slice": i + 1,
-                "total_slices": total_slices,
-                "progress_percent": progress_percent
+                "mode": mode,
+                "progress_percent": 50
             })
+        else:
+            # 2D mode: Process each slice independently
+            stage1_output = []
+            for i, img in enumerate(input_normalized):
+                img_tensor = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
+                denoised_tensor = stage1_predictor.denoise_tensor(img_tensor)
+                denoised = denoised_tensor.squeeze().cpu().numpy()
+                stage1_output.append(denoised)
 
-        stage1_output = np.array(stage1_output)
+                progress_percent = ((i + 1) / total_slices) * 50
+                emit_progress('inference', {
+                    "inference_id": inference_id,
+                    "stage": "stage1",
+                    "status": "processing",
+                    "mode": mode,
+                    "current_slice": i + 1,
+                    "total_slices": total_slices,
+                    "progress_percent": progress_percent
+                })
+
+            stage1_output = np.array(stage1_output)
 
         # Save Stage 1 intermediate output
-        stage1_output_path = os.path.join(output_dir, f'stage1_denoised_{inference_id}.tif')
+        mode_suffix = '_2.5d' if mode == '2.5d' else ''
+        stage1_output_path = os.path.join(output_dir, f'stage1{mode_suffix}_denoised_{inference_id}.tif')
         tifffile.imwrite(stage1_output_path, stage1_output.astype(np.float32))
 
         # =========== Stage 2: Struct-N2V ===========
         emit_progress('inference', {
             "inference_id": inference_id,
             "stage": "stage2",
-            "status": "loading_model"
+            "status": "loading_model",
+            "mode": mode
         })
 
-        # Load Stage 2 model
-        stage2_model = create_model(
-            'stage2',
-            features=stage2_config.get('features', 64),
-            num_layers=stage2_config.get('num_layers', 2),
-            use_resize_conv=stage2_config.get('use_resize_conv', True),
-            upsampling_mode=stage2_config.get('upsampling_mode', 'bilinear')
+        # Load Stage 2 model (mode-aware)
+        stage2_model = create_model_from_config(
+            config=inference_config,
+            stage='stage2'
         ).to(device)
 
         checkpoint = safe_load_checkpoint(stage2_model_path, device)
@@ -1400,34 +1653,45 @@ def run_sequential_inference(config: dict):
         stage2_model.eval()
 
         patch_size = stage2_config.get('patch_size', 64)
-        stage2_predictor = AutoStructN2VPredictor(model=stage2_model, patch_size=patch_size)
+        stage2_predictor = AutoStructN2VPredictor(model=stage2_model, patch_size=patch_size, mode=mode)
 
         # Process Stage 2 using Stage 1 output
-        stage2_output = []
-        for i, img in enumerate(stage1_output):
-            # Stage 1 output is already normalized (0-1 range)
-            img_float = img.astype(np.float32)
+        if mode == '2.5d':
+            # 2.5D mode: Use predictor's denoise_stack method
+            stage2_output = stage2_predictor.denoise_stack(stage1_output)
 
-            # Convert to tensor and denoise
-            img_tensor = torch.from_numpy(img_float).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
-            denoised_tensor = stage2_predictor.denoise_tensor(img_tensor)
-            denoised = denoised_tensor.squeeze().cpu().numpy()
-            stage2_output.append(denoised)
-
-            progress_percent = 50 + ((i + 1) / total_slices) * 50  # Stage 2 is 50-100%
             emit_progress('inference', {
                 "inference_id": inference_id,
                 "stage": "stage2",
                 "status": "processing",
-                "current_slice": i + 1,
-                "total_slices": total_slices,
-                "progress_percent": progress_percent
+                "mode": mode,
+                "progress_percent": 100
             })
+        else:
+            # 2D mode: Process each slice independently
+            stage2_output = []
+            for i, img in enumerate(stage1_output):
+                img_float = img.astype(np.float32)
+                img_tensor = torch.from_numpy(img_float).unsqueeze(0).unsqueeze(0)
+                denoised_tensor = stage2_predictor.denoise_tensor(img_tensor)
+                denoised = denoised_tensor.squeeze().cpu().numpy()
+                stage2_output.append(denoised)
 
-        stage2_output = np.array(stage2_output)
+                progress_percent = 50 + ((i + 1) / total_slices) * 50
+                emit_progress('inference', {
+                    "inference_id": inference_id,
+                    "stage": "stage2",
+                    "status": "processing",
+                    "mode": mode,
+                    "current_slice": i + 1,
+                    "total_slices": total_slices,
+                    "progress_percent": progress_percent
+                })
+
+            stage2_output = np.array(stage2_output)
 
         # Save final output with proper naming convention
-        output_filename = f'asn2v_denoised_{inference_id}.tif'
+        output_filename = f'asn2v{mode_suffix}_denoised_{inference_id}.tif'
         output_path = os.path.join(output_dir, output_filename)
         tifffile.imwrite(output_path, stage2_output.astype(np.float32))
 
@@ -1435,6 +1699,7 @@ def run_sequential_inference(config: dict):
         metadata = {
             "inference_id": inference_id,
             "method": "autostructn2v",
+            "mode": mode,
             "input_path": input_path,
             "output_path": output_path,
             "stage1_output_path": stage1_output_path,
@@ -1454,7 +1719,8 @@ def run_sequential_inference(config: dict):
             "stage1OutputPath": stage1_output_path,
             "metadataPath": metadata_path,
             "totalSlices": total_slices,
-            "method": "autostructn2v"
+            "method": "autostructn2v",
+            "mode": mode
         })
 
     except Exception as e:
@@ -1471,14 +1737,17 @@ def extract_mask(config: dict):
 
     If denoised_patches_path is provided and exists, uses those exact patches
     (same as initial training). Otherwise falls back to sampling from images.
+
+    Supports both 2D mode (2D patches) and 2.5D mode (triplet patches).
     """
     try:
         input_path = config['input_path']
         output_dir = config['output_dir']
         extractor_params = config.get('extractor', {})
         denoised_patches_path = config.get('denoised_patches_path')
+        mode = config.get('mode', '2d')  # '2d' or '2.5d'
 
-        emit_progress('mask', {"status": "loading"})
+        emit_progress('mask', {"status": "loading", "mode": mode})
 
         patches = None
 
@@ -1487,6 +1756,11 @@ def extract_mask(config: dict):
             print(f"Loading saved denoised patches from {denoised_patches_path}")
             patches = np.load(denoised_patches_path)
             print(f"Loaded {len(patches)} patches (same as initial training)")
+
+            # Detect if these are triplet patches (3D) based on shape
+            if patches.ndim == 4 and patches.shape[1] == 3:
+                print("Detected triplet patches (2.5D mode)")
+                mode = '2.5d'
         else:
             # Fallback: sample patches from Stage 1 denoised output
             print(f"No saved patches found, sampling from {input_path}")
@@ -1498,29 +1772,40 @@ def extract_mask(config: dict):
             # Use a fixed random seed for deterministic patch sampling
             np.random.seed(42)
 
-            # Extract patches - use more patches to better match training (500 vs 200)
             patch_size = config.get('patch_size', 64)
-            patches_list = []
-            patches_per_slice = 50  # 50 patches per slice
 
-            for img in images[:min(len(images), 10)]:  # Use up to 10 slices
-                img_norm = (img - img.min()) / (img.max() - img.min() + 1e-8)
-                h, w = img_norm.shape
+            if mode == '2.5d':
+                # 2.5D mode: Sample triplet patches
+                from autoStructN2V.utils.patching import extract_triplet_patches
+                patches = extract_triplet_patches(
+                    images,
+                    patch_size=patch_size,
+                    num_patches=500
+                )
+                print(f"Sampled {len(patches)} triplet patches for 2.5D mask extraction")
+            else:
+                # 2D mode: Sample 2D patches
+                patches_list = []
+                patches_per_slice = 50
 
-                for _ in range(patches_per_slice):
-                    if h >= patch_size and w >= patch_size:
-                        top = np.random.randint(0, h - patch_size + 1)
-                        left = np.random.randint(0, w - patch_size + 1)
-                        patch = img_norm[top:top+patch_size, left:left+patch_size]
-                        patches_list.append(patch)
+                for img in images[:min(len(images), 10)]:
+                    img_norm = (img - img.min()) / (img.max() - img.min() + 1e-8)
+                    h, w = img_norm.shape
 
-            patches = np.array(patches_list)
-            print(f"Sampled {len(patches)} patches from denoised output")
+                    for _ in range(patches_per_slice):
+                        if h >= patch_size and w >= patch_size:
+                            top = np.random.randint(0, h - patch_size + 1)
+                            left = np.random.randint(0, w - patch_size + 1)
+                            patch = img_norm[top:top+patch_size, left:left+patch_size]
+                            patches_list.append(patch)
+
+                patches = np.array(patches_list)
+                print(f"Sampled {len(patches)} patches from denoised output")
 
             # Reset random state
             np.random.seed(None)
 
-        emit_progress('mask', {"status": "extracting", "numPatches": len(patches)})
+        emit_progress('mask', {"status": "extracting", "mode": mode, "numPatches": len(patches)})
 
         # Create extractor with all parameters matching training mode
         extractor = StructuralNoiseExtractor(
@@ -1540,8 +1825,20 @@ def extract_mask(config: dict):
             max_true_pixels=extractor_params.get('max_true_pixels', 25)
         )
 
-        # Extract mask
-        struct_mask, _ = extractor.extract_mask(patches, verbose=False)
+        # Extract mask (different method for 2D vs 2.5D)
+        if mode == '2.5d':
+            struct_mask, _ = extractor.extract_mask_3d(patches, verbose=False)
+            # For 3D mask, center slice contains the main pattern
+            active_pixels = int(np.sum(struct_mask[1]))  # Center slice
+            kernel_size = int(struct_mask.shape[1])
+            mask_array_for_viz = [s.astype(int).tolist() for s in struct_mask]
+            pattern = _detect_pattern(struct_mask[1])
+        else:
+            struct_mask, _ = extractor.extract_mask(patches, verbose=False)
+            active_pixels = int(np.sum(struct_mask))
+            kernel_size = int(struct_mask.shape[0])
+            mask_array_for_viz = struct_mask.astype(int).tolist()
+            pattern = _detect_pattern(struct_mask)
 
         # Save mask
         os.makedirs(output_dir, exist_ok=True)
@@ -1554,20 +1851,32 @@ def extract_mask(config: dict):
         import matplotlib.pyplot as plt
 
         preview_path = os.path.join(output_dir, 'mask_preview.png')
-        plt.figure(figsize=(6, 6))
-        plt.imshow(struct_mask, cmap='gray')
-        plt.title(f'Extracted Mask ({struct_mask.shape[0]}x{struct_mask.shape[1]})\nActive pixels: {np.sum(struct_mask)}')
-        plt.axis('off')
+
+        if mode == '2.5d':
+            # For 2.5D, show all 3 slices
+            fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+            for i, (ax, label) in enumerate(zip(axes, ['Z-1', 'Z (center)', 'Z+1'])):
+                ax.imshow(struct_mask[i], cmap='gray')
+                ax.set_title(f'{label}\nActive: {int(np.sum(struct_mask[i]))}')
+                ax.axis('off')
+            plt.suptitle(f'Extracted 3D Mask ({kernel_size}x{kernel_size})\nTotal active (center): {active_pixels}')
+        else:
+            plt.figure(figsize=(6, 6))
+            plt.imshow(struct_mask, cmap='gray')
+            plt.title(f'Extracted Mask ({kernel_size}x{kernel_size})\nActive pixels: {active_pixels}')
+            plt.axis('off')
+
         plt.savefig(preview_path, bbox_inches='tight', dpi=100)
         plt.close()
 
         emit_result('mask', {
             "maskPath": mask_path,
             "previewPath": preview_path,
-            "kernelSize": int(struct_mask.shape[0]),
-            "activePixels": int(np.sum(struct_mask)),
-            "pattern": _detect_pattern(struct_mask),
-            "maskArray": struct_mask.astype(int).tolist()  # 2D boolean array for visualization
+            "mode": mode,
+            "kernelSize": kernel_size,
+            "activePixels": active_pixels,
+            "pattern": pattern,
+            "maskArray": mask_array_for_viz  # 2D or 3D array for visualization
         })
 
     except Exception as e:
@@ -1635,15 +1944,24 @@ def run_stage2_only(config: dict):
             raise FileNotFoundError(f'Mask file not found: {mask_path}')
 
         struct_mask = np.load(mask_path)
+        mode = config.get('mode', '2d')
 
-        # Create full mask
-        from autoStructN2V.masking import create_full_mask
-        full_mask, prediction_kernel = create_full_mask(
-            struct_mask,
-            config['stage2']['patch_size'],
-            config['stage2']['mask_percentage'],
-            verbose
-        )
+        # Create full mask (mode-aware: 2.5D uses 3D masks)
+        if mode == '2.5d' and struct_mask.ndim == 3:
+            full_mask, prediction_kernel = create_full_mask_3d(
+                struct_mask,
+                config['stage2']['patch_size'],
+                config['stage2']['mask_percentage'],
+                verbose
+            )
+        else:
+            from autoStructN2V.masking import create_full_mask
+            full_mask, prediction_kernel = create_full_mask(
+                struct_mask,
+                config['stage2']['patch_size'],
+                config['stage2']['mask_percentage'],
+                verbose
+            )
 
         # Reconstruct directory structure
         dirs = {
@@ -1705,13 +2023,10 @@ def run_stage2_only(config: dict):
             verbose=verbose
         )
 
-        # Create model
-        stage2_model = create_model(
-            'stage2',
-            features=config['stage2']['features'],
-            num_layers=config['stage2']['num_layers'],
-            use_resize_conv=config['stage2'].get('use_resize_conv', True),
-            upsampling_mode=config['stage2'].get('upsampling_mode', 'bilinear')
+        # Create model (mode-aware: 2.5D uses 3 input channels, 1 output for Stage 2)
+        stage2_model = create_model_from_config(
+            config=config,
+            stage='stage2'
         )
 
         # Create optimizer and scheduler

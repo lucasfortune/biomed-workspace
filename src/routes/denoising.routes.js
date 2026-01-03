@@ -463,8 +463,16 @@ function createDenoisingRoutes(dependencies) {
    * Returns training ID for Socket.IO room joining.
    */
   router.post('/dl/start-training', requireAuth, async (req, res) => {
-    const { method, config, inputFileId, inputPath } = req.body;
+    const { method, config, inputFileId, inputPath, mode = '2d' } = req.body;
     const sessionId = req.session.id;
+
+    // Validate mode
+    if (!['2d', '2.5d'].includes(mode)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mode must be "2d" or "2.5d"'
+      });
+    }
 
     // Validate method
     if (!method || !['n2v', 'autostructn2v'].includes(method)) {
@@ -569,6 +577,7 @@ function createDenoisingRoutes(dependencies) {
 
       const fullConfig = {
         method,
+        mode, // '2d' or '2.5d'
         training_id: trainingId,
         input_dir: absoluteInputPath,
         output_dir: outputDir,
@@ -607,6 +616,7 @@ function createDenoisingRoutes(dependencies) {
       denoisingService.createSession(trainingId, {
         sessionId,
         method,
+        mode,
         config: fullConfig
       });
 
@@ -622,14 +632,16 @@ function createDenoisingRoutes(dependencies) {
         logger.info('[Denoising] Started DL training:', {
           sessionId,
           trainingId,
-          method
+          method,
+          mode
         });
       }
 
       if (activityLogger) {
         activityLogger.logActivity(req.session.user.username, 'dl_denoising_start', {
           trainingId,
-          method
+          method,
+          mode
         });
       }
 
@@ -638,6 +650,7 @@ function createDenoisingRoutes(dependencies) {
         success: true,
         trainingId,
         method,
+        mode,
         message: 'Training started. Join Socket.IO room for progress updates.'
       });
 
@@ -725,7 +738,7 @@ function createDenoisingRoutes(dependencies) {
    *   - isImported: true
    */
   router.post('/dl/run-inference', requireAuth, async (req, res) => {
-    const { trainingId, inputPath, inputFileId, stage, modelPaths, configPath, method, isImported } = req.body;
+    const { trainingId, inputPath, inputFileId, stage, modelPaths, configPath, method, isImported, mode: requestMode } = req.body;
     const sessionId = req.session.id;
 
     try {
@@ -797,6 +810,8 @@ function createDenoisingRoutes(dependencies) {
         };
 
         let fullConfig = null;
+        // Mode from request, config file, or default to '2d'
+        let mode = requestMode || '2d';
 
         if (absoluteConfigPath && fs.existsSync(absoluteConfigPath)) {
           try {
@@ -809,6 +824,10 @@ function createDenoisingRoutes(dependencies) {
               use_resize_conv: stageConfig.use_resize_conv !== false,
               upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
             };
+            // Get mode from config if not provided in request
+            if (!requestMode && fullConfig.mode) {
+              mode = fullConfig.mode;
+            }
           } catch (e) {
             console.warn('Could not parse config file, using defaults');
           }
@@ -828,6 +847,7 @@ function createDenoisingRoutes(dependencies) {
             outputDir,
             modelConfig,
             method: 'autostructn2v',
+            mode,  // '2d' or '2.5d'
             sequential: true,
             // For file tracking
             sessionId,
@@ -847,6 +867,7 @@ function createDenoisingRoutes(dependencies) {
             modelConfig,
             stage: 'stage1',
             method,
+            mode,  // '2d' or '2.5d'
             // For file tracking
             sessionId,
             workspacePath,
@@ -896,6 +917,9 @@ function createDenoisingRoutes(dependencies) {
           upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
         };
 
+        // Get mode from training session or request
+        const mode = requestMode || trainSession.mode || trainSession.config?.mode || '2d';
+
         // Start inference
         denoisingService.runInference({
           inferenceId,
@@ -905,6 +929,7 @@ function createDenoisingRoutes(dependencies) {
           modelConfig,
           stage: useStage,
           method: trainSession.method || 'n2v',
+          mode,  // '2d' or '2.5d'
           // For file tracking
           sessionId,
           workspacePath,
@@ -916,7 +941,8 @@ function createDenoisingRoutes(dependencies) {
             sessionId,
             inferenceId,
             trainingId,
-            stage: useStage
+            stage: useStage,
+            mode
           });
         }
 
@@ -1009,11 +1035,15 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
+      // Get mode from session
+      const mode = session.mode || session.config?.mode || '2d';
+
       // Regenerate mask with new parameters
       const result = await denoisingService.regenerateMask({
         trainingId,
         stage1Dir,
-        parameters: parameters || {}
+        parameters: parameters || {},
+        mode  // '2d' or '2.5d'
       }, io);
 
       res.json({
@@ -1093,24 +1123,30 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
+      // Get mode from session
+      const mode = session.mode || session.config?.mode || '2d';
+
       if (logger) {
         logger.info('[Denoising] Continuing training after mask approval:', {
           trainingId,
           stage1ModelPath: session.stage1ModelPath,
-          maskPath: session.maskPath
+          maskPath: session.maskPath,
+          mode
         });
       }
 
       // Continue training with Stage 2
       denoisingService.continueTraining({
         trainingId,
-        session
+        session,
+        mode  // Pass mode explicitly for clarity
       }, io);
 
       if (activityLogger) {
         activityLogger.logActivity(req.session.user.username, 'dl_denoising_continue', {
           trainingId,
-          stage: 'stage2'
+          stage: 'stage2',
+          mode
         });
       }
 

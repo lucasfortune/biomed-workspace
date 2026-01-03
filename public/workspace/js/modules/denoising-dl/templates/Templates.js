@@ -66,6 +66,15 @@ class Templates {
               <div class="section-header">
                 <h4>1. Select Denoising Method</h4>
                 ${this.renderHelpIcon('denoising-dl.step1.method')}
+                <div class="mode-toggle-container">
+                  <span class="mode-label mode-label-left active">2D</span>
+                  <label class="mode-toggle-switch">
+                    <input type="checkbox" id="mode-toggle">
+                    <span class="mode-toggle-slider"></span>
+                  </label>
+                  <span class="mode-label mode-label-right">2.5D</span>
+                  ${this.renderHelpIcon('denoising-dl.step1.mode')}
+                </div>
               </div>
               <label class="method-option">
                 <input type="radio" name="dl-method" value="n2v">

@@ -86,6 +86,7 @@ class DLDenoisingModule extends BaseModule {
     // Module state
     this.uploadedFile = null;
     this.selectedMethod = null; // 'n2v' or 'autostructn2v'
+    this.selectedMode = '2d'; // '2d' or '2.5d'
     this.gpuInfo = null;
     this.validationResult = null;
     this.trainingId = null;
@@ -232,6 +233,12 @@ class DLDenoisingModule extends BaseModule {
       radio.addEventListener('change', (e) => this.onMethodChange(e.target.value));
     });
 
+    // Mode toggle (2D / 2.5D)
+    const modeToggle = document.getElementById('mode-toggle');
+    if (modeToggle) {
+      modeToggle.addEventListener('change', (e) => this.onModeChange(e.target.checked ? '2.5d' : '2d'));
+    }
+
     // Preset selector
     document.getElementById('presetSelector')?.addEventListener('change', (e) => {
       this.onPresetChange(e.target.value);
@@ -291,6 +298,28 @@ class DLDenoisingModule extends BaseModule {
    */
   onMethodChange(method) {
     return this.fileHandler.onMethodChange(method);
+  }
+
+  /**
+   * Handle mode change (2D / 2.5D)
+   * @param {string} mode - '2d' or '2.5d'
+   */
+  onModeChange(mode) {
+    console.log('[DLDenoisingModule] Mode changed to:', mode);
+    this.selectedMode = mode;
+
+    // Update mode label styling
+    const leftLabel = document.querySelector('.mode-label-left');
+    const rightLabel = document.querySelector('.mode-label-right');
+    if (leftLabel && rightLabel) {
+      leftLabel.classList.toggle('active', mode === '2d');
+      rightLabel.classList.toggle('active', mode === '2.5d');
+    }
+
+    // Re-validate file if one is already selected (check stack depth for 2.5D)
+    if (this.fileHandler) {
+      this.fileHandler.onModeChange(mode);
+    }
   }
 
   /**
@@ -761,6 +790,7 @@ class DLDenoisingModule extends BaseModule {
     this.uploadedFile = null;
     this.selectedFile = null;
     this.selectedMethod = null;
+    this.selectedMode = '2d';
     this.validationResult = null;
     this.trainingId = null;
     this.trainingResult = null;
@@ -782,6 +812,14 @@ class DLDenoisingModule extends BaseModule {
     document.querySelectorAll('input[name="dl-method"]').forEach(radio => {
       radio.checked = false;
     });
+
+    // Reset mode toggle to 2D
+    const modeToggle = document.getElementById('mode-toggle');
+    if (modeToggle) modeToggle.checked = false;
+    const leftLabel = document.querySelector('.mode-label-left');
+    const rightLabel = document.querySelector('.mode-label-right');
+    if (leftLabel) leftLabel.classList.add('active');
+    if (rightLabel) rightLabel.classList.remove('active');
 
     // Hide workflow selection section and reset workflow sections
     const workflowSection = document.getElementById('workflowSelectionSection');
