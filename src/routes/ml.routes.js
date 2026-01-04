@@ -1257,10 +1257,12 @@ function createMLRoutes(dependencies) {
     }
 
     // Spawn Python script to get info
+    // Use --no-classes for fast metadata-only read (skips loading entire file)
     const pythonProcess = spawn(PYTHON_PATH, [
       'python/extract_slice.py',
       outputPath,
-      '--info'
+      '--info',
+      '--no-classes'
     ]);
 
     let output = '';

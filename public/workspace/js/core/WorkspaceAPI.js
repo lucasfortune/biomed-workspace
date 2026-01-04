@@ -251,15 +251,13 @@ class WorkspaceAPI {
    * @param {string} fileId - File ID to download
    */
   downloadFile(fileId) {
-    // Use hidden iframe to trigger download without page navigation
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = `${this.baseURL}/api/workspace/file/${fileId}/download`;
-    document.body.appendChild(iframe);
-    // Clean up iframe after download starts
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 5000);
+    // Use anchor tag to trigger download without CSP issues
+    const link = document.createElement('a');
+    link.href = `${this.baseURL}/api/workspace/file/${fileId}/download`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   /**
@@ -436,14 +434,13 @@ class WorkspaceAPI {
    * @param {string} trainingId - Training ID
    */
   downloadModel(trainingId) {
-    // Use hidden iframe to trigger download without page navigation
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = `${this.baseURL}/download-model/${trainingId}`;
-    document.body.appendChild(iframe);
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 5000);
+    // Use anchor tag to trigger download without CSP issues
+    const link = document.createElement('a');
+    link.href = `${this.baseURL}/download-model/${trainingId}`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   /**
@@ -451,14 +448,13 @@ class WorkspaceAPI {
    * @param {string} inferenceId - Inference ID
    */
   downloadInferenceResults(inferenceId) {
-    // Use hidden iframe to trigger download without page navigation
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = `${this.baseURL}/download-inference-results/${inferenceId}`;
-    document.body.appendChild(iframe);
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 5000);
+    // Use anchor tag to trigger download without CSP issues
+    const link = document.createElement('a');
+    link.href = `${this.baseURL}/download-inference-results/${inferenceId}`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   // ===========================================================================
