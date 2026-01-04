@@ -15,8 +15,34 @@ This document contains bugs and/or issues reported by the developer and/or users
 
 ## open Bugs/Issues:
 
+- issue: dl denoising module: step 3 color of lines in charts is the wrong way around! 
+    - is this fixed somehow?
+    - prio 2
+    - compl. 1
+
+- issue: dl denoising: training start notifications are red, should be green
+    - prio 2
+    - compl 1
+
+- feature: dl denoising module: autostructN2V mask extractor needs auto accept toggle
+    - prio 2
+    - compl 2
+
 
 ## CLOSED
+
+
+- issue: image viewer module: file validation takes super long/does not work at all?
+    - can this be quick? is full file being send to frontend? where is validation happening?
+    - FIXED
+    - prio 5
+    - compl. 1
+
+- issue: file download broken, downloading single file results in error in browser console:
+    - Content-Security-Policy: The page’s settings blocked the loading of a resource (frame-src) at http://localhost:3001/api/workspace/file/file_1767456499651_b47f148b3ed4/download because it violates the following directive: “frame-src 'none'” workspace
+    - FIXED
+    - prio 5
+    - compl. 1
 
 - issue: 3d visulaizer module: mesh validation takes very long. why?
     - can this be quicker?

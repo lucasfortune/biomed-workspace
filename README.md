@@ -67,12 +67,14 @@ node manageUsers.js add-admin <username> <password> <fullName> <email> <institut
 
 ## ✨ Features
 
-### Workspace Version (Phase 2 Complete)
-- **Modular Architecture**: IDE-like interface with pluggable processing modules
-- **Segmentation Module**: Complete U-Net pipeline (upload, train, inference, visualize)
+### Workspace Version (Phase 4 Complete)
+- **Modular Architecture**: IDE-like interface with 6 processing modules
+- **Processing Modules**: Segmentation, DL Denoising (N2V), Filter Denoising, Annotation, Mesh Generation, 3D Visualization, Image Viewer
+- **File Browser**: Visual file tree with search, batch operations, ZIP export/restore
+- **Help System**: 200+ context-sensitive help articles with glossary
+- **Design System**: Light/dark mode with Physics of Parasitism branding
 - **State Management**: Centralized state with event-driven updates
 - **Real-time Progress**: Socket.IO integration for training/inference tracking
-- **3D Visualization**: Interactive Three.js viewer with per-class controls
 
 ### Classic Version (Stable)
 - Complete ML pipeline in linear workflow
@@ -92,14 +94,13 @@ node manageUsers.js add-admin <username> <password> <fullName> <email> <institut
 ## 🏃 Quick Usage
 
 ### Workspace Version
-1. **Launch Segmentation Module** from welcome hub
-2. **Upload Data**: Raw images + annotations (or use test data)
-3. **Configure Training**: Set patch size, learning rate, epochs
-4. **Train Model**: Monitor real-time progress with charts
-5. **Run Inference**: Segment new data
-6. **Visualize**: Interactive 3D view with class controls
+1. **Select Module** from the welcome hub (6 modules available)
+2. **Upload Data**: Raw images via file browser (or use test data)
+3. **Process**: Configure and run module-specific workflows
+4. **Monitor Progress**: Real-time updates via Socket.IO
+5. **Export Results**: Download processed files or ZIP archive
 
-### Classic Version
+### Classic Version (LEGACY)
 - Traditional 5-step linear workflow
 - Same capabilities, different UI
 
@@ -131,10 +132,11 @@ node manageUsers.js reset-password <user> <pass>
 /viz_app/
 ├── /public/
 │   ├── /classic/         # Original app (stable)
-│   └── /workspace/       # New modular app (Phase 2 complete)
+│   └── /workspace/       # Modular app (Phase 4 complete, 8 modules)
 ├── /python/              # ML processing scripts
+├── /src/                 # Modular backend (routes, services, middleware)
 ├── /docs/                # Comprehensive documentation
-├── server.js             # Express backend
+├── server.js             # Express backend entry point
 ├── CLAUDE.md             # AI assistant guide
 └── README.md             # This file
 ```
@@ -163,19 +165,13 @@ PORT=3001 npm start
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| Phase 1 | ✅ Complete | Foundation & architecture setup |
-| Phase 2 | ✅ Complete | Module system & segmentation integration |
-| Phase 3 | 📋 Planned | File browser & workspace management |
-| Phase 4 | 📋 Planned | Denoising module |
-| Phase 5 | 📋 Planned | Annotation tool |
+| Phase 1 | ✅ Complete | Classic version foundation |
+| Phase 2 | ✅ Complete | Workspace & module system |
+| Phase 3 | ✅ Complete | File browser & workspace management |
+| Phase 4 | ✅ Complete | Additional modules & platform polish |
+| Phase 5 | 📋 Planned | Batch processing & model zoo |
 
 See [Roadmap](docs/vision/ROADMAP.md) for detailed plan.
-
----
-
-## 🤝 Contributing
-
-See [CLAUDE.md](CLAUDE.md) for development guidelines and architecture information.
 
 ---
 
@@ -194,4 +190,4 @@ MIT License
 
 ---
 
-**Last Updated:** 2025-11-27 | **Current Version:** Phase 2 Complete
+**Last Updated:** 2026-01-04 | **Current Version:** Phase 4 Complete
