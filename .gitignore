@@ -267,3 +267,6 @@ users.json
 
 # Claude Code Prompts
 docs/prompts/
+
+# developing & bugfixing
+docs/dev/
