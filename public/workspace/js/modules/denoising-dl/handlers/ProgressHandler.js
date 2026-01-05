@@ -164,7 +164,7 @@ class ProgressHandler {
       this.module.trainingProgress.updateStatus('Preparing data...');
     }
 
-    this.module.state.notify('info', `Training initialized on ${data.device.toUpperCase()}`);
+    this.module.state.notify('success', `Training initialized on ${data.device.toUpperCase()}`);
   }
 
   /**
