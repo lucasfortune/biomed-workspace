@@ -127,6 +127,9 @@ class DLDenoisingModule extends BaseModule {
     this.socket = null;
     this.socketConnected = false;
 
+    // Auto-approve toggle state (for autoStructN2V mask approval)
+    this.autoApproveEnabled = false;
+
     // Bind methods
     this.onFileSelected = this.onFileSelected.bind(this);
     this.onFileUploaded = this.onFileUploaded.bind(this);
@@ -253,6 +256,15 @@ class DLDenoisingModule extends BaseModule {
         }
       });
     });
+
+    // Auto-approve toggle (for autoStructN2V mask approval)
+    const autoApproveToggle = document.getElementById('autoApproveToggle');
+    if (autoApproveToggle) {
+      autoApproveToggle.addEventListener('change', (e) => {
+        this.autoApproveEnabled = e.target.checked;
+        console.log('[DLDenoisingModule] Auto-approve:', this.autoApproveEnabled ? 'enabled' : 'disabled');
+      });
+    }
   }
 
   async checkGPU() {
@@ -821,6 +833,18 @@ class DLDenoisingModule extends BaseModule {
     if (leftLabel) leftLabel.classList.add('active');
     if (rightLabel) rightLabel.classList.remove('active');
 
+    // Reset auto-approve toggle
+    this.autoApproveEnabled = false;
+    const autoApproveToggle = document.getElementById('autoApproveToggle');
+    if (autoApproveToggle) {
+      autoApproveToggle.checked = false;
+      autoApproveToggle.disabled = false;
+    }
+    const autoApproveContainer = document.getElementById('autoApproveContainer');
+    if (autoApproveContainer) {
+      autoApproveContainer.classList.remove('disabled');
+    }
+
     // Hide workflow selection section and reset workflow sections
     const workflowSection = document.getElementById('workflowSelectionSection');
     if (workflowSection) {
@@ -851,6 +875,21 @@ class DLDenoisingModule extends BaseModule {
     this.uploadedFile = null;
 
     this.goToStep(1);
+  }
+
+  /**
+   * Update auto-approve toggle enabled/disabled state
+   * @param {boolean} enabled - Whether the toggle should be interactive
+   */
+  updateAutoApproveToggleState(enabled) {
+    const toggle = document.getElementById('autoApproveToggle');
+    const container = document.getElementById('autoApproveContainer');
+    if (toggle) {
+      toggle.disabled = !enabled;
+    }
+    if (container) {
+      container.classList.toggle('disabled', !enabled);
+    }
   }
 
   async deactivate() {

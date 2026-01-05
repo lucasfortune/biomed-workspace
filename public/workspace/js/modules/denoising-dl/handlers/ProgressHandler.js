@@ -402,6 +402,27 @@ class ProgressHandler {
       isEmpty: data.activePixels < 2
     });
 
+    // Disable the auto-approve toggle now that mask extraction is complete
+    this.module.updateAutoApproveToggleState(false);
+
+    // Check if auto-approve is enabled
+    if (this.module.autoApproveEnabled) {
+      console.log('[ProgressHandler] Auto-approve enabled, automatically approving mask...');
+
+      // Update status to show auto-approval
+      this.module.updateStageStatus('mask', 'completed', 'Auto-approved');
+
+      if (this.module.trainingProgress) {
+        this.module.trainingProgress.updateStatus('Mask auto-approved, starting Stage 2...');
+      }
+
+      // Automatically trigger mask approval
+      this.module.approveMask();
+      return; // Exit early - don't show manual approval UI
+    }
+
+    // Manual approval flow continues below...
+
     // Show mask action buttons (Approve/Skip)
     const maskActions = document.getElementById('maskActions');
     if (maskActions) {

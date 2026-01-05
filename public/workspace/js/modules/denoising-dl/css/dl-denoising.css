@@ -2582,3 +2582,117 @@
     flex-direction: column;
   }
 }
+
+/* ============================================
+   AUTO-APPROVE TOGGLE
+   ============================================ */
+
+/* Container for auto-approve toggle - positioned in collapsible header */
+.dl-denoising-module .auto-approve-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: var(--module-spacing-sm);
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--module-radius-sm);
+  transition: opacity var(--module-transition-fast);
+}
+
+.dl-denoising-module .auto-approve-toggle-container.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Toggle label text */
+.dl-denoising-module .auto-approve-label {
+  font-size: var(--module-font-size-xs);
+  font-weight: 500;
+  color: var(--module-text-secondary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Toggle switch styling (following Physics of Parasitism design system) */
+.dl-denoising-module .auto-approve-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.dl-denoising-module .auto-approve-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.dl-denoising-module .auto-approve-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--module-border);
+  transition: background-color 0.3s ease;
+  border-radius: 18px;
+}
+
+.dl-denoising-module .auto-approve-slider:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: transform 0.3s ease;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Checked state - use PoP RED for "enabled" state */
+.dl-denoising-module .auto-approve-toggle input:checked + .auto-approve-slider {
+  background-color: var(--module-primary);
+}
+
+.dl-denoising-module .auto-approve-toggle input:checked + .auto-approve-slider:before {
+  transform: translateX(18px);
+}
+
+/* Hover state */
+.dl-denoising-module .auto-approve-toggle:hover .auto-approve-slider {
+  background-color: var(--module-border-dark);
+}
+
+.dl-denoising-module .auto-approve-toggle input:checked:hover + .auto-approve-slider {
+  background-color: var(--module-primary);
+}
+
+/* Disabled state */
+.dl-denoising-module .auto-approve-toggle input:disabled + .auto-approve-slider {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Focus state for accessibility */
+.dl-denoising-module .auto-approve-toggle input:focus + .auto-approve-slider {
+  box-shadow: 0 0 0 2px rgba(169, 29, 29, 0.3);
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .dl-denoising-module .auto-approve-toggle-container {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .dl-denoising-module .auto-approve-label {
+  color: var(--module-text-secondary);
+}
+
+[data-theme="dark"] .dl-denoising-module .auto-approve-slider {
+  background-color: var(--module-border);
+}
+
+[data-theme="dark"] .dl-denoising-module .auto-approve-toggle input:checked + .auto-approve-slider {
+  background-color: var(--module-primary);
+}

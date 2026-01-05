@@ -397,6 +397,13 @@ class Templates {
         <div class="collapsible-header" data-section="maskExtraction">
           <span class="collapsible-icon">&#9660;</span>
           <h4>Mask Extraction</h4>
+          <div class="auto-approve-toggle-container" id="autoApproveContainer">
+            <label class="auto-approve-toggle" title="Automatically approve mask and start Stage 2">
+              <input type="checkbox" id="autoApproveToggle" />
+              <span class="auto-approve-slider"></span>
+            </label>
+            <span class="auto-approve-label">Auto-approve</span>
+          </div>
           <span class="stage-status" id="maskStageStatus">Pending</span>
         </div>
         <div class="collapsible-body" id="maskExtractionBody">
