@@ -266,6 +266,11 @@ class MaskHandler {
       this.module.trainingProgress.updateStatus('Starting Stage 2 training...');
     }
 
+    // Disable mask parameter controls since Stage 2 is starting
+    if (this.module.maskParameterPanel) {
+      this.module.maskParameterPanel.setDisabled(true);
+    }
+
     try {
       // Call backend to continue training with Stage 2
       const result = await this.module.api.continueTraining(this.module.trainingId);

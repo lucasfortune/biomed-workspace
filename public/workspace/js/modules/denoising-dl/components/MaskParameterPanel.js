@@ -181,6 +181,36 @@ class MaskParameterPanel {
   }
 
   /**
+   * Set disabled state for all interactive controls
+   * Used when mask is approved and Stage 2 training starts
+   * @param {boolean} disabled
+   */
+  setDisabled(disabled) {
+    const controlIds = [
+      'slider_adaptive_thresholding',
+      'slider_base_percentile',
+      'slider_percentile_decay',
+      'slider_max_masked_pixels'
+    ];
+
+    // Disable all input controls
+    controlIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = disabled;
+    });
+
+    // Disable buttons
+    const container = document.getElementById(this.containerId);
+    if (container) {
+      const buttons = container.querySelectorAll('button');
+      buttons.forEach(btn => btn.disabled = disabled);
+
+      // Visual feedback via CSS class
+      container.classList.toggle('disabled', disabled);
+    }
+  }
+
+  /**
    * Refresh the display
    */
   refresh() {
