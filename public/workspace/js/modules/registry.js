@@ -45,7 +45,7 @@ const moduleRegistry = [
       {
         id: 'denoising-dl',
         label: 'Deep Learning',
-        sublabel: 'N2V / autoN2V',
+        sublabel: 'N2V / asN2V',
         path: '/workspace/js/modules/denoising-dl/DLDenoisingModule.js',
         status: 'available',
         helpArticleId: 'denoising-dl'
@@ -75,7 +75,7 @@ const moduleRegistry = [
   {
     id: 'segmentation',
     name: 'U-Net Segmentation',
-    description: 'Complete ML pipeline: Data Upload, Training, Inference',
+    description: 'Segment annotated image volumes with a U-Net annotation algorithm',
     icon: moduleIcons.segmentation,
     path: '/workspace/js/modules/segmentation/SegmentationModule.js',
     inputs: ['image_stack', 'annotations'],
