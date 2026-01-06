@@ -276,6 +276,15 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
           await onComplete(training, params);
         }
       } else {
+        // Check if training was cancelled (status set by TrainingService.cancelTraining)
+        // Don't emit failure for cancelled training - it already emitted 'training-cancelled'
+        if (training.status === 'cancelled') {
+          if (logger) {
+            logger.debug(`[TRAINING] Process ended due to cancellation: ${params.training_id}`);
+          }
+          return;
+        }
+
         training.status = 'failed';
         training.endTime = new Date();
 
