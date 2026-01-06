@@ -15,6 +15,20 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-01-06 (Skip Stage 2 Fix, File Category Refactor, Notification & Metadata Fixes)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-06 | [Skip Stage 2 Fix](2026-01-06_skip_stage2_fix.md) | 🐛 Bug Fix | ~1.5 hrs | ✅ Complete |
+| 2026-01-06 | [Notification & Metadata Bug Fixes](2026-01-06_notification_metadata_bugfixes.md) | 🐛 Bug Fix | ~45 min | ✅ Complete |
+| 2026-01-06 | [File Category System Refactor](2026-01-06_file_category_refactor.md) | ♻️ Refactor | ~2 hrs | ✅ Complete |
+
+### 2026-01-05 (DL Denoising Bug Fixes)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-05 | [DL Denoising Bug Fixes](2026-01-05_dl_denoising_bugfixes.md) | 🐛 Bug Fix | ~1 hr | ✅ Complete |
+
 ### 2026-01-04 (autoStructN2V 2.5D Implementation)
 
 | Date | Session | Type | Duration | Status |
@@ -168,7 +182,8 @@ This index provides a chronological record of all development sessions. Sessions
 - [Phase 2 Completion](2025-11-26_phase2_completion.md) - Module system
 - [Phase 1 Completion](2025-11-20_phase1_completion.md) - Foundation
 
-### 🐛 Bug Fixes (5)
+### 🐛 Bug Fixes (6)
+- [Notification & Metadata Bug Fixes](2026-01-06_notification_metadata_bugfixes.md) - Notification colors/icons, metadata cleanup
 - [Annotation Bug Fixes & Sparse Encoding](2025-12-25_annotation_bugfixes_sparse_encoding.md) - Brush, save, sparse encoding
 - [UI & Navigation Fixes](2025-12-02_ui_navigation_fixes.md) - Post-pipeline navigation & UI polish
 - [Custom Upload Fix](2025-11-28_custom_upload_fix.md) - Variable naming & approval checks
@@ -184,11 +199,11 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 21 |
-| **Total Development Time** | ~105.5 hours |
+| **Total Sessions** | 22 |
+| **Total Development Time** | ~106.25 hours |
 | **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Phase 4 Info Panel complete, Module Framework complete, Data Lineage complete, Annotation Module complete, 2.5D Denoising complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
-| **Bugs Fixed** | 52+ issues |
+| **Bugs Fixed** | 54+ issues |
 | **Lines Added** | ~27,600+ (code) + ~37,000 (docs) |
 | **Lines Removed** | ~1,010+ (cleanup) |
 | **Files Created** | 86+ |
@@ -526,5 +541,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2026-01-04
-**Total Sessions Documented:** 21
+**Last Updated:** 2026-01-06
+**Total Sessions Documented:** 22
