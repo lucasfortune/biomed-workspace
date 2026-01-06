@@ -381,7 +381,7 @@ function createMLRoutes(dependencies) {
         fs.mkdirSync(trainingParams.output_dir, { recursive: true });
       }
 
-      // Store training session
+      // Store training session with history array for chart restoration
       trainingSessions.set(trainingId, {
         sessionId: sessionId,
         username: req.session.user.username,
@@ -391,7 +391,14 @@ function createMLRoutes(dependencies) {
         current_epoch: 0,
         total_epochs: config.num_epochs,
         params: trainingParams,
-        isTestData: isUsingTestData
+        isTestData: isUsingTestData,
+        history: [] // Array of {epoch, train_loss, val_loss, train_dice, val_dice}
+      });
+
+      // Debug logging
+      console.log('[ML Routes] Training session created:', {
+        trainingId,
+        allSessionIds: Array.from(trainingSessions.keys())
       });
 
       if (activityLogger) {
@@ -427,11 +434,66 @@ function createMLRoutes(dependencies) {
     const trainingId = req.params.trainingId;
     const training = trainingSessions.get(trainingId);
 
+    // Debug logging
+    console.log('[ML Routes] Training status request:', {
+      requestedId: trainingId,
+      found: !!training,
+      allSessionIds: Array.from(trainingSessions.keys()),
+      historyLength: training?.history?.length || 0
+    });
+
     if (!training) {
-      return res.status(404).json({ error: 'Training session not found' });
+      // Session not in memory - could be server restart or old session
+      // Return success: true with status: 'unknown' so frontend can handle gracefully
+      return res.json({
+        success: true,
+        status: 'unknown',
+        message: 'Training session not found in memory. It may have completed or the server was restarted.'
+      });
     }
 
-    res.json(training);
+    res.json({
+      success: true,
+      ...training
+    });
+  });
+
+  /**
+   * Cancel an ongoing training process
+   * POST /cancel-training/:trainingId
+   */
+  router.post('/cancel-training/:trainingId', requireAuth, (req, res) => {
+    const { trainingId } = req.params;
+
+    try {
+      const cancelled = trainingService.cancelTraining(trainingId, io);
+
+      if (cancelled) {
+        activityLogger.logActivity(
+          req.session.user?.username || 'unknown',
+          'TRAINING_CANCELLED',
+          { trainingId }
+        );
+        res.json({
+          success: true,
+          message: 'Training cancelled successfully'
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'No active training process found for this ID'
+        });
+      }
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[ML] Error cancelling training:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
   });
 
   // ===========================================================================

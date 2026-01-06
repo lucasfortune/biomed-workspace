@@ -222,6 +222,9 @@ class Templates {
               <span class="btn-icon">&#9658;</span>
               Start Denoising
             </button>
+            <button id="cancelTrainingBtn" class="btn btn-danger" onclick="window.dlDenoisingModule?.progressHandler?.cancelTraining()" style="display: none; margin-left: 12px;">
+              Cancel Training
+            </button>
           </div>
 
           ${this.renderN2VTrainingSection()}

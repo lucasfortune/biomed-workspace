@@ -5,6 +5,8 @@
  * stage transitions, and completion events.
  */
 
+import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
+
 class ProgressHandler {
   /**
    * @param {DLDenoisingModule} module - Reference to the parent module
@@ -62,6 +64,7 @@ class ProgressHandler {
     this.module.socket.off('denoising-cleanup-progress');
     this.module.socket.off('denoising-complete-complete');
     this.module.socket.off('denoising-training-complete');
+    this.module.socket.off('denoising-cancelled');
     this.module.socket.off('denoising-error');
 
     // Init progress (device setup, GPU check)
@@ -141,14 +144,39 @@ class ProgressHandler {
       console.error('[ProgressHandler] Training error:', data);
       this.handleTrainingError(data);
     });
+
+    // Training cancelled (from backend when process is killed)
+    this.module.socket.on('denoising-cancelled', (data) => {
+      console.log('[ProgressHandler] Training cancelled:', data);
+      this.handleTrainingCancelled(data);
+    });
   }
 
   /**
-   * Disconnect from Socket.IO
+   * Disconnect from Socket.IO and remove all event listeners
    */
   disconnectSocket() {
-    if (this.module.socket && this.module.socketConnected) {
-      this.module.socket.emit('leave-denoising', this.module.trainingId);
+    if (this.module.socket) {
+      // Remove all event listeners to prevent memory leaks and duplicate handlers
+      this.module.socket.off('denoising-init-progress');
+      this.module.socket.off('denoising-data-progress');
+      this.module.socket.off('denoising-stage1-progress');
+      this.module.socket.off('denoising-stage1-complete');
+      this.module.socket.off('denoising-mask-progress');
+      this.module.socket.off('denoising-mask-complete');
+      this.module.socket.off('denoising-paused');
+      this.module.socket.off('denoising-stage2-progress');
+      this.module.socket.off('denoising-stage2-complete');
+      this.module.socket.off('denoising-cleanup-progress');
+      this.module.socket.off('denoising-complete-complete');
+      this.module.socket.off('denoising-training-complete');
+      this.module.socket.off('denoising-error');
+      this.module.socket.off('denoising-cancelled');
+
+      // Leave the room if connected
+      if (this.module.socketConnected && this.module.trainingId) {
+        this.module.socket.emit('leave-denoising', this.module.trainingId);
+      }
       this.module.socketConnected = false;
     }
   }
@@ -214,6 +242,9 @@ class ProgressHandler {
    * Handle Stage 1 progress update
    */
   handleStage1Progress(data) {
+    // Update progress timestamp for stale detection
+    TrainingSessionPersistence.updateProgress();
+
     // Determine prefix based on method
     const prefix = this.module.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
 
@@ -367,6 +398,9 @@ class ProgressHandler {
   handleTrainingPaused(data) {
     console.log('[ProgressHandler] Training paused, awaiting mask approval');
 
+    // Update localStorage stage to paused_at_mask
+    TrainingSessionPersistence.updateStage('paused_at_mask');
+
     // Update mask status to show awaiting approval
     this.module.updateStageStatus('mask', 'completed', 'Awaiting Approval');
 
@@ -442,6 +476,13 @@ class ProgressHandler {
    * Handle Stage 2 progress update
    */
   handleStage2Progress(data) {
+    // Update localStorage stage to stage2 (only on first progress update)
+    if (data.epoch === 1) {
+      TrainingSessionPersistence.updateStage('stage2');
+    }
+    // Update progress timestamp for stale detection
+    TrainingSessionPersistence.updateProgress();
+
     // Update progress bar
     const progressPercent = data.totalEpochs > 0 ? (data.epoch / data.totalEpochs) * 100 : 0;
     const progressFill = document.getElementById('stage2ProgressFill');
@@ -552,6 +593,9 @@ class ProgressHandler {
     // Clear saved training ID from state (training is done)
     this.module.state.update(`modules.denoising-dl.trainingId`, null);
 
+    // Clear localStorage session - training is done
+    TrainingSessionPersistence.clearAll();
+
     // Disconnect socket
     this.disconnectSocket();
 
@@ -581,8 +625,33 @@ class ProgressHandler {
     // Clear saved training ID
     this.module.state.update(`modules.denoising-dl.trainingId`, null);
 
+    // Clear localStorage session - training failed
+    TrainingSessionPersistence.clearAll();
+
     // Disconnect socket
     this.disconnectSocket();
+  }
+
+  /**
+   * Handle training cancelled (from backend when process is killed)
+   */
+  handleTrainingCancelled(data) {
+    console.log('[ProgressHandler] Training was cancelled');
+
+    // Reset UI to ready state
+    this.module.showTrainingReady();
+
+    // Clear saved training ID
+    this.module.trainingId = null;
+    this.module.state.update(`modules.denoising-dl.trainingId`, null);
+
+    // Clear localStorage session
+    TrainingSessionPersistence.clearAll();
+
+    // Disconnect socket
+    this.disconnectSocket();
+
+    this.module.state.notify('info', 'Training cancelled');
   }
 
   /**
@@ -605,6 +674,9 @@ class ProgressHandler {
       // Clear training ID
       this.module.trainingId = null;
       this.module.state.update(`modules.denoising-dl.trainingId`, null);
+
+      // Clear localStorage session - training cancelled
+      TrainingSessionPersistence.clearAll();
     } catch (error) {
       console.error('[ProgressHandler] Error cancelling training:', error);
       this.module.state.notify('error', 'Failed to cancel training');

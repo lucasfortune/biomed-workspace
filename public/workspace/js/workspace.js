@@ -68,6 +68,9 @@ class Workspace {
    */
   async init() {
     try {
+      // Load global services for session management
+      await this.loadGlobalServices();
+
       // Initialize core systems
       this.state = new StateManager();
       this.moduleLoader = new ModuleLoader(this.state);
@@ -110,6 +113,25 @@ class Workspace {
     } catch (error) {
       console.error('[Workspace] Initialization error:', error);
       this.showError('Failed to initialize workspace: ' + error.message);
+    }
+  }
+
+  /**
+   * Load global services required for session management
+   * These are dynamically imported so they're available before modules load
+   */
+  async loadGlobalServices() {
+    try {
+      // Load TrainingSessionPersistence (for training session persistence and global lock)
+      await import('/workspace/js/services/TrainingSessionPersistence.js');
+      console.log('[Workspace] TrainingSessionPersistence loaded');
+
+      // Load ResumeDialog (for resume/start fresh dialog)
+      await import('/workspace/js/core/components/ResumeDialog.js');
+      console.log('[Workspace] ResumeDialog loaded');
+    } catch (error) {
+      console.error('[Workspace] Error loading global services:', error);
+      // Non-fatal - modules will handle missing services gracefully
     }
   }
 

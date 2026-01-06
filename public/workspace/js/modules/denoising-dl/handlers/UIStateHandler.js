@@ -20,9 +20,13 @@ class UIStateHandler {
     const startSection = document.getElementById('startTrainingSection');
     const n2vSection = document.getElementById('n2vTrainingSection');
     const autoStructSection = document.getElementById('autoStructTrainingSection');
+    const startBtn = document.getElementById('startTrainingBtn');
+    const cancelBtn = document.getElementById('cancelTrainingBtn');
 
-    // Show start button, hide training sections
+    // Show start button, hide cancel button and training sections
     if (startSection) startSection.style.display = 'block';
+    if (startBtn) startBtn.style.display = 'inline-flex';
+    if (cancelBtn) cancelBtn.style.display = 'none';
     if (n2vSection) n2vSection.style.display = 'none';
     if (autoStructSection) autoStructSection.style.display = 'none';
 
@@ -79,9 +83,12 @@ class UIStateHandler {
     const startSection = document.getElementById('startTrainingSection');
     const n2vSection = document.getElementById('n2vTrainingSection');
     const autoStructSection = document.getElementById('autoStructTrainingSection');
+    const startBtn = document.getElementById('startTrainingBtn');
+    const cancelBtn = document.getElementById('cancelTrainingBtn');
 
-    // Hide start button
-    if (startSection) startSection.style.display = 'none';
+    // Show cancel button, hide start button
+    if (startBtn) startBtn.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'inline-block';
 
     // Show the correct training section based on method
     if (this.module.selectedMethod === 'n2v') {

@@ -117,6 +117,14 @@ class SegmentationAPI {
   }
 
   /**
+   * Cancel an ongoing training process
+   * @param {string} trainingId - Training session ID
+   */
+  async cancelTraining(trainingId) {
+    return this._post(`/cancel-training/${trainingId}`, {});
+  }
+
+  /**
    * Download trained model
    * @param {string} trainingId - Training session ID
    * @returns {string} Download URL
@@ -286,3 +294,6 @@ class SegmentationAPI {
 if (typeof window !== 'undefined') {
   window.SegmentationAPI = SegmentationAPI;
 }
+
+// ES6 export for module imports
+export default SegmentationAPI;

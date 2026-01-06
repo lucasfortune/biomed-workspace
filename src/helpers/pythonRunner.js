@@ -218,6 +218,25 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
             training.current_epoch = progress.epoch;
             training.total_epochs = progress.total_epochs;
             training.metrics = progress.metrics;
+
+            // Store in history for chart restoration on resume
+            // Only store if we have valid epoch and metrics (skip initial/empty progress events)
+            const epoch = progress.epoch;
+            const trainLoss = progress.metrics?.train_loss;
+            const valLoss = progress.metrics?.val_loss;
+            const trainDice = progress.metrics?.train_dice;
+            const valDice = progress.metrics?.val_dice;
+
+            if (epoch != null && epoch > 0 && trainLoss != null && valLoss != null) {
+              if (!training.history) training.history = [];
+              training.history.push({
+                epoch: epoch,
+                train_loss: trainLoss,
+                val_loss: valLoss,
+                train_dice: trainDice,
+                val_dice: valDice
+              });
+            }
           }
 
           // Send real-time update to clients

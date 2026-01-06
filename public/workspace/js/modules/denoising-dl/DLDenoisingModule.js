@@ -197,7 +197,326 @@ class DLDenoisingModule extends BaseModule {
     // Expose global for onclick handlers
     window.dlDenoisingModule = this;
 
+    // Check for active training session that can be resumed
+    await this.checkForActiveSession();
+
     console.log('[DLDenoisingModule] Initialization complete');
+  }
+
+  /**
+   * Check for active training session in localStorage and prompt user
+   */
+  async checkForActiveSession() {
+    const TrainingSessionPersistence = window.TrainingSessionPersistence;
+    const ResumeDialog = window.ResumeDialog;
+
+    if (!TrainingSessionPersistence || !ResumeDialog) {
+      console.warn('[DLDenoisingModule] TrainingSessionPersistence or ResumeDialog not available');
+      return;
+    }
+
+    const session = TrainingSessionPersistence.load();
+    if (!session) return;
+
+    // Only handle sessions for this module
+    if (session.moduleType !== 'denoising-dl') {
+      console.log('[DLDenoisingModule] Active session belongs to different module:', session.moduleType);
+      return;
+    }
+
+    console.log('[DLDenoisingModule] Found active training session:', session);
+
+    // Check if session is stale (no progress for 10+ minutes)
+    if (TrainingSessionPersistence.isStale(10)) {
+      console.log('[DLDenoisingModule] Session appears stale, offering force cleanup option');
+    }
+
+    // Show resume dialog
+    const choice = await ResumeDialog.show({
+      moduleType: session.moduleType,
+      trainingId: session.trainingId,
+      startedAt: session.startedAt,
+      stage: session.stage
+    });
+
+    if (choice === 'resume') {
+      await this.resumeTrainingSession(session);
+    } else {
+      await this.cleanupAndStartFresh(session);
+    }
+  }
+
+  /**
+   * Resume an active training session
+   * @param {Object} session - Session data from localStorage
+   */
+  async resumeTrainingSession(session) {
+    console.log('[DLDenoisingModule] Resuming training session:', session.trainingId);
+
+    // Set training ID
+    this.trainingId = session.trainingId;
+    this.state.update(`modules.denoising-dl.trainingId`, this.trainingId);
+
+    // Restore method from config if available (needed for correct chart initialization)
+    if (session.config && session.config.method) {
+      this.selectedMethod = session.config.method;
+      console.log('[DLDenoisingModule] Restored method from session config:', this.selectedMethod);
+    }
+
+    // Navigate to step 3 (training)
+    this.goToStep(3);
+
+    // Show training in progress UI (will create correct charts based on selectedMethod)
+    await this.showTrainingInProgress();
+
+    // Small delay to ensure DOM and charts are ready
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Connect to socket to receive progress updates
+    this.connectToTrainingSocket();
+
+    // Fetch current status from backend
+    try {
+      const status = await this.api.getTrainingStatus(this.trainingId);
+      console.log('[DLDenoisingModule] Current training status:', status);
+
+      if (status.success) {
+        // Restore chart data from history if available
+        await this.restoreFromHistory(status);
+
+        if (status.status === 'completed') {
+          // Training finished while we were away
+          this.showTrainingCompleteResumed(status);
+          TrainingSessionPersistence.clearAll();
+          this.state.notify('info', 'Training completed. You can proceed to inference.');
+        } else if (status.status === 'failed') {
+          // Training failed
+          this.state.notify('error', 'Training failed while you were away.');
+          TrainingSessionPersistence.clearAll();
+          this.showTrainingReady();
+        } else if (status.status === 'unknown') {
+          // Session not in server memory - likely completed or server restarted
+          this.showTrainingCompleteResumed(status);
+          TrainingSessionPersistence.clearAll();
+          this.state.notify('info', 'Previous training session found. You can proceed to inference.');
+        } else if (status.status === 'paused' || status.status === 'paused_at_mask') {
+          // Paused at mask approval
+          this.state.notify('info', 'Training resumed - awaiting mask approval.');
+        } else if (status.status === 'running' || status.status === 'training') {
+          // Still running - chart data already restored above
+          this.state.notify('success', 'Reconnected to training session.');
+        } else {
+          // Unknown status, assume may still be running
+          this.state.notify('info', 'Reconnected to training session.');
+        }
+      }
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error fetching training status:', error);
+      // Even on error, assume training may have completed
+      this.showTrainingCompleteResumed();
+      TrainingSessionPersistence.clearAll();
+      this.state.notify('info', 'Previous training session found. You can proceed to inference.');
+    }
+  }
+
+  /**
+   * Restore UI state from backend status history
+   * @param {Object} status - Training status from backend
+   */
+  async restoreFromHistory(status) {
+    // Determine the method from session data
+    const method = status.method || 'n2v';
+    this.selectedMethod = method;
+
+    // Wait for DOM to settle after showTrainingInProgress
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initialize charts if not already done
+    await this.chartHandler.initializeCharts();
+
+    // Restore stage1/n2v history
+    const stage1History = status.stage1History || [];
+    if (stage1History.length > 0) {
+      const chartKey = method === 'n2v' ? 'n2v' : 'stage1';
+      this.chartHandler.restoreChartsFromHistory(chartKey, stage1History);
+
+      // Update epoch display
+      const lastPoint = stage1History[stage1History.length - 1];
+      const prefix = method === 'n2v' ? 'n2v' : 'stage1';
+      // Access stage1 from session object (endpoint returns status.session.stage1)
+      const totalEpochs = status.session?.stage1?.totalEpochs || lastPoint.epoch;
+
+      const currentEpochEl = document.getElementById(`${prefix}CurrentEpoch`);
+      const totalEpochsEl = document.getElementById(`${prefix}TotalEpochs`);
+      if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
+      if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
+
+      // Update progress bar
+      const progressFill = document.getElementById(`${prefix}ProgressFill`);
+      if (progressFill) {
+        const percent = totalEpochs > 0 ? (lastPoint.epoch / totalEpochs) * 100 : 0;
+        progressFill.style.width = `${percent}%`;
+      }
+
+      // Update loss values
+      const trainLossEl = document.getElementById(`${prefix}TrainLoss`);
+      const valLossEl = document.getElementById(`${prefix}ValLoss`);
+      if (trainLossEl && lastPoint.trainLoss != null) {
+        trainLossEl.textContent = lastPoint.trainLoss.toFixed(6);
+      }
+      if (valLossEl && lastPoint.valLoss != null) {
+        valLossEl.textContent = lastPoint.valLoss.toFixed(6);
+      }
+    }
+
+    // Restore stage2 history (for autostructn2v)
+    const stage2History = status.stage2History || [];
+    if (method === 'autostructn2v' && stage2History.length > 0) {
+      this.chartHandler.restoreChartsFromHistory('stage2', stage2History);
+
+      // Update epoch display
+      const lastPoint = stage2History[stage2History.length - 1];
+      // Access stage2 from session object (endpoint returns status.session.stage2)
+      const totalEpochs = status.session?.stage2?.totalEpochs || lastPoint.epoch;
+
+      const currentEpochEl = document.getElementById('stage2CurrentEpoch');
+      const totalEpochsEl = document.getElementById('stage2TotalEpochs');
+      if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
+      if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
+
+      // Update progress bar
+      const progressFill = document.getElementById('stage2ProgressFill');
+      if (progressFill) {
+        const percent = totalEpochs > 0 ? (lastPoint.epoch / totalEpochs) * 100 : 0;
+        progressFill.style.width = `${percent}%`;
+      }
+
+      // Update loss values
+      const trainLossEl = document.getElementById('stage2TrainLoss');
+      const valLossEl = document.getElementById('stage2ValLoss');
+      if (trainLossEl && lastPoint.trainLoss != null) {
+        trainLossEl.textContent = lastPoint.trainLoss.toFixed(6);
+      }
+      if (valLossEl && lastPoint.valLoss != null) {
+        valLossEl.textContent = lastPoint.valLoss.toFixed(6);
+      }
+    }
+
+    console.log('[DLDenoisingModule] Restored history - stage1:', stage1History.length, 'points, stage2:', stage2History.length, 'points');
+  }
+
+  /**
+   * Show training complete UI when resuming a completed session
+   * This is different from showTrainingComplete() which expects result data
+   * @param {Object} status - Training status from backend (optional)
+   */
+  showTrainingCompleteResumed(status = {}) {
+    // Update UI to show completion state
+    const n2vSection = document.getElementById('n2vTrainingSection');
+    const autoStructSection = document.getElementById('autoStructTrainingSection');
+    const startSection = document.getElementById('startTrainingSection');
+
+    // Hide start button
+    if (startSection) startSection.style.display = 'none';
+
+    // Determine method from status or use stored method
+    const method = status.method || this.selectedMethod || 'n2v';
+    this.selectedMethod = method;
+
+    // Show the appropriate training section based on method
+    if (method === 'n2v') {
+      if (n2vSection) n2vSection.style.display = 'block';
+      if (autoStructSection) autoStructSection.style.display = 'none';
+
+      // Update epoch display from history if available
+      const stage1History = status.stage1History || [];
+      if (stage1History.length > 0) {
+        const lastPoint = stage1History[stage1History.length - 1];
+        const totalEpochs = status.session?.stage1?.totalEpochs || lastPoint.epoch;
+
+        const currentEpochEl = document.getElementById('n2vCurrentEpoch');
+        const totalEpochsEl = document.getElementById('n2vTotalEpochs');
+        if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
+        if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
+
+        // Update progress bar to 100%
+        const progressFill = document.getElementById('n2vProgressFill');
+        if (progressFill) progressFill.style.width = '100%';
+      }
+
+      this.uiStateHandler.updateStageStatus('n2v', 'completed', 'Complete');
+    } else {
+      // autostructn2v
+      if (n2vSection) n2vSection.style.display = 'none';
+      if (autoStructSection) autoStructSection.style.display = 'block';
+
+      // Update Stage 1 epoch display from history
+      const stage1History = status.stage1History || [];
+      if (stage1History.length > 0) {
+        const lastPoint = stage1History[stage1History.length - 1];
+        const totalEpochs = status.session?.stage1?.totalEpochs || lastPoint.epoch;
+
+        const currentEpochEl = document.getElementById('stage1CurrentEpoch');
+        const totalEpochsEl = document.getElementById('stage1TotalEpochs');
+        if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
+        if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
+
+        // Update progress bar to 100%
+        const progressFill = document.getElementById('stage1ProgressFill');
+        if (progressFill) progressFill.style.width = '100%';
+      }
+
+      // Update Stage 2 epoch display from history
+      const stage2History = status.stage2History || [];
+      if (stage2History.length > 0) {
+        const lastPoint = stage2History[stage2History.length - 1];
+        const totalEpochs = status.session?.stage2?.totalEpochs || lastPoint.epoch;
+
+        const currentEpochEl = document.getElementById('stage2CurrentEpoch');
+        const totalEpochsEl = document.getElementById('stage2TotalEpochs');
+        if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
+        if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
+
+        // Update progress bar to 100%
+        const progressFill = document.getElementById('stage2ProgressFill');
+        if (progressFill) progressFill.style.width = '100%';
+      }
+
+      this.uiStateHandler.updateStageStatus('stage1', 'completed', 'Complete');
+      this.uiStateHandler.updateStageStatus('mask', 'completed', 'Complete');
+      this.uiStateHandler.updateStageStatus('stage2', 'completed', 'Complete');
+    }
+
+    // Enable next button
+    const step3Next = document.getElementById('step3Next');
+    if (step3Next) step3Next.disabled = false;
+
+    // Mark training as complete
+    this.trainingComplete = true;
+  }
+
+  /**
+   * Clean up active session and start fresh
+   * @param {Object} session - Session data from localStorage
+   */
+  async cleanupAndStartFresh(session) {
+    console.log('[DLDenoisingModule] Cleaning up and starting fresh');
+
+    try {
+      // Cancel the training on the backend
+      await this.api.cancelTraining(session.trainingId);
+      this.state.notify('info', 'Previous training cancelled. Ready to start new training.');
+    } catch (error) {
+      console.error('[DLDenoisingModule] Error cancelling training:', error);
+      // Still clear local state even if backend cancel fails
+    }
+
+    // Clear localStorage
+    TrainingSessionPersistence.clearAll();
+
+    // Reset UI state
+    this.trainingId = null;
+    this.state.update(`modules.denoising-dl.trainingId`, null);
   }
 
   /**
@@ -895,6 +1214,11 @@ class DLDenoisingModule extends BaseModule {
 
   async deactivate() {
     console.log('[DLDenoisingModule] Deactivating...');
+
+    // Disconnect socket and remove all listeners to prevent memory leaks
+    if (this.progressHandler) {
+      this.progressHandler.disconnectSocket();
+    }
 
     // Clean up global references
     try { delete window.dlDenoisingModule; } catch (e) { window.dlDenoisingModule = undefined; }

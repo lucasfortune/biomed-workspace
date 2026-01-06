@@ -116,9 +116,9 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
         # Track timing
         self.start_time = time.time()
 
-        # Emit training start
-        if self.progress_callback:
-            self.progress_callback(0, num_epochs, 0, 0, self.optimizer.param_groups[0]['lr'])
+        # Note: Training start is already signaled via 'starting' status events
+        # in training.py before this method is called. No need to emit epoch 0 here
+        # as it provides misleading trainLoss=0/valLoss=0 data.
 
         # Main training loop
         print(f"Training {self.stage} model...")

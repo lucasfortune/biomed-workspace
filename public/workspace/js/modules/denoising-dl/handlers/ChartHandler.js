@@ -84,21 +84,24 @@ class ChartHandler {
       }
     });
 
-    // Create charts for the current method
+    // Create charts for the current method (skip if already created)
     if (this.module.selectedMethod === 'n2v') {
       const canvas = document.getElementById('n2vLossChart');
-      if (canvas) {
+      if (canvas && !this.module.charts.n2v) {
         this.module.charts.n2v = new Chart(canvas.getContext('2d'), chartConfig('n2vLossChart'));
+        console.log('[ChartHandler] Created n2v chart');
       }
     } else {
       // autoStructN2V - create stage 1 and stage 2 charts
       const stage1Canvas = document.getElementById('stage1LossChart');
-      if (stage1Canvas) {
+      if (stage1Canvas && !this.module.charts.stage1) {
         this.module.charts.stage1 = new Chart(stage1Canvas.getContext('2d'), chartConfig('stage1LossChart'));
+        console.log('[ChartHandler] Created stage1 chart');
       }
       const stage2Canvas = document.getElementById('stage2LossChart');
-      if (stage2Canvas) {
+      if (stage2Canvas && !this.module.charts.stage2) {
         this.module.charts.stage2 = new Chart(stage2Canvas.getContext('2d'), chartConfig('stage2LossChart'));
+        console.log('[ChartHandler] Created stage2 chart');
       }
     }
   }
@@ -114,10 +117,64 @@ class ChartHandler {
     const chart = this.module.charts[chartKey];
     if (!chart) return;
 
+    // Validate data - skip epoch 0 or invalid values
+    // Epoch must be > 0 (epoch 0 is just initialization, not real training data)
+    if (epoch == null || epoch <= 0) {
+      return;
+    }
+
+    // Loss values must be valid numbers (not null/undefined/NaN)
+    if (trainLoss == null || valLoss == null || isNaN(trainLoss) || isNaN(valLoss)) {
+      return;
+    }
+
+    // Skip if this epoch already exists in the chart (avoid duplicates on resume)
+    if (chart.data.labels.includes(epoch)) {
+      return;
+    }
+
     chart.data.labels.push(epoch);
     chart.data.datasets[0].data.push(trainLoss);
     chart.data.datasets[1].data.push(valLoss);
     chart.update('none');
+  }
+
+  /**
+   * Restore chart data from history array
+   * @param {string} chartKey - Chart identifier ('n2v', 'stage1', or 'stage2')
+   * @param {Array} history - Array of {epoch, trainLoss, valLoss}
+   */
+  restoreChartsFromHistory(chartKey, history) {
+    if (!history || history.length === 0) {
+      console.log(`[ChartHandler] No history to restore for ${chartKey}`);
+      return;
+    }
+
+    const chart = this.module.charts[chartKey];
+    if (!chart) {
+      console.warn(`[ChartHandler] Chart ${chartKey} not initialized, cannot restore history`);
+      return;
+    }
+
+    console.log(`[ChartHandler] Restoring ${history.length} data points to ${chartKey} chart`);
+
+    // Clear existing chart data
+    chart.data.labels = [];
+    chart.data.datasets[0].data = [];
+    chart.data.datasets[1].data = [];
+
+    // Add all historical data points (only valid ones with epoch > 0 and valid loss values)
+    for (const point of history) {
+      if (point.epoch != null && point.epoch > 0 &&
+          point.trainLoss != null && point.valLoss != null) {
+        chart.data.labels.push(point.epoch);
+        chart.data.datasets[0].data.push(point.trainLoss);
+        chart.data.datasets[1].data.push(point.valLoss);
+      }
+    }
+
+    console.log(`[ChartHandler] Chart ${chartKey} now has ${chart.data.labels.length} data points`);
+    chart.update();
   }
 
   /**

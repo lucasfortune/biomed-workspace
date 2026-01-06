@@ -688,14 +688,20 @@ function createDenoisingRoutes(dependencies) {
       const session = denoisingService.getSession(trainingId);
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          error: 'Training session not found'
+        // Session not in memory - could be server restart or completed training
+        return res.json({
+          success: true,
+          status: 'unknown',
+          message: 'Training session not found in memory. It may have completed or the server was restarted.'
         });
       }
 
       res.json({
         success: true,
+        status: session.status,
+        method: session.method,  // Include method at top level for easy access
+        stage1History: session.stage1History || [],  // History for chart restoration
+        stage2History: session.stage2History || [],  // History for chart restoration
         session: {
           id: session.id,
           method: session.method,
@@ -714,6 +720,53 @@ function createDenoisingRoutes(dependencies) {
     } catch (error) {
       if (logger) {
         logger.error('[Denoising] Error getting training status:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Cancel an ongoing training process
+   * POST /api/denoising/dl/cancel-training/:trainingId
+   *
+   * Kills the Python process and marks the session as cancelled.
+   */
+  router.post('/dl/cancel-training/:trainingId', requireAuth, async (req, res) => {
+    const { trainingId } = req.params;
+
+    try {
+      const { denoisingService, io } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      const cancelled = denoisingService.cancelTraining(trainingId, io);
+
+      if (cancelled) {
+        if (logger) {
+          logger.info(`[Denoising] Training cancelled: ${trainingId}`);
+        }
+        res.json({
+          success: true,
+          message: 'Training cancelled successfully'
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'No active training process found for this ID'
+        });
+      }
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error cancelling training:', error);
       }
       res.status(500).json({
         success: false,

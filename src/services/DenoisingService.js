@@ -32,6 +32,9 @@ class DenoisingService {
 
     // Map to track active denoising sessions
     this.denoisingSessions = new Map();
+
+    // Map to track active Python processes (for cancellation)
+    this.activeProcesses = new Map();
   }
 
   // ===========================================================================
@@ -79,6 +82,9 @@ class DenoisingService {
         valLoss: null,
         modelPath: null
       },
+      // History arrays for chart restoration on resume
+      stage1History: [], // Array of {epoch, trainLoss, valLoss}
+      stage2History: [], // Array of {epoch, trainLoss, valLoss}
       experimentDir: null,
       error: null
     };
@@ -182,6 +188,9 @@ class DenoisingService {
       '--config', configPath,
       '--mode', 'train'
     ]);
+
+    // Track process for cancellation
+    this.activeProcesses.set(trainingId, pythonScript);
 
     let outputBuffer = '';
     let stderrBuffer = '';
@@ -299,6 +308,9 @@ class DenoisingService {
       '--config', configPath,
       '--mode', 'train_stage2_only'
     ]);
+
+    // Track process for cancellation
+    this.activeProcesses.set(trainingId, pythonScript);
 
     let outputBuffer = '';
     let stderrBuffer = '';
@@ -424,6 +436,9 @@ class DenoisingService {
       '--mode', 'finalize_stage1_only'
     ]);
 
+    // Track process for cancellation
+    this.activeProcesses.set(trainingId, pythonScript);
+
     let outputBuffer = '';
     let stderrBuffer = '';
 
@@ -524,6 +539,18 @@ class DenoisingService {
         session[stage].totalEpochs = data.totalEpochs || 0;
         session[stage].trainLoss = data.trainLoss;
         session[stage].valLoss = data.valLoss;
+
+        // Store in history for chart restoration on resume
+        // Only store if we have valid epoch and loss data (skip initial/empty progress events)
+        if (data.epoch != null && data.epoch > 0 && data.trainLoss != null && data.valLoss != null) {
+          const historyKey = `${stage}History`;
+          if (!session[historyKey]) session[historyKey] = [];
+          session[historyKey].push({
+            epoch: data.epoch,
+            trainLoss: data.trainLoss,
+            valLoss: data.valLoss
+          });
+        }
       } else if (stage === 'mask') {
         session.mask.status = data.status || 'extracting';
       }
@@ -746,6 +773,9 @@ class DenoisingService {
    * @private
    */
   _handleProcessComplete(code, trainingId, stderrBuffer, io) {
+    // Remove from active processes map
+    this.activeProcesses.delete(trainingId);
+
     const session = this.getSession(trainingId);
     const roomName = `denoising-${trainingId}`;
 
@@ -825,6 +855,54 @@ class DenoisingService {
 
     if (this.logger) {
       this.logger.error(`Denoising error (${stage}):`, message);
+    }
+  }
+
+  /**
+   * Cancel an ongoing training process
+   * @param {string} trainingId - Training ID to cancel
+   * @param {object} io - Socket.IO instance
+   * @returns {boolean} True if process was cancelled
+   */
+  cancelTraining(trainingId, io) {
+    const process = this.activeProcesses.get(trainingId);
+
+    if (!process) {
+      if (this.logger) {
+        this.logger.warn(`No active process found for training ${trainingId}`);
+      }
+      return false;
+    }
+
+    // Kill the process
+    try {
+      process.kill('SIGTERM');
+      this.activeProcesses.delete(trainingId);
+
+      // Update session status
+      const session = this.getSession(trainingId);
+      if (session) {
+        session.status = 'cancelled';
+        session.endTime = new Date();
+      }
+
+      // Emit cancellation event
+      const roomName = `denoising-${trainingId}`;
+      io.to(roomName).emit('denoising-cancelled', {
+        trainingId,
+        message: 'Training cancelled by user'
+      });
+
+      if (this.logger) {
+        this.logger.info(`Cancelled training process: ${trainingId}`);
+      }
+
+      return true;
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error(`Failed to cancel training ${trainingId}:`, error);
+      }
+      return false;
     }
   }
 

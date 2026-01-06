@@ -31,6 +31,9 @@ class TrainingService {
     this.sessionTracker = options.sessionTracker;
     this.fileService = options.fileService;
     this.logger = options.logger;
+
+    // Map to track active Python processes (for cancellation)
+    this.activeProcesses = new Map();
   }
 
   // ===========================================================================
@@ -128,6 +131,9 @@ class TrainingService {
       '--training_id', params.training_id
     ]);
 
+    // Track process for cancellation
+    this.activeProcesses.set(params.training_id, pythonScript);
+
     // Attach unified error handler
     const stderrBuffer = attachErrorHandler(
       pythonScript,
@@ -220,6 +226,9 @@ class TrainingService {
    * @param {object} io - Socket.IO instance
    */
   async handleTrainingComplete(code, params, stderrBuffer, io) {
+    // Remove from active processes map
+    this.activeProcesses.delete(params.training_id);
+
     const training = this.sessionTracker.getTrainingSession(params.training_id);
 
     if (!training) {
@@ -292,6 +301,53 @@ class TrainingService {
           this.logger.debug(`Tracked training output: ${path.basename(file.path)}`);
         }
       }
+    }
+  }
+
+  /**
+   * Cancel an ongoing training process
+   * @param {string} trainingId - Training ID to cancel
+   * @param {object} io - Socket.IO instance
+   * @returns {boolean} True if process was cancelled
+   */
+  cancelTraining(trainingId, io) {
+    const process = this.activeProcesses.get(trainingId);
+
+    if (!process) {
+      if (this.logger) {
+        this.logger.warn(`No active process found for training ${trainingId}`);
+      }
+      return false;
+    }
+
+    // Kill the process
+    try {
+      process.kill('SIGTERM');
+      this.activeProcesses.delete(trainingId);
+
+      // Update session status
+      const training = this.sessionTracker.getTrainingSession(trainingId);
+      if (training) {
+        training.status = 'cancelled';
+        training.endTime = new Date();
+      }
+
+      // Emit cancellation event
+      io.to(`training-${trainingId}`).emit('training-cancelled', {
+        trainingId,
+        message: 'Training cancelled by user'
+      });
+
+      if (this.logger) {
+        this.logger.info(`Cancelled training process: ${trainingId}`);
+      }
+
+      return true;
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error(`Failed to cancel training ${trainingId}:`, error);
+      }
+      return false;
     }
   }
 
