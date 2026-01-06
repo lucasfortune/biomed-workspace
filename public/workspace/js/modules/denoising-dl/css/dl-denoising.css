@@ -1997,8 +1997,8 @@
 }
 
 .dl-denoising-module .training-status .epoch-info span {
-  color: var(--module-text-primary);
-  font-weight: 600;
+  color: var(--module-primary);
+  font-weight: 700;
 }
 
 /* Progress Bar - Segmentation Style */
@@ -2010,10 +2010,10 @@
 }
 
 .dl-denoising-module .training-progress-fill {
-  background: linear-gradient(90deg, #4CAF50, #81C784);
+  background: var(--module-gradient);
   height: 100%;
-  border-radius: 8px;
-  transition: width 0.5s ease;
+  border-radius: var(--module-radius-xl);
+  transition: width var(--module-transition-slow);
   width: 0%;
 }
 

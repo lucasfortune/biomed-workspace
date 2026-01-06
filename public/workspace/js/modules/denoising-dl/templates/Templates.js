@@ -218,11 +218,11 @@ class Templates {
 
           <!-- Start Training Button (shown when not training) -->
           <div id="startTrainingSection" class="training-start-section">
-            <button id="startTrainingBtn" class="btn primary large" onclick="window.dlDenoisingModule?.startTraining()">
+            <button id="startTrainingBtn" class="btn btn-danger" onclick="window.dlDenoisingModule?.startTraining()">
               <span class="btn-icon">&#9658;</span>
               Start Denoising
             </button>
-            <button id="cancelTrainingBtn" class="btn btn-danger" onclick="window.dlDenoisingModule?.progressHandler?.cancelTraining()" style="display: none; margin-left: 12px;">
+            <button id="cancelTrainingBtn" class="btn btn-danger" onclick="window.dlDenoisingModule?.progressHandler?.cancelTraining()" style="display: none; margin-bottom: 12px;">
               Cancel Training
             </button>
           </div>
