@@ -24,9 +24,8 @@ class FileBrowser {
 
     // Category keyword mapping for unified search
     this.categoryKeywords = {
-      'raw_images': ['raw', 'image', 'images', 'training', 'input'],
+      'raw_images': ['raw', 'image', 'images', 'training', 'input', 'inference', 'test', 'predict', 'prediction'],
       'annotations': ['annotation', 'annotations', 'mask', 'masks', 'label', 'labels'],
-      'inference_data': ['inference', 'test', 'predict', 'prediction'],
       'imported_models': ['model', 'models', 'imported', 'pth', 'weights', 'checkpoint'],
       'segmentation_results': ['segmentation', 'segment', 'result', 'results', 'output'],
       'denoised': ['denoise', 'denoised', 'denoising', 'clean', 'cleaned'],
@@ -397,20 +396,11 @@ class FileBrowser {
       children: []
     };
 
-    // Define standard workspace directory structure
+    // Define standard workspace directory structure (minimal - subdirs created on-demand)
     const standardDirs = [
       'uploads',
-      'uploads/raw',
-      'uploads/annotations',
-      'uploads/inference_data',
-      'uploads/imported_models',
-      'models',
-      'models/segmentation',
-      'models/denoising',
       'results',
-      'results/segmentation',
-      'results/denoised',
-      'results/meshes'
+      'models'
     ];
 
     // Map to store directory nodes
@@ -1165,6 +1155,10 @@ class FileBrowser {
               <span class="file-info-value">${this.escapeHtml(file.category || 'N/A')}</span>
             </div>
             <div class="file-info-row">
+              <span class="file-info-label">Tags:</span>
+              <span class="file-info-value">${this.renderTags(file.tags)}</span>
+            </div>
+            <div class="file-info-row">
               <span class="file-info-label">Uploaded:</span>
               <span class="file-info-value">${this.formatDate(file.uploadedAt)}</span>
             </div>
@@ -1375,6 +1369,20 @@ class FileBrowser {
     if (diffDays < 7) return `${diffDays}d ago`;
 
     return date.toLocaleDateString();
+  }
+
+  /**
+   * Render tags as styled badges
+   * @param {string[]} tags - Array of tag strings
+   * @returns {string} HTML string of tag badges
+   */
+  renderTags(tags) {
+    if (!tags || tags.length === 0) {
+      return '<span class="file-info-no-tags">None</span>';
+    }
+    return tags.map(tag =>
+      `<span class="file-info-tag">${this.escapeHtml(tag)}</span>`
+    ).join(' ');
   }
 
   /**

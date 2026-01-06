@@ -149,7 +149,18 @@ function createWorkspaceRoutes(dependencies) {
   router.post('/upload', requireAuth, upload.any(), async (req, res) => {
     try {
       const sessionId = req.session.id;
-      const category = req.body.category || 'uploads';
+      let category = req.body.category || 'uploads';
+      let tags = [];
+
+      // Map categories and assign tags
+      // inference_data is now stored as 'raw' with 'inference' tag
+      if (category === 'inference_data') {
+        category = 'raw';
+        tags = ['inference'];
+      } else if (category === 'raw_images') {
+        category = 'raw';
+        tags = ['training'];
+      }
 
       // Check approval status - only active users can upload custom files
       if (req.session.user.status !== 'active') {
@@ -179,6 +190,7 @@ function createWorkspaceRoutes(dependencies) {
         name: uploadedFile.originalname,
         path: relativePath,
         category: category,
+        tags: tags,
         size: uploadedFile.size,
         folderId: req.body.folderId || null
       });

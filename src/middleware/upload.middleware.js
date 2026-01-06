@@ -38,7 +38,7 @@ function createStorage(workspaceManager, logger) {
       } else if (file.fieldname === 'annotations') {
         subdir = 'uploads/annotations';
       } else if (file.fieldname === 'inference_data') {
-        subdir = 'uploads/inference_data';
+        subdir = 'uploads/raw';  // Redirect inference data to raw folder
       } else if (file.fieldname === 'imported_models') {
         subdir = 'uploads/imported_models';
       } else if (file.fieldname === 'meshes') {

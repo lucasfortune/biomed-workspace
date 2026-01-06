@@ -48,18 +48,11 @@ class WorkspaceManager {
       return this.getWorkspaceInfo(sessionId);
     }
 
-    // Create workspace directory structure
+    // Create workspace directory structure (minimal - subdirs created on-demand)
     const directories = [
-      'uploads/raw',
-      'uploads/annotations',
-      'uploads/unfinished_annotations',
-      'uploads/imported_models',
-      'results/denoised',
-      'results/meshes',
-      'results/visualizations',
-      'models/segmentation',
-      'models/denoising',
-      'models/configs'
+      'uploads',
+      'results',
+      'models'
     ];
 
     directories.forEach(dir => {
@@ -235,6 +228,8 @@ class WorkspaceManager {
       uploadedAt: new Date().toISOString(),
       folderId: fileInfo.folderId || null,
       thumbnailPath: null,
+      // Tags for additional classification (e.g., ['inference'] for inference data)
+      tags: fileInfo.tags || [],
       // Lineage - only added for processed files (not original uploads)
       ...(fileInfo.lineage && { lineage: fileInfo.lineage })
     };
@@ -833,20 +828,11 @@ class WorkspaceManager {
 
     deleteRecursive(workspacePath, true);
 
-    // Recreate standard directory structure
+    // Recreate standard directory structure (minimal - subdirs created on-demand)
     const directories = [
-      'uploads/raw',
-      'uploads/annotations',
-      'uploads/unfinished_annotations',
-      'uploads/imported_models',
-      'uploads/inference_data',
-      'results/segmentation',
-      'results/denoising',
-      'results/meshes',
-      'results/visualizations',
-      'models/segmentation',
-      'models/denoising',
-      'models/configs'
+      'uploads',
+      'results',
+      'models'
     ];
 
     directories.forEach(dir => {

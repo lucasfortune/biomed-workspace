@@ -165,7 +165,8 @@ class DLDenoisingModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'dl_denoising_input',
-        fileType: 'raw_images',
+        fileType: 'raw',  // Updated to use unified 'raw' category
+        // No filterTags - denoising accepts any raw image
         title: 'Input Image Stack',
         icon: '📁',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.input'),

@@ -352,7 +352,8 @@ class AnnotationModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'annotation_source',
-        fileType: 'raw_images',  // Default category for uploads
+        fileType: 'raw',  // Updated to use unified 'raw' category
+        // No filterTags - annotation accepts any raw image (training or inference)
         title: 'Source Image',
         icon: '🖼️',
         helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
@@ -368,12 +369,13 @@ class AnnotationModule extends BaseModule {
           'annotations': 'Existing Annotation',
           'unfinished_annotations': 'Unfinished'
         },
-        // Filter workspace files to show raw images and inference data
+        // Filter workspace files to show raw images (includes inference data)
+        // Keep backward compat for existing workspaces with old categories
         filterFiles: (files) => {
           return files.filter(f =>
-            f.category === 'raw_images' ||
-            f.category === 'inference_data' ||
-            f.category === 'raw'  // Legacy category name
+            f.category === 'raw' ||
+            f.category === 'raw_images' ||  // Backward compat
+            f.category === 'inference_data'  // Backward compat
           );
         }
       });

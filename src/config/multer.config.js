@@ -37,7 +37,7 @@ function createStorage(workspaceManager, logger) {
       } else if (file.fieldname === 'annotations') {
         subdir = 'uploads/annotations';
       } else if (file.fieldname === 'inference_data') {
-        subdir = 'uploads/inference_data';
+        subdir = 'uploads/raw';  // Redirect inference data to raw folder
       } else if (file.fieldname === 'file') {
         // For workspace upload endpoint, use category from body if available
         subdir = 'uploads/raw'; // Will be moved if needed

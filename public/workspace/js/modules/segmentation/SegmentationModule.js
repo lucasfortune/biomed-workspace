@@ -540,7 +540,8 @@ class SegmentationModule extends BaseModule {
     // Create FileSelector instances with core component API
     this.rawImageSelector = new FileSelector({
       id: 'raw_images',
-      fileType: 'raw_images',
+      fileType: 'raw',  // Updated to use unified 'raw' category
+      filterTags: ['training'],  // Show files tagged for training
       title: 'Raw Images',
       icon: '📁',
       helpIconHtml: this.renderHelpIcon('segmentation.step1.raw-images'),
@@ -564,7 +565,8 @@ class SegmentationModule extends BaseModule {
 
     this.inferenceSelector = new FileSelector({
       id: 'inference_data',
-      fileType: 'inference_data',
+      fileType: 'raw',  // Updated to use unified 'raw' category
+      filterTags: ['inference'],  // Show files tagged for inference
       title: 'Inference Data',
       icon: '📁',
       helpIconHtml: this.renderHelpIcon('segmentation.step4.inference-data'),

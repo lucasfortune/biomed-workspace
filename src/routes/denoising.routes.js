@@ -1636,7 +1636,8 @@ function createDenoisingRoutes(dependencies) {
       const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
         name: testFileName,
         path: path.relative(workspacePath, destPath),
-        category: 'raw_images',
+        category: 'raw',
+        tags: ['test-data'],
         size: fileStats.size,
         folderId: null
       });

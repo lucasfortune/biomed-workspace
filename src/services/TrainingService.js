@@ -274,15 +274,18 @@ class TrainingService {
       return;
     }
 
+    // Track model files with appropriate tags
     const filesToTrack = [
-      { path: path.join(outputDir, 'best_model.pth'), category: 'models' },
-      { path: path.join(outputDir, 'config.json'), category: 'config' },
-      { path: path.join(outputDir, 'results.json'), category: 'results' }
+      { path: path.join(outputDir, 'best_model.pth'), category: 'models', tags: ['weights', 'segmentation'] },
+      { path: path.join(outputDir, 'config.json'), category: 'models', tags: ['config', 'segmentation'] },
+      { path: path.join(outputDir, 'results.json'), category: 'models', tags: ['info', 'segmentation'] }
     ];
 
     for (const file of filesToTrack) {
       if (fs.existsSync(file.path)) {
-        await this.fileService.trackModuleOutput(sessionId, file.path, file.category);
+        await this.fileService.trackModuleOutput(sessionId, file.path, file.category, {
+          tags: file.tags
+        });
 
         if (this.logger) {
           this.logger.debug(`Tracked training output: ${path.basename(file.path)}`);

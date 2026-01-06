@@ -231,11 +231,15 @@ function createMLRoutes(dependencies) {
       let rawFileEntry, annFileEntry;
 
       if (!skipUpload) {
+        // Determine tags based on whether this is test data
+        const rawTags = isTestData ? ['training', 'test-data'] : ['training'];
+
         const rawRelPath = path.relative(workspacePath, rawFile.path);
         rawFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: rawFile.filename || rawFile.originalname,
           path: rawRelPath,
-          category: 'raw_images',
+          category: 'raw',  // Unified raw category
+          tags: rawTags,
           size: rawFile.size,
           folderId: null
         });
@@ -245,6 +249,7 @@ function createMLRoutes(dependencies) {
           name: annotationFile.filename || annotationFile.originalname,
           path: annRelPath,
           category: 'annotations',
+          tags: isTestData ? ['test-data'] : [],
           size: annotationFile.size,
           folderId: null
         });
@@ -483,7 +488,7 @@ function createMLRoutes(dependencies) {
       }
       // Case 2: Test data
       else if (isTestData) {
-        const inferenceUploadDir = path.join(workspacePath, 'uploads', 'inference_data');
+        const inferenceUploadDir = path.join(workspacePath, 'uploads', 'raw');
 
         if (!fs.existsSync(workspacePath)) {
           workspaceManager.initializeWorkspace(sessionId);
@@ -548,10 +553,12 @@ function createMLRoutes(dependencies) {
         }
       } else {
         // New upload (test data or custom) - track in metadata
+        const inferenceTags = isTestData ? ['inference', 'test-data'] : ['inference'];
         inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: inferenceFile.filename || inferenceFile.originalname,
           path: inferenceRelPath,
-          category: 'inference_data',
+          category: 'raw',
+          tags: inferenceTags,
           size: inferenceFile.size,
           folderId: null
         });

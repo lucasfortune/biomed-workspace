@@ -33,7 +33,8 @@ class FileSelector {
    * @param {string} [config.title='Select File'] - Display title
    * @param {string} [config.icon='📁'] - Emoji icon
    * @param {string} [config.helpIconHtml=''] - HTML for help icon (from renderHelpIcon)
-   * @param {string} [config.fileType] - File type for categorization (raw_images, annotations, etc.)
+   * @param {string} [config.fileType] - File type/category for filtering (raw, annotations, etc.)
+   * @param {Array} [config.filterTags] - Tags files must have (e.g., ['inference'] for inference data)
    * @param {string} [config.accept='.tif,.tiff'] - Accepted file extensions
    * @param {boolean} [config.showTestData=true] - Show test data optgroup
    * @param {boolean} [config.showRecentResults=false] - Show recent results optgroup
@@ -55,6 +56,7 @@ class FileSelector {
     this.icon = config.icon || '📁';
     this.helpIconHtml = config.helpIconHtml || '';
     this.fileType = config.fileType || 'file';
+    this.filterTags = config.filterTags || null;  // Tags files must have (e.g., ['inference'])
     this.accept = config.accept || '.tif,.tiff';
     this.showTestData = config.showTestData !== false;
     this.showRecentResults = config.showRecentResults === true;
@@ -215,7 +217,7 @@ class FileSelector {
   }
 
   /**
-   * Filter files by type
+   * Filter files by type and tags
    * @param {Array} files - Files to filter
    * @returns {Array}
    */
@@ -233,11 +235,20 @@ class FileSelector {
       }
 
       // Match by category if fileType is specified
+      let categoryMatch = true;
       if (this.fileType && file.category) {
-        return isAccepted && file.category === this.fileType;
+        categoryMatch = file.category === this.fileType;
       }
 
-      return isAccepted;
+      // Match by tags if filterTags is specified
+      let tagsMatch = true;
+      if (this.filterTags && this.filterTags.length > 0) {
+        const fileTags = file.tags || [];
+        // File must have ALL specified tags
+        tagsMatch = this.filterTags.every(tag => fileTags.includes(tag));
+      }
+
+      return isAccepted && categoryMatch && tagsMatch;
     });
   }
 

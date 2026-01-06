@@ -51,7 +51,8 @@ class InferenceHandler {
     if (container) {
       this.inferenceFileSelector = new FileSelector({
         id: 'inference_input',
-        fileType: 'raw_images',
+        fileType: 'raw',  // Updated to use unified 'raw' category
+        // No filterTags - denoising accepts any raw image for inference
         title: 'Input Image Stack',
         icon: '📁',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step4.data'),

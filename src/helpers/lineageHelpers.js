@@ -164,25 +164,32 @@ function getProcessingHistoryString(fileId, allFiles) {
 
 /**
  * Find the original raw image file for overlay purposes
- * Specifically looks for files with category 'raw_images' or 'inference_data'
+ * Specifically looks for files with category 'raw_images' or 'raw' (with optional 'inference' tag)
  * @param {string} fileId - Starting file ID (e.g., mesh or segmentation result)
  * @param {object[]} allFiles - Array of all file objects
  * @returns {object|null} Original data file or null if not found
  *
  * @example
  * const original = findOriginalDataFile('mesh_file_123', metadata.files);
- * // Returns the original inference_data or raw_images file that started the chain
+ * // Returns the original raw_images or raw file that started the chain
  */
 function findOriginalDataFile(fileId, allFiles) {
   const result = findRootFiles(fileId, allFiles);
 
   // Categories that are considered "original data" for overlay purposes
-  const overlayCategories = ['raw_images', 'inference_data'];
+  // 'inference_data' kept for backward compatibility with existing workspaces
+  const overlayCategories = ['raw_images', 'raw', 'inference_data'];
+
+  // Helper to check if file is original data
+  const isOriginalData = (file) => {
+    if (!file) return false;
+    return overlayCategories.includes(file.category);
+  };
 
   // First, check root files
   for (const rootId of result.rootIds) {
     const file = allFiles.find(f => f.id === rootId);
-    if (file && overlayCategories.includes(file.category)) {
+    if (isOriginalData(file)) {
       return file;
     }
   }
@@ -190,7 +197,7 @@ function findOriginalDataFile(fileId, allFiles) {
   // If no direct root match, look through the entire path
   for (const entry of result.path) {
     const file = allFiles.find(f => f.id === entry.fileId);
-    if (file && overlayCategories.includes(file.category)) {
+    if (isOriginalData(file)) {
       return file;
     }
   }
