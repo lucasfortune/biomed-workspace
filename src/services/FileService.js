@@ -43,14 +43,26 @@ class FileService {
       const workspacePath = this.workspaceService.getWorkspacePath(sessionId);
       const relativePath = path.relative(workspacePath, filePath);
 
-      const fileEntry = this.workspaceService.addFileToMetadata(sessionId, {
+      // Build file entry with explicit tags handling
+      const fileData = {
         name: fileName,
         path: relativePath,
         category: category,
         size: fileSize,
-        folderId: null,
-        ...metadata
-      });
+        folderId: null
+      };
+
+      // Explicitly add tags if provided
+      if (metadata.tags && Array.isArray(metadata.tags)) {
+        fileData.tags = metadata.tags;
+      }
+
+      // Add lineage if provided
+      if (metadata.lineage) {
+        fileData.lineage = metadata.lineage;
+      }
+
+      const fileEntry = this.workspaceService.addFileToMetadata(sessionId, fileData);
 
       if (this.logger) {
         this.logger.debug(`Tracked ${category} output:`, fileName);

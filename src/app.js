@@ -104,14 +104,15 @@ function configureApp(app, dependencies) {
         const configPath = path.join(params.output_dir, 'config.json');
         const resultsPath = path.join(params.output_dir, 'results.json');
 
+        // Track model files with appropriate tags
         if (fs.existsSync(modelPath)) {
-          await trackModuleOutput(training.sessionId, modelPath, 'models');
+          await trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'] });
         }
         if (fs.existsSync(configPath)) {
-          await trackModuleOutput(training.sessionId, configPath, 'models');
+          await trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'] });
         }
         if (fs.existsSync(resultsPath)) {
-          await trackModuleOutput(training.sessionId, resultsPath, 'models');
+          await trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'] });
         }
       }
     });

@@ -393,7 +393,8 @@ def run_stage2_only(config: dict):
             'stages_run': ['stage1'],  # Stage 1 already completed
             'stage1_model_path': stage1_model_path,
             'stage1_denoised_dir': stage1_denoised_dir,
-            'mask_path': mask_path
+            'mask_path': mask_path,
+            'training_results': {}  # Will hold stage2 training metrics
         }
 
         # For 2.5D mode, check if Stage 1 denoised stack exists
@@ -463,7 +464,10 @@ def run_stage2_only(config: dict):
         )
 
         # Train
-        stage2_trainer.train(stage2_train_loader, stage2_val_loader, stage2_test_loader)
+        _, stage2_training_results = stage2_trainer.train(stage2_train_loader, stage2_val_loader, stage2_test_loader)
+
+        # Store training metrics
+        results['training_results']['stage2'] = stage2_training_results
 
         # Save model
         stage2_checkpoint_path = os.path.join(dirs['stage2']['model'], 'stage2_model.pth')

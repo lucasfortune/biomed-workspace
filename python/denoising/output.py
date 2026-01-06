@@ -361,6 +361,53 @@ def finalize_training_output(config: dict, dirs: dict, results: dict, method: st
         output_files['config'] = config_dest
 
     # =========================================================================
+    # Save Results JSON (Training Metrics)
+    # =========================================================================
+
+    training_results = results.get('training_results', {})
+    if training_results:
+        # Build results.json similar to segmentation module format
+        results_json = {
+            'method': method,
+            'stages_run': results.get('stages_run', []),
+            'mode': config.get('mode', '2d')
+        }
+
+        # Add Stage 1 metrics if present
+        if 'stage1' in training_results:
+            stage1_metrics = training_results['stage1']
+            results_json['stage1'] = {
+                'final_train_loss': stage1_metrics.get('final_train_loss'),
+                'final_val_loss': stage1_metrics.get('final_val_loss'),
+                'best_val_loss': stage1_metrics.get('best_val_loss'),
+                'epochs_completed': stage1_metrics.get('epochs_completed'),
+                'total_epochs': stage1_metrics.get('total_epochs'),
+                'early_stopped': stage1_metrics.get('early_stopped', False),
+                'training_time_seconds': stage1_metrics.get('training_time_seconds')
+            }
+
+        # Add Stage 2 metrics if present
+        if 'stage2' in training_results:
+            stage2_metrics = training_results['stage2']
+            results_json['stage2'] = {
+                'final_train_loss': stage2_metrics.get('final_train_loss'),
+                'final_val_loss': stage2_metrics.get('final_val_loss'),
+                'best_val_loss': stage2_metrics.get('best_val_loss'),
+                'epochs_completed': stage2_metrics.get('epochs_completed'),
+                'total_epochs': stage2_metrics.get('total_epochs'),
+                'early_stopped': stage2_metrics.get('early_stopped', False),
+                'training_time_seconds': stage2_metrics.get('training_time_seconds')
+            }
+
+        # Save results.json to models directory
+        results_json_path = os.path.join(models_output_dir, 'results.json')
+        with open(results_json_path, 'w') as f:
+            json.dump(results_json, f, indent=2)
+        output_files['results'] = results_json_path
+
+        print(f"[DEBUG] Saved training results to {results_json_path}")
+
+    # =========================================================================
     # Cleanup Intermediate Files
     # =========================================================================
 

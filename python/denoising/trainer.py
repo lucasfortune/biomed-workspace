@@ -175,13 +175,26 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
         print(f"Training completed. Final losses - Training: {train_loss:.4f}, Validation: {val_loss:.4f}")
         print(f"Total training time: {elapsed/60:.1f} minutes")
 
+        # Build training results dictionary
+        training_results = {
+            'final_train_loss': float(train_loss),
+            'final_val_loss': float(val_loss),
+            'best_val_loss': float(best_val_loss),
+            'epochs_completed': epoch + 1,
+            'total_epochs': num_epochs,
+            'early_stopped': early_stopping.counter >= patience if hasattr(early_stopping, 'counter') else False,
+            'training_time_seconds': elapsed,
+            'train_loss_history': [float(x) for x in train_loss_history],
+            'val_loss_history': [float(x) for x in val_loss_history]
+        }
+
         # For stage1, we need to generate denoised patches for mask extraction
         if self.stage == 'stage1':
             print("Generating denoised patches for potential mask extraction...")
             denoised_patches = self._generate_denoised_patches(train_loader)
-            return denoised_patches
+            return denoised_patches, training_results
 
-        return None
+        return None, training_results
 
     def _generate_denoised_patches(self, train_loader):
         """

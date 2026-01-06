@@ -661,6 +661,7 @@ class DenoisingService {
           name: path.basename(outputFiles.stage1_model),
           path: relativePath,
           category: 'models',
+          tags: ['weights', 'denoising'],
           size: stats.size,
           folderId: null,
           lineage: createLineageObj('denoising-training')
@@ -674,6 +675,7 @@ class DenoisingService {
           name: path.basename(outputFiles.stage2_model),
           path: relativePath,
           category: 'models',
+          tags: ['weights', 'denoising'],
           size: stats.size,
           folderId: null,
           lineage: createLineageObj('denoising-training')
@@ -687,10 +689,28 @@ class DenoisingService {
         this.workspaceManager.addFileToMetadata(sessionId, {
           name: path.basename(outputFiles.config),
           path: relativePath,
-          category: 'config',
+          category: 'models',
+          tags: ['config', 'denoising'],
           size: stats.size,
           folderId: null
         });
+      }
+
+      // Track results.json file (training metrics)
+      if (outputFiles.results && fs.existsSync(outputFiles.results)) {
+        const relativePath = path.relative(workspacePath, outputFiles.results);
+        const stats = fs.statSync(outputFiles.results);
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(outputFiles.results),
+          path: relativePath,
+          category: 'models',
+          tags: ['info', 'denoising'],
+          size: stats.size,
+          folderId: null
+        });
+        if (this.logger) {
+          this.logger.debug(`Tracked results.json: ${relativePath}`);
+        }
       }
 
     } catch (error) {

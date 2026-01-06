@@ -214,7 +214,8 @@ def run_training(config: dict):
             'method': method,
             'stages_run': [],
             'extracted_images_dir': extracted_images_dir,
-            'original_num_slices': original_num_slices
+            'original_num_slices': original_num_slices,
+            'training_results': {}  # Will hold stage1 and stage2 training metrics
         }
 
         denoised_patches = None
@@ -272,7 +273,10 @@ def run_training(config: dict):
             )
 
             # Train
-            denoised_patches = stage1_trainer.train(train_loader, val_loader, test_loader)
+            denoised_patches, stage1_training_results = stage1_trainer.train(train_loader, val_loader, test_loader)
+
+            # Store training metrics
+            results['training_results']['stage1'] = stage1_training_results
 
             # Save model
             stage1_checkpoint_path = os.path.join(dirs['stage1']['model'], 'stage1_model.pth')
@@ -566,7 +570,10 @@ def run_training(config: dict):
                 )
 
                 # Train
-                stage2_trainer.train(stage2_train_loader, stage2_val_loader, stage2_test_loader)
+                _, stage2_training_results = stage2_trainer.train(stage2_train_loader, stage2_val_loader, stage2_test_loader)
+
+                # Store training metrics
+                results['training_results']['stage2'] = stage2_training_results
 
                 # Save model
                 stage2_checkpoint_path = os.path.join(dirs['stage2']['model'], 'stage2_model.pth')

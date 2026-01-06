@@ -267,6 +267,7 @@ class TrainingService {
    * @param {string} outputDir - Training output directory
    */
   async trackTrainingOutputs(sessionId, outputDir) {
+    // NOTE: This method is currently not called - file tracking is done in src/app.js onComplete callback
     if (!this.fileService) {
       if (this.logger) {
         this.logger.warn('FileService not configured, skipping output tracking');
