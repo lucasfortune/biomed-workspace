@@ -11,43 +11,51 @@ Both modules can include long-running training tasks. Users should be able to na
 
 ---
 
-## Phase 1: Fix Socket Listener Leak (Critical Bug)
+## Implementation Status
 
-**Problem**: DL Denoising module doesn't clean up socket listeners on deactivate, causing memory leaks and duplicate events.
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `public/workspace/js/modules/denoising-dl/DLDenoisingModule.js` | Add `this.progressHandler.disconnectSocket()` in `deactivate()` |
-| `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js` | Add explicit `socket.off()` for ALL event types in `disconnectSocket()` |
-
-### Testing Steps
-1. Launch DL Denoising module, start training
-2. Click "Back to Hub" while training
-3. Re-launch DL Denoising module
-4. Check DevTools Console - should NOT see duplicate socket events
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Socket Listener Leak Fix | ✅ Complete |
+| Phase 2 | Client-Side State Persistence | ✅ Complete |
+| Phase 3 | Cancel Training Button & Backend | ✅ Complete |
+| Phase 4 | Global Training Lock | ✅ Complete |
+| Phase 5 | Resume Dialog & Cleanup | ✅ Complete |
+| Bug Fixes | Chart history, epoch counter, API issues | ✅ Complete |
 
 ---
 
-## Phase 2: Client-Side State Persistence (localStorage)
+## Phase 1: Fix Socket Listener Leak (Critical Bug) ✅ COMPLETE
+
+**Problem**: DL Denoising module doesn't clean up socket listeners on deactivate, causing memory leaks and duplicate events.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `public/workspace/js/modules/denoising-dl/DLDenoisingModule.js` | Added `this.progressHandler.disconnectSocket()` in `deactivate()` |
+| `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js` | Added explicit `socket.off()` for ALL event types in `disconnectSocket()` |
+
+### Verification
+- Socket listeners properly cleaned up on module deactivate
+- No duplicate events on re-launch
+
+---
+
+## Phase 2: Client-Side State Persistence (localStorage) ✅ COMPLETE
 
 **Goal**: Training sessions survive page refresh and navigate-away.
 
-### New File to Create
+### Files Created
 
 **`public/workspace/js/services/TrainingSessionPersistence.js`**
-```javascript
-class TrainingSessionPersistence {
-  static STORAGE_KEY = 'workspace_active_training';
-
-  static save(session) { /* save to localStorage */ }
-  static load() { /* load from localStorage */ }
-  static clear() { /* remove from localStorage */ }
-  static isActive() { /* check if active training exists */ }
-  static getModuleType() { /* get which module has active training */ }
-}
-```
+- `save(session)` - Save training session to localStorage
+- `load()` - Load session from localStorage
+- `clear()` - Remove from localStorage
+- `clearAll()` - Clear both session and lock
+- `isActive()` - Check if active training exists
+- `getModuleType()` - Get which module has active training
+- `acquireLock()` / `releaseLock()` - Global training lock
+- `isLocked()` / `getLockOwner()` - Lock status checks
 
 ### localStorage Data Structure
 ```javascript
@@ -61,68 +69,7 @@ class TrainingSessionPersistence {
   status: 'running' | 'paused',
   lastProgressAt: ISO timestamp
 }
-```
 
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Save session on training start, clear on complete/error |
-| `public/workspace/js/modules/denoising-dl/handlers/TrainingHandler.js` | Save session on training start, update stage on progress |
-| `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js` | Clear session on complete/error |
-
-### Testing Steps
-1. Start training in Segmentation module
-2. While training, refresh page (F5)
-3. Module should detect active training via localStorage
-4. Let training complete - verify localStorage cleared
-
----
-
-## Phase 3: Cancel Training Button & Backend
-
-**Goal**: Add cancel button next to "Start Training" on step 3.
-
-### Backend Changes
-
-| File | Change |
-|------|--------|
-| `src/services/DenoisingService.js` | Add `activeProcesses` Map, store process refs, add `cancelTraining()` method |
-| `src/services/TrainingService.js` | Same pattern - track processes, add cancel method |
-| `src/routes/denoising.routes.js` | Add `POST /api/denoising/dl/cancel-training/:trainingId` |
-| `src/routes/ml.routes.js` | Add `POST /api/ml/cancel-training/:trainingId` |
-
-### Frontend Changes
-
-| File | Change |
-|------|--------|
-| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Add cancel button HTML, wire up API call, clear localStorage |
-| `public/workspace/js/modules/denoising-dl/DLDenoisingModule.js` | Add cancel button in Step 3 UI |
-| `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js` | Add `cancelTraining()` method |
-
-### UI Layout (Step 3)
-```html
-<div class="training-actions">
-  <button id="startTrainingBtn" class="btn btn-primary">Start Training</button>
-  <button id="cancelTrainingBtn" class="btn btn-danger" style="display: none;">Cancel Training</button>
-</div>
-```
-
-### Testing Steps
-1. Start training in Segmentation module
-2. Click "Cancel Training" button
-3. Verify Python process killed (`ps aux | grep python`)
-4. Verify UI resets, localStorage cleared
-5. Repeat for DL Denoising module
-
----
-
-## Phase 4: Global Training Lock
-
-**Goal**: Only one training at a time across ALL modules.
-
-### localStorage Lock Structure
-```javascript
 // Key: 'workspace_training_lock'
 {
   moduleType: 'segmentation' | 'denoising-dl',
@@ -131,110 +78,185 @@ class TrainingSessionPersistence {
 }
 ```
 
-### Files to Modify
+### Files Modified
 
 | File | Change |
 |------|--------|
-| `public/workspace/js/services/TrainingSessionPersistence.js` | Add `acquireLock()`, `releaseLock()`, `isLocked()`, `getLockOwner()` methods |
-| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Check lock before training, show error if locked by another module |
-| `public/workspace/js/modules/denoising-dl/handlers/TrainingHandler.js` | Same lock checking |
-
-### Cross-Tab Sync
-Add `window.addEventListener('storage', ...)` for multi-tab awareness.
-
-### Testing Steps
-1. Start training in Segmentation module
-2. Switch to DL Denoising module
-3. Try to start training - should show error "Training already in progress in Segmentation"
-4. Cancel Segmentation training
-5. DL Denoising training should now work
-6. Test with multiple browser tabs
+| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Save session on training start, clear on complete/error |
+| `public/workspace/js/modules/denoising-dl/handlers/TrainingHandler.js` | Save session on training start, update stage on progress |
+| `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js` | Clear session on complete/error |
 
 ---
 
-## Phase 5: Resume Dialog & Cleanup
+## Phase 3: Cancel Training Button & Backend ✅ COMPLETE
+
+**Goal**: Add cancel button next to "Start Training" on step 3.
+
+### Backend Changes
+
+| File | Change |
+|------|--------|
+| `src/services/DenoisingService.js` | Added `activeProcesses` Map, `registerProcess()`, `cancelTraining()` methods |
+| `src/services/TrainingService.js` | Added `activeProcesses` Map, `registerProcess()`, `cancelTraining()` methods |
+| `src/routes/denoising.routes.js` | Added `POST /api/denoising/dl/cancel-training/:trainingId` endpoint |
+| `src/routes/ml.routes.js` | Added `POST /cancel-training/:trainingId` endpoint |
+| `src/helpers/pythonRunner.js` | Added process registration callback support |
+
+### Frontend Changes
+
+| File | Change |
+|------|--------|
+| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Added cancel button, `cancelTraining()` method, API integration |
+| `public/workspace/js/modules/denoising-dl/DLDenoisingModule.js` | Added cancel button in Step 3 UI |
+| `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js` | Added `cancelTraining()` method |
+| `public/workspace/js/modules/segmentation/SegmentationAPI.js` | Added `cancelTraining(trainingId)` method |
+
+---
+
+## Phase 4: Global Training Lock ✅ COMPLETE
+
+**Goal**: Only one training at a time across ALL modules.
+
+### Implementation
+- Lock acquisition/release integrated into TrainingSessionPersistence
+- Both modules check lock before starting training
+- Cross-tab sync via `window.addEventListener('storage', ...)`
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `public/workspace/js/services/TrainingSessionPersistence.js` | Added lock methods |
+| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Check lock before training |
+| `public/workspace/js/modules/denoising-dl/handlers/TrainingHandler.js` | Check lock before training |
+| `public/workspace/js/workspace.js` | Added storage event listener for cross-tab sync |
+
+---
+
+## Phase 5: Resume Dialog & Cleanup ✅ COMPLETE
 
 **Goal**: Prompt user to resume or start fresh when returning to module with active training.
 
-### New File to Create
+### Files Created
 
 **`public/workspace/js/core/components/ResumeDialog.js`**
-```javascript
-class ResumeDialog {
-  static show(options) {
-    // options: { moduleType, trainingId, startedAt, onResume, onStartFresh }
-    // Returns promise: 'resume' | 'fresh'
-  }
-}
-```
+- Modal dialog component
+- Shows training session info (ID, start time, elapsed time)
+- "Resume Training" and "Start Fresh" buttons
+- Returns promise with user choice
 
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `public/workspace/js/modules/segmentation/SegmentationModule.js` | In `checkForResume()`, show dialog, handle resume/fresh choice |
-| `public/workspace/js/modules/denoising-dl/handlers/NavigationHandler.js` | In `checkTrainingStatus()`, integrate dialog, handle mask pause state |
-
-### Resume Flow
+### Resume Flow Implementation
 ```
 Module activates
     ↓
-Check localStorage for active training
+checkForActiveSession() - Check localStorage
     ↓
-If found → Show ResumeDialog
+If found → ResumeDialog.show()
     ↓
-User chooses "Resume" → Reconnect to Socket.IO, restore UI
+User chooses "Resume" → Reconnect Socket.IO, restore UI, fetch history
 User chooses "Start Fresh" → Cancel training API, clear localStorage, reset UI
 ```
 
-### Edge Cases
-- **Browser close**: Check backend status on next visit
-- **Multiple tabs**: Use storage events for sync
-- **Stale sessions**: Detect no progress for 10+ minutes, offer force reset
+### Files Modified
 
-### Testing Steps
-1. Start training, close browser tab
-2. Open new tab, go to workspace
-3. Launch same module
-4. Verify Resume dialog appears
-5. Test "Resume" - verify reconnection works
-6. Test "Start Fresh" - verify cleanup (process killed, localStorage cleared)
+| File | Change |
+|------|--------|
+| `public/workspace/js/modules/segmentation/SegmentationModule.js` | Added `checkForActiveSession()`, integrated ResumeDialog |
+| `public/workspace/js/modules/denoising-dl/DLDenoisingModule.js` | Added `checkForActiveSession()`, integrated ResumeDialog |
 
 ---
 
-## Implementation Order
+## Additional Bug Fixes ✅ COMPLETE
 
-```
-Phase 1 (Socket Leak Fix) ─── Independent, do first
-         │
-         ▼
-Phase 2 (localStorage) ────── Foundation for phases 3-5
-         │
-         ▼
-Phase 3 (Cancel Button) ───── Requires Phase 2
-         │
-         ▼
-Phase 4 (Global Lock) ─────── Builds on Phase 2
-         │
-         ▼
-Phase 5 (Resume Dialog) ───── Requires all previous
-```
+### 1. Epoch 0 Chart Data Issue
+**Problem**: Charts showed epoch 0 with trainLoss=0/valLoss=0 on training start.
+
+**Files Modified**:
+- `public/workspace/js/modules/segmentation/charts.js` - Added `epoch > 0` validation
+- `public/workspace/js/modules/denoising-dl/handlers/ChartHandler.js` - Added `epoch > 0` validation
+- `python/denoising/trainer.py` - Removed epoch 0 emission, only emit after real training
+
+### 2. Epoch Counter Hidden on Resume
+**Problem**: When status was 'unknown', `showTrainingCompleteUI()` was called which hid the epoch counter.
+
+**Fix**: Modified 'unknown' status handling to:
+- Show epoch counter with "Reconnecting..." state
+- Start polling fallback
+- Wait 5 seconds before determining if training is actually complete
+
+### 3. Chart History Not Restored
+**Problem**: `this.api` was undefined in SegmentationModule, causing API calls to fail.
+
+**Fix**:
+- Added `import SegmentationAPI from './SegmentationAPI.js';`
+- Added `this.api = new SegmentationAPI();` in constructor
+- Added `export default SegmentationAPI;` to SegmentationAPI.js
+
+### 4. Server Restart Detection
+**Problem**: After server restart, training sessions in memory are lost but localStorage still has session data.
+
+**Fix**:
+- Added server startup banner with timestamp
+- Training status endpoint returns 'unknown' status for missing sessions
+- Frontend handles 'unknown' status gracefully with polling fallback
 
 ---
 
 ## Critical Files Summary
 
-### Frontend
+### Frontend (New)
+- `public/workspace/js/services/TrainingSessionPersistence.js` - localStorage persistence
+- `public/workspace/js/core/components/ResumeDialog.js` - Resume/fresh dialog
+
+### Frontend (Modified)
 - `public/workspace/js/modules/denoising-dl/DLDenoisingModule.js`
 - `public/workspace/js/modules/denoising-dl/handlers/ProgressHandler.js`
 - `public/workspace/js/modules/denoising-dl/handlers/TrainingHandler.js`
-- `public/workspace/js/modules/denoising-dl/handlers/NavigationHandler.js`
+- `public/workspace/js/modules/denoising-dl/handlers/ChartHandler.js`
+- `public/workspace/js/modules/denoising-dl/handlers/UIStateHandler.js`
+- `public/workspace/js/modules/denoising-dl/templates/Templates.js`
 - `public/workspace/js/modules/segmentation/SegmentationModule.js`
-- `public/workspace/js/services/TrainingSessionPersistence.js` (new)
-- `public/workspace/js/core/components/ResumeDialog.js` (new)
+- `public/workspace/js/modules/segmentation/SegmentationAPI.js`
+- `public/workspace/js/modules/segmentation/charts.js`
+- `public/workspace/js/workspace.js`
 
-### Backend
-- `src/services/DenoisingService.js`
-- `src/services/TrainingService.js`
-- `src/routes/denoising.routes.js`
-- `src/routes/ml.routes.js`
+### Backend (Modified)
+- `src/services/DenoisingService.js` - Process tracking, cancel method
+- `src/services/TrainingService.js` - Process tracking, cancel method
+- `src/routes/denoising.routes.js` - Cancel endpoint
+- `src/routes/ml.routes.js` - Cancel endpoint, training status endpoint
+- `src/helpers/pythonRunner.js` - Process registration callback
+- `server.js` - Startup banner
+
+### Python (Modified)
+- `python/denoising/trainer.py` - Removed epoch 0 emission
+
+---
+
+## Known Remaining Issues
+
+1. **DL Denoising Resume**: May need additional testing for mask pause state and stage2 resume
+2. **Stale Session Detection**: No automatic cleanup of sessions with no progress for extended periods
+3. **Multi-Tab Edge Cases**: Storage events work but UI sync could be improved
+
+---
+
+## Testing Checklist
+
+### Segmentation Module
+- [x] Start training, click "Back to Hub", resume - charts show history
+- [x] Epoch counter visible during resume
+- [x] Cancel button works during training
+- [x] Start fresh clears localStorage and cancels backend process
+- [x] Charts don't show epoch 0 data
+
+### DL Denoising Module
+- [x] Start training, click "Back to Hub", resume
+- [x] Cancel button works during training
+- [ ] Mask pause state resume (needs testing)
+- [ ] Stage 2 resume (needs testing)
+
+### Cross-Module
+- [x] Cannot start training in one module while another is training
+- [x] Lock released on training complete/cancel
+- [ ] Multi-tab sync (needs testing)
