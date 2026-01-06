@@ -99,6 +99,14 @@ function configureApp(app, dependencies) {
   function startTrainingProcess(params, ioInstance) {
     return startTrainingProcessPython(PYTHON_PATH, params, ioInstance, trainingSessions, {
       logger,
+      onProcessStart: (process, trainingId) => {
+        // Register process with TrainingService for cancellation support
+        trainingService.registerProcess(trainingId, process);
+      },
+      onProcessEnd: (trainingId) => {
+        // Unregister process when training completes or fails
+        trainingService.unregisterProcess(trainingId);
+      },
       onComplete: async (training, params) => {
         const modelPath = path.join(params.output_dir, 'best_model.pth');
         const configPath = path.join(params.output_dir, 'config.json');

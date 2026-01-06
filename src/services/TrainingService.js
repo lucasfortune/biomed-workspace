@@ -305,6 +305,29 @@ class TrainingService {
   }
 
   /**
+   * Register a training process for cancellation support
+   * @param {string} trainingId - Training ID
+   * @param {object} process - Child process object
+   */
+  registerProcess(trainingId, process) {
+    this.activeProcesses.set(trainingId, process);
+    if (this.logger) {
+      this.logger.debug(`Registered training process: ${trainingId}`);
+    }
+  }
+
+  /**
+   * Unregister a training process (called on completion/failure)
+   * @param {string} trainingId - Training ID
+   */
+  unregisterProcess(trainingId) {
+    this.activeProcesses.delete(trainingId);
+    if (this.logger) {
+      this.logger.debug(`Unregistered training process: ${trainingId}`);
+    }
+  }
+
+  /**
    * Cancel an ongoing training process
    * @param {string} trainingId - Training ID to cancel
    * @param {object} io - Socket.IO instance

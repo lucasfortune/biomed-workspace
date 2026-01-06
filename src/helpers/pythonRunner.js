@@ -168,9 +168,11 @@ function generateThumbnail(pythonPath, inputPath, outputPath, options = {}) {
  * @param {object} options - Options
  * @param {object} options.logger - Logger instance
  * @param {function} options.onComplete - Callback on completion
+ * @param {function} options.onProcessStart - Callback when process starts (for registration)
+ * @param {function} options.onProcessEnd - Callback when process ends (for cleanup)
  */
 function startTrainingProcess(pythonPath, params, io, trainingSessions, options = {}) {
-  const { logger, onComplete } = options;
+  const { logger, onComplete, onProcessStart, onProcessEnd } = options;
 
   const pythonScript = spawn(pythonPath, [
     'python/train_model.py',
@@ -180,6 +182,11 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
     '--output_dir', params.output_dir,
     '--training_id', params.training_id
   ]);
+
+  // Register process for cancellation support
+  if (onProcessStart) {
+    onProcessStart(pythonScript, params.training_id);
+  }
 
   // Attach unified error handler
   const stderrBuffer = attachErrorHandler(
@@ -252,6 +259,11 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
   });
 
   pythonScript.on('close', async (code) => {
+    // Unregister process from cancellation tracking
+    if (onProcessEnd) {
+      onProcessEnd(params.training_id);
+    }
+
     const training = trainingSessions.get(params.training_id);
 
     if (training) {
