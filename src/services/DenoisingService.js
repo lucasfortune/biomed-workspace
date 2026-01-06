@@ -344,6 +344,133 @@ class DenoisingService {
   }
 
   /**
+   * Skip Stage 2 training and finalize with Stage 1 results only
+   * Called when user chooses to skip autoStructN2V Stage 2 after mask approval
+   * Spawns Python process to properly finalize outputs and cleanup intermediate files
+   * @param {Object} params - Skip parameters
+   * @param {string} params.trainingId - Training session ID
+   * @param {Object} params.session - Training session object
+   * @param {Object} io - Socket.IO instance
+   */
+  async skipStage2Training(params, io) {
+    const { trainingId, session } = params;
+    const roomName = `denoising-${trainingId}`;
+
+    if (!this.pythonPath) {
+      this._emitError(io, trainingId, 'finalize', 'Python path not configured');
+      return;
+    }
+
+    if (this.logger) {
+      this.logger.info(`[Denoising] Skipping Stage 2 for training ${trainingId}, starting finalization`);
+    }
+
+    // Update session status
+    session.status = 'finalizing';
+    session.stage = 'cleanup';
+    session.stage2.status = 'skipped';
+
+    // Get mode and workspace info
+    const mode = session.mode || session.config?.mode || '2d';
+    const workspacePath = this.workspaceManager.getWorkspacePath(session.sessionId);
+
+    // Build config for finalization
+    const finalizeConfig = {
+      training_id: trainingId,
+      method: 'autostructn2v',
+      mode,
+      experiment_dir: session.experimentDir,
+      stage1_model_path: session.stage1ModelPath,
+      stage1_denoised_dir: session.stage1DenoisedDir,
+      workspace_dir: workspacePath,
+      // Include original config for reference
+      stage1: session.config?.stage1 || {},
+      stage2: session.config?.stage2 || {}
+    };
+
+    // For 2.5D mode, also pass the stack path
+    if (mode === '2.5d') {
+      const stackPath = path.join(session.experimentDir, 'data', 'stage1_denoised', 'stage1_denoised_stack.tif');
+      if (fs.existsSync(stackPath)) {
+        finalizeConfig.stage1_denoised_stack_path = stackPath;
+      }
+    }
+
+    // Write config to temp file
+    const configPath = path.join(session.experimentDir, `config_finalize_${trainingId}.json`);
+
+    try {
+      await fsp.writeFile(configPath, JSON.stringify(finalizeConfig, null, 2));
+    } catch (err) {
+      this._emitError(io, trainingId, 'finalize', `Failed to write config: ${err.message}`);
+      return;
+    }
+
+    if (this.logger) {
+      this.logger.info(`[Denoising] Starting finalization for ${trainingId}`);
+    }
+
+    // Emit finalization starting event
+    io.to(roomName).emit('denoising-cleanup-progress', {
+      stage: 'finalize',
+      status: 'starting',
+      message: 'Finalizing Stage 1 results (Stage 2 skipped)'
+    });
+
+    // Spawn Python process for finalization
+    const pythonScript = spawn(this.pythonPath, [
+      'python/autostructn2v_wrapper.py',
+      '--config', configPath,
+      '--mode', 'finalize_stage1_only'
+    ]);
+
+    let outputBuffer = '';
+    let stderrBuffer = '';
+
+    // Handle stdout for progress updates
+    pythonScript.stdout.on('data', (data) => {
+      const output = data.toString();
+
+      if (this.logger) {
+        this.logger.debug('Denoising finalization output:', output);
+      }
+
+      outputBuffer += output;
+
+      // Process complete lines
+      const lines = outputBuffer.split('\n');
+      outputBuffer = lines.pop(); // Keep incomplete line
+
+      for (const line of lines) {
+        this._handleOutputLine(line, trainingId, io);
+      }
+    });
+
+    // Handle stderr
+    pythonScript.stderr.on('data', (data) => {
+      stderrBuffer += data.toString();
+      if (this.logger) {
+        this.logger.debug('Denoising finalization stderr:', data.toString());
+      }
+    });
+
+    // Handle process completion
+    pythonScript.on('close', (code) => {
+      // Mark stage2 as skipped (in case it was reset)
+      session.stage2.status = 'skipped';
+
+      this._handleProcessComplete(code, trainingId, stderrBuffer, io);
+
+      // Clean up temp config file
+      fsp.unlink(configPath).catch(() => {});
+    });
+
+    pythonScript.on('error', (err) => {
+      this._emitError(io, trainingId, 'finalize', `Failed to spawn process: ${err.message}`);
+    });
+  }
+
+  /**
    * Handle a line of output from the training process
    * @private
    */
@@ -446,6 +573,11 @@ class DenoisingService {
         session.status = 'completed';
         session.experimentDir = data.experimentDir;
         session.outputFiles = data.outputFiles;
+
+        // Preserve stage2 skipped status if this was a skip finalization
+        if (data.stage2Skipped) {
+          session.stage2.status = 'skipped';
+        }
 
         // Track output files in workspace metadata
         if (data.outputFiles && session.sessionId && this.workspaceManager) {

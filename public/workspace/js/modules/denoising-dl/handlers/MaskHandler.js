@@ -295,9 +295,15 @@ class MaskHandler {
 
   /**
    * Skip Stage 2 and use N2V results
+   * Calls backend to finalize training with Stage 1 results only
    */
-  skipStage2() {
+  async skipStage2() {
     console.log('[MaskHandler] Skipping Stage 2, using N2V results');
+
+    if (!this.module.trainingId) {
+      this.module.state.notify('error', 'No active training session');
+      return;
+    }
 
     // Hide mask action buttons
     const maskActions = document.getElementById('maskActions');
@@ -308,15 +314,41 @@ class MaskHandler {
     // Update stage 2 status to skipped
     this.module.updateStageStatus('stage2', 'skipped', 'Skipped');
 
-    // Show results section with Stage 1 only
-    const resultsSection = document.getElementById('autoStructResultsSection');
-    if (resultsSection) {
-      resultsSection.style.display = 'block';
+    // Update progress status
+    if (this.module.trainingProgress) {
+      this.module.trainingProgress.updateStatus('Completing with N2V results...');
     }
 
-    this.module.state.notify('info', 'Stage 2 skipped. Using N2V results.');
+    // Disable mask parameter controls
+    if (this.module.maskParameterPanel) {
+      this.module.maskParameterPanel.setDisabled(true);
+    }
 
-    // The training should complete with just Stage 1 results
+    try {
+      // Call backend to skip Stage 2 and finalize
+      const result = await this.module.api.skipStage2(this.module.trainingId);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to skip Stage 2');
+      }
+
+      console.log('[MaskHandler] Skip Stage 2 successful:', result);
+      this.module.state.notify('success', 'Training completed with N2V (Stage 1) results.');
+
+      // Socket.IO completion event will handle the rest of the UI updates
+    } catch (error) {
+      console.error('[MaskHandler] Error skipping Stage 2:', error);
+      this.module.state.notify('error', `Failed to skip Stage 2: ${error.message}`);
+
+      // Reset UI state on error
+      this.module.updateStageStatus('stage2', 'pending', 'Pending');
+      if (maskActions) {
+        maskActions.style.display = 'block';
+      }
+      if (this.module.maskParameterPanel) {
+        this.module.maskParameterPanel.setDisabled(false);
+      }
+    }
   }
 }
 

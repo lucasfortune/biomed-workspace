@@ -1168,6 +1168,97 @@ function createDenoisingRoutes(dependencies) {
     }
   });
 
+  /**
+   * Skip Stage 2 training and use N2V (Stage 1) results only
+   * POST /api/denoising/dl/skip-stage2
+   *
+   * Body:
+   *   - trainingId: Training ID paused at mask approval
+   *
+   * Marks training as complete with Stage 1 results only, tracks output files.
+   */
+  router.post('/dl/skip-stage2', requireAuth, async (req, res) => {
+    const { trainingId } = req.body;
+
+    if (!trainingId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Training ID is required'
+      });
+    }
+
+    try {
+      const { denoisingService, io } = dependencies;
+
+      if (!denoisingService) {
+        return res.status(500).json({
+          success: false,
+          error: 'DenoisingService not available'
+        });
+      }
+
+      // Get training session
+      const session = denoisingService.getSession(trainingId);
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          error: 'Training session not found'
+        });
+      }
+
+      // Verify session is in paused_at_mask status
+      if (session.status !== 'paused_at_mask') {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot skip Stage 2: session status is '${session.status}', expected 'paused_at_mask'`
+        });
+      }
+
+      // Verify Stage 1 model exists
+      if (!session.stage1ModelPath || !fs.existsSync(session.stage1ModelPath)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Stage 1 model not found. Cannot complete training.'
+        });
+      }
+
+      if (logger) {
+        logger.info('[Denoising] Skipping Stage 2 for training:', {
+          trainingId,
+          stage1ModelPath: session.stage1ModelPath
+        });
+      }
+
+      // Skip Stage 2 and finalize with Stage 1 results
+      await denoisingService.skipStage2Training({
+        trainingId,
+        session
+      }, io);
+
+      if (activityLogger) {
+        activityLogger.logActivity(req.session.user.username, 'dl_denoising_skip_stage2', {
+          trainingId,
+          stage: 'stage2_skipped'
+        });
+      }
+
+      res.json({
+        success: true,
+        trainingId,
+        message: 'Stage 2 skipped. Training completed with N2V (Stage 1) results only.'
+      });
+
+    } catch (error) {
+      if (logger) {
+        logger.error('[Denoising] Error skipping Stage 2:', error);
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   // ===========================================================================
   // DL DENOISING RESULT VIEWING (for ImageViewer integration)
   // ===========================================================================

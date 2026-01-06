@@ -2538,6 +2538,131 @@ def run_stage2_only(config: dict):
 
 
 # =============================================================================
+# Finalize Stage 1 Only (for Skip Stage 2)
+# =============================================================================
+
+def finalize_stage1_only(config: dict):
+    """
+    Finalize training with Stage 1 results only.
+
+    Called when user chooses to skip Stage 2 after mask extraction.
+    This function:
+    1. Collects Stage 1 denoised output
+    2. Copies model to final location
+    3. Saves config
+    4. Cleans up all intermediate files
+
+    Expected config:
+    - training_id: The training session ID
+    - experiment_dir: Path to experiment directory
+    - stage1_model_path: Path to Stage 1 model
+    - stage1_denoised_dir: Path to Stage 1 denoised images (2D mode)
+    - stage1_denoised_stack_path: Path to Stage 1 denoised stack (2.5D mode)
+    - workspace_dir: Workspace directory for final output
+    - mode: '2d' or '2.5d'
+    - method: Should be 'autostructn2v' (N2V doesn't have skip option)
+    """
+    training_id = config.get('training_id', f'train_{int(time.time())}')
+
+    emit_progress('finalize', {
+        "training_id": training_id,
+        "status": "starting",
+        "message": "Finalizing Stage 1 results (Stage 2 skipped)"
+    })
+
+    try:
+        # Build dirs dictionary (normally created by create_output_directories)
+        experiment_dir = config.get('experiment_dir')
+        if not experiment_dir or not os.path.exists(experiment_dir):
+            raise ValueError(f"Experiment directory not found: {experiment_dir}")
+
+        dirs = {
+            'experiment': experiment_dir,
+            'data': os.path.join(experiment_dir, 'data'),
+            'stage1': os.path.join(experiment_dir, 'stage1'),
+            'stage1_model': os.path.join(experiment_dir, 'stage1', 'model'),
+        }
+
+        # Build results dictionary from config paths
+        results = {
+            'stages_run': ['stage1'],  # Only Stage 1 was run
+            'stage1_model_path': config.get('stage1_model_path'),
+        }
+
+        mode = config.get('mode', '2d')
+
+        # Handle denoised output paths based on mode
+        if mode == '2.5d':
+            # 2.5D mode: Look for complete stack file
+            stage1_stack_path = config.get('stage1_denoised_stack_path')
+            if not stage1_stack_path:
+                # Try to find it in the experiment directory
+                stage1_stack_path = os.path.join(experiment_dir, 'data', 'stage1_denoised', 'stage1_denoised_stack.tif')
+            if os.path.exists(stage1_stack_path):
+                results['stage1_denoised_stack_path'] = stage1_stack_path
+            else:
+                emit_progress('finalize', {
+                    "training_id": training_id,
+                    "status": "warning",
+                    "message": f"Stage 1 denoised stack not found at {stage1_stack_path}"
+                })
+        else:
+            # 2D mode: Look for directory with individual slices
+            stage1_denoised_dir = config.get('stage1_denoised_dir')
+            if not stage1_denoised_dir:
+                stage1_denoised_dir = os.path.join(experiment_dir, 'data', 'stage1_denoised')
+            if os.path.exists(stage1_denoised_dir):
+                results['stage1_denoised_dir'] = stage1_denoised_dir
+            else:
+                emit_progress('finalize', {
+                    "training_id": training_id,
+                    "status": "warning",
+                    "message": f"Stage 1 denoised directory not found at {stage1_denoised_dir}"
+                })
+
+        # Check for extracted_images directory (2D mode creates this)
+        extracted_images_dir = config.get('extracted_images_dir')
+        if not extracted_images_dir:
+            # Try common locations
+            workspace_dir = config.get('workspace_dir', os.path.dirname(experiment_dir))
+            possible_paths = [
+                os.path.join(workspace_dir, 'uploads', 'raw', 'extracted_images'),
+                os.path.join(workspace_dir, 'extracted_images'),
+                os.path.join(os.path.dirname(experiment_dir), 'extracted_images')
+            ]
+            for p in possible_paths:
+                if os.path.exists(p):
+                    extracted_images_dir = p
+                    break
+        if extracted_images_dir:
+            results['extracted_images_dir'] = extracted_images_dir
+
+        # Call the finalization function (same as used after full training)
+        output_files = finalize_training_output(
+            config,
+            dirs,
+            results,
+            'autostructn2v',  # Method is autoStructN2V since N2V doesn't have skip
+            training_id
+        )
+
+        # Emit final completion
+        emit_result('complete', {
+            "training_id": training_id,
+            "method": 'autostructn2v',
+            "stagesRun": ['stage1'],
+            "stage2Skipped": True,
+            "outputFiles": output_files
+        })
+
+        return output_files
+
+    except Exception as e:
+        emit_error('finalize', str(e), traceback.format_exc())
+        raise
+
+
+# =============================================================================
 # Main Entry Point
 # =============================================================================
 
@@ -2545,8 +2670,8 @@ def main():
     parser = argparse.ArgumentParser(description='autoStructN2V Web Wrapper')
     parser.add_argument('--config', required=True, help='Path to config JSON file')
     parser.add_argument('--mode', required=True,
-                        choices=['train', 'inference', 'extract_mask', 'train_stage2_only', 'inference_sequential'],
-                        help='Operation mode: train, inference, extract_mask, train_stage2_only (resume after mask approval), or inference_sequential (stage1 then stage2)')
+                        choices=['train', 'inference', 'extract_mask', 'train_stage2_only', 'inference_sequential', 'finalize_stage1_only'],
+                        help='Operation mode: train, inference, extract_mask, train_stage2_only (resume after mask approval), inference_sequential (stage1 then stage2), or finalize_stage1_only (skip Stage 2)')
 
     args = parser.parse_args()
 
@@ -2572,6 +2697,8 @@ def main():
             run_stage2_only(config)
         elif args.mode == 'inference_sequential':
             run_sequential_inference(config)
+        elif args.mode == 'finalize_stage1_only':
+            finalize_stage1_only(config)
     except Exception as e:
         # Error already emitted in the function
         sys.exit(1)

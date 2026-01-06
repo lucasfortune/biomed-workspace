@@ -109,6 +109,20 @@ class DLDenoisingAPI {
   }
 
   /**
+   * Skip Stage 2 training and finalize with N2V (Stage 1) results only
+   * @param {string} trainingId - Training session ID
+   * @returns {Promise<Object>} Skip result
+   */
+  async skipStage2(trainingId) {
+    const response = await fetch(`${this.baseUrl}/skip-stage2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trainingId })
+    });
+    return response.json();
+  }
+
+  /**
    * Run inference with trained model
    * @param {Object} params - Inference parameters
    * @returns {Promise<Object>} Inference result

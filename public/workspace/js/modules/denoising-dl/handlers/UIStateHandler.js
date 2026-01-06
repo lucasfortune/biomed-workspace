@@ -151,18 +151,31 @@ class UIStateHandler {
    * @param {Object} data - Training result data
    */
   showAutoStructComplete(data) {
+    // Check if Stage 2 was skipped
+    const stage2Skipped = data.stage2Skipped === true;
+
     // Update final status
-    this.updateStageStatus('stage2', 'completed', 'Complete');
+    if (stage2Skipped) {
+      this.updateStageStatus('stage2', 'skipped', 'Skipped');
+    } else {
+      this.updateStageStatus('stage2', 'completed', 'Complete');
+    }
 
     // Update status text
     const statusText = document.getElementById('stage2StatusText');
     if (statusText) {
-      statusText.textContent = 'Training completed successfully!';
-      statusText.style.color = '#50C878';
-      statusText.style.fontWeight = '600';
+      if (stage2Skipped) {
+        statusText.textContent = 'Stage 2 skipped. Using N2V (Stage 1) results.';
+        statusText.style.color = 'var(--text-secondary)';
+        statusText.style.fontWeight = '500';
+      } else {
+        statusText.textContent = 'Training completed successfully!';
+        statusText.style.color = '#50C878';
+        statusText.style.fontWeight = '600';
+      }
     }
 
-    // Show download buttons in progress section
+    // Show download buttons in progress section (Stage 1 results available)
     const downloadButtons = document.getElementById('stage2DownloadButtons');
     if (downloadButtons) {
       downloadButtons.style.display = 'flex';
