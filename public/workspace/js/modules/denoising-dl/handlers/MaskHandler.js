@@ -241,6 +241,9 @@ class MaskHandler {
   async approveMask() {
     console.log('[MaskHandler] Mask approved, triggering Stage 2 training...');
 
+    // Update mask status badge to "Approved"
+    this.module.updateStageStatus('mask', 'completed', 'Approved');
+
     if (!this.module.trainingId) {
       this.module.state.notify('error', 'No active training session');
       return;
