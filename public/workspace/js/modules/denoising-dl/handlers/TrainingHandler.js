@@ -65,7 +65,7 @@ class TrainingHandler {
           this.module.trainingProgress.start();
         }
 
-        this.module.state.notify('success', 'Training started. This may take several minutes.');
+        this.module.state.notify('info', 'Training started. This may take several minutes.');
       } else {
         throw new Error(result.error || 'Failed to start training');
       }

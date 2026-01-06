@@ -67,13 +67,7 @@ class WorkspaceManager {
       lastAccessed: new Date().toISOString(),
       version: '1.1.0',
       files: [],
-      folders: [],
-      modules: {
-        segmentation: { runs: [] },
-        denoising: { runs: [] },
-        annotation: { runs: [] },
-        mesh: { runs: [] }
-      }
+      folders: []
     };
 
     this.saveMetadata(sessionId, metadata);
@@ -165,9 +159,9 @@ class WorkspaceManager {
         sessionId,
         createdAt: new Date().toISOString(),
         lastAccessed: new Date().toISOString(),
-        version: '1.0.0',
+        version: '1.1.0',
         files: [],
-        modules: {}
+        folders: []
       };
     }
 
@@ -847,13 +841,7 @@ class WorkspaceManager {
       lastAccessed: new Date().toISOString(),
       version: '1.1.0',
       files: [],
-      folders: [],
-      modules: {
-        segmentation: { runs: [] },
-        denoising: { runs: [] },
-        annotation: { runs: [] },
-        mesh: { runs: [] }
-      }
+      folders: []
     };
 
     this.saveMetadata(sessionId, newMetadata);

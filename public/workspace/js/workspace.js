@@ -555,9 +555,19 @@ class Workspace {
     const container = document.getElementById('notification-container');
     if (!container) return;
 
+    const icons = {
+      success: '✓',
+      error: '✕',
+      warning: '⚠',
+      info: 'ℹ'
+    };
+
     container.innerHTML = notifications.map(notif => `
       <div class="notification ${escapeHtml(notif.type)}">
-        ${escapeHtml(notif.message)}
+        <div class="notification-content">
+          <span class="notification-icon">${icons[notif.type] || icons.info}</span>
+          <span>${escapeHtml(notif.message)}</span>
+        </div>
       </div>
     `).join('');
   }

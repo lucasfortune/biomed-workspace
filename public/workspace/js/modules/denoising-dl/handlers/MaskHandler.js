@@ -221,7 +221,7 @@ class MaskHandler {
           window.workspace.fileBrowser.refresh();
         }
 
-        this.module.state.notify('success', 'Mask regenerated');
+        this.module.state.notify('info', 'Mask regenerated');
       } else {
         throw new Error(result.error || 'Failed to regenerate mask');
       }

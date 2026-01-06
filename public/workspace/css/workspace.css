@@ -1284,6 +1284,37 @@ body {
   border-left-color: var(--warning-color);
 }
 
+.notification.info {
+  border-left-color: var(--info-color);
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+}
+
+.notification-icon {
+  margin-right: 10px;
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+.notification.success .notification-icon {
+  color: var(--secondary-color);
+}
+
+.notification.error .notification-icon {
+  color: var(--danger-color);
+}
+
+.notification.warning .notification-icon {
+  color: var(--warning-color);
+}
+
+.notification.info .notification-icon {
+  color: var(--info-color);
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(100%);
