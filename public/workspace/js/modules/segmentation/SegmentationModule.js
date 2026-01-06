@@ -607,39 +607,23 @@ class SegmentationModule extends BaseModule {
 
     // Fetch current status from backend
     try {
-      console.log('[SegmentationModule] Fetching training status for ID:', session.trainingId);
       const status = await this.api.getTrainingStatus(session.trainingId);
-      console.log('[SegmentationModule] Training status response:', {
-        status: status.status,
-        hasHistory: !!(status.history && status.history.length > 0),
-        historyLength: status.history?.length || 0,
-        currentEpoch: status.current_epoch,
-        totalEpochs: status.total_epochs
-      });
-      console.log('[SegmentationModule] Charts initialized:', { loss: !!this.lossChart, dice: !!this.diceChart });
 
       if (status.success) {
         // Restore charts from history if available
         if (status.history && status.history.length > 0) {
-          console.log('[SegmentationModule] Restoring chart history:', status.history.length, 'points');
           this.restoreChartsFromHistory(status.history);
-        } else {
-          console.log('[SegmentationModule] No history to restore');
         }
 
         // Update epoch counter from status
-        console.log('[SegmentationModule] Epoch data:', { current: status.current_epoch, total: status.total_epochs });
         if (status.current_epoch != null && status.total_epochs != null) {
           const currentEpochEl = document.getElementById('currentEpoch');
           const totalEpochsEl = document.getElementById('totalEpochs');
-          console.log('[SegmentationModule] Epoch elements found:', { current: !!currentEpochEl, total: !!totalEpochsEl });
           if (currentEpochEl) currentEpochEl.textContent = status.current_epoch;
           if (totalEpochsEl) totalEpochsEl.textContent = status.total_epochs;
           const progress = status.total_epochs > 0 ? (status.current_epoch / status.total_epochs) * 100 : 0;
           const progressFill = document.getElementById('trainingProgressFill');
           if (progressFill) progressFill.style.width = `${progress}%`;
-        } else {
-          console.warn('[SegmentationModule] No epoch data in status response');
         }
 
         if (status.status === 'completed') {
@@ -1916,7 +1900,6 @@ class SegmentationModule extends BaseModule {
     });
 
     // Charts are accessible via window.segmentationModule.lossChart and .diceChart
-    console.log('[SegmentationModule] Charts initialized');
   }
 
   /**

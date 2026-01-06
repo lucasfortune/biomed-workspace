@@ -161,12 +161,6 @@ configureApp(app, {
 const PORT = env.PORT;
 
 server.listen(PORT, () => {
-  const startupTime = new Date().toISOString();
-  console.log('='.repeat(60));
-  console.log(`[SERVER STARTUP] ${startupTime}`);
-  console.log(`[SERVER STARTUP] Server running on http://localhost:${PORT}`);
-  console.log(`[SERVER STARTUP] Training sessions will be cleared on server restart`);
-  console.log('='.repeat(60));
   logger.info(`Server running on http://localhost:${PORT}`);
 
   // Start cleanup service for abandoned workspaces

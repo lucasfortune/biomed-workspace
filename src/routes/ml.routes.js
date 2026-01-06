@@ -395,12 +395,6 @@ function createMLRoutes(dependencies) {
         history: [] // Array of {epoch, train_loss, val_loss, train_dice, val_dice}
       });
 
-      // Debug logging
-      console.log('[ML Routes] Training session created:', {
-        trainingId,
-        allSessionIds: Array.from(trainingSessions.keys())
-      });
-
       if (activityLogger) {
         activityLogger.logTrainingStart(
           req.session.user.username,
@@ -433,14 +427,6 @@ function createMLRoutes(dependencies) {
   router.get('/training-status/:trainingId', requireAuth, (req, res) => {
     const trainingId = req.params.trainingId;
     const training = trainingSessions.get(trainingId);
-
-    // Debug logging
-    console.log('[ML Routes] Training status request:', {
-      requestedId: trainingId,
-      found: !!training,
-      allSessionIds: Array.from(trainingSessions.keys()),
-      historyLength: training?.history?.length || 0
-    });
 
     if (!training) {
       // Session not in memory - could be server restart or old session
