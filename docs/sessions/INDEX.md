@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-01-07 (Segmentation Consistency & Reset Fixes)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-07 | [Segmentation Consistency & Reset Fixes](2026-01-07_segmentation_consistency_fixes.md) | 🐛 Bug Fix | ~2 hrs | ✅ Complete |
+
 ### 2026-01-06 (Session State Bug Fixes, Skip Stage 2 Fix, File Category Refactor)
 
 | Date | Session | Type | Duration | Status |
@@ -183,7 +189,8 @@ This index provides a chronological record of all development sessions. Sessions
 - [Phase 2 Completion](2025-11-26_phase2_completion.md) - Module system
 - [Phase 1 Completion](2025-11-20_phase1_completion.md) - Foundation
 
-### 🐛 Bug Fixes (6)
+### 🐛 Bug Fixes (7)
+- [Segmentation Consistency & Reset Fixes](2026-01-07_segmentation_consistency_fixes.md) - Config dropdowns, chart styling, reset behavior, cancel cleanup
 - [Notification & Metadata Bug Fixes](2026-01-06_notification_metadata_bugfixes.md) - Notification colors/icons, metadata cleanup
 - [Annotation Bug Fixes & Sparse Encoding](2025-12-25_annotation_bugfixes_sparse_encoding.md) - Brush, save, sparse encoding
 - [UI & Navigation Fixes](2025-12-02_ui_navigation_fixes.md) - Post-pipeline navigation & UI polish
@@ -200,11 +207,11 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 22 |
-| **Total Development Time** | ~106.25 hours |
+| **Total Sessions** | 23 |
+| **Total Development Time** | ~108.25 hours |
 | **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Phase 4 Info Panel complete, Module Framework complete, Data Lineage complete, Annotation Module complete, 2.5D Denoising complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
-| **Bugs Fixed** | 54+ issues |
+| **Bugs Fixed** | 58+ issues |
 | **Lines Added** | ~27,600+ (code) + ~37,000 (docs) |
 | **Lines Removed** | ~1,010+ (cleanup) |
 | **Files Created** | 86+ |
@@ -215,6 +222,16 @@ This index provides a chronological record of all development sessions. Sessions
 ## 📝 Recent Activity Summary
 
 ### What Was Accomplished (Latest First)
+
+**2026-01-07 - Segmentation Consistency & Reset Fixes** ⭐ **UI CONSISTENCY FIXES**
+- Fixed config entry fields inconsistency (converted to `<select>` dropdowns matching DL denoising)
+- Fixed chart styling inconsistency (added `pointRadius: 0`, `tension: 0.1` to match DL denoising)
+- Complete rewrite of `resetWorkflow()` to be frontend-only (no backend call)
+- Added training cancellation cleanup for both Segmentation and DL Denoising modules
+- Fixed multiple reset bugs (duplicate listeners, reconnection attempts, file selector clearing)
+- Fixed ES6 module loading error (SegmentationAPI.js was loaded twice)
+- 3 files changed, ~450 lines modified
+- 4 issues fixed (Issues #2, #3, #5, #6)
 
 **2026-01-04 - autoStructN2V 2.5D Implementation** ⭐ **2.5D DENOISING COMPLETE**
 - Added 2.5D volumetric processing mode to DL denoising module
@@ -447,10 +464,12 @@ This index provides a chronological record of all development sessions. Sessions
 | InfoContentService.js | Info Panel Implementation |
 | info-panel.css | Info Panel Implementation |
 | lineageHelpers.js | Data Lineage Tracking |
+| TrainingService.js | Segmentation Consistency & Reset Fixes |
+| DenoisingService.js | Segmentation Consistency & Reset Fixes |
 | FileBrowser.js | Data Lineage Tracking, Phase 3.2 |
 | WorkspaceManager.js | Phase 3.2, Phase 3.1 |
 | server.js | Phase 3.2, Workspace Path Consistency, Phase 3.1, Phase 1, Custom Upload Fix, Overlay Debug |
-| SegmentationModule.js | UI & Navigation Fixes, Custom Upload Fix, Phase 2, Cleanup, Bug Fixes |
+| SegmentationModule.js | Segmentation Consistency & Reset Fixes, UI & Navigation Fixes, Custom Upload Fix, Phase 2, Cleanup, Bug Fixes |
 | FileSelector.js | Phase 3.2, UI & Navigation Fixes, Custom Upload Fix |
 | workspace.css | Phase 3.2 |
 | WorkspaceAPI.js | Phase 3.2, Phase 1 |
@@ -542,5 +561,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2026-01-06
-**Total Sessions Documented:** 22
+**Last Updated:** 2026-01-07
+**Total Sessions Documented:** 23

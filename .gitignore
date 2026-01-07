@@ -260,7 +260,8 @@ dist
 .vscode-test
 
 # Session data (if stored locally)
-sessions/
+/sessions/
+!docs/sessions/
 
 # User data
 users.json
