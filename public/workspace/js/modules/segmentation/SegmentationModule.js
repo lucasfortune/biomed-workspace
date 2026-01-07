@@ -284,7 +284,14 @@ class SegmentationModule extends BaseModule {
                 <h3>Dataset Configuration</h3>
                 <div class="form-field">
                   <label for="patchSize">Patch Size${this.renderHelpIcon('segmentation.config.patch-size')}</label>
-                  <input type="number" id="patchSize" value="64" min="16" max="1024">
+                  <select id="patchSize">
+                    <option value="32">32</option>
+                    <option value="48">48</option>
+                    <option value="64" selected>64</option>
+                    <option value="96">96</option>
+                    <option value="128">128</option>
+                    <option value="256">256</option>
+                  </select>
                 </div>
                 <div class="form-field">
                   <label for="patchesPerImage">Patches per Image${this.renderHelpIcon('segmentation.config.patches-per-image')}</label>
@@ -292,7 +299,14 @@ class SegmentationModule extends BaseModule {
                 </div>
                 <div class="form-field">
                   <label for="batchSize">Batch Size${this.renderHelpIcon('segmentation.config.batch-size')}</label>
-                  <input type="number" id="batchSize" value="8" min="1" max="32">
+                  <select id="batchSize">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="4">4</option>
+                    <option value="8" selected>8</option>
+                    <option value="16">16</option>
+                    <option value="32">32</option>
+                  </select>
                 </div>
                 <div class="form-field checkbox-field">
                   <input type="checkbox" id="augmentation" checked>
@@ -304,7 +318,13 @@ class SegmentationModule extends BaseModule {
                 <h3>Model Architecture</h3>
                 <div class="form-field">
                   <label for="numFeatures">Number of Features${this.renderHelpIcon('segmentation.config.num-features')}</label>
-                  <input type="number" id="numFeatures" value="64" min="16" max="256" step="16">
+                  <select id="numFeatures">
+                    <option value="32">32</option>
+                    <option value="48">48</option>
+                    <option value="64" selected>64</option>
+                    <option value="96">96</option>
+                    <option value="128">128</option>
+                  </select>
                 </div>
                 <div class="form-field">
                   <label for="numLayers">Number of Layers${this.renderHelpIcon('segmentation.config.num-layers')}</label>
@@ -316,7 +336,14 @@ class SegmentationModule extends BaseModule {
                 <h3>Training Parameters</h3>
                 <div class="form-field">
                   <label for="learningRate">Learning Rate${this.renderHelpIcon('segmentation.config.learning-rate')}</label>
-                  <input type="number" id="learningRate" value="0.001" min="0.0001" max="0.1" step="0.0001">
+                  <select id="learningRate">
+                    <option value="0.00001">1e-5</option>
+                    <option value="0.00005">5e-5</option>
+                    <option value="0.0001">1e-4</option>
+                    <option value="0.0002">2e-4</option>
+                    <option value="0.001" selected>1e-3</option>
+                    <option value="0.002">2e-3</option>
+                  </select>
                 </div>
                 <div class="form-field">
                   <label for="numEpochs">Number of Epochs${this.renderHelpIcon('segmentation.config.num-epochs')}</label>
@@ -484,10 +511,10 @@ class SegmentationModule extends BaseModule {
     // Initialize ValidationDisplay component
     this.validationDisplay = new ValidationDisplay('validationResult');
 
-    // Set up back button handler
+    // Set up back button handler (use onclick to prevent duplicate handlers)
     const backButton = document.getElementById('backToHub');
     if (backButton) {
-      backButton.addEventListener('click', () => workspace.returnToHub());
+      backButton.onclick = () => workspace.returnToHub();
     }
 
     // Initialize Socket.IO
@@ -891,8 +918,8 @@ class SegmentationModule extends BaseModule {
   async loadHelperScripts() {
     // Regular scripts (non-module)
     // Note: FileSelector is now imported from core/components as ES6 module
+    // Note: SegmentationAPI is imported as ES6 module at top of file, don't load as regular script
     const regularScripts = [
-      '/workspace/js/modules/segmentation/SegmentationAPI.js',
       '/workspace/js/modules/segmentation/utils.js',
       '/workspace/js/modules/segmentation/navigation.js',
       '/workspace/js/modules/segmentation/training.js',
@@ -1831,14 +1858,22 @@ class SegmentationModule extends BaseModule {
             data: [],
             borderColor: '#FF6384',
             backgroundColor: 'rgba(255, 99, 132, 0.1)',
-            tension: 0.4
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.1,
+            fill: false
           },
           {
             label: 'Validation Loss',
             data: [],
             borderColor: '#36A2EB',
             backgroundColor: 'rgba(54, 162, 235, 0.1)',
-            tension: 0.4
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.1,
+            fill: false
           }
         ]
       },
@@ -1870,14 +1905,22 @@ class SegmentationModule extends BaseModule {
             data: [],
             borderColor: '#4BC0C0',
             backgroundColor: 'rgba(75, 192, 192, 0.1)',
-            tension: 0.4
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.1,
+            fill: false
           },
           {
             label: 'Validation Dice',
             data: [],
             borderColor: '#9966FF',
             backgroundColor: 'rgba(153, 102, 255, 0.1)',
-            tension: 0.4
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.1,
+            fill: false
           }
         ]
       },
@@ -1907,13 +1950,14 @@ class SegmentationModule extends BaseModule {
    */
   setupEventListeners() {
     // Workflow section toggle handlers
+    // Use onclick instead of addEventListener to prevent duplicate handlers
     document.querySelectorAll('.workflow-header').forEach(header => {
-      header.addEventListener('click', () => {
+      header.onclick = () => {
         const workflow = header.dataset.workflow;
         if (workflow) {
           this.onWorkflowSectionToggle(workflow);
         }
-      });
+      };
     });
 
     // Step 1: Navigation
@@ -2311,74 +2355,129 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
-   * Reset entire workflow
+   * Reset entire workflow (frontend only - files are preserved in workspace)
    */
   async resetWorkflow() {
-    const confirmed = confirm('Are you sure you want to start a new analysis? This will clear all current data.');
+    const confirmed = confirm('Are you sure you want to start a new analysis? This will reset the current workflow. Your workspace files will be preserved.');
 
     if (confirmed) {
-      try {
-        const response = await fetch('/reset-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
+      console.log('[SegmentationModule] Resetting workflow (frontend only)...');
 
-        const result = await response.json();
+      // Clear training session persistence (localStorage) - MUST be first to prevent reconnect attempts
+      TrainingSessionPersistence.clearAll();
 
-        if (result.success) {
-          // Clear global inference result
-          if (typeof window.inferenceResult !== 'undefined') {
-            window.inferenceResult = null;
-          }
-
-          // Destroy existing charts before reinitializing
-          if (this.lossChart) {
-            this.lossChart.destroy();
-            this.lossChart = null;
-          }
-          if (this.diceChart) {
-            this.diceChart.destroy();
-            this.diceChart = null;
-          }
-
-          // Reset uploaded files
-          this.uploadedFiles = {
-            raw_images: null,
-            annotations: null,
-            inference_data: null
-          };
-
-          // Reset step condition flags
-          this.filesValidated = false;
-          this.configSaved = false;
-          this.trainingComplete = false;
-          this.hasImportedModel = false;
-
-          // Reset IDs
-          this.currentTrainingId = null;
-          this.currentInferenceId = null;
-
-          // Reset training UI state
-          this.resetTrainingUIState();
-
-          // Reset inference UI state
-          this.resetInferenceUIState();
-
-          // Clear validation display on Step 1
-          if (this.validationDisplay) {
-            this.validationDisplay.hide();
-          }
-
-          this.state.notify('success', 'Session reset successfully');
-          this.goToStep(1);
-          // Reinitialize
-          await this.initialize();
-        }
-      } catch (error) {
-        console.error('[SegmentationModule] Reset error:', error);
-        this.state.notify('error', `Reset failed: ${error.message}`);
+      // Clear global inference result
+      if (typeof window.inferenceResult !== 'undefined') {
+        window.inferenceResult = null;
       }
+
+      // Destroy existing charts before reinitializing
+      if (this.lossChart) {
+        this.lossChart.destroy();
+        this.lossChart = null;
+      }
+      if (this.diceChart) {
+        this.diceChart.destroy();
+        this.diceChart = null;
+      }
+
+      // Reset uploaded files (frontend reference only)
+      this.uploadedFiles = {
+        raw_images: null,
+        annotations: null,
+        inference_data: null
+      };
+
+      // Reset step condition flags
+      this.filesValidated = false;
+      this.configSaved = false;
+      this.trainingComplete = false;
+      this.hasImportedModel = false;
+
+      // Reset IDs
+      this.currentTrainingId = null;
+      this.currentInferenceId = null;
+
+      // Reset workflow mode and collapse workflow sections (Step 1)
+      this.workflowMode = null;
+      const trainSection = document.getElementById('trainFromScratchSection');
+      const importSection = document.getElementById('importModelSection');
+      if (trainSection) trainSection.classList.remove('active');
+      if (importSection) importSection.classList.remove('active');
+
+      // Reset configuration to defaults (Step 2)
+      this.resetConfigToDefaults();
+
+      // Reset training UI state
+      this.resetTrainingUIState();
+
+      // Reset inference UI state
+      this.resetInferenceUIState();
+
+      // Clear validation display on Step 1
+      if (this.validationDisplay) {
+        this.validationDisplay.hide();
+      }
+
+      // Clear file selector selections and refresh
+      if (this.rawImageSelector) {
+        this.rawImageSelector.clearSelection();
+        await this.rawImageSelector.refresh();
+      }
+
+      if (this.annotationsSelector) {
+        this.annotationsSelector.clearSelection();
+        await this.annotationsSelector.refresh();
+      }
+
+      if (this.inferenceSelector) {
+        this.inferenceSelector.clearSelection();
+        await this.inferenceSelector.refresh();
+      }
+
+      // Update step navigator
+      if (this.stepNavigator) {
+        this.stepNavigator.update(1);
+      }
+
+      this.state.notify('success', 'Ready for new analysis');
+      this.goToStep(1);
+
+      // Note: Do NOT call initialize() here - it would add duplicate event listeners
+      // and trigger checkForActiveSession() which tries to reconnect to old training
     }
+  }
+
+  /**
+   * Reset configuration form to default values
+   */
+  resetConfigToDefaults() {
+    // Dataset Configuration
+    const patchSize = document.getElementById('patchSize');
+    const patchesPerImage = document.getElementById('patchesPerImage');
+    const batchSize = document.getElementById('batchSize');
+    const augmentation = document.getElementById('augmentation');
+
+    if (patchSize) patchSize.value = '64';
+    if (patchesPerImage) patchesPerImage.value = '50';
+    if (batchSize) batchSize.value = '8';
+    if (augmentation) augmentation.checked = true;
+
+    // Model Architecture
+    const numFeatures = document.getElementById('numFeatures');
+    const numLayers = document.getElementById('numLayers');
+
+    if (numFeatures) numFeatures.value = '64';
+    if (numLayers) numLayers.value = '4';
+
+    // Training Parameters
+    const learningRate = document.getElementById('learningRate');
+    const numEpochs = document.getElementById('numEpochs');
+
+    if (learningRate) learningRate.value = '0.001';
+    if (numEpochs) numEpochs.value = '100';
+
+    console.log('[SegmentationModule] Configuration reset to defaults');
   }
 
   /**
@@ -2447,6 +2546,12 @@ class SegmentationModule extends BaseModule {
     const inferenceResult = document.getElementById('inferenceResult');
     if (inferenceResult) {
       inferenceResult.style.display = 'none';
+    }
+
+    // Hide inference completion section (the "Segmentation Complete" success message)
+    const inferenceCompletionSection = document.getElementById('inferenceCompletionSection');
+    if (inferenceCompletionSection) {
+      inferenceCompletionSection.style.display = 'none';
     }
 
     // Reset progress elements

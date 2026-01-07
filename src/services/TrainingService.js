@@ -353,6 +353,13 @@ class TrainingService {
       if (training) {
         training.status = 'cancelled';
         training.endTime = new Date();
+
+        // Clean up training output files
+        // Note: output_dir is stored in training.params.output_dir (from ml.routes.js)
+        const outputDir = training.outputDir || training.params?.output_dir;
+        if (outputDir) {
+          this.cleanupCancelledTrainingFiles(outputDir, training.sessionId);
+        }
       }
 
       // Emit cancellation event
@@ -371,6 +378,117 @@ class TrainingService {
         this.logger.error(`Failed to cancel training ${trainingId}:`, error);
       }
       return false;
+    }
+  }
+
+  /**
+   * Clean up files from cancelled training
+   * @param {string} outputDir - Training output directory path
+   * @param {string} sessionId - Session ID for metadata cleanup
+   */
+  cleanupCancelledTrainingFiles(outputDir, sessionId) {
+    try {
+      if (!outputDir || !fs.existsSync(outputDir)) {
+        if (this.logger) {
+          this.logger.debug(`No output directory to clean up: ${outputDir}`);
+        }
+        return;
+      }
+
+      if (this.logger) {
+        this.logger.info(`Cleaning up cancelled training files: ${outputDir}`);
+      }
+
+      // Files that might have been created during cancelled training
+      const filesToRemove = ['best_model.pth', 'config.json', 'results.json'];
+
+      for (const fileName of filesToRemove) {
+        const filePath = path.join(outputDir, fileName);
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            if (this.logger) {
+              this.logger.debug(`Deleted cancelled training file: ${filePath}`);
+            }
+          }
+        } catch (fileError) {
+          if (this.logger) {
+            this.logger.warn(`Could not delete file ${filePath}: ${fileError.message}`);
+          }
+        }
+      }
+
+      // Remove the directory if empty
+      try {
+        const remainingFiles = fs.readdirSync(outputDir);
+        if (remainingFiles.length === 0) {
+          fs.rmdirSync(outputDir);
+          if (this.logger) {
+            this.logger.debug(`Removed empty training directory: ${outputDir}`);
+          }
+
+          // Also try to remove parent directory if empty (e.g., models/segmentation/)
+          const parentDir = path.dirname(outputDir);
+          const parentFiles = fs.readdirSync(parentDir);
+          if (parentFiles.length === 0) {
+            fs.rmdirSync(parentDir);
+            if (this.logger) {
+              this.logger.debug(`Removed empty parent directory: ${parentDir}`);
+            }
+          }
+        }
+      } catch (dirError) {
+        if (this.logger) {
+          this.logger.debug(`Could not remove directory: ${dirError.message}`);
+        }
+      }
+
+      // Remove entries from workspace metadata if any were tracked
+      // (typically files aren't tracked until training completes, but clean up just in case)
+      if (this.fileService?.workspaceManager && sessionId) {
+        this.removeFromMetadata(outputDir, sessionId, filesToRemove);
+      }
+
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error(`Error cleaning up cancelled training files:`, error);
+      }
+    }
+  }
+
+  /**
+   * Remove file entries from workspace metadata
+   * @param {string} outputDir - Output directory path
+   * @param {string} sessionId - Session ID
+   * @param {string[]} fileNames - File names to remove
+   */
+  removeFromMetadata(outputDir, sessionId, fileNames) {
+    try {
+      const workspaceManager = this.fileService.workspaceManager;
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      let modified = false;
+      for (const fileName of fileNames) {
+        const fullPath = path.join(outputDir, fileName);
+        const relativePath = path.relative(workspacePath, fullPath);
+        const fileIndex = metadata.files.findIndex(f => f.path === relativePath);
+        if (fileIndex !== -1) {
+          metadata.files.splice(fileIndex, 1);
+          modified = true;
+          if (this.logger) {
+            this.logger.debug(`Removed from metadata: ${relativePath}`);
+          }
+        }
+      }
+
+      if (modified) {
+        workspaceManager.saveMetadata(sessionId, metadata);
+      }
+    } catch (error) {
+      if (this.logger) {
+        this.logger.warn(`Could not clean metadata for cancelled training: ${error.message}`);
+      }
     }
   }
 

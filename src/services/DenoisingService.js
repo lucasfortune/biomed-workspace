@@ -180,6 +180,7 @@ class DenoisingService {
     if (session) {
       session.status = 'running';
       session.stage = 'stage1';
+      session.outputDir = outputDir; // Store for cleanup on cancel
     }
 
     // Spawn Python process
@@ -884,6 +885,13 @@ class DenoisingService {
       if (session) {
         session.status = 'cancelled';
         session.endTime = new Date();
+
+        // Clean up training output files
+        // experimentDir is set after stage1 completes, outputDir is set when training starts
+        const dirToClean = session.experimentDir || session.outputDir;
+        if (dirToClean) {
+          this.cleanupCancelledTrainingFiles(dirToClean, session.sessionId);
+        }
       }
 
       // Emit cancellation event
@@ -903,6 +911,100 @@ class DenoisingService {
         this.logger.error(`Failed to cancel training ${trainingId}:`, error);
       }
       return false;
+    }
+  }
+
+  /**
+   * Clean up files from cancelled denoising training
+   * @param {string} experimentDir - Experiment directory path
+   * @param {string} sessionId - Session ID for metadata cleanup
+   */
+  cleanupCancelledTrainingFiles(experimentDir, sessionId) {
+    try {
+      if (!experimentDir || !fs.existsSync(experimentDir)) {
+        if (this.logger) {
+          this.logger.debug(`No experiment directory to clean up: ${experimentDir}`);
+        }
+        return;
+      }
+
+      if (this.logger) {
+        this.logger.info(`Cleaning up cancelled denoising files: ${experimentDir}`);
+      }
+
+      // Remove entire experiment directory recursively
+      // This includes all models, configs, intermediate results, etc.
+      try {
+        fs.rmSync(experimentDir, { recursive: true, force: true });
+        if (this.logger) {
+          this.logger.debug(`Removed experiment directory: ${experimentDir}`);
+        }
+
+        // Try to remove parent directory if empty (e.g., models/denoising/)
+        const parentDir = path.dirname(experimentDir);
+        try {
+          const parentFiles = fs.readdirSync(parentDir);
+          if (parentFiles.length === 0) {
+            fs.rmdirSync(parentDir);
+            if (this.logger) {
+              this.logger.debug(`Removed empty parent directory: ${parentDir}`);
+            }
+          }
+        } catch (parentError) {
+          // Parent directory not empty or doesn't exist - that's fine
+        }
+      } catch (rmError) {
+        if (this.logger) {
+          this.logger.warn(`Could not remove experiment directory: ${rmError.message}`);
+        }
+      }
+
+      // Remove entries from workspace metadata if any were tracked
+      // (typically files are tracked during/after training completes)
+      if (this.workspaceManager && sessionId) {
+        this.removeFromMetadata(experimentDir, sessionId);
+      }
+
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error(`Error cleaning up cancelled denoising files:`, error);
+      }
+    }
+  }
+
+  /**
+   * Remove file entries from workspace metadata for a cancelled experiment
+   * @param {string} experimentDir - Experiment directory path
+   * @param {string} sessionId - Session ID
+   */
+  removeFromMetadata(experimentDir, sessionId) {
+    try {
+      const metadata = this.workspaceManager.loadMetadata(sessionId);
+      const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
+      const relativeDirPath = path.relative(workspacePath, experimentDir);
+
+      // Remove any files that were in the experiment directory
+      const originalCount = metadata.files.length;
+      metadata.files = metadata.files.filter(f => {
+        // Keep files that are NOT in the experiment directory
+        const isInExperimentDir = f.path.startsWith(relativeDirPath + '/') ||
+                                   f.path.startsWith(relativeDirPath + '\\');
+        if (isInExperimentDir && this.logger) {
+          this.logger.debug(`Removing from metadata: ${f.path}`);
+        }
+        return !isInExperimentDir;
+      });
+
+      if (metadata.files.length < originalCount) {
+        this.workspaceManager.saveMetadata(sessionId, metadata);
+        if (this.logger) {
+          this.logger.debug(`Removed ${originalCount - metadata.files.length} files from metadata`);
+        }
+      }
+    } catch (error) {
+      if (this.logger) {
+        this.logger.warn(`Could not clean metadata for cancelled denoising: ${error.message}`);
+      }
     }
   }
 
