@@ -102,22 +102,28 @@ class InfoPanel {
 
   /**
    * Load initial content
+   * Uses manifest-based loading for complete glossary on first render
    */
   async loadInitialContent() {
     try {
-      // Try to load getting-started article
-      const article = await this.contentService.loadContentFile('getting-started');
+      // Initialize content service (loads manifest with complete glossary)
+      await this.contentService.initialize();
 
-      // Pre-load segmentation module for faster access
-      await this.contentService.loadModule('segmentation');
+      // Load getting-started article content
+      const article = await this.contentService.getArticle('getting-started');
 
-      // Build glossary index from loaded content
-      this.contentService.buildGlossaryFromCache();
-
-      // Display getting-started as default
+      // Display getting-started as default article
       if (article && this.articleComponent) {
         this.articleComponent.display(article);
       }
+
+      // Refresh glossary UI (glossary data is already loaded from manifest)
+      if (this.glossaryComponent) {
+        this.glossaryComponent.refresh();
+      }
+
+      console.log('[InfoPanel] Initial content loaded, glossary ready with',
+        this.contentService.getStats().totalArticles, 'articles');
     } catch (error) {
       console.warn('[InfoPanel] Error loading initial content:', error);
     }
@@ -183,11 +189,7 @@ class InfoPanel {
         // Update state
         this.state.update('infoPanel.currentArticleId', articleId);
 
-        // Refresh glossary in case new content was loaded
-        if (this.glossaryComponent) {
-          this.contentService.buildGlossaryFromCache();
-          this.glossaryComponent.refresh();
-        }
+        // Note: Glossary refresh not needed - manifest provides complete glossary
       } else {
         console.warn(`[InfoPanel] Article not found: ${articleId}`);
         this.state.notify('warning', `Help article not found: ${articleId}`);

@@ -90,7 +90,11 @@ class InfoArticle {
         <p class="ip-article-summary">${this.escapeHtml(article.content.summary)}</p>
       ` : ''}
 
-      ${article.content?.body ? `
+      ${article.content?.bodyHtml ? `
+        <div class="ip-article-body markdown-content">
+          ${article.content.bodyHtml}
+        </div>
+      ` : article.content?.body ? `
         <div class="ip-article-body">
           ${this.formatBody(article.content.body)}
         </div>

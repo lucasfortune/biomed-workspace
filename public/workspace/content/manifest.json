@@ -1,0 +1,2477 @@
+{
+  "version": "2.0.0",
+  "generated": "2026-01-08T12:39:52.022Z",
+  "articles": {
+    "getting-started": {
+      "id": "getting-started",
+      "title": "Getting Started with Help",
+      "displayTitle": "Getting Started with Help",
+      "category": "guide",
+      "module": null,
+      "tags": [
+        "help",
+        "getting-started",
+        "introduction"
+      ],
+      "path": "getting-started.md",
+      "seeAlsoManual": [],
+      "seeAlsoTags": [
+        "introduction",
+        "guide"
+      ]
+    },
+    "annotation": {
+      "id": "annotation",
+      "title": "Quick Annotation Tool",
+      "displayTitle": "Quick Annotation Tool",
+      "category": "module",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "segmentation",
+        "labels",
+        "brush",
+        "training-data"
+      ],
+      "path": "modules/annotation/_module.md",
+      "seeAlsoManual": [
+        "annotation.step1.source-image",
+        "annotation.step2.tools"
+      ],
+      "seeAlsoTags": [
+        "annotation",
+        "segmentation"
+      ]
+    },
+    "annotation.step1.source-image": {
+      "id": "annotation.step1.source-image",
+      "title": "Source Image Selection",
+      "displayTitle": "Source Image Selection",
+      "category": "data",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "upload",
+        "tiff",
+        "source-image"
+      ],
+      "path": "modules/annotation/step1-source-image.md",
+      "seeAlsoManual": [
+        "annotation",
+        "annotation.step2.tools"
+      ],
+      "seeAlsoTags": [
+        "upload",
+        "tiff"
+      ]
+    },
+    "annotation.step2.tools": {
+      "id": "annotation.step2.tools",
+      "title": "Drawing Tools",
+      "displayTitle": "Drawing Tools",
+      "category": "tools",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "brush",
+        "eraser",
+        "tools"
+      ],
+      "path": "modules/annotation/step2-tools.md",
+      "seeAlsoManual": [
+        "annotation.step2.brush-size",
+        "annotation.step2.classes"
+      ],
+      "seeAlsoTags": [
+        "tools",
+        "brush"
+      ]
+    },
+    "annotation.step2.brush-size": {
+      "id": "annotation.step2.brush-size",
+      "title": "Brush Size",
+      "displayTitle": "Brush Size",
+      "category": "tools",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "brush",
+        "size"
+      ],
+      "path": "modules/annotation/step2-brush-size.md",
+      "seeAlsoManual": [
+        "annotation.step2.tools"
+      ],
+      "seeAlsoTags": [
+        "brush",
+        "tools"
+      ]
+    },
+    "annotation.step2.history": {
+      "id": "annotation.step2.history",
+      "title": "History & Autosave",
+      "displayTitle": "History & Autosave",
+      "category": "tools",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "undo",
+        "redo",
+        "autosave",
+        "history"
+      ],
+      "path": "modules/annotation/step2-history.md",
+      "seeAlsoManual": [
+        "annotation.step2.tools"
+      ],
+      "seeAlsoTags": [
+        "undo",
+        "autosave"
+      ]
+    },
+    "annotation.step2.classes": {
+      "id": "annotation.step2.classes",
+      "title": "Annotation Classes",
+      "displayTitle": "Annotation Classes",
+      "category": "tools",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "classes",
+        "labels",
+        "multi-class"
+      ],
+      "path": "modules/annotation/step2-classes.md",
+      "seeAlsoManual": [
+        "annotation.step2.tools",
+        "annotation"
+      ],
+      "seeAlsoTags": [
+        "classes",
+        "labels"
+      ]
+    },
+    "denoising-dl": {
+      "id": "denoising-dl",
+      "title": "Deep Learning Denoising",
+      "displayTitle": "Deep Learning Denoising",
+      "category": "module",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "deep-learning",
+        "n2v",
+        "autostructn2v",
+        "self-supervised"
+      ],
+      "path": "modules/denoising-dl/_module.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.method",
+        "denoising-dl.step1.mode",
+        "denoising-dl.autostructn2v-detail"
+      ],
+      "seeAlsoTags": [
+        "denoising",
+        "training"
+      ]
+    },
+    "denoising-dl.step1.mode": {
+      "id": "denoising-dl.step1.mode",
+      "title": "2D vs 2.5D Processing Mode",
+      "displayTitle": "2D vs 2.5D Processing Mode",
+      "category": "configuration",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "2.5d",
+        "volumetric",
+        "mode",
+        "triplet"
+      ],
+      "path": "modules/denoising-dl/step1-mode.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.method",
+        "denoising-dl.step1.input",
+        "denoising-dl.autostructn2v-detail"
+      ],
+      "seeAlsoTags": [
+        "2.5d",
+        "volumetric"
+      ]
+    },
+    "denoising-dl.step1.method": {
+      "id": "denoising-dl.step1.method",
+      "title": "Denoising Methods",
+      "displayTitle": "Denoising Methods (DL Denoising)",
+      "category": "configuration",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "n2v",
+        "autostructn2v",
+        "method-selection"
+      ],
+      "path": "modules/denoising-dl/step1-method.md",
+      "seeAlsoManual": [
+        "denoising-dl",
+        "denoising-dl.autostructn2v-detail",
+        "denoising-dl.step1.mode"
+      ],
+      "seeAlsoTags": [
+        "method-selection"
+      ]
+    },
+    "denoising-dl.autostructn2v-detail": {
+      "id": "denoising-dl.autostructn2v-detail",
+      "title": "autoStructN2V Explained",
+      "displayTitle": "autoStructN2V Explained",
+      "category": "concept",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "structured-noise",
+        "two-stage"
+      ],
+      "path": "modules/denoising-dl/autostructn2v-detail.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.method",
+        "denoising-dl.step1.mode",
+        "denoising-dl.step3.autostructn2v"
+      ],
+      "seeAlsoTags": [
+        "autostructn2v",
+        "structured-noise"
+      ]
+    },
+    "denoising-dl.step1.workflow": {
+      "id": "denoising-dl.step1.workflow",
+      "title": "Workflow Options",
+      "displayTitle": "Workflow Options (DL Denoising)",
+      "category": "process",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "workflow",
+        "training",
+        "import"
+      ],
+      "path": "modules/denoising-dl/step1-workflow.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.input",
+        "denoising-dl.step1.import.config"
+      ],
+      "seeAlsoTags": [
+        "workflow",
+        "training"
+      ]
+    },
+    "denoising-dl.step1.input": {
+      "id": "denoising-dl.step1.input",
+      "title": "Input Image Stack",
+      "displayTitle": "Input Image Stack (DL Denoising)",
+      "category": "data",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "input",
+        "tiff",
+        "upload"
+      ],
+      "path": "modules/denoising-dl/step1-input.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.workflow",
+        "denoising-dl.step1.mode",
+        "denoising-dl"
+      ],
+      "seeAlsoTags": [
+        "input",
+        "upload"
+      ]
+    },
+    "denoising-dl.step1.import.config": {
+      "id": "denoising-dl.step1.import.config",
+      "title": "Model Configuration File",
+      "displayTitle": "Model Configuration File (DL Denoising)",
+      "category": "data",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "import",
+        "config",
+        "json"
+      ],
+      "path": "modules/denoising-dl/step1-import-config.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.import.model",
+        "denoising-dl.step1.workflow"
+      ],
+      "seeAlsoTags": [
+        "import",
+        "config"
+      ]
+    },
+    "denoising-dl.step1.import.model": {
+      "id": "denoising-dl.step1.import.model",
+      "title": "Model Weights File",
+      "displayTitle": "Model Weights File (DL Denoising)",
+      "category": "data",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "import",
+        "model",
+        "pth"
+      ],
+      "path": "modules/denoising-dl/step1-import-model.md",
+      "seeAlsoManual": [
+        "denoising-dl.step1.import.config",
+        "denoising-dl.step1.workflow"
+      ],
+      "seeAlsoTags": [
+        "import",
+        "model"
+      ]
+    },
+    "denoising-dl.step2.overview": {
+      "id": "denoising-dl.step2.overview",
+      "title": "Configuration Overview",
+      "displayTitle": "Configuration Overview",
+      "category": "process",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "configuration",
+        "parameters",
+        "presets"
+      ],
+      "path": "modules/denoising-dl/step2-overview.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.patch-size",
+        "denoising-dl.step2.epochs"
+      ],
+      "seeAlsoTags": [
+        "configuration",
+        "parameters"
+      ]
+    },
+    "denoising-dl.step2.patch-size": {
+      "id": "denoising-dl.step2.patch-size",
+      "title": "Patch Size",
+      "displayTitle": "Patch Size (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "patch",
+        "configuration"
+      ],
+      "path": "modules/denoising-dl/step2-patch-size.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.patches-per-image",
+        "denoising-dl.step2.batch-size"
+      ],
+      "seeAlsoTags": [
+        "configuration",
+        "patches"
+      ]
+    },
+    "denoising-dl.step2.patches-per-image": {
+      "id": "denoising-dl.step2.patches-per-image",
+      "title": "Patches per Image",
+      "displayTitle": "Patches per Image (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "patches",
+        "dataset",
+        "configuration"
+      ],
+      "path": "modules/denoising-dl/step2-patches-per-image.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.patch-size",
+        "denoising-dl.step2.batch-size"
+      ],
+      "seeAlsoTags": [
+        "configuration",
+        "dataset"
+      ]
+    },
+    "denoising-dl.step2.batch-size": {
+      "id": "denoising-dl.step2.batch-size",
+      "title": "Batch Size",
+      "displayTitle": "Batch Size (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "batch",
+        "memory",
+        "configuration"
+      ],
+      "path": "modules/denoising-dl/step2-batch-size.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.learning-rate",
+        "denoising-dl.step2.patch-size"
+      ],
+      "seeAlsoTags": [
+        "configuration",
+        "memory"
+      ]
+    },
+    "denoising-dl.step2.mask-percentage": {
+      "id": "denoising-dl.step2.mask-percentage",
+      "title": "Mask Percentage",
+      "displayTitle": "Mask Percentage",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "n2v",
+        "mask",
+        "blind-spot"
+      ],
+      "path": "modules/denoising-dl/step2-mask-percentage.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.patch-size"
+      ],
+      "seeAlsoTags": [
+        "configuration",
+        "n2v"
+      ]
+    },
+    "denoising-dl.step2.features": {
+      "id": "denoising-dl.step2.features",
+      "title": "Number of Features",
+      "displayTitle": "Number of Features (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "architecture",
+        "features",
+        "model"
+      ],
+      "path": "modules/denoising-dl/step2-features.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.num-layers"
+      ],
+      "seeAlsoTags": [
+        "architecture",
+        "model"
+      ]
+    },
+    "denoising-dl.step2.num-layers": {
+      "id": "denoising-dl.step2.num-layers",
+      "title": "Number of Layers",
+      "displayTitle": "Number of Layers (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "architecture",
+        "layers",
+        "model"
+      ],
+      "path": "modules/denoising-dl/step2-num-layers.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.features",
+        "denoising-dl.step2.patch-size"
+      ],
+      "seeAlsoTags": [
+        "architecture",
+        "model"
+      ]
+    },
+    "denoising-dl.step2.learning-rate": {
+      "id": "denoising-dl.step2.learning-rate",
+      "title": "Learning Rate",
+      "displayTitle": "Learning Rate (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "training",
+        "learning-rate",
+        "optimization"
+      ],
+      "path": "modules/denoising-dl/step2-learning-rate.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.batch-size",
+        "denoising-dl.step2.epochs"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "optimization"
+      ]
+    },
+    "denoising-dl.step2.epochs": {
+      "id": "denoising-dl.step2.epochs",
+      "title": "Number of Epochs",
+      "displayTitle": "Number of Epochs (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "training",
+        "epochs",
+        "duration"
+      ],
+      "path": "modules/denoising-dl/step2-epochs.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.early-stopping",
+        "denoising-dl.step2.learning-rate"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "duration"
+      ]
+    },
+    "denoising-dl.step2.early-stopping": {
+      "id": "denoising-dl.step2.early-stopping",
+      "title": "Early Stopping",
+      "displayTitle": "Early Stopping",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "training",
+        "early-stopping",
+        "convergence"
+      ],
+      "path": "modules/denoising-dl/step2-early-stopping.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.epochs",
+        "denoising-dl.step3.loss"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "convergence"
+      ]
+    },
+    "denoising-dl.step3.overview": {
+      "id": "denoising-dl.step3.overview",
+      "title": "Run Denoising",
+      "displayTitle": "Run Denoising",
+      "category": "process",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "training",
+        "progress"
+      ],
+      "path": "modules/denoising-dl/step3-overview.md",
+      "seeAlsoManual": [
+        "denoising-dl.step3.n2v",
+        "denoising-dl.step3.autostructn2v"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "progress"
+      ]
+    },
+    "denoising-dl.step3.n2v": {
+      "id": "denoising-dl.step3.n2v",
+      "title": "N2V Training Process",
+      "displayTitle": "N2V Training Process",
+      "category": "process",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "n2v",
+        "training",
+        "single-stage"
+      ],
+      "path": "modules/denoising-dl/step3-n2v.md",
+      "seeAlsoManual": [
+        "denoising-dl.step3.loss",
+        "denoising-dl.step3.best-val-loss",
+        "denoising-dl.step1.mode"
+      ],
+      "seeAlsoTags": [
+        "n2v",
+        "training"
+      ]
+    },
+    "denoising-dl.step3.autostructn2v": {
+      "id": "denoising-dl.step3.autostructn2v",
+      "title": "autoStructN2V Training Process",
+      "displayTitle": "autoStructN2V Training Process",
+      "category": "process",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "training",
+        "two-stage"
+      ],
+      "path": "modules/denoising-dl/step3-autostructn2v.md",
+      "seeAlsoManual": [
+        "denoising-dl.autostructn2v-detail",
+        "denoising-dl.step3.loss",
+        "denoising-dl.step1.mode"
+      ],
+      "seeAlsoTags": [
+        "autostructn2v",
+        "training"
+      ]
+    },
+    "denoising-dl.step3.loss": {
+      "id": "denoising-dl.step3.loss",
+      "title": "Loss Curves",
+      "displayTitle": "Loss Curves (DL Denoising)",
+      "category": "metric",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "training",
+        "loss",
+        "metrics"
+      ],
+      "path": "modules/denoising-dl/step3-loss.md",
+      "seeAlsoManual": [
+        "denoising-dl.step3.best-val-loss",
+        "denoising-dl.step2.learning-rate"
+      ],
+      "seeAlsoTags": [
+        "metrics",
+        "training"
+      ]
+    },
+    "denoising-dl.step3.best-val-loss": {
+      "id": "denoising-dl.step3.best-val-loss",
+      "title": "Best Validation Loss",
+      "displayTitle": "Best Validation Loss",
+      "category": "metric",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "training",
+        "validation",
+        "metrics"
+      ],
+      "path": "modules/denoising-dl/step3-best-val-loss.md",
+      "seeAlsoManual": [
+        "denoising-dl.step3.loss",
+        "denoising-dl.step2.early-stopping"
+      ],
+      "seeAlsoTags": [
+        "metrics",
+        "validation"
+      ]
+    },
+    "denoising-dl.step4.overview": {
+      "id": "denoising-dl.step4.overview",
+      "title": "Process Additional Data",
+      "displayTitle": "Process Additional Data",
+      "category": "process",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "inference",
+        "additional-data"
+      ],
+      "path": "modules/denoising-dl/step4-overview.md",
+      "seeAlsoManual": [
+        "denoising-dl.step4.data",
+        "denoising-dl.step3.overview"
+      ],
+      "seeAlsoTags": [
+        "inference",
+        "additional-data"
+      ]
+    },
+    "denoising-dl.step4.data": {
+      "id": "denoising-dl.step4.data",
+      "title": "Select Data to Process",
+      "displayTitle": "Select Data to Process",
+      "category": "data",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "inference",
+        "input",
+        "additional-data"
+      ],
+      "path": "modules/denoising-dl/step4-data.md",
+      "seeAlsoManual": [
+        "denoising-dl.step4.overview",
+        "denoising-dl.step1.input"
+      ],
+      "seeAlsoTags": [
+        "inference",
+        "data"
+      ]
+    },
+    "denoising-dl.step2.augmentation": {
+      "id": "denoising-dl.step2.augmentation",
+      "title": "Data Augmentation",
+      "displayTitle": "Data Augmentation (DL Denoising)",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "augmentation",
+        "training",
+        "configuration"
+      ],
+      "path": "modules/denoising-dl/step2-augmentation.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.patch-size",
+        "denoising-dl.step2.patches-per-image"
+      ],
+      "seeAlsoTags": [
+        "configuration",
+        "training"
+      ]
+    },
+    "denoising-dl.step2.resize-conv": {
+      "id": "denoising-dl.step2.resize-conv",
+      "title": "Resize Convolution",
+      "displayTitle": "Resize Convolution",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "architecture",
+        "upsampling",
+        "advanced"
+      ],
+      "path": "modules/denoising-dl/step2-resize-conv.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.upsampling-mode",
+        "denoising-dl.step2.features"
+      ],
+      "seeAlsoTags": [
+        "architecture",
+        "advanced"
+      ]
+    },
+    "denoising-dl.step2.upsampling-mode": {
+      "id": "denoising-dl.step2.upsampling-mode",
+      "title": "Upsampling Mode",
+      "displayTitle": "Upsampling Mode",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "architecture",
+        "upsampling",
+        "interpolation",
+        "advanced"
+      ],
+      "path": "modules/denoising-dl/step2-upsampling-mode.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.resize-conv",
+        "denoising-dl.step2.features"
+      ],
+      "seeAlsoTags": [
+        "architecture",
+        "advanced"
+      ]
+    },
+    "denoising-dl.step2.masking-strategy": {
+      "id": "denoising-dl.step2.masking-strategy",
+      "title": "Masking Strategy",
+      "displayTitle": "Masking Strategy",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "n2v",
+        "masking",
+        "blind-spot",
+        "advanced"
+      ],
+      "path": "modules/denoising-dl/step2-masking-strategy.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.mask-percentage",
+        "denoising-dl.step3.n2v"
+      ],
+      "seeAlsoTags": [
+        "n2v",
+        "advanced"
+      ]
+    },
+    "denoising-dl.step2.roi-selection": {
+      "id": "denoising-dl.step2.roi-selection",
+      "title": "ROI Selection",
+      "displayTitle": "ROI Selection",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "roi",
+        "autostructn2v",
+        "stage1",
+        "advanced"
+      ],
+      "path": "modules/denoising-dl/step2-roi-selection.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.patches-per-image",
+        "denoising-dl.autostructn2v-detail"
+      ],
+      "seeAlsoTags": [
+        "autostructn2v",
+        "advanced"
+      ]
+    },
+    "denoising-dl.step2.mask-extractor.adaptive": {
+      "id": "denoising-dl.step2.mask-extractor.adaptive",
+      "title": "Adaptive Thresholding",
+      "displayTitle": "Adaptive Thresholding",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "mask-extractor",
+        "threshold"
+      ],
+      "path": "modules/denoising-dl/step2-mask-extractor-adaptive.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.mask-extractor.base-percentile",
+        "denoising-dl.autostructn2v-detail"
+      ],
+      "seeAlsoTags": [
+        "mask-extractor",
+        "autostructn2v"
+      ]
+    },
+    "denoising-dl.step2.mask-extractor.base-percentile": {
+      "id": "denoising-dl.step2.mask-extractor.base-percentile",
+      "title": "Base Percentile",
+      "displayTitle": "Base Percentile",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "mask-extractor",
+        "threshold"
+      ],
+      "path": "modules/denoising-dl/step2-mask-extractor-base-percentile.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.mask-extractor.adaptive",
+        "denoising-dl.step2.mask-extractor.percentile-decay"
+      ],
+      "seeAlsoTags": [
+        "mask-extractor",
+        "autostructn2v"
+      ]
+    },
+    "denoising-dl.step2.mask-extractor.percentile-decay": {
+      "id": "denoising-dl.step2.mask-extractor.percentile-decay",
+      "title": "Percentile Decay",
+      "displayTitle": "Percentile Decay",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "mask-extractor",
+        "adaptive"
+      ],
+      "path": "modules/denoising-dl/step2-mask-extractor-percentile-decay.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.mask-extractor.adaptive",
+        "denoising-dl.step2.mask-extractor.base-percentile"
+      ],
+      "seeAlsoTags": [
+        "mask-extractor",
+        "autostructn2v"
+      ]
+    },
+    "denoising-dl.step2.mask-extractor.max-pixels": {
+      "id": "denoising-dl.step2.mask-extractor.max-pixels",
+      "title": "Max Masked Pixels",
+      "displayTitle": "Max Masked Pixels",
+      "category": "parameter",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "mask-extractor",
+        "limit"
+      ],
+      "path": "modules/denoising-dl/step2-mask-extractor-max-pixels.md",
+      "seeAlsoManual": [
+        "denoising-dl.step2.mask-extractor.adaptive",
+        "denoising-dl.autostructn2v-detail"
+      ],
+      "seeAlsoTags": [
+        "mask-extractor",
+        "autostructn2v"
+      ]
+    },
+    "denoising-filter": {
+      "id": "denoising-filter",
+      "title": "Filter-Based Denoising",
+      "displayTitle": "Filter-Based Denoising",
+      "category": "module",
+      "module": "denoising-filter",
+      "tags": [
+        "denoising",
+        "filter",
+        "gaussian",
+        "nlm",
+        "noise-reduction"
+      ],
+      "path": "modules/denoising-filter/_module.md",
+      "seeAlsoManual": [
+        "denoising-filter.step1.input",
+        "denoising-filter.step2.methods"
+      ],
+      "seeAlsoTags": [
+        "denoising",
+        "filter"
+      ]
+    },
+    "denoising-filter.step1.input": {
+      "id": "denoising-filter.step1.input",
+      "title": "Input Image Stack",
+      "displayTitle": "Input Image Stack (Filter Denoising)",
+      "category": "data",
+      "module": "denoising-filter",
+      "tags": [
+        "denoising",
+        "input",
+        "tiff",
+        "upload"
+      ],
+      "path": "modules/denoising-filter/step1-input.md",
+      "seeAlsoManual": [
+        "denoising-filter",
+        "denoising-filter.step2.methods"
+      ],
+      "seeAlsoTags": [
+        "input",
+        "upload"
+      ]
+    },
+    "denoising-filter.step2.methods": {
+      "id": "denoising-filter.step2.methods",
+      "title": "Denoising Methods",
+      "displayTitle": "Denoising Methods (Filter Denoising)",
+      "category": "configuration",
+      "module": "denoising-filter",
+      "tags": [
+        "denoising",
+        "gaussian",
+        "nlm",
+        "methods"
+      ],
+      "path": "modules/denoising-filter/step2-methods.md",
+      "seeAlsoManual": [
+        "denoising-filter.step2.gaussian",
+        "denoising-filter.step2.nlm"
+      ],
+      "seeAlsoTags": [
+        "methods",
+        "configuration"
+      ]
+    },
+    "denoising-filter.step2.gaussian": {
+      "id": "denoising-filter.step2.gaussian",
+      "title": "Gaussian Parameters",
+      "displayTitle": "Gaussian Parameters",
+      "category": "parameters",
+      "module": "denoising-filter",
+      "tags": [
+        "denoising",
+        "gaussian",
+        "sigma",
+        "kernel"
+      ],
+      "path": "modules/denoising-filter/step2-gaussian.md",
+      "seeAlsoManual": [
+        "denoising-filter.step2.methods"
+      ],
+      "seeAlsoTags": [
+        "gaussian",
+        "parameters"
+      ]
+    },
+    "denoising-filter.step2.nlm": {
+      "id": "denoising-filter.step2.nlm",
+      "title": "Non-Local Means Parameters",
+      "displayTitle": "Non-Local Means Parameters",
+      "category": "parameters",
+      "module": "denoising-filter",
+      "tags": [
+        "denoising",
+        "nlm",
+        "filter-strength",
+        "windows"
+      ],
+      "path": "modules/denoising-filter/step2-nlm.md",
+      "seeAlsoManual": [
+        "denoising-filter.step2.methods"
+      ],
+      "seeAlsoTags": [
+        "nlm",
+        "parameters"
+      ]
+    },
+    "denoising": {
+      "id": "denoising",
+      "title": "Denoising Module",
+      "displayTitle": "Denoising Module",
+      "category": "module",
+      "module": "denoising",
+      "tags": [
+        "denoising",
+        "noise-reduction",
+        "image-processing",
+        "deep-learning",
+        "filter"
+      ],
+      "path": "modules/denoising/_module.md",
+      "seeAlsoManual": [
+        "denoising-dl",
+        "denoising-filter"
+      ],
+      "seeAlsoTags": [
+        "denoising",
+        "noise-reduction"
+      ]
+    },
+    "file-browser": {
+      "id": "file-browser",
+      "title": "File Browser & Workspace",
+      "displayTitle": "File Browser & Workspace",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "workspace",
+        "files",
+        "upload",
+        "download"
+      ],
+      "path": "modules/file-browser/_module.md",
+      "seeAlsoManual": [
+        "file-browser.upload",
+        "file-browser.workspace-backup",
+        "file-browser.batch-operations"
+      ],
+      "seeAlsoTags": [
+        "workspace",
+        "files"
+      ]
+    },
+    "file-browser.upload": {
+      "id": "file-browser.upload",
+      "title": "Uploading Files",
+      "displayTitle": "Uploading Files",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "upload",
+        "drag-drop"
+      ],
+      "path": "modules/file-browser/upload.md",
+      "seeAlsoManual": [
+        "file-browser",
+        "file-browser.categories"
+      ],
+      "seeAlsoTags": [
+        "upload"
+      ]
+    },
+    "file-browser.categories": {
+      "id": "file-browser.categories",
+      "title": "File Categories",
+      "displayTitle": "File Categories",
+      "category": "concept",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "categories",
+        "organization"
+      ],
+      "path": "modules/file-browser/categories.md",
+      "seeAlsoManual": [
+        "file-browser",
+        "file-browser.search"
+      ],
+      "seeAlsoTags": [
+        "categories",
+        "organization"
+      ]
+    },
+    "file-browser.file-operations": {
+      "id": "file-browser.file-operations",
+      "title": "File Operations",
+      "displayTitle": "File Operations",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "download",
+        "rename",
+        "delete"
+      ],
+      "path": "modules/file-browser/file-operations.md",
+      "seeAlsoManual": [
+        "file-browser.batch-operations",
+        "file-browser"
+      ],
+      "seeAlsoTags": [
+        "file-operations"
+      ]
+    },
+    "file-browser.batch-operations": {
+      "id": "file-browser.batch-operations",
+      "title": "Batch Operations",
+      "displayTitle": "Batch Operations",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "batch",
+        "select",
+        "multi-select"
+      ],
+      "path": "modules/file-browser/batch-operations.md",
+      "seeAlsoManual": [
+        "file-browser.file-operations",
+        "file-browser.search"
+      ],
+      "seeAlsoTags": [
+        "batch",
+        "selection"
+      ]
+    },
+    "file-browser.search": {
+      "id": "file-browser.search",
+      "title": "Search & Filter",
+      "displayTitle": "Search & Filter",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "search",
+        "filter"
+      ],
+      "path": "modules/file-browser/search.md",
+      "seeAlsoManual": [
+        "file-browser.categories",
+        "file-browser"
+      ],
+      "seeAlsoTags": [
+        "search",
+        "filter"
+      ]
+    },
+    "file-browser.workspace-backup": {
+      "id": "file-browser.workspace-backup",
+      "title": "Workspace Backup & Restore",
+      "displayTitle": "Workspace Backup & Restore",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "workspace",
+        "backup",
+        "restore",
+        "session",
+        "persistence"
+      ],
+      "path": "modules/file-browser/workspace-backup.md",
+      "seeAlsoManual": [
+        "file-browser",
+        "file-browser.batch-operations"
+      ],
+      "seeAlsoTags": [
+        "backup",
+        "restore",
+        "persistence"
+      ]
+    },
+    "file-browser.tree-navigation": {
+      "id": "file-browser.tree-navigation",
+      "title": "Tree Navigation",
+      "displayTitle": "Tree Navigation",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "tree",
+        "folders",
+        "navigation"
+      ],
+      "path": "modules/file-browser/tree-navigation.md",
+      "seeAlsoManual": [
+        "file-browser",
+        "file-browser.categories"
+      ],
+      "seeAlsoTags": [
+        "navigation",
+        "folders"
+      ]
+    },
+    "imageviewer": {
+      "id": "imageviewer",
+      "title": "Image Viewer Module",
+      "displayTitle": "Image Viewer Module",
+      "category": "module",
+      "module": "imageviewer",
+      "tags": [
+        "imageviewer",
+        "tiff",
+        "visualization",
+        "gallery",
+        "thumbnails"
+      ],
+      "path": "modules/imageviewer/_module.md",
+      "seeAlsoManual": [
+        "imageviewer.step1.image-stack",
+        "imageviewer.step2.ui-controls"
+      ],
+      "seeAlsoTags": [
+        "visualization",
+        "tiff"
+      ]
+    },
+    "imageviewer.step1.image-stack": {
+      "id": "imageviewer.step1.image-stack",
+      "title": "Image Stack Selection",
+      "displayTitle": "Image Stack Selection",
+      "category": "data",
+      "module": "imageviewer",
+      "tags": [
+        "imageviewer",
+        "upload",
+        "tiff",
+        "file-selection"
+      ],
+      "path": "modules/imageviewer/step1-image-stack.md",
+      "seeAlsoManual": [
+        "imageviewer",
+        "imageviewer.step2.ui-controls"
+      ],
+      "seeAlsoTags": [
+        "upload",
+        "tiff"
+      ]
+    },
+    "imageviewer.step2.ui-controls": {
+      "id": "imageviewer.step2.ui-controls",
+      "title": "Viewer Controls",
+      "displayTitle": "Viewer Controls",
+      "category": "process",
+      "module": "imageviewer",
+      "tags": [
+        "imageviewer",
+        "controls",
+        "gallery",
+        "thumbnails",
+        "zoom"
+      ],
+      "path": "modules/imageviewer/step2-ui-controls.md",
+      "seeAlsoManual": [
+        "imageviewer",
+        "imageviewer.step1.image-stack"
+      ],
+      "seeAlsoTags": [
+        "controls",
+        "navigation"
+      ]
+    },
+    "mesh": {
+      "id": "mesh",
+      "title": "Surface Mesh Generation Module",
+      "displayTitle": "Surface Mesh Generation Module",
+      "category": "module",
+      "module": "mesh",
+      "tags": [
+        "mesh",
+        "3d",
+        "surface",
+        "marching-cubes",
+        "visualization"
+      ],
+      "path": "modules/mesh/_module.md",
+      "seeAlsoManual": [
+        "mesh.step1.segmentation-data",
+        "mesh.step2.output-options"
+      ],
+      "seeAlsoTags": [
+        "mesh",
+        "3d"
+      ]
+    },
+    "mesh.step1.segmentation-data": {
+      "id": "mesh.step1.segmentation-data",
+      "title": "Segmentation Data Selection",
+      "displayTitle": "Segmentation Data Selection",
+      "category": "data",
+      "module": "mesh",
+      "tags": [
+        "mesh",
+        "input",
+        "segmentation",
+        "annotations"
+      ],
+      "path": "modules/mesh/step1-segmentation-data.md",
+      "seeAlsoManual": [
+        "mesh",
+        "mesh.step2.output-options"
+      ],
+      "seeAlsoTags": [
+        "input",
+        "segmentation"
+      ]
+    },
+    "mesh.step2.output-options": {
+      "id": "mesh.step2.output-options",
+      "title": "Output Options",
+      "displayTitle": "Output Options",
+      "category": "configuration",
+      "module": "mesh",
+      "tags": [
+        "mesh",
+        "formats",
+        "output",
+        "export"
+      ],
+      "path": "modules/mesh/step2-output-options.md",
+      "seeAlsoManual": [
+        "mesh",
+        "mesh.step1.segmentation-data"
+      ],
+      "seeAlsoTags": [
+        "formats",
+        "export"
+      ]
+    },
+    "segmentation": {
+      "id": "segmentation",
+      "title": "U-Net Segmentation Module",
+      "displayTitle": "U-Net Segmentation Module",
+      "category": "module",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "u-net",
+        "deep-learning",
+        "training",
+        "inference"
+      ],
+      "path": "modules/segmentation/_module.md",
+      "seeAlsoManual": [
+        "segmentation.step1",
+        "segmentation.step1.workflow-choice"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "inference"
+      ]
+    },
+    "segmentation.step1.workflow-choice": {
+      "id": "segmentation.step1.workflow-choice",
+      "title": "Workflow Options",
+      "displayTitle": "Workflow Options (Segmentation)",
+      "category": "process",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "workflow",
+        "training",
+        "pretrained",
+        "import"
+      ],
+      "path": "modules/segmentation/step1-workflow-choice.md",
+      "seeAlsoManual": [
+        "segmentation.step1",
+        "segmentation.step1.raw-images"
+      ],
+      "seeAlsoTags": [
+        "workflow",
+        "training"
+      ]
+    },
+    "segmentation.step1.raw-images": {
+      "id": "segmentation.step1.raw-images",
+      "title": "Raw Training Images",
+      "displayTitle": "Raw Training Images",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "upload",
+        "training-data",
+        "tiff",
+        "images"
+      ],
+      "path": "modules/segmentation/step1-raw-images.md",
+      "seeAlsoManual": [
+        "segmentation.step1.annotations",
+        "segmentation.step1"
+      ],
+      "seeAlsoTags": [
+        "upload",
+        "training-data"
+      ]
+    },
+    "segmentation.step1.annotations": {
+      "id": "segmentation.step1.annotations",
+      "title": "Annotation Masks",
+      "displayTitle": "Annotation Masks",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "upload",
+        "annotations",
+        "labels",
+        "masks"
+      ],
+      "path": "modules/segmentation/step1-annotations.md",
+      "seeAlsoManual": [
+        "segmentation.step1.raw-images",
+        "segmentation.step1"
+      ],
+      "seeAlsoTags": [
+        "upload",
+        "annotations"
+      ]
+    },
+    "segmentation.step1.config-file": {
+      "id": "segmentation.step1.config-file",
+      "title": "Model Configuration File",
+      "displayTitle": "Model Configuration File (Segmentation)",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "import",
+        "config",
+        "pretrained",
+        "json"
+      ],
+      "path": "modules/segmentation/step1-config-file.md",
+      "seeAlsoManual": [
+        "segmentation.step1.model-file",
+        "segmentation.step1.workflow-choice"
+      ],
+      "seeAlsoTags": [
+        "import",
+        "pretrained"
+      ]
+    },
+    "segmentation.step1.model-file": {
+      "id": "segmentation.step1.model-file",
+      "title": "Model Weights File",
+      "displayTitle": "Model Weights File (Segmentation)",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "import",
+        "model",
+        "pretrained",
+        "weights"
+      ],
+      "path": "modules/segmentation/step1-model-file.md",
+      "seeAlsoManual": [
+        "segmentation.step1.config-file",
+        "segmentation.step1.workflow-choice"
+      ],
+      "seeAlsoTags": [
+        "import",
+        "pretrained"
+      ]
+    },
+    "segmentation.step1": {
+      "id": "segmentation.step1",
+      "title": "Data Upload (Step 1)",
+      "displayTitle": "Data Upload (Step 1)",
+      "category": "process",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "upload",
+        "workflow",
+        "training-data",
+        "annotations"
+      ],
+      "path": "modules/segmentation/step1.md",
+      "seeAlsoManual": [
+        "segmentation",
+        "segmentation.training-data"
+      ],
+      "seeAlsoTags": [
+        "upload",
+        "annotations"
+      ]
+    },
+    "segmentation.config.patch-size": {
+      "id": "segmentation.config.patch-size",
+      "title": "Patch Size",
+      "displayTitle": "Patch Size (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "patch",
+        "configuration"
+      ],
+      "path": "modules/segmentation/config-patch-size.md",
+      "seeAlsoManual": [
+        "segmentation.config.batch-size"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "configuration"
+      ]
+    },
+    "segmentation.config.batch-size": {
+      "id": "segmentation.config.batch-size",
+      "title": "Batch Size",
+      "displayTitle": "Batch Size (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "batch",
+        "configuration",
+        "memory"
+      ],
+      "path": "modules/segmentation/config-batch-size.md",
+      "seeAlsoManual": [
+        "segmentation.config.patch-size",
+        "segmentation.config.learning-rate"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "configuration"
+      ]
+    },
+    "segmentation.config.learning-rate": {
+      "id": "segmentation.config.learning-rate",
+      "title": "Learning Rate",
+      "displayTitle": "Learning Rate (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "learning-rate",
+        "configuration",
+        "optimization"
+      ],
+      "path": "modules/segmentation/config-learning-rate.md",
+      "seeAlsoManual": [
+        "segmentation.config.batch-size"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "optimization"
+      ]
+    },
+    "segmentation.config.patches-per-image": {
+      "id": "segmentation.config.patches-per-image",
+      "title": "Patches per Image",
+      "displayTitle": "Patches per Image (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "patches",
+        "configuration",
+        "dataset"
+      ],
+      "path": "modules/segmentation/config-patches-per-image.md",
+      "seeAlsoManual": [
+        "segmentation.config.patch-size",
+        "segmentation.config.batch-size"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "dataset"
+      ]
+    },
+    "segmentation.config.augmentation": {
+      "id": "segmentation.config.augmentation",
+      "title": "Data Augmentation",
+      "displayTitle": "Data Augmentation (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "augmentation",
+        "configuration",
+        "dataset"
+      ],
+      "path": "modules/segmentation/config-augmentation.md",
+      "seeAlsoManual": [
+        "segmentation.config.patches-per-image"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "dataset"
+      ]
+    },
+    "segmentation.config.num-features": {
+      "id": "segmentation.config.num-features",
+      "title": "Number of Features",
+      "displayTitle": "Number of Features (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "architecture",
+        "configuration",
+        "model"
+      ],
+      "path": "modules/segmentation/config-num-features.md",
+      "seeAlsoManual": [
+        "segmentation.config.num-layers"
+      ],
+      "seeAlsoTags": [
+        "architecture",
+        "model"
+      ]
+    },
+    "segmentation.config.num-layers": {
+      "id": "segmentation.config.num-layers",
+      "title": "Number of Layers",
+      "displayTitle": "Number of Layers (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "architecture",
+        "configuration",
+        "model"
+      ],
+      "path": "modules/segmentation/config-num-layers.md",
+      "seeAlsoManual": [
+        "segmentation.config.num-features",
+        "segmentation.config.patch-size"
+      ],
+      "seeAlsoTags": [
+        "architecture",
+        "model"
+      ]
+    },
+    "segmentation.config.num-epochs": {
+      "id": "segmentation.config.num-epochs",
+      "title": "Number of Epochs",
+      "displayTitle": "Number of Epochs (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "epochs",
+        "configuration",
+        "duration"
+      ],
+      "path": "modules/segmentation/config-num-epochs.md",
+      "seeAlsoManual": [
+        "segmentation.config.learning-rate"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "duration"
+      ]
+    },
+    "segmentation.step3": {
+      "id": "segmentation.step3",
+      "title": "Training Progress",
+      "displayTitle": "Training Progress",
+      "category": "process",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "progress",
+        "neural-network",
+        "optimization"
+      ],
+      "path": "modules/segmentation/step3.md",
+      "seeAlsoManual": [
+        "segmentation.step3.loss-curves",
+        "segmentation.step3.dice-score"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "metrics"
+      ]
+    },
+    "segmentation.step3.loss-curves": {
+      "id": "segmentation.step3.loss-curves",
+      "title": "Loss Curves",
+      "displayTitle": "Loss Curves (Segmentation)",
+      "category": "metric",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "loss",
+        "metrics",
+        "convergence"
+      ],
+      "path": "modules/segmentation/step3-loss-curves.md",
+      "seeAlsoManual": [
+        "segmentation.step3.dice-score",
+        "segmentation.step3"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "metrics"
+      ]
+    },
+    "segmentation.step3.dice-score": {
+      "id": "segmentation.step3.dice-score",
+      "title": "Dice Score",
+      "displayTitle": "Dice Score",
+      "category": "metric",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "dice",
+        "metrics",
+        "accuracy"
+      ],
+      "path": "modules/segmentation/step3-dice-score.md",
+      "seeAlsoManual": [
+        "segmentation.step3.loss-curves",
+        "segmentation.step3"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "metrics"
+      ]
+    },
+    "segmentation.step4": {
+      "id": "segmentation.step4",
+      "title": "Running Inference",
+      "displayTitle": "Running Inference",
+      "category": "process",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "inference",
+        "prediction",
+        "output"
+      ],
+      "path": "modules/segmentation/step4.md",
+      "seeAlsoManual": [
+        "segmentation.step4.inference-data",
+        "segmentation.step3"
+      ],
+      "seeAlsoTags": [
+        "inference",
+        "output"
+      ]
+    },
+    "segmentation.step4.inference-data": {
+      "id": "segmentation.step4.inference-data",
+      "title": "Inference Data",
+      "displayTitle": "Inference Data",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "inference",
+        "upload",
+        "input",
+        "tiff"
+      ],
+      "path": "modules/segmentation/step4-inference-data.md",
+      "seeAlsoManual": [
+        "segmentation.step4",
+        "segmentation.step1.raw-images"
+      ],
+      "seeAlsoTags": [
+        "inference",
+        "upload"
+      ]
+    },
+    "visualization": {
+      "id": "visualization",
+      "title": "3D Visualization Module",
+      "displayTitle": "3D Visualization Module",
+      "category": "module",
+      "module": "visualization",
+      "tags": [
+        "visualization",
+        "3d",
+        "mesh",
+        "threejs",
+        "interactive"
+      ],
+      "path": "modules/visualization/_module.md",
+      "seeAlsoManual": [
+        "visualization.step1.mesh-data",
+        "visualization.step2.controls"
+      ],
+      "seeAlsoTags": [
+        "visualization",
+        "3d"
+      ]
+    },
+    "visualization.step1.mesh-data": {
+      "id": "visualization.step1.mesh-data",
+      "title": "Mesh Data Selection",
+      "displayTitle": "Mesh Data Selection",
+      "category": "data",
+      "module": "visualization",
+      "tags": [
+        "visualization",
+        "mesh",
+        "json",
+        "input"
+      ],
+      "path": "modules/visualization/step1-mesh-data.md",
+      "seeAlsoManual": [
+        "visualization",
+        "visualization.step2.controls"
+      ],
+      "seeAlsoTags": [
+        "mesh",
+        "input"
+      ]
+    },
+    "visualization.step2.controls": {
+      "id": "visualization.step2.controls",
+      "title": "Visualization Controls",
+      "displayTitle": "Visualization Controls",
+      "category": "tools",
+      "module": "visualization",
+      "tags": [
+        "visualization",
+        "controls",
+        "opacity",
+        "visibility",
+        "clipping"
+      ],
+      "path": "modules/visualization/step2-controls.md",
+      "seeAlsoManual": [
+        "visualization",
+        "visualization.step1.mesh-data"
+      ],
+      "seeAlsoTags": [
+        "controls",
+        "3d"
+      ]
+    }
+  },
+  "glossary": {
+    "2": [
+      {
+        "term": "2.5D Processing",
+        "definition": "A volumetric processing mode that uses triplets of consecutive slices (z-1, z, z+1) as input to predict the center slice, leveraging inter-slice context for better denoising",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "2D vs 2.5D Processing Mode",
+        "articleId": "denoising-dl.step1.mode"
+      }
+    ],
+    "3": [
+      {
+        "term": "3D Visualization Module",
+        "articleId": "visualization"
+      }
+    ],
+    "G": [
+      {
+        "term": "Gaussian Filter",
+        "definition": "A smoothing filter using weights that follow a bell curve (Gaussian) distribution, giving more weight to nearby pixels",
+        "articleId": "denoising-filter"
+      },
+      {
+        "term": "Gaussian Parameters",
+        "articleId": "denoising-filter.step2.gaussian"
+      },
+      {
+        "term": "Getting Started with Help",
+        "articleId": "getting-started"
+      },
+      {
+        "term": "Ground Truth",
+        "definition": "Human-created labels that represent the correct answer, used to train and evaluate machine learning models",
+        "articleId": "annotation"
+      }
+    ],
+    "Q": [
+      {
+        "term": "Quick Annotation Tool",
+        "articleId": "annotation"
+      }
+    ],
+    "S": [
+      {
+        "term": "Search & Filter",
+        "articleId": "file-browser.search"
+      },
+      {
+        "term": "Segmentation Data Selection",
+        "articleId": "mesh.step1.segmentation-data"
+      },
+      {
+        "term": "Select Data to Process",
+        "articleId": "denoising-dl.step4.data"
+      },
+      {
+        "term": "Self-Supervised Learning",
+        "definition": "A training approach where the model learns from the data itself without requiring manually labeled ground truth",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Session Storage",
+        "definition": "Temporary file storage that exists only during your login session — files are cleared when the session ends",
+        "articleId": "file-browser"
+      },
+      {
+        "term": "Sigma",
+        "definition": "The standard deviation of the Gaussian distribution - controls how quickly weights decrease with distance",
+        "articleId": "denoising-filter"
+      },
+      {
+        "term": "Slice",
+        "definition": "A single 2D image within a 3D image stack, typically representing one focal plane or time point",
+        "articleId": "imageviewer"
+      },
+      {
+        "term": "Source Image Selection",
+        "articleId": "annotation.step1.source-image"
+      },
+      {
+        "term": "STL Format",
+        "definition": "Stereolithography format - a common file format for 3D printing that stores triangle mesh geometry",
+        "articleId": "mesh"
+      },
+      {
+        "term": "Structured Noise",
+        "definition": "Noise with spatial patterns or correlations, such as scan lines or periodic artifacts, as opposed to random pixel-independent noise",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Surface Mesh",
+        "definition": "A 3D representation composed of vertices (points) and faces (triangles) that approximate the surface of an object",
+        "articleId": "mesh"
+      },
+      {
+        "term": "Surface Mesh Generation Module",
+        "articleId": "mesh"
+      }
+    ],
+    "D": [
+      {
+        "term": "Data Augmentation (DL Denoising)",
+        "articleId": "denoising-dl.step2.augmentation"
+      },
+      {
+        "term": "Data Augmentation (Segmentation)",
+        "articleId": "segmentation.config.augmentation"
+      },
+      {
+        "term": "Data Upload (Step 1)",
+        "articleId": "segmentation.step1"
+      },
+      {
+        "term": "Deep Learning Denoising",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Denoising",
+        "definition": "The process of removing unwanted noise from images while preserving important features and details",
+        "articleId": "denoising"
+      },
+      {
+        "term": "Denoising Methods (DL Denoising)",
+        "articleId": "denoising-dl.step1.method"
+      },
+      {
+        "term": "Denoising Methods (Filter Denoising)",
+        "articleId": "denoising-filter.step2.methods"
+      },
+      {
+        "term": "Denoising Module",
+        "articleId": "denoising"
+      },
+      {
+        "term": "Dice Score",
+        "articleId": "segmentation.step3.dice-score"
+      },
+      {
+        "term": "Drawing Tools",
+        "articleId": "annotation.step2.tools"
+      }
+    ],
+    "B": [
+      {
+        "term": "Base Percentile",
+        "articleId": "denoising-dl.step2.mask-extractor.base-percentile"
+      },
+      {
+        "term": "Batch Operation",
+        "definition": "An action performed on multiple selected files at once, such as batch download or batch delete",
+        "articleId": "file-browser"
+      },
+      {
+        "term": "Batch Operations",
+        "articleId": "file-browser.batch-operations"
+      },
+      {
+        "term": "Batch Size (DL Denoising)",
+        "articleId": "denoising-dl.step2.batch-size"
+      },
+      {
+        "term": "Batch Size (Segmentation)",
+        "articleId": "segmentation.config.batch-size"
+      },
+      {
+        "term": "Best Validation Loss",
+        "articleId": "denoising-dl.step3.best-val-loss"
+      },
+      {
+        "term": "Blind-Spot Network",
+        "definition": "A network architecture that cannot see the center pixel when predicting it, preventing the trivial solution of copying noisy values",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Brush Size",
+        "articleId": "annotation.step2.brush-size"
+      },
+      {
+        "term": "Brush Tool",
+        "definition": "A painting tool that applies the current class label to pixels as you draw",
+        "articleId": "annotation"
+      }
+    ],
+    "H": [
+      {
+        "term": "History & Autosave",
+        "articleId": "annotation.step2.history"
+      }
+    ],
+    "A": [
+      {
+        "term": "Adaptive Thresholding",
+        "articleId": "denoising-dl.step2.mask-extractor.adaptive"
+      },
+      {
+        "term": "Annotation",
+        "definition": "A labeled mask where each pixel is assigned to a class (background or object categories)",
+        "articleId": "annotation"
+      },
+      {
+        "term": "Annotation Classes",
+        "articleId": "annotation.step2.classes"
+      },
+      {
+        "term": "Annotation Masks",
+        "articleId": "segmentation.step1.annotations"
+      },
+      {
+        "term": "autoStructN2V",
+        "definition": "A two-stage extension of N2V that automatically detects and removes structured noise patterns through Fourier analysis",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "autoStructN2V Explained",
+        "articleId": "denoising-dl.autostructn2v-detail"
+      },
+      {
+        "term": "autoStructN2V Training Process",
+        "articleId": "denoising-dl.step3.autostructn2v"
+      }
+    ],
+    "W": [
+      {
+        "term": "Workflow Options (DL Denoising)",
+        "articleId": "denoising-dl.step1.workflow"
+      },
+      {
+        "term": "Workflow Options (Segmentation)",
+        "articleId": "segmentation.step1.workflow-choice"
+      },
+      {
+        "term": "Workspace",
+        "definition": "The collection of all files in your current session, organized into categories for different processing stages",
+        "articleId": "file-browser"
+      },
+      {
+        "term": "Workspace Backup & Restore",
+        "articleId": "file-browser.workspace-backup"
+      },
+      {
+        "term": "Workspace ZIP",
+        "definition": "A compressed archive containing your entire workspace, used for backup and restore between sessions",
+        "articleId": "file-browser"
+      }
+    ],
+    "I": [
+      {
+        "term": "Image Stack",
+        "definition": "A series of 2D images stored together, representing a 3D volume or time series",
+        "articleId": "imageviewer"
+      },
+      {
+        "term": "Image Stack Selection",
+        "articleId": "imageviewer.step1.image-stack"
+      },
+      {
+        "term": "Image Viewer Module",
+        "articleId": "imageviewer"
+      },
+      {
+        "term": "Inference Data",
+        "articleId": "segmentation.step4.inference-data"
+      },
+      {
+        "term": "Input Image Stack (DL Denoising)",
+        "articleId": "denoising-dl.step1.input"
+      },
+      {
+        "term": "Input Image Stack (Filter Denoising)",
+        "articleId": "denoising-filter.step1.input"
+      }
+    ],
+    "M": [
+      {
+        "term": "Marching Cubes",
+        "definition": "An algorithm that extracts a polygonal mesh from a 3D scalar field (like a labeled image stack) by finding surface boundaries",
+        "articleId": "mesh"
+      },
+      {
+        "term": "Mask",
+        "definition": "An image where pixel values represent class labels rather than visual intensity",
+        "articleId": "annotation"
+      },
+      {
+        "term": "Mask Extraction",
+        "definition": "The process of analyzing N2V residuals in Fourier space to detect periodic noise patterns for Stage 2 training",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Mask Percentage",
+        "articleId": "denoising-dl.step2.mask-percentage"
+      },
+      {
+        "term": "Masking Strategy",
+        "articleId": "denoising-dl.step2.masking-strategy"
+      },
+      {
+        "term": "Max Masked Pixels",
+        "articleId": "denoising-dl.step2.mask-extractor.max-pixels"
+      },
+      {
+        "term": "Mesh",
+        "definition": "A 3D surface representation composed of vertices (points) and faces (triangles)",
+        "articleId": "visualization"
+      },
+      {
+        "term": "Mesh Data Selection",
+        "articleId": "visualization.step1.mesh-data"
+      },
+      {
+        "term": "Model Configuration File (DL Denoising)",
+        "articleId": "denoising-dl.step1.import.config"
+      },
+      {
+        "term": "Model Configuration File (Segmentation)",
+        "articleId": "segmentation.step1.config-file"
+      },
+      {
+        "term": "Model Weights File (DL Denoising)",
+        "articleId": "denoising-dl.step1.import.model"
+      },
+      {
+        "term": "Model Weights File (Segmentation)",
+        "articleId": "segmentation.step1.model-file"
+      }
+    ],
+    "C": [
+      {
+        "term": "Class",
+        "definition": "A category of pixels in a segmentation task, such as 'cell', 'background', or 'nucleus'",
+        "articleId": "annotation"
+      },
+      {
+        "term": "Clipping/Slice Range",
+        "definition": "Limiting the visible region of a 3D object to reveal internal structure",
+        "articleId": "visualization"
+      },
+      {
+        "term": "Configuration Overview",
+        "articleId": "denoising-dl.step2.overview"
+      }
+    ],
+    "P": [
+      {
+        "term": "Pan",
+        "definition": "Moving the viewing area across a zoomed image by clicking and dragging",
+        "articleId": "imageviewer"
+      },
+      {
+        "term": "Patch",
+        "definition": "A small rectangular region of pixels used for comparison in NLM denoising",
+        "articleId": "denoising-filter"
+      },
+      {
+        "term": "Patch Size (DL Denoising)",
+        "articleId": "denoising-dl.step2.patch-size"
+      },
+      {
+        "term": "Patch Size (Segmentation)",
+        "articleId": "segmentation.config.patch-size"
+      },
+      {
+        "term": "Patches per Image (DL Denoising)",
+        "articleId": "denoising-dl.step2.patches-per-image"
+      },
+      {
+        "term": "Patches per Image (Segmentation)",
+        "articleId": "segmentation.config.patches-per-image"
+      },
+      {
+        "term": "Percentile Decay",
+        "articleId": "denoising-dl.step2.mask-extractor.percentile-decay"
+      },
+      {
+        "term": "Process Additional Data",
+        "articleId": "denoising-dl.step4.overview"
+      }
+    ],
+    "N": [
+      {
+        "term": "N2V Training Process",
+        "articleId": "denoising-dl.step3.n2v"
+      },
+      {
+        "term": "Noise2Void (N2V)",
+        "definition": "A self-supervised denoising method that trains by predicting masked pixels from their surroundings, requiring no clean reference images",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Non-Local Means",
+        "definition": "A denoising algorithm that averages similar patches from across the entire image, not just nearby pixels",
+        "articleId": "denoising-filter"
+      },
+      {
+        "term": "Non-Local Means Parameters",
+        "articleId": "denoising-filter.step2.nlm"
+      },
+      {
+        "term": "Number of Epochs (DL Denoising)",
+        "articleId": "denoising-dl.step2.epochs"
+      },
+      {
+        "term": "Number of Epochs (Segmentation)",
+        "articleId": "segmentation.config.num-epochs"
+      },
+      {
+        "term": "Number of Features (DL Denoising)",
+        "articleId": "denoising-dl.step2.features"
+      },
+      {
+        "term": "Number of Features (Segmentation)",
+        "articleId": "segmentation.config.num-features"
+      },
+      {
+        "term": "Number of Layers (DL Denoising)",
+        "articleId": "denoising-dl.step2.num-layers"
+      },
+      {
+        "term": "Number of Layers (Segmentation)",
+        "articleId": "segmentation.config.num-layers"
+      }
+    ],
+    "L": [
+      {
+        "term": "Learning Rate (DL Denoising)",
+        "articleId": "denoising-dl.step2.learning-rate"
+      },
+      {
+        "term": "Learning Rate (Segmentation)",
+        "articleId": "segmentation.config.learning-rate"
+      },
+      {
+        "term": "Lineage",
+        "definition": "The processing history of a file, tracking which source files were used to create it",
+        "articleId": "visualization"
+      },
+      {
+        "term": "Loss Curves (DL Denoising)",
+        "articleId": "denoising-dl.step3.loss"
+      },
+      {
+        "term": "Loss Curves (Segmentation)",
+        "articleId": "segmentation.step3.loss-curves"
+      }
+    ],
+    "E": [
+      {
+        "term": "Early Stopping",
+        "articleId": "denoising-dl.step2.early-stopping"
+      }
+    ],
+    "R": [
+      {
+        "term": "Raw Training Images",
+        "articleId": "segmentation.step1.raw-images"
+      },
+      {
+        "term": "Resize Convolution",
+        "articleId": "denoising-dl.step2.resize-conv"
+      },
+      {
+        "term": "ROI Selection",
+        "articleId": "denoising-dl.step2.roi-selection"
+      },
+      {
+        "term": "Run Denoising",
+        "articleId": "denoising-dl.step3.overview"
+      },
+      {
+        "term": "Running Inference",
+        "articleId": "segmentation.step4"
+      }
+    ],
+    "U": [
+      {
+        "term": "U-Net Segmentation Module",
+        "articleId": "segmentation"
+      },
+      {
+        "term": "Uploading Files",
+        "articleId": "file-browser.upload"
+      },
+      {
+        "term": "Upsampling Mode",
+        "articleId": "denoising-dl.step2.upsampling-mode"
+      }
+    ],
+    "F": [
+      {
+        "term": "Faces",
+        "definition": "Triangular surfaces in a mesh, each defined by three vertices",
+        "articleId": "mesh"
+      },
+      {
+        "term": "File Browser & Workspace",
+        "articleId": "file-browser"
+      },
+      {
+        "term": "File Categories",
+        "articleId": "file-browser.categories"
+      },
+      {
+        "term": "File Lineage",
+        "definition": "The processing history of a file, showing which modules created it and from what source files",
+        "articleId": "file-browser"
+      },
+      {
+        "term": "File Operations",
+        "articleId": "file-browser.file-operations"
+      },
+      {
+        "term": "Filter-Based Denoising",
+        "articleId": "denoising-filter"
+      }
+    ],
+    "T": [
+      {
+        "term": "Three.js",
+        "definition": "A JavaScript 3D graphics library used for rendering and animating 3D content in web browsers",
+        "articleId": "visualization"
+      },
+      {
+        "term": "TIFF",
+        "definition": "Tagged Image File Format - a flexible image format commonly used in microscopy for storing multi-page image stacks",
+        "articleId": "imageviewer"
+      },
+      {
+        "term": "Training Progress",
+        "articleId": "segmentation.step3"
+      },
+      {
+        "term": "Tree Navigation",
+        "articleId": "file-browser.tree-navigation"
+      },
+      {
+        "term": "Triplet (2.5D)",
+        "definition": "Three consecutive slices from a stack used as input in 2.5D mode: the slice above (z-1), the center slice (z), and the slice below (z+1)",
+        "articleId": "denoising-dl"
+      }
+    ],
+    "V": [
+      {
+        "term": "Validation Loss",
+        "definition": "Error measured on held-out data not used for training, indicating how well the model generalizes to new images",
+        "articleId": "denoising-dl"
+      },
+      {
+        "term": "Vertices",
+        "definition": "The corner points of triangles in a mesh, defined by X, Y, Z coordinates",
+        "articleId": "mesh"
+      },
+      {
+        "term": "Viewer Controls",
+        "articleId": "imageviewer.step2.ui-controls"
+      },
+      {
+        "term": "Visualization Controls",
+        "articleId": "visualization.step2.controls"
+      }
+    ],
+    "O": [
+      {
+        "term": "OBJ Format",
+        "definition": "Wavefront OBJ - a simple text-based 3D geometry format widely supported by 3D software",
+        "articleId": "mesh"
+      },
+      {
+        "term": "Opacity",
+        "definition": "The degree to which an object blocks light - 100% is fully solid, lower values are more transparent",
+        "articleId": "visualization"
+      },
+      {
+        "term": "Output Options",
+        "articleId": "mesh.step2.output-options"
+      }
+    ],
+    "K": [
+      {
+        "term": "Kernel",
+        "definition": "The filter window - a small matrix of weights applied to each pixel and its neighbors",
+        "articleId": "denoising-filter"
+      }
+    ],
+    "Z": [
+      {
+        "term": "Zoom",
+        "definition": "Magnification level for viewing images - values above 100% show enlarged detail, below 100% shows a wider view",
+        "articleId": "imageviewer"
+      }
+    ]
+  },
+  "modules": [
+    "annotation",
+    "denoising",
+    "denoising-dl",
+    "denoising-filter",
+    "file-browser",
+    "imageviewer",
+    "mesh",
+    "segmentation",
+    "visualization"
+  ]
+}

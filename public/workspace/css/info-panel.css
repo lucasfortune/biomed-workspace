@@ -586,3 +586,117 @@
   background-color: var(--border-color);
   border-radius: 4px;
 }
+
+/* ==========================================================================
+   Markdown Content Styling
+   For articles with pre-rendered markdown HTML
+   ========================================================================== */
+
+.ip-article-body.markdown-content h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 20px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ip-article-body.markdown-content h2:first-child {
+  margin-top: 0;
+}
+
+.ip-article-body.markdown-content h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 16px 0 8px;
+}
+
+.ip-article-body.markdown-content h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 14px 0 6px;
+}
+
+.ip-article-body.markdown-content p {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.ip-article-body.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.ip-article-body.markdown-content ul,
+.ip-article-body.markdown-content ol {
+  margin: 8px 0 12px;
+  padding-left: 20px;
+}
+
+.ip-article-body.markdown-content li {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.ip-article-body.markdown-content li p {
+  margin: 0;
+}
+
+.ip-article-body.markdown-content code {
+  background-color: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.ip-article-body.markdown-content pre {
+  background-color: var(--bg-secondary);
+  padding: 12px 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--border-light);
+}
+
+.ip-article-body.markdown-content pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ip-article-body.markdown-content strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ip-article-body.markdown-content em {
+  font-style: italic;
+}
+
+.ip-article-body.markdown-content a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.ip-article-body.markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.ip-article-body.markdown-content blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.ip-article-body.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 20px 0;
+}

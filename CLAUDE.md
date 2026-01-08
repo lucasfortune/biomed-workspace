@@ -635,6 +635,10 @@ The application provides **built-in test data** for users awaiting approval:
 - `activityLogger.js` - Activity logging to `logs/activity.log`
 - `users.json` - User database (created on first user registration)
 
+**Help System Scripts:**
+- `scripts/convert-help-to-markdown.js` - Convert JSON help articles to markdown + generate manifest
+- `scripts/validate-help-migration.js` - Validate manifest, markdown files, and article references
+
 ## Configuration & Environment
 
 **Environment Variables (.env):**
@@ -664,11 +668,43 @@ Backend API for admin dashboard functionality:
 
 ### Info Panel / Help System
 
-Educational help system integrated into the workspace:
-- **InfoPanel.js** - Container with tabs for articles, glossary, search
-- **InfoContentService.js** - Content loading and caching
-- 200+ help articles organized by module
-- Context-sensitive help via `helpArticleId` on components
+Educational help system integrated into the workspace using **markdown-based content** with manifest loading:
+
+**Architecture:**
+- `manifest.json` loaded eagerly at startup - provides complete glossary immediately
+- Individual markdown files (`.md`) loaded lazily on demand
+- YAML frontmatter in each article stores metadata (id, title, tags, seeAlso)
+- `marked.js` library parses markdown to HTML for rendering
+
+**Content Structure:**
+```
+/public/workspace/content/
+├── manifest.json              # Complete article index + glossary (loaded first)
+└── modules/
+    ├── segmentation/*.md      # 22 articles
+    ├── denoising-dl/*.md      # 22 articles
+    ├── denoising-filter/*.md  # 7 articles
+    └── ... (8 module directories, 84 total articles)
+```
+
+**Key Components:**
+- **InfoPanel.js** - Container orchestrating search, glossary, and article display
+- **InfoContentService.js** - Manifest-based loading, caching, search, glossary
+- **InfoArticle.js** - Renders markdown HTML with styled formatting
+- **InfoGlossary.js** - Alphabetical term navigation from manifest glossary
+- **InfoSearch.js** - Full-text search across article titles and tags
+
+**Duplicate Title Handling:**
+14 article titles exist in multiple modules. These are disambiguated with `displayTitle`:
+- "Batch Size" → "Batch Size (Segmentation)" / "Batch Size (DL Denoising)"
+- "Learning Rate" → "Learning Rate (Segmentation)" / "Learning Rate (DL Denoising)"
+- etc.
+
+**Related Scripts:**
+- `scripts/convert-help-to-markdown.js` - Convert JSON articles to markdown
+- `scripts/validate-help-migration.js` - Validate manifest and markdown files
+
+**Context-sensitive help:** Components use `data-info-id` attribute to link to articles
 
 ### Design System (Physics of Parasitism Branding)
 
