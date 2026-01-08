@@ -143,6 +143,13 @@ function onTrainingComplete(data) {
     if (data.success) {
         document.getElementById('trainingStatusText').textContent = 'Training completed successfully!';
 
+        // Update status badge to show completion
+        const stageStatus = document.getElementById('trainingStageStatus');
+        if (stageStatus) {
+            stageStatus.textContent = 'Complete';
+            stageStatus.className = 'stage-status completed';
+        }
+
         // Training ID is already stored in window.segmentationModule.currentTrainingId
 
         // NEW: Mark step 3 as completed and enable step 4
@@ -169,7 +176,14 @@ function onTrainingComplete(data) {
     } else {
         document.getElementById('trainingStatusText').textContent = 'Training failed!';
         showError('Training failed. Please check your configuration and try again.');
-        
+
+        // Update status badge to show failure
+        const stageStatus = document.getElementById('trainingStageStatus');
+        if (stageStatus) {
+            stageStatus.textContent = 'Failed';
+            stageStatus.className = 'stage-status failed';
+        }
+
         // Reset training states on failure
         stepStates[3].trainingStarted = false;
         processStates.trainingInProgress = false;
