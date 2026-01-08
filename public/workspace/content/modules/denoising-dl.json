@@ -266,7 +266,7 @@
       "contentType": "medium",
       "content": {
         "summary": "Single-stage training for removing random, uncorrelated noise.",
-        "body": "N2V training is a straightforward single-stage process:\n\n1. Dataset Preparation\nPatches are extracted from your images according to your configuration (patch size, patches per image).\n\n2. Training Loop\nFor each epoch, the network processes all patches:\n- Random pixels are masked based on mask percentage\n- Network predicts masked pixel values from surrounding context\n- Loss measures prediction accuracy\n- Weights are updated to improve predictions\n\n3. Validation\nAfter each epoch, performance is evaluated on held-out patches. This validation loss guides early stopping.\n\n4. Denoising\nOnce trained, the model processes your full images to produce denoised results.\n\n2.5D Mode Differences:\nIn 2.5D mode, the network takes 3 consecutive slices as input and predicts the center slice. This uses inter-slice context for better denoising of volumetric data. Boundary slices are copied from the original.\n\nWhat to expect:\n- Training typically takes 5-30 minutes depending on data size and GPU\n- Loss should decrease steadily during training\n- Results are available immediately when training completes"
+        "body": "N2V training is a straightforward single-stage process:\n\n1. Dataset Preparation\nPatches are extracted from your images according to your configuration (patch size, patches per image).\n\n2. Training Loop\nFor each epoch, the network processes all patches:\n- Random pixels are masked based on mask percentage\n- Network predicts masked pixel values from surrounding context\n- Loss measures prediction accuracy\n- Weights are updated to improve predictions\n\n3. Validation\nAfter each epoch, performance is evaluated on held-out patches. This validation loss guides early stopping.\n\n4. Denoising\nOnce trained, the model processes your full images to produce denoised results.\n\n2.5D Mode Differences:\nIn 2.5D mode, the network takes 3 consecutive slices as input and predicts the center slice. This uses inter-slice context for better denoising of volumetric data. Boundary slices are copied from the original.\n\nWhat to expect:\n- Training typically takes 5-30 minutes depending on data size and GPU\n- Loss should decrease steadily during training\n- Results are available immediately when training completes\n\nReference:\nKrull, A., Buchholz, T.-O., & Jug, F. (2019). Noise2Void - Learning Denoising From Single Noisy Images. In 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2124–2132. DOI: 10.1109/cvpr.2019.00223"
       },
       "seeAlsoManual": ["denoising-dl.step3.loss", "denoising-dl.step3.best-val-loss", "denoising-dl.step1.mode"],
       "seeAlsoTags": ["n2v", "training"]
@@ -335,6 +335,132 @@
       },
       "seeAlsoManual": ["denoising-dl.step4.overview", "denoising-dl.step1.input"],
       "seeAlsoTags": ["inference", "data"]
+    },
+    {
+      "id": "denoising-dl.step2.augmentation",
+      "title": "Data Augmentation",
+      "category": "parameter",
+      "tags": ["denoising", "augmentation", "training", "configuration"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Apply random transformations to training patches to improve model generalization.",
+        "body": "Data augmentation artificially expands the training dataset by applying random transformations to image patches during training.\n\nTransformations applied:\n- Random rotations (90°, 180°, 270°)\n- Horizontal and vertical flips\n\nBenefits:\n- Helps the model generalize to different orientations\n- Reduces overfitting on small datasets\n- Improves robustness to image orientation\n\nWhen to enable:\n- Most cases benefit from augmentation\n- Especially helpful with smaller training datasets\n\nWhen to disable:\n- autoStructN2V Stage 1: Disabled by default because augmentation can interfere with structural noise pattern detection\n- If your images have a specific required orientation\n\nNote: For autoStructN2V, augmentation is only available in Stage 2 (advanced options) after the noise pattern has been detected.",
+        "parameterImpact": "Generally improves results by reducing overfitting. Keep enabled unless you have a specific reason to disable."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.patch-size", "denoising-dl.step2.patches-per-image"],
+      "seeAlsoTags": ["configuration", "training"]
+    },
+    {
+      "id": "denoising-dl.step2.resize-conv",
+      "title": "Resize Convolution",
+      "category": "parameter",
+      "tags": ["denoising", "architecture", "upsampling", "advanced"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Use resize-convolution instead of transposed convolution for upsampling in the U-Net decoder.",
+        "body": "The U-Net architecture requires upsampling in its decoder pathway. This option controls how that upsampling is performed.\n\nResize Convolution (Enabled - Default):\nFirst resizes the feature maps using interpolation, then applies a convolution. This approach avoids checkerboard artifacts that can occur with transposed convolutions.\n\nTransposed Convolution (Disabled):\nUses learned upsampling through transposed (deconvolution) layers. Can produce sharper results but may introduce checkerboard patterns.\n\nRecommendations:\n- Keep enabled (default) for most cases\n- The resize-convolution approach generally produces smoother, artifact-free results\n- Only disable if you observe overly smooth results and want to experiment",
+        "parameterImpact": "Affects output quality subtly. Default (enabled) is recommended for artifact-free denoising."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.upsampling-mode", "denoising-dl.step2.features"],
+      "seeAlsoTags": ["architecture", "advanced"]
+    },
+    {
+      "id": "denoising-dl.step2.upsampling-mode",
+      "title": "Upsampling Mode",
+      "category": "parameter",
+      "tags": ["denoising", "architecture", "upsampling", "interpolation", "advanced"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Choose the interpolation method used when upsampling feature maps in the decoder.",
+        "body": "When Resize Convolution is enabled, this option determines which interpolation method is used to resize feature maps.\n\nBilinear (Default):\nSmooth interpolation using 4 nearest pixels. Good balance between quality and speed. Recommended for most cases.\n\nNearest:\nSimple nearest-neighbor interpolation. Fastest but can produce blocky results. May be useful if you want to preserve sharp edges.\n\nBicubic:\nSmoother interpolation using 16 neighboring pixels. Slightly slower but produces smoother gradients. May help with very high-frequency noise.\n\nRecommendations:\n- Bilinear: Default choice, works well for most microscopy data\n- Nearest: Try if bilinear produces overly smooth results\n- Bicubic: Try if you need extra smoothness or have high-frequency artifacts",
+        "parameterImpact": "Minor effect on output quality. Bilinear is the safe default; only change if results seem too smooth or too blocky."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.resize-conv", "denoising-dl.step2.features"],
+      "seeAlsoTags": ["architecture", "advanced"]
+    },
+    {
+      "id": "denoising-dl.step2.masking-strategy",
+      "title": "Masking Strategy",
+      "category": "parameter",
+      "tags": ["denoising", "n2v", "masking", "blind-spot", "advanced"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Choose how masked pixels are replaced during N2V training.",
+        "body": "N2V training masks random pixels and predicts them from surrounding context. This parameter controls what value is used to replace masked pixels.\n\nLocal Mean (Default - Strategy 0):\nMasked pixels are replaced with the mean value of their local neighborhood. This provides the network with a reasonable initial guess without giving away the true value.\n\nZeros (Strategy 1):\nMasked pixels are set to zero. The network must predict from context with no hint about the pixel value. Can work well when noise has non-zero mean.\n\nRandom (Strategy 2):\nMasked pixels are replaced with random values from the image. Provides variety but can sometimes confuse the network.\n\nRecommendations:\n- Local Mean: Best for most microscopy images, especially with Gaussian-like noise\n- Zeros: Try if your noise has a strong bias or you want stricter self-supervision\n- Random: Experimental, try if other strategies don't work well",
+        "parameterImpact": "Affects how the network learns to fill masked regions. Local Mean is safest; others are for experimentation."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.mask-percentage", "denoising-dl.step3.n2v"],
+      "seeAlsoTags": ["n2v", "advanced"]
+    },
+    {
+      "id": "denoising-dl.step2.roi-selection",
+      "title": "ROI Selection",
+      "category": "parameter",
+      "tags": ["denoising", "roi", "autostructn2v", "stage1", "advanced"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Filter training patches to focus on regions with meaningful content.",
+        "body": "ROI (Region of Interest) Selection filters out patches that contain mostly background or empty space, focusing training on informative regions.\n\nHow it works:\n- Each potential patch is analyzed for content\n- Patches are scored based on variance/intensity\n- Only patches above the threshold are used for training\n\nROI Threshold:\nControls how selective the filtering is (0.3 to 0.7).\n- Lower values (0.3-0.4): Less selective, includes more patches\n- Default (0.5): Balanced filtering\n- Higher values (0.6-0.7): More selective, only high-content patches\n\nWhen to use:\n- Enable (default) when images have significant background/empty regions\n- Helps focus model on actual structures rather than noise in empty areas\n\nWhen to disable:\n- If your images are densely packed with structures\n- If you notice the model missing fine details in lower-intensity regions",
+        "parameterImpact": "Improves training efficiency by focusing on meaningful content. Keep enabled unless your images have uniform content."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.patches-per-image", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoTags": ["autostructn2v", "advanced"]
+    },
+    {
+      "id": "denoising-dl.step2.mask-extractor.adaptive",
+      "title": "Adaptive Thresholding",
+      "category": "parameter",
+      "tags": ["denoising", "autostructn2v", "mask-extractor", "threshold"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Automatically adjust the noise detection threshold based on the detected pattern strength.",
+        "body": "Adaptive Thresholding dynamically adjusts the noise detection sensitivity based on how strong the structured noise pattern is.\n\nHow it works:\n- The mask extractor analyzes Fourier residuals to find periodic noise\n- With adaptive thresholding enabled, the threshold adjusts based on signal strength\n- Stronger patterns get tighter thresholds; weaker patterns get more lenient ones\n\nEnabled (Default):\n- Automatically balances sensitivity\n- Works well for most noise patterns\n- Recommended for first attempts\n\nDisabled:\n- Uses fixed threshold based on Base Percentile\n- More predictable but may miss weak patterns or over-detect strong ones\n- Use if adaptive detection is catching too much or too little\n\nWhen to disable:\n- If the auto-detected mask includes too many false positives\n- If you want precise manual control over detection sensitivity",
+        "parameterImpact": "Controls how aggressively noise patterns are detected. Keep enabled for automatic optimization."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.mask-extractor.base-percentile", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoTags": ["mask-extractor", "autostructn2v"]
+    },
+    {
+      "id": "denoising-dl.step2.mask-extractor.base-percentile",
+      "title": "Base Percentile",
+      "category": "parameter",
+      "tags": ["denoising", "autostructn2v", "mask-extractor", "threshold"],
+      "contentType": "medium",
+      "content": {
+        "summary": "The percentile threshold for detecting noise pattern peaks in the Fourier residuals.",
+        "body": "Base Percentile sets the sensitivity for detecting structural noise patterns in the frequency domain analysis.\n\nHow it works:\n- After Stage 1, residuals are analyzed in Fourier space\n- Peaks above this percentile threshold are identified as structured noise\n- Lower percentile = more sensitive (detects weaker patterns)\n- Higher percentile = less sensitive (only strong patterns)\n\nValues (30-70):\n- 30-40%: Very sensitive, may detect subtle patterns but risk false positives\n- 50% (Default): Balanced detection\n- 60-70%: Conservative, only detects prominent patterns\n\nRecommendations:\n- Start with default (50%)\n- Decrease if the mask seems to miss visible noise patterns\n- Increase if the mask includes too many false detections\n\nNote: When Adaptive Thresholding is enabled, this serves as the starting point that gets adjusted based on pattern strength.",
+        "parameterImpact": "Lower values detect more patterns but risk false positives. Start with 50% and adjust based on mask preview."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.mask-extractor.adaptive", "denoising-dl.step2.mask-extractor.percentile-decay"],
+      "seeAlsoTags": ["mask-extractor", "autostructn2v"]
+    },
+    {
+      "id": "denoising-dl.step2.mask-extractor.percentile-decay",
+      "title": "Percentile Decay",
+      "category": "parameter",
+      "tags": ["denoising", "autostructn2v", "mask-extractor", "adaptive"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Controls how quickly the adaptive threshold relaxes when searching for noise patterns.",
+        "body": "Percentile Decay determines how the detection threshold adjusts during adaptive analysis.\n\nHow it works:\n- When searching for noise patterns, the algorithm may need to adjust sensitivity\n- Decay rate controls how quickly the threshold changes\n- Higher decay = faster adjustment = more aggressive detection\n- Lower decay = slower adjustment = more conservative detection\n\nValues (1.0-1.3):\n- 1.0: No decay (fixed threshold)\n- 1.10-1.15: Moderate adjustment (recommended)\n- 1.15 (Default): Good balance\n- 1.20-1.30: Aggressive adjustment, may over-detect\n\nRecommendations:\n- Keep at default (1.15) for most cases\n- Decrease toward 1.0 if mask includes too many patterns\n- Increase if obvious patterns are being missed\n\nNote: Only effective when Adaptive Thresholding is enabled.",
+        "parameterImpact": "Fine-tunes adaptive detection behavior. Default works well; only adjust if mask preview shows issues."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.mask-extractor.adaptive", "denoising-dl.step2.mask-extractor.base-percentile"],
+      "seeAlsoTags": ["mask-extractor", "autostructn2v"]
+    },
+    {
+      "id": "denoising-dl.step2.mask-extractor.max-pixels",
+      "title": "Max Masked Pixels",
+      "category": "parameter",
+      "tags": ["denoising", "autostructn2v", "mask-extractor", "limit"],
+      "contentType": "medium",
+      "content": {
+        "summary": "Maximum number of pixels that can be active in the structural noise mask.",
+        "body": "Max Masked Pixels sets an upper limit on how many pixels can be marked as structural noise in the detection mask.\n\nHow it works:\n- The mask extractor identifies pixels contributing to structured noise\n- This parameter caps the total active pixels in the mask\n- Prevents over-detection that could remove real image features\n\nValues (5-50):\n- 5-15: Very conservative, for subtle patterns\n- 20-25 (Default): Balanced, suitable for typical scan line artifacts\n- 30-50: Allows detection of complex or widespread patterns\n\nWhen to adjust:\n- Increase if your noise pattern is complex with many components\n- Decrease if the mask is too aggressive and affecting image details\n\nVisual Check:\nAlways review the mask visualization before approving. If the mask shows too many active pixels, reduce this value. If visible patterns aren't captured, increase it.\n\nNote: This is a hard limit — the mask will never exceed this many active pixels regardless of other settings.",
+        "parameterImpact": "Limits mask complexity. Default (25) works for typical patterns; adjust based on mask preview."
+      },
+      "seeAlsoManual": ["denoising-dl.step2.mask-extractor.adaptive", "denoising-dl.autostructn2v-detail"],
+      "seeAlsoTags": ["mask-extractor", "autostructn2v"]
     }
   ],
   "glossary": {

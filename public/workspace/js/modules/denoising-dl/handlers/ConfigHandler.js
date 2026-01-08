@@ -5,6 +5,8 @@
  * for training parameters.
  */
 
+import Templates from '../templates/Templates.js';
+
 class ConfigHandler {
   /**
    * @param {DLDenoisingModule} module - Reference to the parent module
@@ -173,7 +175,7 @@ class ConfigHandler {
         <div class="config-group">
           <h3>Dataset Configuration</h3>
           <div class="form-field">
-            <label for="stage1_patch_size">Patch Size</label>
+            <label for="stage1_patch_size">Patch Size${Templates.renderHelpIcon('denoising-dl.step2.patch-size')}</label>
             <select id="stage1_patch_size" data-param="patch_size">
               <option value="32" ${config.patch_size === 32 ? 'selected' : ''}>32</option>
               <option value="48" ${config.patch_size === 48 ? 'selected' : ''}>48</option>
@@ -183,12 +185,12 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="stage1_patches_per_image">Patches per Image</label>
+            <label for="stage1_patches_per_image">Patches per Image${Templates.renderHelpIcon('denoising-dl.step2.patches-per-image')}</label>
             <input type="number" id="stage1_patches_per_image" data-param="patches_per_image"
                    value="${config.patches_per_image || 100}" min="50" max="500" step="10">
           </div>
           <div class="form-field">
-            <label for="stage1_batch_size">Batch Size</label>
+            <label for="stage1_batch_size">Batch Size${Templates.renderHelpIcon('denoising-dl.step2.batch-size')}</label>
             <select id="stage1_batch_size" data-param="batch_size">
               <option value="1" ${config.batch_size === 1 ? 'selected' : ''}>1</option>
               <option value="2" ${config.batch_size === 2 ? 'selected' : ''}>2</option>
@@ -199,21 +201,21 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="stage1_mask_percentage">Mask Percentage (%)</label>
+            <label for="stage1_mask_percentage">Mask Percentage (%)${Templates.renderHelpIcon('denoising-dl.step2.mask-percentage')}</label>
             <input type="number" id="stage1_mask_percentage" data-param="mask_percentage"
                    value="${config.mask_percentage || 15}" min="5" max="30" step="1">
           </div>
           <div class="form-field checkbox-field">
             <input type="checkbox" id="stage1_use_augmentation" data-param="use_augmentation"
                    ${config.use_augmentation !== false ? 'checked' : ''}>
-            <label for="stage1_use_augmentation">Apply Data Augmentation</label>
+            <label for="stage1_use_augmentation">Apply Data Augmentation${Templates.renderHelpIcon('denoising-dl.step2.augmentation')}</label>
           </div>
         </div>
 
         <div class="config-group">
           <h3>Model Architecture</h3>
           <div class="form-field">
-            <label for="stage1_features">Number of Features</label>
+            <label for="stage1_features">Number of Features${Templates.renderHelpIcon('denoising-dl.step2.features')}</label>
             <select id="stage1_features" data-param="features">
               <option value="32" ${config.features === 32 ? 'selected' : ''}>32</option>
               <option value="48" ${config.features === 48 ? 'selected' : ''}>48</option>
@@ -223,7 +225,7 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="stage1_num_layers">Number of Layers</label>
+            <label for="stage1_num_layers">Number of Layers${Templates.renderHelpIcon('denoising-dl.step2.num-layers')}</label>
             <select id="stage1_num_layers" data-param="num_layers">
               <option value="2" ${config.num_layers === 2 ? 'selected' : ''}>2</option>
               <option value="3" ${config.num_layers === 3 ? 'selected' : ''}>3</option>
@@ -235,7 +237,7 @@ class ConfigHandler {
         <div class="config-group">
           <h3>Training Parameters</h3>
           <div class="form-field">
-            <label for="stage1_learning_rate">Learning Rate</label>
+            <label for="stage1_learning_rate">Learning Rate${Templates.renderHelpIcon('denoising-dl.step2.learning-rate')}</label>
             <select id="stage1_learning_rate" data-param="learning_rate">
               <option value="0.00001" ${config.learning_rate === 0.00001 ? 'selected' : ''}>1e-5</option>
               <option value="0.00005" ${config.learning_rate === 0.00005 ? 'selected' : ''}>5e-5</option>
@@ -244,17 +246,17 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="stage1_epochs">Number of Epochs</label>
+            <label for="stage1_epochs">Number of Epochs${Templates.renderHelpIcon('denoising-dl.step2.epochs')}</label>
             <input type="number" id="stage1_epochs" data-param="epochs"
                    value="${config.epochs || 100}" min="10" max="500" step="10">
           </div>
           <div class="form-field checkbox-field">
             <input type="checkbox" id="stage1_early_stopping" data-param="early_stopping"
                    ${config.early_stopping !== false ? 'checked' : ''}>
-            <label for="stage1_early_stopping">Early Stopping</label>
+            <label for="stage1_early_stopping">Early Stopping${Templates.renderHelpIcon('denoising-dl.step2.early-stopping')}</label>
           </div>
           <div class="form-field">
-            <label for="stage1_early_stopping_patience">Early Stopping Patience</label>
+            <label for="stage1_early_stopping_patience">Early Stopping Patience${Templates.renderHelpIcon('denoising-dl.step2.early-stopping')}</label>
             <input type="number" id="stage1_early_stopping_patience" data-param="early_stopping_patience"
                    value="${config.early_stopping_patience || 10}" min="5" max="50" step="5"
                    ${config.early_stopping === false ? 'disabled' : ''}>
@@ -272,10 +274,10 @@ class ConfigHandler {
             <div class="form-field checkbox-field">
               <input type="checkbox" id="stage1_use_resize_conv" data-param="use_resize_conv"
                      ${config.use_resize_conv !== false ? 'checked' : ''}>
-              <label for="stage1_use_resize_conv">Resize Convolution</label>
+              <label for="stage1_use_resize_conv">Resize Convolution${Templates.renderHelpIcon('denoising-dl.step2.resize-conv')}</label>
             </div>
             <div class="form-field">
-              <label for="stage1_upsampling_mode">Upsampling Mode</label>
+              <label for="stage1_upsampling_mode">Upsampling Mode${Templates.renderHelpIcon('denoising-dl.step2.upsampling-mode')}</label>
               <select id="stage1_upsampling_mode" data-param="upsampling_mode">
                 <option value="bilinear" ${config.upsampling_mode === 'bilinear' || !config.upsampling_mode ? 'selected' : ''}>Bilinear</option>
                 <option value="nearest" ${config.upsampling_mode === 'nearest' ? 'selected' : ''}>Nearest</option>
@@ -283,7 +285,7 @@ class ConfigHandler {
               </select>
             </div>
             <div class="form-field">
-              <label for="stage1_masking_strategy">Masking Strategy</label>
+              <label for="stage1_masking_strategy">Masking Strategy${Templates.renderHelpIcon('denoising-dl.step2.masking-strategy')}</label>
               <select id="stage1_masking_strategy" data-param="masking_strategy">
                 <option value="0" ${config.masking_strategy === 0 || config.masking_strategy === undefined ? 'selected' : ''}>Local Mean</option>
                 <option value="1" ${config.masking_strategy === 1 ? 'selected' : ''}>Zeros</option>
@@ -309,7 +311,7 @@ class ConfigHandler {
         <div class="config-group">
           <h3>Dataset Configuration</h3>
           <div class="form-field">
-            <label for="${stage}_patch_size">Patch Size</label>
+            <label for="${stage}_patch_size">Patch Size${Templates.renderHelpIcon('denoising-dl.step2.patch-size')}</label>
             <select id="${stage}_patch_size" data-param="patch_size">
               <option value="32" ${config.patch_size === 32 ? 'selected' : ''}>32</option>
               <option value="48" ${config.patch_size === 48 ? 'selected' : ''}>48</option>
@@ -319,12 +321,12 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="${stage}_patches_per_image">Patches per Image</label>
+            <label for="${stage}_patches_per_image">Patches per Image${Templates.renderHelpIcon('denoising-dl.step2.patches-per-image')}</label>
             <input type="number" id="${stage}_patches_per_image" data-param="patches_per_image"
                    value="${config.patches_per_image || (isStage1 ? 100 : 200)}" min="50" max="500" step="10">
           </div>
           <div class="form-field">
-            <label for="${stage}_batch_size">Batch Size</label>
+            <label for="${stage}_batch_size">Batch Size${Templates.renderHelpIcon('denoising-dl.step2.batch-size')}</label>
             <select id="${stage}_batch_size" data-param="batch_size">
               <option value="1" ${config.batch_size === 1 ? 'selected' : ''}>1</option>
               <option value="2" ${config.batch_size === 2 ? 'selected' : ''}>2</option>
@@ -335,7 +337,7 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="${stage}_mask_percentage">Mask Percentage (%)</label>
+            <label for="${stage}_mask_percentage">Mask Percentage (%)${Templates.renderHelpIcon('denoising-dl.step2.mask-percentage')}</label>
             <input type="number" id="${stage}_mask_percentage" data-param="mask_percentage"
                    value="${config.mask_percentage || (isStage1 ? 15 : 10)}" min="5" max="30" step="1">
           </div>
@@ -344,7 +346,7 @@ class ConfigHandler {
         <div class="config-group">
           <h3>Model Architecture</h3>
           <div class="form-field">
-            <label for="${stage}_features">Number of Features</label>
+            <label for="${stage}_features">Number of Features${Templates.renderHelpIcon('denoising-dl.step2.features')}</label>
             <select id="${stage}_features" data-param="features">
               <option value="32" ${config.features === 32 ? 'selected' : ''}>32</option>
               <option value="48" ${config.features === 48 ? 'selected' : ''}>48</option>
@@ -354,7 +356,7 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="${stage}_num_layers">Number of Layers</label>
+            <label for="${stage}_num_layers">Number of Layers${Templates.renderHelpIcon('denoising-dl.step2.num-layers')}</label>
             <select id="${stage}_num_layers" data-param="num_layers">
               <option value="2" ${config.num_layers === 2 ? 'selected' : ''}>2</option>
               <option value="3" ${config.num_layers === 3 ? 'selected' : ''}>3</option>
@@ -367,7 +369,7 @@ class ConfigHandler {
         <div class="config-group">
           <h3>Training Parameters</h3>
           <div class="form-field">
-            <label for="${stage}_learning_rate">Learning Rate</label>
+            <label for="${stage}_learning_rate">Learning Rate${Templates.renderHelpIcon('denoising-dl.step2.learning-rate')}</label>
             <select id="${stage}_learning_rate" data-param="learning_rate">
               <option value="0.00001" ${config.learning_rate === 0.00001 ? 'selected' : ''}>1e-5</option>
               <option value="0.00005" ${config.learning_rate === 0.00005 ? 'selected' : ''}>5e-5</option>
@@ -376,17 +378,17 @@ class ConfigHandler {
             </select>
           </div>
           <div class="form-field">
-            <label for="${stage}_epochs">Number of Epochs</label>
+            <label for="${stage}_epochs">Number of Epochs${Templates.renderHelpIcon('denoising-dl.step2.epochs')}</label>
             <input type="number" id="${stage}_epochs" data-param="epochs"
                    value="${config.epochs || 100}" min="10" max="500" step="10">
           </div>
           <div class="form-field checkbox-field">
             <input type="checkbox" id="${stage}_early_stopping" data-param="early_stopping"
                    ${config.early_stopping !== false ? 'checked' : ''}>
-            <label for="${stage}_early_stopping">Early Stopping</label>
+            <label for="${stage}_early_stopping">Early Stopping${Templates.renderHelpIcon('denoising-dl.step2.early-stopping')}</label>
           </div>
           <div class="form-field">
-            <label for="${stage}_early_stopping_patience">Early Stopping Patience</label>
+            <label for="${stage}_early_stopping_patience">Early Stopping Patience${Templates.renderHelpIcon('denoising-dl.step2.early-stopping')}</label>
             <input type="number" id="${stage}_early_stopping_patience" data-param="early_stopping_patience"
                    value="${config.early_stopping_patience || 10}" min="5" max="50" step="5"
                    ${config.early_stopping === false ? 'disabled' : ''}>
@@ -405,10 +407,10 @@ class ConfigHandler {
             <div class="form-field checkbox-field">
               <input type="checkbox" id="${stage}_use_roi" data-param="use_roi"
                      ${config.use_roi !== false ? 'checked' : ''}>
-              <label for="${stage}_use_roi">ROI Selection</label>
+              <label for="${stage}_use_roi">ROI Selection${Templates.renderHelpIcon('denoising-dl.step2.roi-selection')}</label>
             </div>
             <div class="form-field">
-              <label for="${stage}_roi_threshold">ROI Threshold</label>
+              <label for="${stage}_roi_threshold">ROI Threshold${Templates.renderHelpIcon('denoising-dl.step2.roi-selection')}</label>
               <input type="number" id="${stage}_roi_threshold" data-param="roi_threshold"
                      value="${config.roi_threshold || 0.5}" min="0.3" max="0.7" step="0.1"
                      ${config.use_roi === false ? 'disabled' : ''}>
@@ -417,16 +419,16 @@ class ConfigHandler {
             <div class="form-field checkbox-field">
               <input type="checkbox" id="${stage}_use_augmentation" data-param="use_augmentation"
                      ${config.use_augmentation !== false ? 'checked' : ''}>
-              <label for="${stage}_use_augmentation">Apply Data Augmentation</label>
+              <label for="${stage}_use_augmentation">Apply Data Augmentation${Templates.renderHelpIcon('denoising-dl.step2.augmentation')}</label>
             </div>
             `}
             <div class="form-field checkbox-field">
               <input type="checkbox" id="${stage}_use_resize_conv" data-param="use_resize_conv"
                      ${config.use_resize_conv !== false ? 'checked' : ''}>
-              <label for="${stage}_use_resize_conv">Resize Convolution</label>
+              <label for="${stage}_use_resize_conv">Resize Convolution${Templates.renderHelpIcon('denoising-dl.step2.resize-conv')}</label>
             </div>
             <div class="form-field">
-              <label for="${stage}_upsampling_mode">Upsampling Mode</label>
+              <label for="${stage}_upsampling_mode">Upsampling Mode${Templates.renderHelpIcon('denoising-dl.step2.upsampling-mode')}</label>
               <select id="${stage}_upsampling_mode" data-param="upsampling_mode">
                 <option value="bilinear" ${config.upsampling_mode === 'bilinear' || !config.upsampling_mode ? 'selected' : ''}>Bilinear</option>
                 <option value="nearest" ${config.upsampling_mode === 'nearest' ? 'selected' : ''}>Nearest</option>
@@ -464,22 +466,22 @@ class ConfigHandler {
             <div class="form-field checkbox-field">
               <input type="checkbox" id="mask_adaptive_thresholding" data-param="adaptive_thresholding"
                      ${config.adaptive_thresholding !== false ? 'checked' : ''}>
-              <label for="mask_adaptive_thresholding">Adaptive Thresholding</label>
+              <label for="mask_adaptive_thresholding">Adaptive Thresholding${Templates.renderHelpIcon('denoising-dl.step2.mask-extractor.adaptive')}</label>
             </div>
             <div class="form-field">
-              <label for="mask_base_percentile">Base Percentile (%)</label>
+              <label for="mask_base_percentile">Base Percentile (%)${Templates.renderHelpIcon('denoising-dl.step2.mask-extractor.base-percentile')}</label>
               <input type="number" id="mask_base_percentile" data-param="base_percentile"
                      value="${config.base_percentile || 50}" min="30" max="70" step="1">
               <span class="field-hint">Threshold for noise detection (30-70)</span>
             </div>
             <div class="form-field">
-              <label for="mask_percentile_decay">Percentile Decay</label>
+              <label for="mask_percentile_decay">Percentile Decay${Templates.renderHelpIcon('denoising-dl.step2.mask-extractor.percentile-decay')}</label>
               <input type="number" id="mask_percentile_decay" data-param="percentile_decay"
                      value="${config.percentile_decay || 1.15}" min="1.0" max="1.3" step="0.01">
               <span class="field-hint">Decay rate for adaptive threshold</span>
             </div>
             <div class="form-field">
-              <label for="mask_max_masked_pixels">Max Masked Pixels</label>
+              <label for="mask_max_masked_pixels">Max Masked Pixels${Templates.renderHelpIcon('denoising-dl.step2.mask-extractor.max-pixels')}</label>
               <input type="number" id="mask_max_masked_pixels" data-param="max_masked_pixels"
                      value="${config.max_masked_pixels || 25}" min="5" max="50" step="1">
               <span class="field-hint">Maximum number of active pixels in the mask</span>
