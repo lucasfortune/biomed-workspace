@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'public/workspace/content/' # e.g., src/assets/help
+  workflow_dispatch: 
 
 jobs:
   push-docs:
