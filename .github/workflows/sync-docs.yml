@@ -22,6 +22,6 @@ jobs:
           source-directory: 'public/workspace/content/' # The folder in Repo A
           destination-github-username: 'lucasfortune'
           destination-repository-name: 'the-virtual-parasite' # Repo B
-          destination-directory: 'docs/manual' # Where the files land in Repo B
+          target-directory: 'docs/manual' # Where the files land in Repo B
           user-email: lucas.fortune@web.de
           target-branch: main
