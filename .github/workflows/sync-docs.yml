@@ -1,0 +1,26 @@
+name: Sync Help to Website
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'public/workspace/content/' # e.g., src/assets/help
+
+jobs:
+  push-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Application Repo
+        uses: actions/checkout@v3
+
+      - name: Push to Website Repo
+        uses: cpina/github-action-push-to-another-repository@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: 'public/workspace/content/' # The folder in Repo A
+          destination-github-username: 'lucasfortune'
+          destination-repository-name: 'the-virtual-parasite' # Repo B
+          destination-directory: 'docs/manual' # Where the files land in Repo B
+          user-email: lucas.fortune@web.de
+          target-branch: main
