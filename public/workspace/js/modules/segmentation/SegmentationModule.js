@@ -7,6 +7,14 @@ import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
 import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
 import SegmentationAPI from './SegmentationAPI.js';
+import Templates from './templates/Templates.js';
+import TrainingHandler from './handlers/TrainingHandler.js';
+import InferenceHandler from './handlers/InferenceHandler.js';
+import ChartHandler from './handlers/ChartHandler.js';
+import NavigationHandler from './handlers/NavigationHandler.js';
+import FileHandler from './handlers/FileHandler.js';
+import ImportHandler from './handlers/ImportHandler.js';
+import StateHandler from './handlers/StateHandler.js';
 
 class SegmentationModule extends BaseModule {
   constructor(stateManager) {
@@ -44,6 +52,15 @@ class SegmentationModule extends BaseModule {
 
     // API client
     this.api = new SegmentationAPI();
+
+    // Handlers (ES6 class pattern)
+    this.trainingHandler = new TrainingHandler(this);
+    this.inferenceHandler = new InferenceHandler(this);
+    this.chartHandler = new ChartHandler(this);
+    this.navigationHandler = new NavigationHandler(this);
+    this.fileHandler = new FileHandler(this);
+    this.importHandler = new ImportHandler(this);
+    this.stateHandler = new StateHandler(this);
 
     // Module-specific state (replaces global variables from classic app)
     this.socket = null;
@@ -134,7 +151,7 @@ class SegmentationModule extends BaseModule {
       await this.initialize();
 
       // Check for resume
-      await this.checkForResume();
+      await this.stateHandler.checkForResume();
 
       console.log('[SegmentationModule] Activation complete');
 
@@ -197,300 +214,23 @@ class SegmentationModule extends BaseModule {
 
   /**
    * Render a help icon that opens the Info Panel
+   * Delegates to Templates for consistency
    * @param {string} articleId - The article ID to display when clicked
    * @returns {string} HTML string for the help icon
    */
   renderHelpIcon(articleId) {
-    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
-      <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
-      </svg>
-    </span>`;
+    return Templates.renderHelpIcon(articleId);
   }
 
   /**
    * Render the complete segmentation UI
+   * Delegates to Templates for maintainability
    */
   render() {
-    this.container.innerHTML = `
-      <div class="segmentation-module">
-        <!-- Module Header (using BaseModule helper) -->
-        ${this.renderHeader()}
-
-        <!-- Step Navigation (using BaseModule helper) -->
-        ${this.renderStepNav()}
-
-        <!-- Main Content Area -->
-        <div class="main-content">
-          <!-- Step 1: Data Upload / Model Import -->
-          <div class="step-content active" id="step1">
-            <h2>Step 1: Training Data or Model Selection</h2>
-            <p>Either upload training data to train a new model, or import a previously trained model.</p>
-
-            <!-- Workflow Selection Section -->
-            <div class="workflow-selection-section">
-              <h4>Choose Workflow ${this.renderHelpIcon('segmentation.step1.workflow-choice')}</h4>
-              <p class="workflow-hint">Select one option. Opening one will close the other.</p>
-
-              <!-- Train from Scratch Section -->
-              <div class="workflow-section" id="trainFromScratchSection">
-                <div class="workflow-header" data-workflow="train">
-                  <span class="workflow-icon">&#9654;</span>
-                  <div class="workflow-header-content">
-                    <span class="workflow-title">Train from Scratch</span>
-                    <span class="workflow-subtitle">Upload training images and annotations</span>
-                  </div>
-                </div>
-                <div class="workflow-body">
-                  <div class="section-card-inner">
-                    <!-- FileSelector components will be inserted here -->
-                    <div id="rawImagesSelectorContainer"></div>
-                    <div id="annotationsSelectorContainer"></div>
-                    <div id="validationResult"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Import Model Section -->
-              <div class="workflow-section" id="importModelSection">
-                <div class="workflow-header" data-workflow="import">
-                  <span class="workflow-icon">&#9654;</span>
-                  <div class="workflow-header-content">
-                    <span class="workflow-title">Use Pretrained Model</span>
-                    <span class="workflow-subtitle">Import a previously trained model for inference</span>
-                  </div>
-                </div>
-                <div class="workflow-body">
-                  <div id="importModelContent">
-                    <!-- Import selectors will be initialized dynamically -->
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="navigation-buttons">
-              <div></div>
-              <button class="btn" id="step1Next" disabled>Next: Configuration</button>
-            </div>
-          </div>
-
-          <!-- Step 2: Configuration -->
-          <div class="step-content" id="step2">
-            <h2>Step 2: Training Configuration</h2>
-            <p>Configure your model and training parameters.</p>
-
-            <div class="config-form">
-              <div class="config-group">
-                <h3>Dataset Configuration</h3>
-                <div class="form-field">
-                  <label for="patchSize">Patch Size${this.renderHelpIcon('segmentation.config.patch-size')}</label>
-                  <select id="patchSize">
-                    <option value="32">32</option>
-                    <option value="48">48</option>
-                    <option value="64" selected>64</option>
-                    <option value="96">96</option>
-                    <option value="128">128</option>
-                    <option value="256">256</option>
-                  </select>
-                </div>
-                <div class="form-field">
-                  <label for="patchesPerImage">Patches per Image${this.renderHelpIcon('segmentation.config.patches-per-image')}</label>
-                  <input type="number" id="patchesPerImage" value="50" min="1" max="100">
-                </div>
-                <div class="form-field">
-                  <label for="batchSize">Batch Size${this.renderHelpIcon('segmentation.config.batch-size')}</label>
-                  <select id="batchSize">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="4">4</option>
-                    <option value="8" selected>8</option>
-                    <option value="16">16</option>
-                    <option value="32">32</option>
-                  </select>
-                </div>
-                <div class="form-field checkbox-field">
-                  <input type="checkbox" id="augmentation" checked>
-                  <label for="augmentation">Apply Data Augmentation${this.renderHelpIcon('segmentation.config.augmentation')}</label>
-                </div>
-              </div>
-
-              <div class="config-group">
-                <h3>Model Architecture</h3>
-                <div class="form-field">
-                  <label for="numFeatures">Number of Features${this.renderHelpIcon('segmentation.config.num-features')}</label>
-                  <select id="numFeatures">
-                    <option value="32">32</option>
-                    <option value="48">48</option>
-                    <option value="64" selected>64</option>
-                    <option value="96">96</option>
-                    <option value="128">128</option>
-                  </select>
-                </div>
-                <div class="form-field">
-                  <label for="numLayers">Number of Layers${this.renderHelpIcon('segmentation.config.num-layers')}</label>
-                  <input type="number" id="numLayers" value="4" min="2" max="6">
-                </div>
-              </div>
-
-              <div class="config-group">
-                <h3>Training Parameters</h3>
-                <div class="form-field">
-                  <label for="learningRate">Learning Rate${this.renderHelpIcon('segmentation.config.learning-rate')}</label>
-                  <select id="learningRate">
-                    <option value="0.00001">1e-5</option>
-                    <option value="0.00005">5e-5</option>
-                    <option value="0.0001">1e-4</option>
-                    <option value="0.0002">2e-4</option>
-                    <option value="0.001" selected>1e-3</option>
-                    <option value="0.002">2e-3</option>
-                  </select>
-                </div>
-                <div class="form-field">
-                  <label for="numEpochs">Number of Epochs${this.renderHelpIcon('segmentation.config.num-epochs')}</label>
-                  <input type="number" id="numEpochs" value="100" min="10" max="500">
-                </div>
-              </div>
-            </div>
-
-            <div class="navigation-buttons">
-              <button class="btn secondary" id="step2Back">Previous</button>
-              <button class="btn" id="step2Next">Next: Training</button>
-            </div>
-          </div>
-
-          <!-- Step 3: Training Progress -->
-          <div class="step-content" id="step3">
-            <h2>Step 3: Training Progress ${this.renderHelpIcon('segmentation.step3')}</h2>
-
-            <!-- Training Container: Shows button initially, then progress -->
-            <div class="training-status">
-              <!-- Initial state: Show start button -->
-              <div id="trainingActionContent" class="training-start-section">
-                <h3 class="training-title">Ready to Train Your Model</h3>
-                <p class="training-subtitle">
-                  Your configuration has been saved. Click below to start training your U-Net model.
-                </p>
-                <button class="btn btn-large primary" id="startTrainingBtn">
-                  <span class="btn-icon">&#9658;</span>
-                  Start Training
-                </button>
-              </div>
-
-              <!-- Training progress state: Hidden initially -->
-              <div id="trainingProgressContent" style="display: none;">
-                <div class="training-status-header">
-                  <h4 id="trainingStatusText">Training started... Preparing data...</h4>
-                  <span class="stage-status training" id="trainingStageStatus">Training</span>
-                </div>
-                <div class="training-progress">
-                  <div class="epoch-info">Epoch <span id="currentEpoch">0</span> of <span id="totalEpochs">0</span></div>
-                  <div class="training-progress-bar">
-                    <div class="training-progress-fill" id="trainingProgressFill"></div>
-                  </div>
-                </div>
-                <button class="btn btn-danger" id="cancelTrainingBtn" style="margin-top: 16px;">
-                  Cancel Training
-                </button>
-              </div>
-            </div>
-
-            <div class="metrics-display">
-              <div class="metric-card">
-                <div class="metric-value" id="trainLoss">--</div>
-                <div class="metric-label">Training Loss</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value" id="valLoss">--</div>
-                <div class="metric-label">Validation Loss</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value" id="trainDice">--</div>
-                <div class="metric-label">Training Dice</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value" id="valDice">--</div>
-                <div class="metric-label">Validation Dice</div>
-              </div>
-            </div>
-
-            <div class="charts-container">
-              <div class="chart-container">
-                <h4>Loss Curves ${this.renderHelpIcon('segmentation.step3.loss-curves')}</h4>
-                <div style="position: relative; height: 220px; margin-top: 40px;">
-                  <canvas id="lossChart"></canvas>
-                </div>
-              </div>
-              <div class="chart-container">
-                <h4>Dice Score ${this.renderHelpIcon('segmentation.step3.dice-score')}</h4>
-                <div style="position: relative; height: 220px; margin-top: 40px;">
-                  <canvas id="diceChart"></canvas>
-                </div>
-              </div>
-            </div>
-
-            <div class="navigation-buttons">
-              <button class="btn secondary" id="trainingBackBtn">Previous</button>
-              <button class="btn" id="trainingNextBtn" disabled>Next: Inference</button>
-            </div>
-          </div>
-
-          <!-- Step 4: Inference -->
-          <div class="step-content" id="step4">
-            <h2>Step 4: Run Inference ${this.renderHelpIcon('segmentation.step4')}</h2>
-
-            <div class="model-info">
-              <h3>Trained Model Ready</h3>
-              <p>Your model has been trained successfully. Select data below to run segmentation.</p>
-            </div>
-
-            <div class="inference-section" style="margin-top: 30px;">
-              <!-- FileSelector component will be inserted here -->
-              <div id="inferenceSelectorContainer"></div>
-
-              <button class="btn" id="runInferenceBtn" disabled style="margin-top: 20px;">
-                Run Segmentation
-              </button>
-
-              <!-- Inference Progress Display -->
-              <div id="inferenceProgressContainer" style="display: none; margin-top: 25px; padding: 20px; background: #f6f8fa; border-radius: 8px; border: 1px solid #d1d5da;">
-                <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #24292e;">Running Inference...</h4>
-
-                <div style="margin-bottom: 12px;">
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; color: #586069;">
-                    <span>Progress: <span id="currentSlice">0</span> / <span id="totalSlices">0</span> slices</span>
-                    <span id="inferenceProgressPercent">0%</span>
-                  </div>
-                  <div style="width: 100%; height: 8px; background: #e1e4e8; border-radius: 4px; overflow: hidden;">
-                    <div id="inferenceProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
-                  </div>
-                </div>
-
-                <div style="font-size: 13px; color: #586069;">
-                  <span id="inferenceStatusText">Processing your data...</span>
-                </div>
-              </div>
-
-              <!-- Inference Completion Section -->
-              <div id="inferenceCompletionSection" class="completion-section" style="display: none; margin-top: 25px; padding: 25px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; border: 1px solid #28a745; text-align: center;">
-                <div style="font-size: 48px; margin-bottom: 15px;">✓</div>
-                <h4 style="margin: 0 0 10px 0; font-size: 20px; color: #155724;">Segmentation Complete</h4>
-                <p style="margin: 0 0 20px 0; font-size: 14px; color: #155724;">Your segmentation results are ready. View them in the Image Viewer or start a new analysis.</p>
-                <div class="completion-actions" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                  <button class="btn" id="openInViewerBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Open in Image Viewer</button>
-                  <button class="btn secondary" id="resetWorkflowBtn">Start New Analysis</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="navigation-buttons">
-              <button class="btn secondary" id="step4Back">Previous</button>
-              <div></div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    `;
+    this.container.innerHTML = Templates.renderModule(
+      () => this.renderHeader(),
+      () => this.renderStepNav()
+    );
   }
 
   /**
@@ -916,15 +656,10 @@ class SegmentationModule extends BaseModule {
    * Load helper scripts (navigation, fileUpload, etc.)
    */
   async loadHelperScripts() {
-    // Regular scripts (non-module)
-    // Note: FileSelector is now imported from core/components as ES6 module
-    // Note: SegmentationAPI is imported as ES6 module at top of file, don't load as regular script
+    // Only load utils.js for helper functions (showLoading, hideLoading, showError)
+    // Other scripts (navigation, training, inference, charts) are now ES6 handler classes
     const regularScripts = [
-      '/workspace/js/modules/segmentation/utils.js',
-      '/workspace/js/modules/segmentation/navigation.js',
-      '/workspace/js/modules/segmentation/training.js',
-      '/workspace/js/modules/segmentation/inference.js',
-      '/workspace/js/modules/segmentation/charts.js'
+      '/workspace/js/modules/segmentation/handlers/utils.js'
     ];
 
     // Load regular scripts
@@ -934,455 +669,55 @@ class SegmentationModule extends BaseModule {
       }
     }
 
-    // Initialize FileSelectors after loading regular scripts
-    await this.initializeFileSelectors();
+    // Set up global function bridges for handlers that need them
+    this.setupGlobalBridges();
+
+    // Initialize FileSelectors via handler
+    await this.fileHandler.initializeFileSelectors();
 
     console.log('[SegmentationModule] Helper scripts loaded');
   }
 
   /**
-   * Initialize FileSelector components
-   * Uses FileSelector from core/components with config-based API
+   * Set up global function bridges for backwards compatibility
+   * These bridge global function calls to handler methods
    */
-  async initializeFileSelectors() {
-    console.log('[SegmentationModule] Initializing FileSelectors...');
+  setupGlobalBridges() {
+    // Bridge updateCharts to chartHandler
+    window.updateCharts = (epoch, metrics) => {
+      if (this.chartHandler) {
+        this.chartHandler.updateCharts(epoch, metrics);
+      }
+    };
 
-    // Create FileSelector instances with core component API
-    this.rawImageSelector = new FileSelector({
-      id: 'raw_images',
-      fileType: 'raw',  // Updated to use unified 'raw' category
-      filterTags: ['training'],  // Show files tagged for training
-      title: 'Raw Images',
-      icon: '📁',
-      helpIconHtml: this.renderHelpIcon('segmentation.step1.raw-images'),
-      showTestData: true,
-      stateManager: this.state,
-      onSelect: (fileInfo) => this.onFileSelected('raw_images', fileInfo),
-      onUpload: (file, uploadedInfo) => this.onFileUploaded('raw_images', file, uploadedInfo)
-    });
+    // Bridge startTrainingPolling (used by some resume logic)
+    window.startTrainingPolling = () => {
+      if (this.trainingHandler) {
+        this.trainingHandler.startTrainingPolling();
+      }
+    };
 
-    this.annotationsSelector = new FileSelector({
-      id: 'annotations',
-      fileType: 'annotations',
-      title: 'Annotations',
-      icon: '🏷️',
-      helpIconHtml: this.renderHelpIcon('segmentation.step1.annotations'),
-      showTestData: true,
-      stateManager: this.state,
-      onSelect: (fileInfo) => this.onFileSelected('annotations', fileInfo),
-      onUpload: (file, uploadedInfo) => this.onFileUploaded('annotations', file, uploadedInfo)
-    });
-
-    this.inferenceSelector = new FileSelector({
-      id: 'inference_data',
-      fileType: 'raw',  // Updated to use unified 'raw' category
-      filterTags: ['inference'],  // Show files tagged for inference
-      title: 'Inference Data',
-      icon: '📁',
-      helpIconHtml: this.renderHelpIcon('segmentation.step4.inference-data'),
-      showTestData: true,
-      stateManager: this.state,
-      onSelect: (fileInfo) => this.onFileSelected('inference_data', fileInfo),
-      onUpload: (file, uploadedInfo) => this.onFileUploaded('inference_data', file, uploadedInfo)
-    });
-
-    // Insert into containers
-    const rawContainer = document.getElementById('rawImagesSelectorContainer');
-    const annotationsContainer = document.getElementById('annotationsSelectorContainer');
-    const inferenceContainer = document.getElementById('inferenceSelectorContainer');
-
-    if (rawContainer) {
-      rawContainer.innerHTML = this.rawImageSelector.render();
-      await this.rawImageSelector.init();
-    }
-
-    if (annotationsContainer) {
-      annotationsContainer.innerHTML = this.annotationsSelector.render();
-      await this.annotationsSelector.init();
-    }
-
-    if (inferenceContainer) {
-      inferenceContainer.innerHTML = this.inferenceSelector.render();
-      await this.inferenceSelector.init();
-    }
-
-    console.log('[SegmentationModule] FileSelectors initialized');
+    // Note: stepStates, processStates, markStepCompleted, updateNavigationButtons
+    // are already set up by NavigationHandler.js import
   }
 
-  /**
-   * Called when a file is selected in FileSelector
-   */
-  async onFileSelected(type, fileInfo) {
-    console.log(`[SegmentationModule] File selected for ${type}:`, fileInfo);
-
-    // Update uploadedFiles
-    this.uploadedFiles[type] = fileInfo;
-
-    // Handle based on file type
-    if (type === 'raw_images' || type === 'annotations') {
-      // Check if both are test data
-      const bothTestData =
-        this.uploadedFiles.raw_images?.isTestData &&
-        this.uploadedFiles.annotations?.isTestData;
-
-      if (bothTestData) {
-        // Both are test data - trigger test data loading
-        await this.loadTestData();
-      } else if (this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
-        // Both files are selected (workspace files or mix)
-        // Need to validate and register files with backend session
-        await this.validateUploadedFiles();
-      }
-    } else if (type === 'inference_data') {
-      if (fileInfo.isTestData) {
-        // Test inference data
-        await this.loadTestInferenceData();
-      } else if (fileInfo) {
-        // Workspace file selected - enable Run Segmentation button
-        const runInferenceBtn = document.getElementById('runInferenceBtn');
-        if (runInferenceBtn) {
-          runInferenceBtn.disabled = false;
-        }
-
-        // Save state
-        this.saveState();
-      }
-    }
-  }
-
-  /**
-   * Called when a file is uploaded via FileSelector
-   * @returns {Promise<boolean>} - Returns true if validation was triggered, false otherwise
-   */
-  async onFileUploaded(type, file, uploadedFileInfo) {
-    console.log(`[SegmentationModule] File uploaded for ${type}:`, {
-      fileName: file.name,
-      fileSize: file.size,
-      uploadedPath: uploadedFileInfo.path,
-      category: uploadedFileInfo.category
-    });
-
-    // Store the actual File object for validation
-    if (!this.pendingFiles) {
-      this.pendingFiles = {};
-    }
-    this.pendingFiles[type] = file;
-
-    // Store the uploaded file info (contains path from server)
-    if (!this.uploadedFiles) {
-      this.uploadedFiles = {};
-    }
-    this.uploadedFiles[type] = uploadedFileInfo;
-
-    // Refresh workspace file browser to show uploaded file
-    if (window.workspace?.fileBrowser) {
-      window.workspace.fileBrowser.refresh();
-    }
-
-    // Log pending files state for debugging
-    console.log(`[SegmentationModule] Pending files state:`, {
-      keys: Object.keys(this.pendingFiles),
-      has_raw_images: !!this.pendingFiles.raw_images,
-      has_annotations: !!this.pendingFiles.annotations,
-      has_inference_data: !!this.pendingFiles.inference_data
-    });
-
-    // If both training files uploaded, validate them together
-    if (type === 'raw_images' || type === 'annotations') {
-      const hasBoth = this.pendingFiles.raw_images && this.pendingFiles.annotations;
-      console.log(`[SegmentationModule] Validation check:`, {
-        type: type,
-        hasBoth: hasBoth,
-        willValidate: hasBoth
-      });
-
-      if (hasBoth) {
-        await this.validateUploadedFiles();
-        return true; // Validation was triggered
-      }
-    } else if (type === 'inference_data') {
-      // Validate inference file immediately
-      await this.validateInferenceFile(file);
-      return true; // Validation was triggered
-    }
-
-    return false; // No validation triggered
-  }
-
-  /**
-   * Load test data (when both dropdowns select test data)
-   */
-  async loadTestData() {
-    console.log('[SegmentationModule] Loading test data...');
-
-    try {
-      this.state.update('ui.loading', true);
-
-      const formData = new FormData();
-      formData.append('isTestData', 'true');
-
-      const response = await fetch('/upload-data', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Store actual file info from backend
-        this.uploadedFiles.raw_images = { path: result.raw_images_path, isTestData: true };
-        this.uploadedFiles.annotations = { path: result.annotations_path, isTestData: true };
-
-        // Show validation results
-        this.displayValidationResults(result.validation);
-
-        // Mark files as validated for step navigation
-        this.filesValidated = true;
-        this.updateStep1NextButton();
-
-        // Save state to persist uploaded files
-        this.saveState();
-
-        // Refresh workspace file browser to show test data files
-        if (window.workspace?.fileBrowser) {
-          window.workspace.fileBrowser.refresh();
-        }
-
-        this.state.notify('success', 'Test data loaded and validated successfully');
-      } else {
-        throw new Error(result.error || 'Failed to load test data');
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Test data loading error:', error);
-      this.state.notify('error', `Failed to load test data: ${error.message}`);
-    } finally {
-      this.state.update('ui.loading', false);
-    }
-  }
-
-  /**
-   * Validate uploaded custom files
-   */
-  async validateUploadedFiles() {
-    console.log('[SegmentationModule] Validating uploaded files...');
-
-    try {
-      this.state.update('ui.loading', true);
-
-      // Files are already uploaded to workspace, just validate them
-      // Don't send file objects again (would cause multer to save duplicates)
-      const formData = new FormData();
-      formData.append('skipUpload', 'true'); // Signal to skip multer processing
-      formData.append('raw_images_path', this.uploadedFiles.raw_images?.path || '');
-      formData.append('annotations_path', this.uploadedFiles.annotations?.path || '');
-
-      const response = await fetch('/upload-data', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Update uploadedFiles with validated info (preserve file names from original selection)
-        this.uploadedFiles.raw_images = {
-          path: result.raw_images_path,
-          name: this.pendingFiles?.raw_images?.name || this.uploadedFiles.raw_images?.name || 'Raw Images'
-        };
-        this.uploadedFiles.annotations = {
-          path: result.annotations_path,
-          name: this.pendingFiles?.annotations?.name || this.uploadedFiles.annotations?.name || 'Annotations'
-        };
-
-        // Show validation results
-        this.displayValidationResults(result.validation);
-
-        // Mark files as validated for step navigation
-        this.filesValidated = true;
-        this.updateStep1NextButton();
-
-        // Update FileSelector UI to show uploaded files
-        if (this.rawImageSelector && this.uploadedFiles.raw_images) {
-          this.rawImageSelector.setSelectedFile(this.uploadedFiles.raw_images);
-        }
-        if (this.annotationsSelector && this.uploadedFiles.annotations) {
-          this.annotationsSelector.setSelectedFile(this.uploadedFiles.annotations);
-        }
-
-        // Clear pending files
-        this.pendingFiles = {};
-
-        // Save state to persist uploaded files
-        this.saveState();
-
-        this.state.notify('success', 'Files validated successfully');
-      } else {
-        throw new Error(result.error || 'Validation failed');
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Validation error:', error);
-      this.state.notify('error', `Validation failed: ${error.message}`);
-
-      // Show error in validation div
-      this.displayValidationError(error.message);
-    } finally {
-      this.state.update('ui.loading', false);
-    }
-  }
-
-  /**
-   * Load test inference data
-   */
-  async loadTestInferenceData() {
-    console.log('[SegmentationModule] Loading test inference data...');
-
-    try {
-      this.state.update('ui.loading', true);
-
-      const formData = new FormData();
-      formData.append('isTestData', 'true');
-
-      const response = await fetch('/upload-inference', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        console.log('[SegmentationModule] Test inference data response:', result);
-        // Use inference_data_path (relative to workspace) instead of file_path
-        // The server's /run-inference expects a path relative to workspace
-        const dataPath = result.inference_data_path || result.file_path;
-        this.uploadedFiles.inference_data = {
-          path: dataPath,
-          isTestData: true,
-          id: result.file_id || null  // Capture file ID for lineage tracking
-        };
-        console.log('[SegmentationModule] Stored inference path:', this.uploadedFiles.inference_data.path);
-
-        // Enable run inference button
-        const runInferenceBtn = document.getElementById('runInferenceBtn');
-        if (runInferenceBtn) {
-          runInferenceBtn.disabled = false;
-        }
-
-        // Save state to persist uploaded files
-        this.saveState();
-
-        this.state.notify('success', 'Test inference data loaded successfully');
-      } else {
-        throw new Error(result.error || 'Failed to load test inference data');
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Test inference loading error:', error);
-      this.state.notify('error', `Failed to load test inference data: ${error.message}`);
-    } finally {
-      this.state.update('ui.loading', false);
-    }
-  }
-
-  /**
-   * Validate inference file
-   */
-  async validateInferenceFile(file) {
-    console.log('[SegmentationModule] Validating inference file...');
-
-    try {
-      this.state.update('ui.loading', true);
-
-      // File is already uploaded to workspace, just validate it
-      // Don't send file object again (would cause multer to save duplicate)
-      const formData = new FormData();
-      formData.append('skipUpload', 'true');
-      formData.append('inference_data_path', this.uploadedFiles.inference_data?.path || '');
-
-      const response = await fetch('/upload-inference', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.uploadedFiles.inference_data = {
-          path: result.inference_data_path,
-          name: file?.name || 'Inference Data',
-          id: result.file_id || null  // Capture file ID for lineage tracking
-        };
-
-        // Enable run inference button
-        const runInferenceBtn = document.getElementById('runInferenceBtn');
-        if (runInferenceBtn) {
-          runInferenceBtn.disabled = false;
-        }
-
-        // Update FileSelector UI to show uploaded file
-        if (this.inferenceSelector && this.uploadedFiles.inference_data) {
-          this.inferenceSelector.setSelectedFile(this.uploadedFiles.inference_data);
-        }
-
-        // Save state to persist uploaded files
-        this.saveState();
-
-        this.state.notify('success', 'Inference file validated successfully');
-      } else {
-        throw new Error(result.error || 'Validation failed');
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Inference validation error:', error);
-      this.state.notify('error', `Inference validation failed: ${error.message}`);
-    } finally {
-      this.state.update('ui.loading', false);
-    }
-  }
+  // ===========================================================================
+  // FILE HANDLING (delegated to FileHandler)
+  // ===========================================================================
 
   /**
    * Display validation results using ValidationDisplay component
+   * Delegates to fileHandler but also accessible directly for backwards compatibility
    */
   displayValidationResults(validation) {
-    if (!this.validationDisplay) {
-      this.validationDisplay = new ValidationDisplay('validationResult');
-    }
-
-    if (validation && validation.success !== false) {
-      // Build details array for the component
-      const details = [];
-      if (validation.raw_dims) {
-        details.push({ label: 'Raw Images', value: `${validation.raw_dims} (${validation.raw_slices} slices)` });
-      }
-      if (validation.ann_dims) {
-        details.push({ label: 'Annotations', value: `${validation.ann_dims} (${validation.ann_slices} slices)` });
-      }
-      if (validation.classes) {
-        details.push({ label: 'Classes detected', value: validation.classes.join(', ') });
-      }
-
-      this.validationDisplay.showSuccess('Validation Successful', details);
-
-      // Show warning separately if present
-      if (validation.warnings) {
-        const container = this.validationDisplay.getContainer();
-        if (container) {
-          const warningDiv = document.createElement('p');
-          warningDiv.className = 'warning';
-          warningDiv.innerHTML = `⚠️ ${validation.warnings}`;
-          container.querySelector('.validation-success')?.appendChild(warningDiv);
-        }
-      }
-    } else {
-      this.validationDisplay.showError('Validation Failed', validation?.error || 'Unknown error');
-    }
+    this.fileHandler.displayValidationResults(validation);
   }
 
   /**
    * Display validation error using ValidationDisplay component
    */
   displayValidationError(errorMessage) {
-    if (!this.validationDisplay) {
-      this.validationDisplay = new ValidationDisplay('validationResult');
-    }
-    this.validationDisplay.showError('Validation Failed', errorMessage);
+    this.fileHandler.displayValidationError(errorMessage);
   }
 
   /**
@@ -1452,12 +787,12 @@ class SegmentationModule extends BaseModule {
 
       // Initialize import selectors when first opened
       if (this.workflowMode === 'import') {
-        this.initializeImportSelectors();
+        this.importHandler.initializeImportSelectors();
       }
     }
 
     this.updateStep1NextButton();
-    this.saveState();
+    this.stateHandler.saveState();
   }
 
   /**
@@ -1492,275 +827,15 @@ class SegmentationModule extends BaseModule {
       // Set hasImportedModel flag
       this.hasImportedModel = true;
       // Store imported model in session
-      await this.storeImportedModelInSession();
+      await this.importHandler.storeImportedModelInSession();
       // Skip to Step 4
       this.goToStep(4);
     }
   }
 
   // ===========================================================================
-  // IMPORT MODEL FUNCTIONALITY
+  // IMPORT MODEL FUNCTIONALITY (delegated to ImportHandler)
   // ===========================================================================
-
-  /**
-   * Initialize import model FileSelectors
-   */
-  async initializeImportSelectors() {
-    const importContent = document.getElementById('importModelContent');
-    if (!importContent) return;
-
-    // Check if already initialized
-    if (this.importSelectorsInitialized) return;
-
-    console.log('[SegmentationModule] Initializing import selectors...');
-
-    // Fetch recent training results
-    let recentResults = [];
-    try {
-      const api = new SegmentationAPI();
-      const result = await api.getRecentTrainingResults();
-      if (result.success) {
-        recentResults = result.results || [];
-        console.log('[SegmentationModule] Recent results:', recentResults);
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Error fetching recent results:', error);
-    }
-
-    // Render import section HTML with placeholder containers
-    importContent.innerHTML = this.renderImportSectionContent();
-
-    // Initialize Config FileSelector
-    const configContainer = document.getElementById('importConfigSelector');
-    if (configContainer) {
-      this.importSelectors.config = new FileSelector({
-        id: 'import_config',
-        fileType: 'config',
-        title: 'Training Configuration',
-        icon: '⚙️',
-        helpIconHtml: this.renderHelpIcon('segmentation.step1.config-file'),
-        showTestData: false,
-        accept: '.json',
-        stateManager: this.state,
-        recentResults: this.filterRecentResultsForConfig(recentResults),
-        onSelect: (fileInfo) => this.onImportFileSelected('config', fileInfo)
-      });
-      configContainer.innerHTML = this.importSelectors.config.render();
-      this.importSelectors.config.init();
-    }
-
-    // Initialize Model FileSelector
-    const modelContainer = document.getElementById('importModelSelector');
-    if (modelContainer) {
-      this.importSelectors.model = new FileSelector({
-        id: 'import_model',
-        fileType: 'models',
-        title: 'Model Weights',
-        icon: '🧠',
-        helpIconHtml: this.renderHelpIcon('segmentation.step1.model-file'),
-        showTestData: false,
-        accept: '.pth',
-        stateManager: this.state,
-        recentResults: this.filterRecentResultsForModel(recentResults),
-        onSelect: (fileInfo) => this.onImportFileSelected('model', fileInfo)
-      });
-      modelContainer.innerHTML = this.importSelectors.model.render();
-      this.importSelectors.model.init();
-    }
-
-    this.importSelectorsInitialized = true;
-    console.log('[SegmentationModule] Import selectors initialized');
-  }
-
-  /**
-   * Render import model section HTML with placeholder containers for FileSelectors
-   */
-  renderImportSectionContent() {
-    return `
-      <div class="section-card-inner">
-        <div id="importConfigSelector"></div>
-        <div id="importModelSelector"></div>
-        <div id="importValidationResult" class="validation-result"></div>
-      </div>
-    `;
-  }
-
-  /**
-   * Filter recent results for config file selector
-   */
-  filterRecentResultsForConfig(results) {
-    return results.map(r => ({
-      label: `Training ${r.trainingId.substring(0, 8)}... (${r.isTestData ? 'Test Data' : 'Custom'})`,
-      value: r.configPath,
-      trainingId: r.trainingId
-    }));
-  }
-
-  /**
-   * Filter recent results for model file selector
-   */
-  filterRecentResultsForModel(results) {
-    return results.map(r => ({
-      label: `Training ${r.trainingId.substring(0, 8)}... (${r.isTestData ? 'Test Data' : 'Custom'})`,
-      value: r.modelPath,
-      trainingId: r.trainingId
-    }));
-  }
-
-  /**
-   * Handle import file selection
-   * @param {string} field - 'model' or 'config'
-   * @param {Object|null} fileInfo - Selected file info
-   */
-  async onImportFileSelected(field, fileInfo) {
-    console.log(`[SegmentationModule] Import file selected for ${field}:`, fileInfo);
-
-    this.importFiles[field] = fileInfo;
-
-    if (!fileInfo) {
-      // File deselected
-      this.importValidation[field] = { valid: false, result: null };
-      this.updateImportValidationDisplay(field);
-      this.checkOverallImportValidation();
-      return;
-    }
-
-    // Show loading state
-    this.updateImportValidationDisplay(field, 'loading');
-
-    // Check if both files are now selected
-    if (this.importFiles.model && this.importFiles.config) {
-      try {
-        // Validate both files together
-        const api = new SegmentationAPI();
-        const result = await api.validateImportedModel(
-          this.importFiles.model.path || this.importFiles.model.value,
-          this.importFiles.config.path || this.importFiles.config.value
-        );
-
-        console.log('[SegmentationModule] Validation result:', result);
-
-        if (result.success && result.valid) {
-          this.importValidation.model = { valid: true, result };
-          this.importValidation.config = { valid: true, result };
-          this.importedModelConfig = result.configData;
-        } else {
-          this.importValidation.model = { valid: false, result };
-          this.importValidation.config = { valid: false, result };
-        }
-
-        this.updateImportValidationDisplay('model');
-        this.updateImportValidationDisplay('config');
-      } catch (error) {
-        console.error(`[SegmentationModule] Import validation error:`, error);
-        this.importValidation[field] = { valid: false, result: { errors: [error.message] } };
-        this.updateImportValidationDisplay(field);
-      }
-    }
-
-    this.checkOverallImportValidation();
-  }
-
-  /**
-   * Update import validation display for a field
-   * @param {string} field - 'model' or 'config'
-   * @param {string} [state] - 'loading' for loading state
-   */
-  updateImportValidationDisplay(field, state) {
-    const containerId = field === 'model' ? 'importModelValidation' : 'importConfigValidation';
-    const container = document.getElementById(containerId);
-    if (!container) return;
-
-    if (state === 'loading') {
-      container.innerHTML = `<div class="import-validation-loading">⏳ Validating...</div>`;
-      return;
-    }
-
-    const validation = this.importValidation[field];
-    if (!validation || !this.importFiles[field]) {
-      container.innerHTML = '';
-      return;
-    }
-
-    if (validation.valid) {
-      container.innerHTML = `<div class="import-validation-success">✓ Valid</div>`;
-    } else if (validation.result?.errors) {
-      container.innerHTML = `<div class="import-validation-error">✗ ${validation.result.errors.join(', ')}</div>`;
-    }
-  }
-
-  /**
-   * Check overall import validation and update UI
-   */
-  checkOverallImportValidation() {
-    const modelValid = this.importValidation.model?.valid || false;
-    const configValid = this.importValidation.config?.valid || false;
-
-    this.importValidated = modelValid && configValid;
-
-    // Update overall validation display
-    const overallContainer = document.getElementById('importValidationResult');
-    if (overallContainer) {
-      if (this.importValidated) {
-        const configInfo = this.importedModelConfig;
-        overallContainer.innerHTML = `
-          <div class="overall-import-validation success">
-            <strong>✓ Model Ready for Inference</strong>
-            <p style="margin: 8px 0 0 0; font-size: 13px; color: #28a745;">
-              Features: ${configInfo?.features || 'N/A'} | Layers: ${configInfo?.num_layers || 'N/A'} | Classes: ${configInfo?.num_classes || 'N/A'}
-            </p>
-          </div>
-        `;
-      } else if (this.importFiles.model && this.importFiles.config) {
-        const errors = this.importValidation.model?.result?.errors ||
-                      this.importValidation.config?.result?.errors || [];
-        if (errors.length > 0) {
-          overallContainer.innerHTML = `
-            <div class="overall-import-validation error">
-              <strong>✗ Validation Failed</strong>
-              <p style="margin: 8px 0 0 0; font-size: 13px;">${errors.join(', ')}</p>
-            </div>
-          `;
-        } else {
-          overallContainer.innerHTML = '';
-        }
-      } else {
-        overallContainer.innerHTML = '';
-      }
-    }
-
-    this.updateStep1NextButton();
-    this.saveState();
-  }
-
-  /**
-   * Store imported model info in session for inference
-   */
-  async storeImportedModelInSession() {
-    try {
-      const modelPath = this.importFiles.model?.path || this.importFiles.model?.value;
-      const configPath = this.importFiles.config?.path || this.importFiles.config?.value;
-
-      if (!modelPath || !configPath) {
-        throw new Error('Model and config paths are required');
-      }
-
-      const api = new SegmentationAPI();
-      const result = await api.storeImportedModel(modelPath, configPath);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to store imported model');
-      }
-
-      this.state.notify('success', 'Model imported successfully');
-      console.log('[SegmentationModule] Imported model stored in session');
-
-    } catch (error) {
-      console.error('[SegmentationModule] Error storing imported model:', error);
-      this.state.notify('error', `Import failed: ${error.message}`);
-      throw error;
-    }
-  }
 
   /**
    * Initialize Socket.IO connection
@@ -1772,15 +847,13 @@ class SegmentationModule extends BaseModule {
 
     this.socket = io();
 
-    // Training progress
+    // Training progress - use handler
     this.socket.on('training-progress', (data) => {
       console.log('[SegmentationModule] Training progress:', data);
-      if (typeof updateTrainingProgress === 'function') {
-        updateTrainingProgress(data);
-      }
+      this.trainingHandler.updateTrainingProgress(data);
     });
 
-    // Training complete
+    // Training complete - use handler
     this.socket.on('training-complete', (data) => {
       console.log('[SegmentationModule] Training complete:', data);
 
@@ -1790,25 +863,19 @@ class SegmentationModule extends BaseModule {
       // Clear localStorage session - training is done
       TrainingSessionPersistence.clearAll();
 
-      if (typeof onTrainingComplete === 'function') {
-        onTrainingComplete(data);
-      }
+      this.trainingHandler.onTrainingComplete(data);
     });
 
-    // Inference progress
+    // Inference progress - use handler
     this.socket.on('inference-progress', (data) => {
       console.log('[SegmentationModule] Inference progress:', data);
-      if (typeof updateInferenceProgress === 'function') {
-        updateInferenceProgress(data);
-      }
+      this.inferenceHandler.updateInferenceProgress(data);
     });
 
-    // Inference complete
+    // Inference complete - use handler
     this.socket.on('inference-complete', (data) => {
       console.log('[SegmentationModule] Inference complete:', data);
-      if (typeof onInferenceComplete === 'function') {
-        onInferenceComplete(data);
-      }
+      this.inferenceHandler.onInferenceComplete(data);
     });
 
     console.log('[SegmentationModule] Socket.IO initialized');
@@ -2076,7 +1143,7 @@ class SegmentationModule extends BaseModule {
     }
 
     // Save state to persist current step
-    this.saveState();
+    this.stateHandler.saveState();
   }
 
   /**
@@ -2182,7 +1249,7 @@ class SegmentationModule extends BaseModule {
         });
 
         // Save state to persist training ID
-        this.saveState();
+        this.stateHandler.saveState();
 
         this.state.notify('success', 'Training started successfully');
       } else {
@@ -2225,7 +1292,7 @@ class SegmentationModule extends BaseModule {
 
         // Clear training ID
         this.currentTrainingId = null;
-        this.saveState();
+        this.stateHandler.saveState();
 
         this.state.notify('info', 'Training cancelled');
       } else {
@@ -2323,7 +1390,7 @@ class SegmentationModule extends BaseModule {
         }
 
         // Save state to persist inference ID
-        this.saveState();
+        this.stateHandler.saveState();
 
         this.state.notify('success', 'Inference started successfully');
       } else {
@@ -2580,257 +1647,9 @@ class SegmentationModule extends BaseModule {
     console.log('[SegmentationModule] Inference UI state reset to initial');
   }
 
-  /**
-   * Save current module state to StateManager for persistence
-   */
-  saveState() {
-    const state = {
-      currentStep: this.currentStep,
-      uploadedFiles: this.uploadedFiles,
-      currentTrainingId: this.currentTrainingId,
-      currentInferenceId: this.currentInferenceId,
-      currentTask: null,
-      // Step condition flags
-      filesValidated: this.filesValidated,
-      configSaved: this.configSaved,
-      trainingComplete: this.trainingComplete,
-      hasImportedModel: this.hasImportedModel,
-      // Workflow mode and import state
-      workflowMode: this.workflowMode,
-      importFiles: this.importFiles,
-      importValidated: this.importValidated,
-      importedModelConfig: this.importedModelConfig
-    };
-
-    // Preserve currentTask if it exists
-    if (this.currentTrainingId) {
-      state.currentTask = { type: 'training', trainingId: this.currentTrainingId };
-    } else if (this.currentInferenceId) {
-      state.currentTask = { type: 'inference', inferenceId: this.currentInferenceId };
-    }
-
-    // Update state in StateManager
-    this.state.update('modules.segmentation.currentStep', this.currentStep);
-    this.state.update('modules.segmentation.uploadedFiles', this.uploadedFiles);
-    this.state.update('modules.segmentation.currentTrainingId', this.currentTrainingId);
-    this.state.update('modules.segmentation.currentInferenceId', this.currentInferenceId);
-    // Persist step condition flags
-    this.state.update('modules.segmentation.filesValidated', this.filesValidated);
-    this.state.update('modules.segmentation.configSaved', this.configSaved);
-    this.state.update('modules.segmentation.trainingComplete', this.trainingComplete);
-    this.state.update('modules.segmentation.hasImportedModel', this.hasImportedModel);
-    // Persist workflow mode and import state
-    this.state.update('modules.segmentation.workflowMode', this.workflowMode);
-    this.state.update('modules.segmentation.importFiles', this.importFiles);
-    this.state.update('modules.segmentation.importValidated', this.importValidated);
-    this.state.update('modules.segmentation.importedModelConfig', this.importedModelConfig);
-    if (state.currentTask) {
-      this.state.update('modules.segmentation.currentTask', state.currentTask);
-    }
-
-    console.log('[SegmentationModule] State saved:', state);
-  }
-
-  /**
-   * Check if there's a task to resume
-   */
-  async checkForResume() {
-    // Skip if we already resumed via the training session dialog
-    // (checkForActiveSession already handled navigation and UI setup)
-    if (this._resumedViaDialog) {
-      console.log('[SegmentationModule] Skipping checkForResume - already resumed via dialog');
-      return;
-    }
-
-    const segmentationState = this.state.get('modules.segmentation');
-
-    if (!segmentationState) {
-      console.log('[SegmentationModule] No saved state to resume');
-      return;
-    }
-
-    console.log('[SegmentationModule] Checking for resume:', segmentationState);
-
-    // Restore uploaded files
-    if (segmentationState.uploadedFiles) {
-      this.uploadedFiles = segmentationState.uploadedFiles;
-      console.log('[SegmentationModule] Restored uploaded files:', this.uploadedFiles);
-    }
-
-    // Restore step condition flags
-    if (segmentationState.filesValidated !== undefined) {
-      this.filesValidated = segmentationState.filesValidated;
-    }
-    if (segmentationState.configSaved !== undefined) {
-      this.configSaved = segmentationState.configSaved;
-    }
-    if (segmentationState.trainingComplete !== undefined) {
-      this.trainingComplete = segmentationState.trainingComplete;
-    }
-    if (segmentationState.hasImportedModel !== undefined) {
-      this.hasImportedModel = segmentationState.hasImportedModel;
-    }
-    console.log('[SegmentationModule] Restored step flags:', {
-      filesValidated: this.filesValidated,
-      configSaved: this.configSaved,
-      trainingComplete: this.trainingComplete,
-      hasImportedModel: this.hasImportedModel
-    });
-
-    // Restore workflow mode and import state
-    if (segmentationState.workflowMode) {
-      this.workflowMode = segmentationState.workflowMode;
-    }
-    if (segmentationState.importFiles) {
-      this.importFiles = segmentationState.importFiles;
-    }
-    if (segmentationState.importValidated !== undefined) {
-      this.importValidated = segmentationState.importValidated;
-    }
-    if (segmentationState.importedModelConfig) {
-      this.importedModelConfig = segmentationState.importedModelConfig;
-    }
-    console.log('[SegmentationModule] Restored workflow state:', {
-      workflowMode: this.workflowMode,
-      importValidated: this.importValidated
-    });
-
-    // Restore training/inference IDs
-    if (segmentationState.currentTrainingId) {
-      this.currentTrainingId = segmentationState.currentTrainingId;
-      console.log('[SegmentationModule] Restored training ID:', this.currentTrainingId);
-    }
-
-    if (segmentationState.currentInferenceId) {
-      this.currentInferenceId = segmentationState.currentInferenceId;
-      console.log('[SegmentationModule] Restored inference ID:', this.currentInferenceId);
-    }
-
-    // Restore current step
-    if (segmentationState.currentStep && segmentationState.currentStep !== 1) {
-      console.log('[SegmentationModule] Restoring to step:', segmentationState.currentStep);
-      this.goToStep(segmentationState.currentStep);
-
-      // Rejoin Socket.IO rooms if needed
-      if (segmentationState.currentTask) {
-        if (segmentationState.currentTask.type === 'training' && this.socket) {
-          this.socket.emit('join-training', segmentationState.currentTask.trainingId);
-          console.log('[SegmentationModule] Rejoined training room');
-        } else if (segmentationState.currentTask.type === 'inference' && this.socket) {
-          this.socket.emit('join-inference', segmentationState.currentTask.inferenceId);
-          console.log('[SegmentationModule] Rejoined inference room');
-        }
-      }
-    }
-
-    // If we have uploaded files on step 1, restore the validation UI
-    if (this.currentStep === 1 && (this.uploadedFiles.raw_images || this.uploadedFiles.annotations)) {
-      console.log('[SegmentationModule] Restoring step 1 validation UI');
-      this.restoreStep1Validation();
-    }
-
-    // Restore training UI state if training is in progress
-    if (segmentationState.currentTask?.type === 'training') {
-      console.log('[SegmentationModule] Restoring training UI state');
-      this.restoreTrainingUI();
-    }
-
-    // If we're on step 4 (inference), restore inference UI
-    if (this.currentStep === 4 && this.uploadedFiles.inference_data) {
-      console.log('[SegmentationModule] Restoring step 4 inference UI');
-      this.restoreStep4InferenceUI();
-    }
-  }
-
-  /**
-   * Restore Step 1 validation UI after resume
-   */
-  restoreStep1Validation() {
-    // Check if both files are present
-    if (this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
-      const step1Next = document.getElementById('step1Next');
-      if (step1Next) {
-        step1Next.disabled = false;
-      }
-
-      // Show validation success using ValidationDisplay component
-      if (this.validationDisplay) {
-        const details = [
-          { label: 'Raw Images', value: this.uploadedFiles.raw_images.isTestData ? 'Test Dataset' : 'Custom Upload' },
-          { label: 'Annotations', value: this.uploadedFiles.annotations.isTestData ? 'Test Dataset' : 'Custom Upload' },
-          { label: 'Status', value: 'Files are ready. Click Next to configure training.' }
-        ];
-        this.validationDisplay.showSuccess('Files Loaded', details);
-      }
-
-      // Update FileSelector UI to show selected files
-      if (this.rawImageSelector && this.uploadedFiles.raw_images) {
-        this.rawImageSelector.setSelectedFile(this.uploadedFiles.raw_images);
-      }
-      if (this.annotationsSelector && this.uploadedFiles.annotations) {
-        this.annotationsSelector.setSelectedFile(this.uploadedFiles.annotations);
-      }
-    }
-  }
-
-  /**
-   * Restore training UI state (show progress, hide start button)
-   */
-  restoreTrainingUI() {
-    // Toggle UI visibility
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-    if (trainingActionContent) {
-      trainingActionContent.style.display = 'none';
-    }
-    if (trainingProgressContent) {
-      trainingProgressContent.style.display = 'block';
-    }
-
-    // Ensure epoch counter is visible
-    const epochInfo = document.querySelector('.epoch-info');
-    if (epochInfo) {
-      epochInfo.style.display = 'block';
-    }
-
-    // Set status text
-    const statusText = document.getElementById('trainingStatusText');
-    if (statusText) {
-      statusText.textContent = 'Reconnecting to training...';
-    }
-
-    // Start polling as backup to Socket.IO
-    if (typeof startTrainingPolling === 'function') {
-      startTrainingPolling();
-    }
-
-    // Enable Next button (training may have completed while away)
-    const trainingNextBtn = document.getElementById('trainingNextBtn');
-    if (trainingNextBtn) {
-      trainingNextBtn.disabled = false;
-    }
-
-    console.log('[SegmentationModule] Training UI state restored');
-  }
-
-  /**
-   * Restore Step 4 inference UI after resume
-   */
-  restoreStep4InferenceUI() {
-    // Enable run inference button
-    const runInferenceBtn = document.getElementById('runInferenceBtn');
-    if (runInferenceBtn) {
-      runInferenceBtn.disabled = false;
-    }
-
-    // Update FileSelector UI to show selected file
-    if (this.inferenceSelector && this.uploadedFiles.inference_data) {
-      this.inferenceSelector.setSelectedFile(this.uploadedFiles.inference_data);
-    }
-
-    console.log('[SegmentationModule] Step 4 inference UI restored');
-  }
+  // ===========================================================================
+  // STATE MANAGEMENT (delegated to StateHandler)
+  // ===========================================================================
 
   /**
    * Deactivate the module
@@ -2855,10 +1674,15 @@ class SegmentationModule extends BaseModule {
       this.diceChart = null;
     }
 
-    // Clear intervals
+    // Clear intervals (both module and handler)
     if (this.trainingPollInterval) {
       clearInterval(this.trainingPollInterval);
       this.trainingPollInterval = null;
+    }
+
+    // Cleanup handlers
+    if (this.trainingHandler) {
+      this.trainingHandler.cleanup();
     }
 
     // Reset step to 1 so next activate starts fresh
