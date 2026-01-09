@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-01-09 (TIFF Stack Operations)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-09 | [TIFF Stack Duplicate and Split Operations](2026-01-09_tiff_stack_operations.md) | 🐛 Bug Fix / ✨ Feature | ~1 hr | ✅ Complete |
+
 ### 2026-01-07 (Segmentation Consistency & Reset Fixes)
 
 | Date | Session | Type | Duration | Status |
