@@ -2160,3 +2160,80 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+
+/* ============================================================================
+   SPLIT STACK DIALOG
+   ============================================================================ */
+
+.split-form {
+  margin: 16px 0;
+}
+
+.split-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.split-input-row label {
+  color: var(--text-secondary);
+  font-size: 14px;
+  min-width: 110px;
+}
+
+.split-input {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.split-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.split-range {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.split-preview {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.split-part {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.split-part strong {
+  color: var(--text-primary);
+}
+
+.split-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.split-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+}
+
+.split-option label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}

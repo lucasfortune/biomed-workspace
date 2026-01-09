@@ -155,7 +155,9 @@ function getProcessingHistoryString(fileId, allFiles) {
     'denoising': 'Denoising',
     'segmentation': 'Segmentation',
     'meshGeneration': 'Mesh Generation',
-    'annotation': 'Annotation'
+    'annotation': 'Annotation',
+    'duplicate': 'Duplicated',
+    'split': 'Split'
   };
 
   const steps = chain.map(entry => displayNames[entry.processType] || entry.processType);

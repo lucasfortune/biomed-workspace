@@ -9,7 +9,9 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
+const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
+const { PYTHON_PATH } = require('../config/constants');
 
 /**
  * Create file routes router
@@ -163,6 +165,249 @@ function createFilesRoutes(dependencies) {
       if (logger) {
         logger.error('Download file error:', error);
       }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // TIFF STACK OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Duplicate a TIFF stack
+   * POST /api/workspace/file/:fileId/duplicate
+   */
+  router.post('/file/:fileId/duplicate', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const sessionId = req.session.id;
+
+      // Get original file
+      const file = await workspaceService.getFile(sessionId, fileId);
+      const workspacePath = workspaceService.getWorkspacePath(sessionId);
+      const inputPath = path.join(workspacePath, file.path);
+
+      // Validate it's a TIFF file
+      const ext = path.extname(file.name).toLowerCase();
+      if (ext !== '.tif' && ext !== '.tiff') {
+        return res.status(400).json({ success: false, error: 'Only TIFF files can be duplicated' });
+      }
+
+      // Check input file exists
+      if (!fs.existsSync(inputPath)) {
+        return res.status(404).json({ success: false, error: 'Source file not found' });
+      }
+
+      // Generate output filename: original_copy.tif (handle conflicts)
+      const baseName = path.basename(file.name, ext);
+      const dirPath = path.dirname(inputPath);
+      let outputName = `${baseName}_copy${ext}`;
+      let outputPath = path.join(dirPath, outputName);
+      let counter = 1;
+
+      while (fs.existsSync(outputPath)) {
+        outputName = `${baseName}_copy_${counter}${ext}`;
+        outputPath = path.join(dirPath, outputName);
+        counter++;
+      }
+
+      // Run Python script
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/tiff_stack_ops.py',
+        'duplicate',
+        inputPath,
+        outputPath
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+      pythonProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      pythonProcess.on('close', async (code) => {
+        if (code === 0 && stdout.includes('SUCCESS:')) {
+          try {
+            const result = JSON.parse(stdout.replace('SUCCESS:', '').trim());
+
+            // Add to metadata with lineage
+            const newFile = workspaceManager.addFileToMetadata(sessionId, {
+              name: outputName,
+              path: path.relative(workspacePath, outputPath),
+              category: file.category,
+              size: result.size,
+              tags: file.tags || [],
+              lineage: {
+                processType: 'duplicate',
+                inputs: [fileId],
+                processedAt: new Date().toISOString()
+              }
+            });
+
+            // Log activity
+            if (activityLogger) {
+              activityLogger.logActivity(req.session.user.username, 'file_duplicated', {
+                sourceFileId: fileId,
+                newFileId: newFile.id,
+                sourceName: file.name,
+                newName: outputName
+              });
+            }
+
+            res.json({ success: true, file: newFile });
+          } catch (parseError) {
+            if (logger) logger.error('Parse duplicate result error:', parseError);
+            res.status(500).json({ success: false, error: 'Failed to parse result' });
+          }
+        } else {
+          const errorMsg = stdout.includes('ERROR:')
+            ? stdout.replace('ERROR:', '').trim()
+            : stderr || 'Duplication failed';
+          if (logger) logger.error('Duplicate error:', errorMsg);
+          res.status(500).json({ success: false, error: errorMsg });
+        }
+      });
+
+      pythonProcess.on('error', (err) => {
+        if (logger) logger.error('Python process error:', err);
+        res.status(500).json({ success: false, error: 'Failed to spawn Python process' });
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Duplicate file error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Split a TIFF stack at specified slice
+   * POST /api/workspace/file/:fileId/split
+   * Body: { splitAt: number, deleteOriginal: boolean }
+   */
+  router.post('/file/:fileId/split', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const { splitAt, deleteOriginal = true } = req.body;
+      const sessionId = req.session.id;
+
+      // Validate splitAt
+      if (!splitAt || typeof splitAt !== 'number' || splitAt < 1) {
+        return res.status(400).json({ success: false, error: 'Invalid split point. Must be a positive number.' });
+      }
+
+      // Get original file
+      const file = await workspaceService.getFile(sessionId, fileId);
+      const workspacePath = workspaceService.getWorkspacePath(sessionId);
+      const inputPath = path.join(workspacePath, file.path);
+
+      // Validate it's a TIFF file
+      const ext = path.extname(file.name).toLowerCase();
+      if (ext !== '.tif' && ext !== '.tiff') {
+        return res.status(400).json({ success: false, error: 'Only TIFF files can be split' });
+      }
+
+      // Check input file exists
+      if (!fs.existsSync(inputPath)) {
+        return res.status(404).json({ success: false, error: 'Source file not found' });
+      }
+
+      // Generate output filenames
+      const baseName = path.basename(file.name, ext);
+      const dirPath = path.dirname(inputPath);
+      const output1Path = path.join(dirPath, `${baseName}_part1${ext}`);
+      const output2Path = path.join(dirPath, `${baseName}_part2${ext}`);
+
+      // Run Python script
+      const pythonProcess = spawn(PYTHON_PATH, [
+        'python/tiff_stack_ops.py',
+        'split',
+        inputPath,
+        output1Path,
+        output2Path,
+        splitAt.toString()
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+      pythonProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      pythonProcess.on('close', async (code) => {
+        if (code === 0 && stdout.includes('SUCCESS:')) {
+          try {
+            const result = JSON.parse(stdout.replace('SUCCESS:', '').trim());
+
+            // Add both parts to metadata with lineage
+            const file1 = workspaceManager.addFileToMetadata(sessionId, {
+              name: path.basename(output1Path),
+              path: path.relative(workspacePath, output1Path),
+              category: file.category,
+              size: result.part1.size,
+              tags: file.tags || [],
+              lineage: {
+                processType: 'split',
+                inputs: [fileId],
+                splitInfo: { part: 1, sliceRange: `1-${splitAt}`, sliceCount: result.part1.sliceCount },
+                processedAt: new Date().toISOString()
+              }
+            });
+
+            const file2 = workspaceManager.addFileToMetadata(sessionId, {
+              name: path.basename(output2Path),
+              path: path.relative(workspacePath, output2Path),
+              category: file.category,
+              size: result.part2.size,
+              tags: file.tags || [],
+              lineage: {
+                processType: 'split',
+                inputs: [fileId],
+                splitInfo: { part: 2, sliceRange: `${splitAt + 1}-${result.originalSliceCount}`, sliceCount: result.part2.sliceCount },
+                processedAt: new Date().toISOString()
+              }
+            });
+
+            // Delete original if requested
+            if (deleteOriginal) {
+              await workspaceService.deleteFile(sessionId, fileId);
+            }
+
+            // Log activity
+            if (activityLogger) {
+              activityLogger.logActivity(req.session.user.username, 'file_split', {
+                sourceFileId: fileId,
+                sourceName: file.name,
+                splitAt,
+                newFiles: [file1.id, file2.id],
+                originalDeleted: deleteOriginal
+              });
+            }
+
+            res.json({
+              success: true,
+              files: [file1, file2],
+              originalDeleted: deleteOriginal
+            });
+          } catch (parseError) {
+            if (logger) logger.error('Parse split result error:', parseError);
+            res.status(500).json({ success: false, error: 'Failed to parse result' });
+          }
+        } else {
+          const errorMsg = stdout.includes('ERROR:')
+            ? stdout.replace('ERROR:', '').trim()
+            : stderr || 'Split failed';
+          if (logger) logger.error('Split error:', errorMsg);
+          res.status(500).json({ success: false, error: errorMsg });
+        }
+      });
+
+      pythonProcess.on('error', (err) => {
+        if (logger) logger.error('Python process error:', err);
+        res.status(500).json({ success: false, error: 'Failed to spawn Python process' });
+      });
+
+    } catch (error) {
+      if (logger) logger.error('Split file error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });

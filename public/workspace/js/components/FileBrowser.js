@@ -1077,10 +1077,15 @@ class FileBrowser {
    * @param {number} y - Y coordinate
    * @param {string} fileId - File ID
    */
-  showFileContextMenu(x, y, fileId) {
+  async showFileContextMenu(x, y, fileId) {
     const file = this.state.get('workspace.files').find(f => f.id === fileId);
     if (!file) return;
 
+    // Check if file is a TIFF
+    const ext = file.name.split('.').pop().toLowerCase();
+    const isTiff = ['tif', 'tiff'].includes(ext);
+
+    // Build base menu items
     const menuItems = [
       {
         icon: '⬇️',
@@ -1096,17 +1101,47 @@ class FileBrowser {
         icon: '✏️',
         label: 'Rename',
         onClick: () => this.renameFile(fileId)
-      },
-      {
-        separator: true
-      },
-      {
-        icon: '🗑️',
-        label: 'Delete',
-        shortcut: 'Del',
-        onClick: () => this.deleteFile(fileId)
       }
     ];
+
+    // Add TIFF-specific operations if applicable
+    if (isTiff) {
+      let sliceCount = 1;
+      try {
+        const response = await this.api.request(`/api/workspace/tiff-info/${fileId}`);
+        if (response.success && response.sliceCount) {
+          sliceCount = response.sliceCount;
+        }
+      } catch (e) {
+        console.warn('[FileBrowser] Could not fetch TIFF info:', e);
+      }
+
+      menuItems.push({ separator: true });
+
+      // Always show Duplicate for TIFF files
+      menuItems.push({
+        icon: '📋',
+        label: 'Duplicate Stack',
+        onClick: () => this.duplicateStack(fileId)
+      });
+
+      // Only show Split for multi-slice TIFFs
+      if (sliceCount > 1) {
+        menuItems.push({
+          icon: '✂️',
+          label: 'Split Stack...',
+          onClick: () => this.showSplitDialog(fileId, file.name, sliceCount)
+        });
+      }
+    }
+
+    menuItems.push({ separator: true });
+    menuItems.push({
+      icon: '🗑️',
+      label: 'Delete',
+      shortcut: 'Del',
+      onClick: () => this.deleteFile(fileId)
+    });
 
     this.contextMenu.show(x, y, menuItems);
   }
@@ -1760,6 +1795,168 @@ class FileBrowser {
           if (progressFill) progressFill.style.width = '0%';
         }
       }, 2000);
+    }
+  }
+
+  // ===========================================================================
+  // TIFF STACK OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Duplicate a TIFF stack
+   * @param {string} fileId - File ID to duplicate
+   */
+  async duplicateStack(fileId) {
+    const file = this.state.get('workspace.files').find(f => f.id === fileId);
+    if (!file) return;
+
+    try {
+      this.setLoading(true, `Duplicating ${file.name}...`);
+
+      const response = await this.api.request(`/api/workspace/file/${fileId}/duplicate`, {
+        method: 'POST'
+      });
+
+      if (response.success) {
+        await this.refresh();
+        this.markAsRecent(response.file.id);
+        this.state.notify('success', `Created ${response.file.name}`);
+      } else {
+        throw new Error(response.error || 'Duplication failed');
+      }
+    } catch (error) {
+      console.error('[FileBrowser] Duplicate error:', error);
+      this.state.notify('error', `Duplication failed: ${error.message}`);
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  /**
+   * Show split stack dialog
+   * @param {string} fileId - File ID
+   * @param {string} fileName - File name
+   * @param {number} sliceCount - Total slice count
+   */
+  showSplitDialog(fileId, fileName, sliceCount) {
+    const defaultSplitAt = Math.floor(sliceCount / 2);
+
+    const modal = document.createElement('div');
+    modal.className = 'workspace-confirm-modal';
+    modal.innerHTML = `
+      <div class="workspace-confirm-overlay"></div>
+      <div class="workspace-confirm-content" style="max-width: 450px;">
+        <h3>Split Stack</h3>
+        <p>Split <strong>${this.escapeHtml(fileName)}</strong> into two separate files.</p>
+
+        <div class="split-form">
+          <div class="split-input-row">
+            <label for="split-point">Split after slice:</label>
+            <input type="number"
+                   id="split-point"
+                   min="1"
+                   max="${sliceCount - 1}"
+                   value="${defaultSplitAt}"
+                   class="split-input">
+            <span class="split-range">of ${sliceCount} slices</span>
+          </div>
+
+          <div class="split-preview">
+            <div class="split-part">
+              <strong>Part 1:</strong> Slices 1-<span id="split-preview-1">${defaultSplitAt}</span>
+            </div>
+            <div class="split-part">
+              <strong>Part 2:</strong> Slices <span id="split-preview-2">${defaultSplitAt + 1}</span>-${sliceCount}
+            </div>
+          </div>
+
+          <div class="split-option">
+            <input type="checkbox" id="delete-original" checked>
+            <label for="delete-original">Delete original file after split</label>
+          </div>
+        </div>
+
+        <div class="workspace-confirm-actions">
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-confirm">Split Stack</button>
+        </div>
+      </div>
+    `;
+
+    // Update preview on input change
+    const splitInput = modal.querySelector('#split-point');
+    const preview1 = modal.querySelector('#split-preview-1');
+    const preview2 = modal.querySelector('#split-preview-2');
+
+    splitInput.addEventListener('input', () => {
+      const val = parseInt(splitInput.value, 10);
+      if (val >= 1 && val < sliceCount) {
+        preview1.textContent = val;
+        preview2.textContent = val + 1;
+      }
+    });
+
+    const closeModal = () => modal.remove();
+
+    modal.querySelector('.workspace-confirm-overlay').addEventListener('click', closeModal);
+    modal.querySelector('.btn-cancel').addEventListener('click', closeModal);
+    modal.querySelector('.btn-confirm').addEventListener('click', async () => {
+      const splitAt = parseInt(splitInput.value, 10);
+      const deleteOriginal = modal.querySelector('#delete-original').checked;
+
+      if (splitAt < 1 || splitAt >= sliceCount) {
+        this.state.notify('error', `Split point must be between 1 and ${sliceCount - 1}`);
+        return;
+      }
+
+      closeModal();
+      await this.splitStack(fileId, splitAt, deleteOriginal);
+    });
+
+    // ESC to close
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', handleEsc);
+      }
+    };
+    document.addEventListener('keydown', handleEsc);
+
+    document.body.appendChild(modal);
+    splitInput.focus();
+    splitInput.select();
+  }
+
+  /**
+   * Split a TIFF stack
+   * @param {string} fileId - File ID
+   * @param {number} splitAt - Slice number to split at
+   * @param {boolean} deleteOriginal - Whether to delete original after split
+   */
+  async splitStack(fileId, splitAt, deleteOriginal) {
+    const file = this.state.get('workspace.files').find(f => f.id === fileId);
+    if (!file) return;
+
+    try {
+      this.setLoading(true, `Splitting ${file.name}...`);
+
+      const response = await this.api.request(`/api/workspace/file/${fileId}/split`, {
+        method: 'POST',
+        body: JSON.stringify({ splitAt, deleteOriginal })
+      });
+
+      if (response.success) {
+        await this.refresh();
+        response.files.forEach(f => this.markAsRecent(f.id));
+        this.state.notify('success', `Split into ${response.files.length} files`);
+      } else {
+        throw new Error(response.error || 'Split failed');
+      }
+    } catch (error) {
+      console.error('[FileBrowser] Split error:', error);
+      this.state.notify('error', `Split failed: ${error.message}`);
+    } finally {
+      this.setLoading(false);
     }
   }
 
