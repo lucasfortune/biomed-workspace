@@ -285,6 +285,12 @@ class BaseModule {
     this.updateStepContent();
     this.updateProgressBar();
 
+    // Scroll step-contents to top when changing steps
+    const stepContents = this.container?.querySelector('.step-contents');
+    if (stepContents) {
+      stepContents.scrollTop = 0;
+    }
+
     // Call step change hook
     this.onStepChange(previousStep, stepNumber);
 

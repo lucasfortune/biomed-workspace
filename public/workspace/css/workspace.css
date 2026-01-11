@@ -990,7 +990,6 @@ body {
   border: 2px solid var(--border-color);
   border-radius: 12px;
   padding: 24px;
-  cursor: pointer;
   transition: all 0.3s;
   position: relative;
   overflow: hidden;

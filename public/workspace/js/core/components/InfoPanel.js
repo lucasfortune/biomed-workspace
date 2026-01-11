@@ -183,6 +183,12 @@ class InfoPanel {
           this.articleComponent.display(article);
         }
 
+        // Scroll article container to top
+        const articleContainer = this.container?.querySelector('.ip-article');
+        if (articleContainer) {
+          articleContainer.scrollTop = 0;
+        }
+
         // Expand panel if collapsed
         this.expand();
 

@@ -62,6 +62,7 @@ class ImageViewerModule extends BaseModule {
 
     // Bind methods
     this.onFileSelect = this.onFileSelect.bind(this);
+    this.onFileUpload = this.onFileUpload.bind(this);
   }
 
   /**
@@ -138,6 +139,7 @@ class ImageViewerModule extends BaseModule {
       showRecentResults: true,
       acceptAllTiff: true,
       onSelect: this.onFileSelect,
+      onUpload: this.onFileUpload,
       stateManager: this.state
     });
 
@@ -332,6 +334,24 @@ class ImageViewerModule extends BaseModule {
       // Test data selected (shouldn't happen as showTestData=false)
       this.validationDisplay.showInfo('Test Data', 'Test data selected');
       this.navigationButtons.setNextEnabled(true);
+    }
+  }
+
+  /**
+   * FileSelector callback: called when user uploads a file
+   */
+  async onFileUpload(file, uploadedInfo) {
+    console.log(`[ImageViewerModule] File uploaded:`, uploadedInfo);
+    this.selectedFile = {
+      id: uploadedInfo.id,
+      name: uploadedInfo.name || file.name,
+      path: uploadedInfo.path,
+      source: 'upload'
+    };
+
+    // Trigger validation for the uploaded file
+    if (uploadedInfo.id) {
+      await this.validateTiffFile(uploadedInfo.id);
     }
   }
 
@@ -923,6 +943,22 @@ class ImageViewerModule extends BaseModule {
 
     // Clear global reference
     window.imageViewerModule = null;
+
+    // Reset module state to defaults
+    this.selectedFile = null;
+    this.tiffInfo = null;
+    this.currentSlice = 0;
+    this.viewMode = 'gallery';
+    this.zoomLevel = 1;
+    this.panOffset = { x: 0, y: 0 };
+    this.isDragging = false;
+    this.dragStart = { x: 0, y: 0 };
+
+    // Reset component references
+    this.stepNavigator = null;
+    this.navigationButtons = null;
+    this.validationDisplay = null;
+    this.imageSelector = null;
 
     // Call parent deactivate
     await super.deactivate();

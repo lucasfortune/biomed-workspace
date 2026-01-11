@@ -79,7 +79,6 @@
 
 .filter-denoising-module .section-header h4 {
   margin: 0;
-  flex: 1;
 }
 
 .filter-denoising-module .section-header .help-icon {
@@ -156,7 +155,7 @@
 }
 
 .filter-denoising-module .params-section h4 {
-  margin-bottom: var(--module-spacing-md);
+
   color: var(--module-text-primary);
 }
 
