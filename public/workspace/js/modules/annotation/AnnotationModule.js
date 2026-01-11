@@ -358,7 +358,7 @@ class AnnotationModule extends BaseModule {
         icon: '🖼️',
         helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
         accept: '.tif,.tiff',
-        showTestData: true,
+        showTestData: false,
         showRecentResults: true,
         stateManager: this.state,
         onSelect: this.onFileSelected,

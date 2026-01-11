@@ -258,7 +258,7 @@
 }
 
 /* Small icon buttons */
-.annotation-module .btn-icon {
+.annotation-module .toolbar-section .btn-icon {
   width: 28px;
   height: 28px;
   padding: 0;
@@ -274,12 +274,12 @@
   font-size: 14px;
 }
 
-.annotation-module .btn-icon:hover:not(:disabled) {
+.annotation-module .toolbar-section .btn-icon:hover:not(:disabled) {
   background: var(--module-border);
   border-color: var(--module-text-secondary);
 }
 
-.annotation-module .btn-icon:disabled {
+.annotation-module .toolbar-section .btn-icon:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
