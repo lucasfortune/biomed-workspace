@@ -502,6 +502,9 @@ class ProgressHandler {
       statusText.textContent = 'Training...';
     }
 
+    // Update status badge to show training is active (was "Starting..." from mask approval)
+    this.module.updateStageStatus('stage2', 'training', 'Training...');
+
     // Update metrics
     const trainLoss = document.getElementById('stage2TrainLoss');
     const valLoss = document.getElementById('stage2ValLoss');
