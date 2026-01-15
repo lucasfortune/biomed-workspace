@@ -223,7 +223,8 @@ class FileHandler {
     if (configContainer) {
       this.importSelectors.config = new FileSelector({
         id: 'import_config',
-        fileType: 'config',
+        fileType: 'models',
+        filterTags: ['config', 'denoising'],
         title: 'Training Configuration',
         icon: '⚙️',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.config'),

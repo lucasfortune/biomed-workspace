@@ -50,7 +50,8 @@ class ImportHandler {
     if (configContainer) {
       this.module.importSelectors.config = new FileSelector({
         id: 'import_config',
-        fileType: 'config',
+        fileType: 'models',
+        filterTags: ['config', 'segmentation'],
         title: 'Training Configuration',
         icon: '⚙️',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.config-file'),

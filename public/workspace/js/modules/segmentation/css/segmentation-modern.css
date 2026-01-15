@@ -258,36 +258,6 @@ body {
   margin: var(--module-spacing-md);
 }
 
-/* ============================================
-   CLASSIC COMPONENT OVERRIDES
-   Override green/rounded styles from components.css
-   with module's purple/blue theme
-   ============================================ */
-
-.segmentation-module .btn {
-  background: var(--module-gradient) !important;
-  border-radius: var(--module-radius-md) !important;
-  padding: 10px 24px !important;
-  font-size: var(--module-font-size-sm) !important;
-  font-weight: 500 !important;
-  box-shadow: var(--module-shadow-button) !important;
-}
-
-.segmentation-module .btn:hover {
-  background: var(--module-gradient-hover) !important;
-  transform: translateY(-1px) !important;
-  box-shadow: var(--module-shadow-button-hover) !important;
-}
-
-.segmentation-module .btn.secondary {
-  background: var(--module-border-dark) !important;
-  color: var(--module-text-primary) !important;
-}
-
-.segmentation-module .btn.secondary:hover {
-  background: var(--module-border) !important;
-}
-
 /* Override class control panel hover to match module theme */
 .segmentation-module .class-control-panel {
   border-radius: var(--module-radius-lg) !important;
