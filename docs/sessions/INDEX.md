@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-01-15 (DL Denoising Bug Fixes)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-15 | [DL Denoising Module Bug Fixes](2026-01-15_bug-fixes-dl-denoising.md) | 🐛 Bug Fix | ~2 hrs | ✅ Complete |
+
 ### 2026-01-09 (TIFF Stack Operations)
 
 | Date | Session | Type | Duration | Status |
