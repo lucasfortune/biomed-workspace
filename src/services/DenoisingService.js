@@ -602,6 +602,16 @@ class DenoisingService {
         session.experimentDir = data.experimentDir;
         session.outputFiles = data.outputFiles;
 
+        // Update model paths with final locations from outputFiles
+        if (data.outputFiles) {
+          if (data.outputFiles.stage1_model) {
+            session.stage1.modelPath = data.outputFiles.stage1_model;
+          }
+          if (data.outputFiles.stage2_model) {
+            session.stage2.modelPath = data.outputFiles.stage2_model;
+          }
+        }
+
         // Preserve stage2 skipped status if this was a skip finalization
         if (data.stage2Skipped) {
           session.stage2.status = 'skipped';

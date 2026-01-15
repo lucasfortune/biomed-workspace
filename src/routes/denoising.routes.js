@@ -952,7 +952,26 @@ function createDenoisingRoutes(dependencies) {
 
         // Determine which model to use
         const useStage = stage || (trainSession.method === 'autostructn2v' && trainSession.stage2?.modelPath ? 'stage2' : 'stage1');
-        const modelPath = useStage === 'stage2' ? trainSession.stage2?.modelPath : trainSession.stage1?.modelPath;
+        // Check both possible locations for stage1 model path (nested for N2V completion, root level for autoStructN2V paused state)
+        const rawModelPath = useStage === 'stage2'
+          ? trainSession.stage2?.modelPath
+          : (trainSession.stage1?.modelPath || trainSession.stage1ModelPath);
+
+        // Resolve model path - paths from training session may already include workspace prefix
+        // or be relative to workspace, so check before joining
+        let modelPath = null;
+        if (rawModelPath) {
+          if (path.isAbsolute(rawModelPath)) {
+            // Already absolute path
+            modelPath = rawModelPath;
+          } else if (rawModelPath.startsWith(workspacePath) || rawModelPath.startsWith('workspaces/')) {
+            // Already includes workspace path prefix - use as-is
+            modelPath = rawModelPath;
+          } else {
+            // Relative to workspace - join with workspace path
+            modelPath = path.join(workspacePath, rawModelPath);
+          }
+        }
 
         if (!modelPath || !fs.existsSync(modelPath)) {
           return res.status(400).json({
