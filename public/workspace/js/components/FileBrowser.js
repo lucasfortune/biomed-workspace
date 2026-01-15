@@ -34,6 +34,9 @@ class FileBrowser {
 
     // Create context menu instance
     this.contextMenu = new ContextMenu();
+
+    // Flag to prevent duplicate drag&drop listeners
+    this.dragDropInitialized = false;
   }
 
   /**
@@ -1453,15 +1456,18 @@ class FileBrowser {
 
   /**
    * Attach drag-and-drop event listeners to file browser
+   *
+   * NOTE: Event handlers query DOM elements dynamically inside handlers (not via closure)
+   * because the file browser container gets re-rendered, replacing those elements.
+   * The sidebar element is persistent, so we attach listeners to it once.
    */
   attachDragAndDropListeners() {
-    const dropOverlay = this.container.querySelector('#fb-drop-overlay');
-    const categoryDropdown = this.container.querySelector('#fb-upload-category');
-    const categoryText = this.container.querySelector('#fb-drop-category-text');
+    // Prevent duplicate listeners - only attach once per instance
+    if (this.dragDropInitialized) {
+      return;
+    }
 
-    if (!dropOverlay) return;
-
-    // Find the entire sidebar element
+    // Find the entire sidebar element (persistent, not re-rendered)
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
 
@@ -1475,6 +1481,13 @@ class FileBrowser {
 
     // Show overlay on drag enter
     sidebar.addEventListener('dragenter', (e) => {
+      // Query elements dynamically - they get re-created on render
+      const dropOverlay = this.container.querySelector('#fb-drop-overlay');
+      const categoryDropdown = this.container.querySelector('#fb-upload-category');
+      const categoryText = this.container.querySelector('#fb-drop-category-text');
+
+      if (!dropOverlay || !categoryDropdown || !categoryText) return;
+
       const category = categoryDropdown.value;
 
       if (!category) {
@@ -1496,6 +1509,9 @@ class FileBrowser {
 
     // Hide overlay on drag leave
     sidebar.addEventListener('dragleave', (e) => {
+      const dropOverlay = this.container.querySelector('#fb-drop-overlay');
+      if (!dropOverlay) return;
+
       // Only hide if actually leaving the sidebar (not just moving to a child)
       const rect = sidebar.getBoundingClientRect();
       const x = e.clientX;
@@ -1509,7 +1525,14 @@ class FileBrowser {
 
     // Handle drop
     sidebar.addEventListener('drop', (e) => {
-      dropOverlay.style.display = 'none';
+      const dropOverlay = this.container.querySelector('#fb-drop-overlay');
+      const categoryDropdown = this.container.querySelector('#fb-upload-category');
+
+      if (dropOverlay) {
+        dropOverlay.style.display = 'none';
+      }
+
+      if (!categoryDropdown) return;
 
       const category = categoryDropdown.value;
       if (!category) {
@@ -1520,6 +1543,9 @@ class FileBrowser {
       const files = Array.from(e.dataTransfer.files);
       this.handleFileSelection(files);
     });
+
+    // Mark as initialized to prevent duplicate listeners on re-render
+    this.dragDropInitialized = true;
   }
 
   /**
