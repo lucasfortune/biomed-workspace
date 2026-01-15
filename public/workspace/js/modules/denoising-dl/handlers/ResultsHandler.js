@@ -232,6 +232,9 @@ class ResultsHandler {
     if (n2vSection) n2vSection.style.display = 'none';
     if (autoStructSection) autoStructSection.style.display = 'none';
 
+    // Reset training button visibility to ready state (show start button, hide cancel button)
+    this.module.showTrainingReady();
+
     // Reset training progress UI for all stages
     ['n2v', 'stage1', 'stage2'].forEach(prefix => {
       this.module.resetTrainingStageUI(prefix);
