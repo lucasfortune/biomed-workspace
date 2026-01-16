@@ -20,3 +20,5 @@ Throughout the workspace, you'll find small question mark icons next to paramete
 You can also use the search bar above to find information on any topic, or browse the glossary to explore available help articles.
 
 The Help panel is designed to assist biologists and researchers who may not be familiar with the technical details of image processing methods. Each article explains what a feature does, why it matters, and how changing parameters affects your results.
+
+For More Help, Step-by-step Guides and additional Information visit the <a href="https://lucasfortune.github.io/the-virtual-parasite/workspace/" target="_blank" rel="noopener noreferrer">Workspace Documentation Website</a>.
