@@ -218,7 +218,7 @@ class VisualizationModule extends BaseModule {
                 <!-- Right: Control Panel (floats in expanded mode) -->
                 <div class="viz-controls-section">
                   <div class="controls-header">
-                    <h4>Visualization Controls</h4>
+                    <h4>Controls</h4>
                     ${this.renderHelpIcon('visualization.step2.controls')}
                     <button id="collapseControlsBtn" class="collapse-controls-btn" title="Hide controls">×</button>
                   </div>

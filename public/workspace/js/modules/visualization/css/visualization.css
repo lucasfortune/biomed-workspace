@@ -537,7 +537,7 @@
 .viz-module .controls-header h4 {
   margin: 0;
   font-size: var(--module-font-size-md);
-  color: var(--module-text-primary);
+  color: #F8F9FA;;
   flex: 1;
 }
 
