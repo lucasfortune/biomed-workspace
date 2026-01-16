@@ -119,45 +119,24 @@ class WorkspaceAPI {
 
   /**
    * Download entire workspace as ZIP file
-   * Streams the zip file and triggers a browser download
-   * @returns {Promise<{success: boolean}>}
+   * Uses browser's native download manager for better UX:
+   * - Shows download progress in browser's download bar
+   * - Streams directly to disk (no memory buffering)
+   * - Doesn't block the UI
    */
-  async downloadWorkspace() {
-    console.log('[WorkspaceAPI] Starting workspace download...');
+  downloadWorkspace() {
+    console.log('[WorkspaceAPI] Triggering workspace download via native browser...');
 
-    const response = await fetch(`${this.baseURL}/api/workspace/download`, {
-      method: 'GET',
-      credentials: 'include'
-    });
+    // Use direct link to trigger browser's native download manager
+    // This streams directly to disk without buffering in memory
+    const link = document.createElement('a');
+    link.href = `${this.baseURL}/api/workspace/download`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
-    if (!response.ok) {
-      // Try to parse error message
-      try {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Download failed: ${response.statusText}`);
-      } catch (e) {
-        throw new Error(`Download failed: ${response.statusText}`);
-      }
-    }
-
-    // Get filename from Content-Disposition header
-    const disposition = response.headers.get('Content-Disposition');
-    const filenameMatch = disposition?.match(/filename="?([^"]+)"?/);
-    const filename = filenameMatch ? filenameMatch[1] : 'workspace.zip';
-
-    // Trigger download
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-    console.log('[WorkspaceAPI] Workspace download complete:', filename);
-    return { success: true, filename };
+    console.log('[WorkspaceAPI] Workspace download initiated');
   }
 
   /**

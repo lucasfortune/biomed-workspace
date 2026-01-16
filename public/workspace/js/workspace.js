@@ -326,6 +326,7 @@ class Workspace {
 
   /**
    * Download current workspace as ZIP file
+   * Uses browser's native download manager - no blocking overlay needed
    */
   async downloadWorkspace() {
     try {
@@ -340,20 +341,16 @@ class Workspace {
         return;
       }
 
-      // Show loading state
-      this.state.update('ui.loading', true);
-      this.state.notify('info', 'Preparing workspace download...', 3000);
+      // Trigger download via browser's native download manager
+      // This streams directly to disk and shows progress in browser's download bar
+      this.api.downloadWorkspace();
 
-      // Download workspace
-      await this.api.downloadWorkspace();
-
-      this.state.notify('success', 'Workspace download started');
+      // Notify user - download will proceed in background
+      this.state.notify('success', 'Download started - check your browser\'s download bar', 5000);
 
     } catch (error) {
       console.error('[Workspace] Download error:', error);
       this.state.notify('error', `Download failed: ${error.message}`);
-    } finally {
-      this.state.update('ui.loading', false);
     }
   }
 
