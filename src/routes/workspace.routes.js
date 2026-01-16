@@ -32,6 +32,7 @@ function createWorkspaceRoutes(dependencies) {
     fileService,
     activityLogger,
     logger,
+    io,
     upload
   } = dependencies;
 
@@ -266,13 +267,58 @@ function createWorkspaceRoutes(dependencies) {
   });
 
   /**
+   * Middleware to track upload progress via Socket.IO
+   * Must run BEFORE multer to capture incoming bytes
+   */
+  const trackUploadProgress = (req, res, next) => {
+    // Get restoreId from query params (available before body is parsed)
+    const restoreId = req.query.restoreId;
+    if (!restoreId || !io) {
+      return next();
+    }
+
+    const roomName = `restore-${restoreId}`;
+    const contentLength = parseInt(req.headers['content-length'], 10);
+
+    if (!contentLength || contentLength === 0) {
+      return next();
+    }
+
+    let bytesReceived = 0;
+    let lastEmittedPercent = 0;
+
+    // Listen to data events on the request stream
+    req.on('data', (chunk) => {
+      bytesReceived += chunk.length;
+      // Scale upload to 0-50% range
+      const percent = Math.round((bytesReceived / contentLength) * 50);
+
+      // Only emit every 2% to avoid flooding
+      if (percent > lastEmittedPercent + 1 || percent === 50) {
+        lastEmittedPercent = percent;
+        io.to(roomName).emit('restore-progress', {
+          restoreId,
+          phase: 'uploading',
+          progress: percent,
+          message: `Uploading... ${Math.round((bytesReceived / contentLength) * 100)}%`
+        });
+      }
+    });
+
+    next();
+  };
+
+  /**
    * Restore workspace from ZIP file
    * POST /api/workspace/restore
    *
    * Accepts a zip file upload and restores the workspace from it.
    * Clears existing workspace, extracts zip, updates session ID in metadata.
+   *
+   * Query params:
+   *   - restoreId: ID for Socket.IO progress tracking
    */
-  router.post('/restore', requireAuth, dependencies.uploadWorkspaceZip.single('workspace'), async (req, res) => {
+  router.post('/restore', requireAuth, trackUploadProgress, dependencies.uploadWorkspaceZip.single('workspace'), async (req, res) => {
     try {
       const sessionId = req.session.id;
 
@@ -301,12 +347,30 @@ function createWorkspaceRoutes(dependencies) {
         });
       }
 
-      // Restore workspace from zip buffer
+      // Get restoreId from query params (used by upload progress middleware)
+      // Fall back to body or generate new one
+      const restoreId = req.query.restoreId || req.body.restoreId || `restore_${Date.now()}`;
+      const roomName = `restore-${restoreId}`;
+
+      // Create progress callback that emits to Socket.IO room
+      const progressCallback = (phase, progress, message) => {
+        if (io) {
+          io.to(roomName).emit('restore-progress', {
+            restoreId,
+            phase,
+            progress,
+            message
+          });
+        }
+      };
+
+      // Restore workspace from zip buffer with progress tracking
       const result = await workspaceService.restoreWorkspace(
         sessionId,
         req.file.buffer,
         fileService,
-        req.session.user?.username
+        req.session.user?.username,
+        progressCallback
       );
 
       res.json({

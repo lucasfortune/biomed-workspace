@@ -1597,6 +1597,10 @@ class FileBrowser {
     const progressFill = this.container.querySelector('#fb-progress-fill');
     const progressText = this.container.querySelector('#fb-progress-text');
 
+    // Generate unique restore ID for Socket.IO progress tracking
+    const restoreId = `restore_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let socket = null;
+
     try {
       // Disable upload controls
       if (uploadBtn) {
@@ -1612,24 +1616,57 @@ class FileBrowser {
       if (progressContainer) {
         progressContainer.style.display = 'block';
         progressFill.style.width = '0%';
-        progressText.textContent = 'Uploading workspace...';
+        progressText.textContent = 'Connecting...';
       }
 
-      // Upload and restore workspace
-      const result = await this.api.restoreWorkspace(zipFile, (progress) => {
-        if (progressFill) {
-          progressFill.style.width = `${progress}%`;
-        }
-        if (progressText) {
-          progressText.textContent = `Uploading... ${progress}%`;
+      // Connect to Socket.IO and wait for connection + room join BEFORE starting upload
+      socket = io();
+
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Socket connection timeout'));
+        }, 10000); // 10 second timeout
+
+        socket.on('connect', () => {
+          socket.emit('join-restore', restoreId);
+        });
+
+        // Wait for room join confirmation before proceeding
+        socket.on('restore-room-joined', (data) => {
+          if (data.restoreId === restoreId) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+
+        socket.on('connect_error', (err) => {
+          clearTimeout(timeout);
+          reject(new Error(`Socket connection failed: ${err.message}`));
+        });
+      });
+
+      // Now set up progress listener
+      socket.on('restore-progress', (data) => {
+        if (data.restoreId === restoreId) {
+          if (progressFill) {
+            progressFill.style.width = `${data.progress}%`;
+          }
+          if (progressText) {
+            progressText.textContent = data.message;
+          }
         }
       });
 
-      // Show extracting state
+      // Update progress text for upload phase
       if (progressText) {
-        progressText.textContent = 'Extracting and restoring...';
-        progressFill.style.width = '100%';
+        progressText.textContent = 'Starting upload...';
       }
+
+      // Upload and restore workspace
+      // Progress is tracked server-side via Socket.IO:
+      // - Upload phase: 0-50% (server tracks incoming bytes)
+      // - Backend phases: 55-100% (validating, clearing, extracting, updating)
+      const result = await this.api.restoreWorkspace(zipFile, null, restoreId);
 
       // Refresh file browser
       await this.refresh();
@@ -1651,6 +1688,15 @@ class FileBrowser {
       }
 
     } finally {
+      // Clean up Socket.IO connection
+      if (socket) {
+        socket.emit('leave-restore', restoreId);
+        socket.off('restore-progress');
+        socket.off('restore-room-joined');
+        socket.off('connect_error');
+        socket.disconnect();
+      }
+
       // Re-enable upload controls
       if (uploadBtn) {
         uploadBtn.disabled = false;

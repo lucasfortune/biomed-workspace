@@ -395,9 +395,17 @@ class WorkspaceService {
    * @param {Buffer} zipBuffer - Zip file buffer
    * @param {object} fileService - FileService instance for thumbnail regeneration
    * @param {string} username - Username for logging
+   * @param {function} progressCallback - Optional callback for progress updates (phase, progress, message)
    * @returns {Promise<object>} Result with file count and status
    */
-  async restoreWorkspace(sessionId, zipBuffer, fileService = null, username = null) {
+  async restoreWorkspace(sessionId, zipBuffer, fileService = null, username = null, progressCallback = null) {
+    // Helper to emit progress if callback provided
+    const emitProgress = (phase, progress, message) => {
+      if (progressCallback) {
+        progressCallback(phase, progress, message);
+      }
+    };
+
     const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
 
     // Ensure workspace exists
@@ -405,19 +413,22 @@ class WorkspaceService {
       this.workspaceManager.initializeWorkspace(sessionId);
     }
 
-    // First, validate that the zip contains metadata.json
+    // Phase 1: Validate ZIP
+    emitProgress('validating', 55, 'Validating workspace archive...');
     const hasMetadata = await this.validateWorkspaceZip(zipBuffer);
     if (!hasMetadata) {
       throw new Error('Invalid workspace zip: missing metadata.json');
     }
 
-    // Clear existing workspace
+    // Phase 2: Clear existing workspace
+    emitProgress('clearing', 65, 'Clearing existing workspace...');
     const clearResult = this.workspaceManager.clearWorkspace(sessionId);
     if (this.logger) {
       this.logger.info(`Cleared ${clearResult.clearedFileCount} files before restore`);
     }
 
-    // Extract zip to workspace
+    // Phase 3: Extract ZIP to workspace
+    emitProgress('extracting', 75, 'Extracting files...');
     await new Promise((resolve, reject) => {
       const stream = require('stream');
       const bufferStream = new stream.PassThrough();
@@ -429,7 +440,8 @@ class WorkspaceService {
         .on('error', reject);
     });
 
-    // Load the imported metadata and update session ID
+    // Phase 4: Load and update metadata
+    emitProgress('updating', 90, 'Updating metadata...');
     let importedMetadata;
     try {
       importedMetadata = this.workspaceManager.loadMetadata(sessionId);
@@ -469,6 +481,9 @@ class WorkspaceService {
     if (this.logger) {
       this.logger.info(`Workspace restored for session: ${sessionId} (${updatedMetadata.files?.length || 0} files)`);
     }
+
+    // Phase 5: Complete
+    emitProgress('complete', 100, 'Workspace restored successfully');
 
     return {
       success: true,

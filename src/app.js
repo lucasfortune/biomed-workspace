@@ -346,6 +346,7 @@ function configureApp(app, dependencies) {
     fileService,
     activityLogger,
     logger,
+    io,
     upload,
     uploadWorkspaceZip
   }));

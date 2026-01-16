@@ -143,10 +143,10 @@ class WorkspaceAPI {
    * Upload and restore workspace from ZIP file
    * @param {File} zipFile - ZIP file to restore from
    * @param {function} onProgress - Progress callback (0-100)
+   * @param {string} restoreId - Optional restore ID for Socket.IO progress tracking
    * @returns {Promise<object>} Result with fileCount and status
    */
-  async restoreWorkspace(zipFile, onProgress = null) {
-    console.log('[WorkspaceAPI] Starting workspace restore...');
+  async restoreWorkspace(zipFile, onProgress = null, restoreId = null) {
 
     return new Promise((resolve, reject) => {
       const formData = new FormData();
@@ -154,19 +154,13 @@ class WorkspaceAPI {
 
       const xhr = new XMLHttpRequest();
 
-      // Track upload progress
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable && onProgress) {
-          const percent = Math.round((e.loaded / e.total) * 100);
-          onProgress(percent);
-        }
-      });
+      // Note: We no longer use XHR upload progress since it doesn't reflect actual server receipt
+      // Server-side middleware tracks real upload progress via Socket.IO
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const result = JSON.parse(xhr.responseText);
-            console.log('[WorkspaceAPI] Workspace restore complete:', result);
             resolve(result);
           } catch (e) {
             reject(new Error('Invalid response from server'));
@@ -189,7 +183,13 @@ class WorkspaceAPI {
         reject(new Error('Workspace restore was cancelled'));
       });
 
-      xhr.open('POST', `${this.baseURL}/api/workspace/restore`);
+      // Pass restoreId as query param so server can track upload progress
+      // before the body is fully parsed
+      const url = restoreId
+        ? `${this.baseURL}/api/workspace/restore?restoreId=${encodeURIComponent(restoreId)}`
+        : `${this.baseURL}/api/workspace/restore`;
+
+      xhr.open('POST', url);
       xhr.withCredentials = true;
       xhr.send(formData);
     });
