@@ -183,6 +183,14 @@ class ResultsHandler {
 
     this.module.state.update('modules.denoising-dl.viewerFile', denoisingData);
 
+    // Reset module state before navigating away (user is done with this analysis)
+    // This ensures fresh state when returning to the module
+    this.module.chartHandler.resetCharts();
+    this.module.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+    this.module.disconnectSocket();
+    this.module.state.update('modules.denoising-dl.trainingId', null);
+    this.module.reset();
+
     // Navigate to Image Viewer module
     window.workspace.loadModule('imageviewer');
   }
