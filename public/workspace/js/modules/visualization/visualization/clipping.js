@@ -63,12 +63,22 @@ export function updateAccurateCapping(classRanges, state) {
 function createAccurateCapsForClass(classValue, minSlice, maxSlice, sliceCount, sliceDirection, shape, state) {
     const { volume, meshGroup, sliceMeshes, sliceMetadata } = state;
 
+    // Get renderOrder from existing slice mesh of this class (for consistent transparency ordering)
+    let classRenderOrder = 0;
+    if (sliceMeshes && sliceMeshes[classValue]) {
+        const existingMesh = sliceMeshes[classValue].find(m => m !== null);
+        if (existingMesh) {
+            classRenderOrder = existingMesh.renderOrder || 0;
+        }
+    }
+
     // Create front cap (at minSlice boundary) if not at start
     if (minSlice > 0) {
         const frontCapMesh = createCrossSectionalCap(
             volume, shape, classValue, minSlice, sliceDirection, 'front', sliceCount, sliceMeshes
         );
         if (frontCapMesh && meshGroup) {
+            frontCapMesh.renderOrder = classRenderOrder;  // Match parent class renderOrder
             meshGroup.add(frontCapMesh);
             trackCappingMesh(classValue, frontCapMesh, 'front');
         }
@@ -80,6 +90,7 @@ function createAccurateCapsForClass(classValue, minSlice, maxSlice, sliceCount, 
             volume, shape, classValue, maxSlice + 1, sliceDirection, 'back', sliceCount, sliceMeshes
         );
         if (backCapMesh && meshGroup) {
+            backCapMesh.renderOrder = classRenderOrder;  // Match parent class renderOrder
             meshGroup.add(backCapMesh);
             trackCappingMesh(classValue, backCapMesh, 'back');
         }

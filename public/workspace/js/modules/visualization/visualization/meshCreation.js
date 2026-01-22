@@ -73,6 +73,13 @@ export async function createSliceBasedClassMeshesAsync(data, scene, onProgress =
 
     console.log(`[MeshCreation] Shape: ${depth}x${height}x${width}, Classes: ${availableClasses}, Slices: ${sliceCount}`);
 
+    // Pre-compute class volumes for inner/outer detection (sent to worker)
+    const classVolumes = {};
+    voxelData.forEach(voxel => {
+        classVolumes[voxel.value] = (classVolumes[voxel.value] || 0) + 1;
+    });
+    console.log(`[MeshCreation] Class volumes:`, classVolumes);
+
     if (!voxelData || voxelData.length === 0) {
         console.warn('[MeshCreation] No voxel data provided');
         const meshGroup = new THREE.Group();
@@ -123,6 +130,9 @@ export async function createSliceBasedClassMeshesAsync(data, scene, onProgress =
                                 sliceIndex: sliceIndex,
                                 originalOpacity: 0.8
                             };
+                            // Set renderOrder based on class volume: smaller volumes render first (lower renderOrder)
+                            // This ensures inner classes are in framebuffer before outer classes blend on top
+                            mesh.renderOrder = classVolumes[classValue] || 0;
                             sliceMeshes[classValue][sliceIndex] = mesh;
                             meshGroup.add(mesh);
                         }
@@ -171,7 +181,8 @@ export async function createSliceBasedClassMeshesAsync(data, scene, onProgress =
                 availableClasses: availableClasses,
                 sliceCount: sliceCount,
                 sliceDirection: sliceDirection,
-                sliceBoundaries: sliceBoundaries
+                sliceBoundaries: sliceBoundaries,
+                classVolumes: classVolumes  // For inner/outer detection at class boundaries
             }
         });
     });
@@ -241,11 +252,17 @@ export function createSliceBasedClassMeshes(data, scene) {
     }
 
     const sparseStartTime = performance.now();
+
+    // Compute class volumes (voxel count per class) for inner/outer detection
+    const classVolumes = {};
     voxelData.forEach(voxel => {
         const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
         volume[index] = voxel.value;
+        // Count voxels per class
+        classVolumes[voxel.value] = (classVolumes[voxel.value] || 0) + 1;
     });
     console.log(`[MeshCreation] Sparse-to-dense conversion: ${(performance.now() - sparseStartTime).toFixed(1)}ms`);
+    console.log(`[MeshCreation] Class volumes:`, classVolumes);
 
     // Calculate scaling factor (same as segmentation module)
     const maxOriginalDim = Math.max(depth, height, width);
@@ -267,7 +284,7 @@ export function createSliceBasedClassMeshes(data, scene) {
     for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
         const sliceMeshData = createSliceForAllClasses(
             volume, shape, availableClasses, sliceIndex,
-            sliceBoundaries, sliceDirection, scaleFactor
+            sliceBoundaries, sliceDirection, scaleFactor, classVolumes
         );
 
         // Create meshes for each class from the collected data
@@ -280,6 +297,9 @@ export function createSliceBasedClassMeshes(data, scene) {
                     sliceIndex: sliceIndex,
                     originalOpacity: 0.8
                 };
+                // Set renderOrder based on class volume: smaller volumes render first (lower renderOrder)
+                // This ensures inner classes are in framebuffer before outer classes blend on top
+                mesh.renderOrder = classVolumes[classValue] || 0;
                 sliceMeshes[classValue][sliceIndex] = mesh;
                 meshGroup.add(mesh);
             }
@@ -323,9 +343,10 @@ export function createSliceBasedClassMeshes(data, scene) {
  * @param {Array} sliceBoundaries - Array of slice boundary positions
  * @param {string} sliceDirection - 'x', 'y', or 'z'
  * @param {number} scaleFactor - Scaling factor for vertices
+ * @param {Object} classVolumes - Voxel count per class (for inner/outer detection)
  * @returns {Object} - Map of classValue -> { vertices: [], normals: [] }
  */
-function createSliceForAllClasses(volume, shape, availableClasses, sliceIndex, sliceBoundaries, sliceDirection, scaleFactor) {
+function createSliceForAllClasses(volume, shape, availableClasses, sliceIndex, sliceBoundaries, sliceDirection, scaleFactor, classVolumes = {}) {
     const [depth, height, width] = shape;
 
     // Initialize vertex/normal arrays for each class
@@ -391,7 +412,20 @@ function createSliceForAllClasses(volume, shape, availableClasses, sliceIndex, s
 
                     // If neighbor is different class, this face is on the surface
                     if (neighborValue !== currentValue) {
-                        addQuadFace(data.vertices, data.normals, x, y, z, face);
+                        // Background boundary (neighborValue === 0): always render exterior surface
+                        if (neighborValue === 0) {
+                            addQuadFace(data.vertices, data.normals, x, y, z, face);
+                        }
+                        // Class-class boundary: only smaller (inner) class renders its face
+                        // This prevents z-fighting at shared edges between enclosed volumes
+                        else {
+                            const currentVolume = classVolumes[currentValue] || 0;
+                            const neighborVolume = classVolumes[neighborValue] || 0;
+                            // Smaller volume wins (inner class). Equal volumes: both render (fallback)
+                            if (currentVolume <= neighborVolume) {
+                                addQuadFace(data.vertices, data.normals, x, y, z, face);
+                            }
+                        }
                     }
                 }
             }
@@ -783,6 +817,11 @@ function createTexturedPlanes(tiffData, shape) {
         }
 
         plane.position.set(0, 0, zPosition);
+
+        // Set renderOrder to render AFTER all mesh classes
+        // This ensures OG data planes properly integrate with transparent meshes
+        // Using a very high value that will always exceed any class volume count
+        plane.renderOrder = 1e9;
 
         // Store metadata
         plane.userData.sliceIndex = index;

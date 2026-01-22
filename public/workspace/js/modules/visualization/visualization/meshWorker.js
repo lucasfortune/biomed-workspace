@@ -81,8 +81,16 @@ function addQuadFace(vertices, normals, x, y, z, face) {
 
 /**
  * Process a single slice for all classes
+ * @param {Uint8Array} volume - Dense volume data
+ * @param {Array} shape - [depth, height, width]
+ * @param {Array} availableClasses - Array of class values
+ * @param {Set} classSet - Set of class values for O(1) lookup
+ * @param {number} sliceIndex - Current slice index
+ * @param {Array} sliceBoundaries - Slice boundary positions
+ * @param {string} sliceDirection - 'x', 'y', or 'z'
+ * @param {Object} classVolumes - Voxel count per class (for inner/outer detection)
  */
-function processSlice(volume, shape, availableClasses, classSet, sliceIndex, sliceBoundaries, sliceDirection) {
+function processSlice(volume, shape, availableClasses, classSet, sliceIndex, sliceBoundaries, sliceDirection, classVolumes = {}) {
     const [depth, height, width] = shape;
 
     // Initialize vertex/normal arrays for each class
@@ -142,7 +150,20 @@ function processSlice(volume, shape, availableClasses, classSet, sliceIndex, sli
                         width, height, depth);
 
                     if (neighborValue !== currentValue) {
-                        addQuadFace(data.vertices, data.normals, x, y, z, face);
+                        // Background boundary (neighborValue === 0): always render exterior surface
+                        if (neighborValue === 0) {
+                            addQuadFace(data.vertices, data.normals, x, y, z, face);
+                        }
+                        // Class-class boundary: only smaller (inner) class renders its face
+                        // This prevents z-fighting at shared edges between enclosed volumes
+                        else {
+                            const currentVolume = classVolumes[currentValue] || 0;
+                            const neighborVolume = classVolumes[neighborValue] || 0;
+                            // Smaller volume wins (inner class). Equal volumes: both render (fallback)
+                            if (currentVolume <= neighborVolume) {
+                                addQuadFace(data.vertices, data.normals, x, y, z, face);
+                            }
+                        }
                     }
                 }
             }
@@ -171,18 +192,29 @@ self.onmessage = function(e) {
     const { type, data } = e.data;
 
     if (type === 'processVoxelData') {
-        const { voxelData, shape, availableClasses, sliceCount, sliceDirection, sliceBoundaries } = data;
+        const { voxelData, shape, availableClasses, sliceCount, sliceDirection, sliceBoundaries, classVolumes = {} } = data;
         const [depth, height, width] = shape;
 
         const startTime = performance.now();
 
         // Convert sparse voxel data to dense volume
+        // Also compute classVolumes if not provided (fallback)
         const volume = new Uint8Array(depth * height * width);
+        const computedClassVolumes = Object.keys(classVolumes).length > 0 ? classVolumes : {};
+        const needsVolumeCompute = Object.keys(classVolumes).length === 0;
+
         for (let i = 0; i < voxelData.length; i++) {
             const voxel = voxelData[i];
             const index = voxel.z * (height * width) + voxel.y * width + voxel.x;
             volume[index] = voxel.value;
+            // Compute class volumes if not provided
+            if (needsVolumeCompute) {
+                computedClassVolumes[voxel.value] = (computedClassVolumes[voxel.value] || 0) + 1;
+            }
         }
+
+        // Use computed volumes (either from main thread or computed here)
+        const finalClassVolumes = computedClassVolumes;
 
         const sparseTime = performance.now() - startTime;
         self.postMessage({ type: 'progress', message: `Sparse-to-dense: ${sparseTime.toFixed(1)}ms` });
@@ -201,7 +233,7 @@ self.onmessage = function(e) {
         for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
             const sliceData = processSlice(
                 volume, shape, availableClasses, classSet,
-                sliceIndex, sliceBoundaries, sliceDirection
+                sliceIndex, sliceBoundaries, sliceDirection, finalClassVolumes
             );
 
             // Store results per class
