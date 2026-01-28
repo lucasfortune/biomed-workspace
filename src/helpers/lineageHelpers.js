@@ -166,26 +166,35 @@ function getProcessingHistoryString(fileId, allFiles) {
 
 /**
  * Find the original raw image file for overlay purposes
- * Specifically looks for files with category 'raw_images' or 'raw' (with optional 'inference' tag)
+ * Looks for files that are raw image uploads (category 'uploads' with 'raw' tag)
+ * Also supports legacy categories for backward compatibility
  * @param {string} fileId - Starting file ID (e.g., mesh or segmentation result)
  * @param {object[]} allFiles - Array of all file objects
  * @returns {object|null} Original data file or null if not found
  *
  * @example
  * const original = findOriginalDataFile('mesh_file_123', metadata.files);
- * // Returns the original raw_images or raw file that started the chain
+ * // Returns the original raw image file that started the chain
  */
 function findOriginalDataFile(fileId, allFiles) {
   const result = findRootFiles(fileId, allFiles);
 
-  // Categories that are considered "original data" for overlay purposes
-  // 'inference_data' kept for backward compatibility with existing workspaces
-  const overlayCategories = ['raw_images', 'raw', 'inference_data'];
-
-  // Helper to check if file is original data
+  // Helper to check if file is original raw data
   const isOriginalData = (file) => {
     if (!file) return false;
-    return overlayCategories.includes(file.category);
+
+    // New category system: uploads with raw tag
+    if (file.category === 'uploads' && file.tags && file.tags.includes('raw')) {
+      return true;
+    }
+
+    // Legacy categories for backward compatibility with existing workspaces
+    const legacyCategories = ['raw_images', 'raw', 'inference_data'];
+    if (legacyCategories.includes(file.category)) {
+      return true;
+    }
+
+    return false;
   };
 
   // First, check root files

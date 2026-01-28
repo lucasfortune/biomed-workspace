@@ -250,16 +250,16 @@ function configureApp(app, dependencies) {
     }
 
     const filesToTrack = [
-      { path: result.output_path, category: 'segmentations' },
-      { path: result.metadata_path, category: 'segmentations' },
-      { path: result.visualization_path, category: 'segmentations' }
+      { path: result.output_path, category: 'results', tags: ['segmentation', 'data'] },
+      { path: result.metadata_path, category: 'results', tags: ['segmentation', 'info'] },
+      { path: result.visualization_path, category: 'results', tags: ['segmentation', 'info'] }
     ];
 
     for (const file of filesToTrack) {
       if (file.path && fs.existsSync(file.path)) {
-        // Pass lineage as part of metadata
-        await trackModuleOutput(sessionId, file.path, file.category, { lineage });
-        logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
+        // Pass lineage and tags as part of metadata
+        await trackModuleOutput(sessionId, file.path, file.category, { lineage, tags: file.tags });
+        logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category}, tags: ${file.tags.join(', ')})`);
       }
     }
 

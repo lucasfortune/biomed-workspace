@@ -659,13 +659,15 @@ class DenoisingService {
       };
 
       // Track denoised TIFF stacks
+      // New metadata system: results category with denoising/data tags
       if (outputFiles.stage1_stack && fs.existsSync(outputFiles.stage1_stack)) {
         const relativePath = path.relative(workspacePath, outputFiles.stage1_stack);
         const stats = fs.statSync(outputFiles.stage1_stack);
         this.workspaceManager.addFileToMetadata(sessionId, {
           name: path.basename(outputFiles.stage1_stack),
           path: relativePath,
-          category: 'denoised_images',
+          category: 'results',
+          tags: ['denoising', 'data'],
           size: stats.size,
           folderId: null,
           lineage: createLineageObj('denoising')
@@ -681,7 +683,8 @@ class DenoisingService {
         this.workspaceManager.addFileToMetadata(sessionId, {
           name: path.basename(outputFiles.stage2_stack),
           path: relativePath,
-          category: 'denoised_images',
+          category: 'results',
+          tags: ['denoising', 'data'],
           size: stats.size,
           folderId: null,
           lineage: createLineageObj('denoising')
@@ -1181,10 +1184,12 @@ class DenoisingService {
       }
 
       // Add to workspace metadata
+      // New metadata system: results category with denoising/data tags
       this.workspaceManager.addFileToMetadata(sessionId, {
         name: path.basename(outputPath),
         path: relativePath,
-        category: 'denoised_images',
+        category: 'results',
+        tags: ['denoising', 'data'],
         size: stats.size,
         folderId: null,
         lineage: lineage

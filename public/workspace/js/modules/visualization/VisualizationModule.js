@@ -284,7 +284,9 @@ class VisualizationModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'viz_input',
-        fileType: 'meshes',
+        fileType: 'results',  // New metadata system: results category
+        filterTags: ['mesh', 'data', 'json'],  // Filter to JSON mesh data files only
+        excludeTags: ['info'],  // Exclude metadata/info files
         title: 'Mesh Data',
         icon: '🔬',
         helpIconHtml: this.renderHelpIcon('visualization.step1.mesh-data'),
@@ -294,17 +296,30 @@ class VisualizationModule extends BaseModule {
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
-        // Configure Recent Results to show only mesh files
-        resultCategories: ['meshes'],
+        // Configure Recent Results to show only JSON mesh data files
+        resultCategories: ['results', 'meshes'],
+        resultTags: ['mesh', 'data', 'json'],  // Filter results to JSON mesh data files only
         resultCategoryLabels: {
+          'results': 'Mesh',
           'meshes': 'Mesh'
         },
-        // Filter workspace files to show mesh JSON files
+        // Filter workspace files to show mesh JSON data files (not metadata)
+        // Support both new (results with mesh/data/json tags) and legacy categories
         filterFiles: (files) => {
-          return files.filter(f =>
-            f.category === 'meshes' &&
-            f.name && f.name.toLowerCase().endsWith('.json')
-          );
+          return files.filter(f => {
+            // New system: results with mesh, data, and json tags
+            if (f.category === 'results' && f.tags) {
+              const hasMesh = f.tags.includes('mesh');
+              const hasData = f.tags.includes('data');
+              const hasJson = f.tags.includes('json');
+              return hasMesh && hasData && hasJson;
+            }
+            // Legacy: meshes category, only mesh_data.json files
+            if (f.category === 'meshes') {
+              return f.name === 'mesh_data.json';
+            }
+            return false;
+          });
         }
       });
 

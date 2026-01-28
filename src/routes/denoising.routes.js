@@ -173,10 +173,12 @@ function createDenoisingRoutes(dependencies) {
             const outputStats = fs.existsSync(outputPath) ? fs.statSync(outputPath) : { size: 0 };
 
             // Add file to metadata
+            // New metadata system: results category with denoising/data tags
             const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
               name: outputFilename,
               path: path.relative(workspacePath, outputPath),
-              category: 'denoised_images',
+              category: 'results',
+              tags: ['denoising', 'data'],
               size: outputStats.size,
               folderId: null,
               lineage
@@ -1795,12 +1797,13 @@ function createDenoisingRoutes(dependencies) {
       fs.copyFileSync(sourcePath, destPath);
 
       // Add to workspace metadata
+      // New metadata system: uploads category with raw tag
       const fileStats = fs.statSync(destPath);
       const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
         name: testFileName,
         path: path.relative(workspacePath, destPath),
-        category: 'raw',
-        tags: ['test-data'],
+        category: 'uploads',
+        tags: ['raw', 'test-data'],
         size: fileStats.size,
         folderId: null
       });

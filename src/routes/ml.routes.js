@@ -231,14 +231,15 @@ function createMLRoutes(dependencies) {
       let rawFileEntry, annFileEntry;
 
       if (!skipUpload) {
-        // Determine tags based on whether this is test data
-        const rawTags = isTestData ? ['training', 'test-data'] : ['training'];
+        // New metadata system: uploads category with raw/annotation tags
+        const rawTags = isTestData ? ['raw', 'test-data'] : ['raw'];
+        const annTags = isTestData ? ['annotation', 'test-data'] : ['annotation'];
 
         const rawRelPath = path.relative(workspacePath, rawFile.path);
         rawFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: rawFile.filename || rawFile.originalname,
           path: rawRelPath,
-          category: 'raw',  // Unified raw category
+          category: 'uploads',
           tags: rawTags,
           size: rawFile.size,
           folderId: null
@@ -248,8 +249,8 @@ function createMLRoutes(dependencies) {
         annFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: annotationFile.filename || annotationFile.originalname,
           path: annRelPath,
-          category: 'annotations',
-          tags: isTestData ? ['test-data'] : [],
+          category: 'uploads',
+          tags: annTags,
           size: annotationFile.size,
           folderId: null
         });
@@ -601,11 +602,12 @@ function createMLRoutes(dependencies) {
         }
       } else {
         // New upload (test data or custom) - track in metadata
-        const inferenceTags = isTestData ? ['inference', 'test-data'] : ['inference'];
+        // New metadata system: uploads category with raw tag
+        const inferenceTags = isTestData ? ['raw', 'test-data'] : ['raw'];
         inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: inferenceFile.filename || inferenceFile.originalname,
           path: inferenceRelPath,
-          category: 'raw',
+          category: 'uploads',
           tags: inferenceTags,
           size: inferenceFile.size,
           folderId: null
@@ -675,9 +677,36 @@ function createMLRoutes(dependencies) {
       const validationResult = await validateImportedModel(modelFile.path, configFile.path);
 
       if (validationResult.success) {
+        const sessionId = req.session.id;
+        const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+        // Track imported model files in workspace metadata
+        // New metadata system: models category with unspecified/weights or unspecified/config tags
+        const modelRelPath = path.relative(workspacePath, modelFile.path);
+        const modelEntry = workspaceManager.addFileToMetadata(sessionId, {
+          name: modelFile.originalname,
+          path: modelRelPath,
+          category: 'models',
+          tags: ['unspecified', 'weights'],
+          size: modelFile.size,
+          folderId: null
+        });
+
+        const configRelPath = path.relative(workspacePath, configFile.path);
+        const configEntry = workspaceManager.addFileToMetadata(sessionId, {
+          name: configFile.originalname,
+          path: configRelPath,
+          category: 'models',
+          tags: ['unspecified', 'config'],
+          size: configFile.size,
+          folderId: null
+        });
+
         req.session.importedModel = {
           modelPath: modelFile.path,
           configPath: configFile.path,
+          modelFileId: modelEntry.id,
+          configFileId: configEntry.id,
           validated: true,
           validation: validationResult
         };
@@ -685,6 +714,8 @@ function createMLRoutes(dependencies) {
         res.json({
           success: true,
           message: 'Model and config validated successfully',
+          modelFileId: modelEntry.id,
+          configFileId: configEntry.id,
           validation: {
             model_info: `Valid PyTorch model (${validationResult.model_size})`,
             config_info: `Valid configuration with ${validationResult.config.features} features, ${validationResult.config.num_layers} layers`

@@ -310,11 +310,13 @@ function createAnnotationRoutes(dependencies) {
               metadata.files[sidecarIndex].lastModifiedAt = new Date().toISOString();
             } else {
               // Add sidecar if it didn't exist
+              // New metadata system: results category with annotation/info tags
               metadata.files.push({
                 id: `${fileId}_sidecar`,
                 name: sidecarFilename,
                 path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
-                category: 'unfinished_annotations_sidecar',
+                category: 'results',
+                tags: ['annotation', 'info'],
                 uploadedAt: new Date().toISOString(),
                 size: fs.statSync(sidecarPath).size,
                 parentId: fileId
@@ -322,11 +324,13 @@ function createAnnotationRoutes(dependencies) {
             }
           } else {
             // Add new TIFF file
+            // New metadata system: results category with annotation/wip tags
             metadata.files.push({
               id: fileId,
               name: tiffFilename,
               path: path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename),
-              category: 'unfinished_annotations',
+              category: 'results',
+              tags: ['annotation', 'wip'],
               uploadedAt: new Date().toISOString(),
               size: fs.statSync(tiffPath).size,
               lineage: {
@@ -337,11 +341,13 @@ function createAnnotationRoutes(dependencies) {
             });
 
             // Add sidecar file
+            // New metadata system: results category with annotation/info tags
             metadata.files.push({
               id: `${fileId}_sidecar`,
               name: sidecarFilename,
               path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
-              category: 'unfinished_annotations_sidecar',
+              category: 'results',
+              tags: ['annotation', 'info'],
               uploadedAt: new Date().toISOString(),
               size: fs.statSync(sidecarPath).size,
               parentId: fileId
@@ -517,12 +523,14 @@ function createAnnotationRoutes(dependencies) {
             metadata.files = [];
           }
 
-          // Add TIFF file with 'annotations' category
+          // Add TIFF file - completed annotations are user-created content
+          // New metadata system: uploads category with annotation tag
           metadata.files.push({
             id: fileId,
             name: tiffFilename,
             path: path.join('annotations', tiffFilename),
-            category: 'annotations',
+            category: 'uploads',
+            tags: ['annotation'],
             uploadedAt: new Date().toISOString(),
             size: fs.statSync(tiffPath).size,
             lineage: {
@@ -533,11 +541,13 @@ function createAnnotationRoutes(dependencies) {
           });
 
           // Add sidecar file
+          // New metadata system: results category with annotation/info tags
           metadata.files.push({
             id: `${fileId}_sidecar`,
             name: sidecarFilename,
             path: path.join('annotations', sidecarFilename),
-            category: 'annotations_sidecar',
+            category: 'results',
+            tags: ['annotation', 'info'],
             uploadedAt: new Date().toISOString(),
             size: fs.statSync(sidecarPath).size,
             parentId: fileId

@@ -613,18 +613,27 @@ function createMeshRoutes(dependencies) {
       }
 
       // Track each output file
-      const filesToTrack = ['mesh_data.json', 'mesh.obj', 'mesh.mtl', 'mesh.stl', 'metadata.json'];
+      // New metadata system: results category with mesh/data or mesh/info tags
+      // Format tag (json, obj, mtl, stl) added for filtering in visualization module
+      const filesToTrack = [
+        { name: 'mesh_data.json', tags: ['mesh', 'data', 'json'] },
+        { name: 'mesh.obj', tags: ['mesh', 'data', 'obj'] },
+        { name: 'mesh.mtl', tags: ['mesh', 'data', 'mtl'] },
+        { name: 'mesh.stl', tags: ['mesh', 'data', 'stl'] },
+        { name: 'metadata.json', tags: ['mesh', 'info'] }
+      ];
 
-      for (const filename of filesToTrack) {
-        const filePath = path.join(outputDir, filename);
+      for (const file of filesToTrack) {
+        const filePath = path.join(outputDir, file.name);
         if (fs.existsSync(filePath)) {
           const relativePath = path.relative(workspacePath, filePath);
           const stats = fs.statSync(filePath);
 
           workspaceManager.addFileToMetadata(sessionId, {
-            name: filename,
+            name: file.name,
             path: relativePath,
-            category: 'meshes',
+            category: 'results',
+            tags: file.tags,
             size: stats.size,
             folderId: null,
             // Include lineage if available

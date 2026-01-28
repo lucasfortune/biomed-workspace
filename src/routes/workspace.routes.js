@@ -150,17 +150,19 @@ function createWorkspaceRoutes(dependencies) {
   router.post('/upload', requireAuth, upload.any(), async (req, res) => {
     try {
       const sessionId = req.session.id;
-      let category = req.body.category || 'uploads';
+      let category = 'uploads';
       let tags = [];
 
-      // Map categories and assign tags
-      // inference_data is now stored as 'raw' with 'inference' tag
-      if (category === 'inference_data') {
-        category = 'raw';
-        tags = ['inference'];
-      } else if (category === 'raw_images') {
-        category = 'raw';
-        tags = ['training'];
+      // Map upload types to proper tags
+      // New system: all uploads use 'uploads' category with 'raw' or 'annotation' tags
+      const uploadCategory = req.body.category || 'uploads';
+      if (uploadCategory === 'inference_data' || uploadCategory === 'raw_images' || uploadCategory === 'raw') {
+        tags = ['raw'];
+      } else if (uploadCategory === 'annotations') {
+        tags = ['annotation'];
+      } else {
+        // Default to raw for unspecified uploads
+        tags = ['raw'];
       }
 
       // Check approval status - only active users can upload custom files

@@ -275,7 +275,6 @@ class FileBrowser {
             <option value="">Upload to...</option>
             <option value="raw_images">📷 Raw Images</option>
             <option value="annotations">🎨 Annotations</option>
-            <option value="inference_data">🔬 Inference Data</option>
             <option value="imported_models">🧠 Model Files</option>
             <option value="workspace" class="fb-option-workspace">📦 Restore Workspace (ZIP)</option>
           </select>
@@ -1497,7 +1496,6 @@ class FileBrowser {
         const categoryNames = {
           raw_images: 'Raw Images',
           annotations: 'Annotations',
-          inference_data: 'Inference Data',
           imported_models: 'Model Files'
         };
         categoryText.textContent = `Uploading to: ${categoryNames[category]}`;

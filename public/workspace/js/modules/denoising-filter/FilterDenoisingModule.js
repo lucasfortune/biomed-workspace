@@ -245,8 +245,8 @@ class FilterDenoisingModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'denoising_input',
-        fileType: 'raw',  // Updated to use unified 'raw' category
-        // No filterTags - denoising accepts any raw image
+        fileType: 'uploads',  // New metadata system: uploads category
+        filterTags: ['raw'],  // Filter to raw images only
         title: 'Input Image Stack',
         icon: '\uD83D\uDCC1',
         helpIconHtml: this.renderHelpIcon('denoising-filter.step1.input'),

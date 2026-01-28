@@ -287,7 +287,8 @@ class MeshModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'mesh_input',
-        fileType: 'annotations', // Default file type for uploads
+        fileType: 'uploads',  // New metadata system
+        filterTags: ['annotation'],  // Show annotation uploads
         title: 'Segmentation Data',
         icon: '🧩',
         helpIconHtml: this.renderHelpIcon('mesh.step1.segmentation-data'),
@@ -296,13 +297,26 @@ class MeshModule extends BaseModule {
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
+        // Result categories to include segmentation results
+        resultCategories: ['results', 'segmentations', 'segmented_stack'],
+        resultTags: ['segmentation', 'data'],  // Filter to segmentation data files (not info)
+        resultCategoryLabels: {
+          'results': 'Result',
+          'segmentations': 'Segmentation',
+          'segmented_stack': 'Segmented'
+        },
         // Custom filter for workspace files (annotations)
-        // Note: segmentations are shown in "Recent Results" section automatically
+        // Support both new (uploads with annotation tag) and legacy categories
         filterFiles: (files) => {
-          return files.filter(f =>
-            f.category === 'annotations' ||
-            f.category === 'segmented_stack'
-          );
+          return files.filter(f => {
+            // New system: uploads with annotation tag
+            if (f.category === 'uploads' && f.tags && f.tags.includes('annotation')) {
+              return true;
+            }
+            // Legacy categories for backward compat
+            return f.category === 'annotations' ||
+                   f.category === 'segmented_stack';
+          });
         }
       });
 

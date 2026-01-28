@@ -56,7 +56,8 @@ class FileSelector {
     this.icon = config.icon || '📁';
     this.helpIconHtml = config.helpIconHtml || '';
     this.fileType = config.fileType || 'file';
-    this.filterTags = config.filterTags || null;  // Tags files must have (e.g., ['inference'])
+    this.filterTags = config.filterTags || null;  // Tags files must have (e.g., ['raw'])
+    this.excludeTags = config.excludeTags || null;  // Tags to exclude files with (e.g., ['info', 'wip'])
     this.accept = config.accept || '.tif,.tiff';
     this.showTestData = config.showTestData !== false;
     this.showRecentResults = config.showRecentResults === true;
@@ -64,14 +65,17 @@ class FileSelector {
     this.testDataOptions = config.testDataOptions || null;
     this.uploadEndpoint = config.uploadEndpoint || '/api/workspace/upload';
 
-    // Configurable result categories (default to TIFF-based results)
-    this.resultCategories = config.resultCategories || ['segmentations', 'denoised', 'processed'];
+    // Configurable result categories (supports both new 'results' and legacy categories)
+    this.resultCategories = config.resultCategories || ['results', 'segmentations', 'denoised_images', 'processed', 'meshes'];
     this.resultCategoryLabels = config.resultCategoryLabels || {
+      'results': 'Result',
       'segmentations': 'Segmentation',
-      'denoised': 'Denoised',
+      'denoised_images': 'Denoised',
       'processed': 'Processed',
       'meshes': 'Mesh'
     };
+    // Tags to identify result types (for new 'results' category system)
+    this.resultTags = config.resultTags || null;  // e.g., ['segmentation', 'data'] to filter results
 
     // Callbacks
     this.onSelect = config.onSelect || null;
@@ -156,7 +160,20 @@ class FileSelector {
           // Separate results from regular files using configurable categories
           this.recentResults = allFiles.filter(file => {
             const isAccepted = this.isAcceptedFile(file.name);
-            return isAccepted && this.resultCategories.includes(file.category);
+            const categoryMatch = this.resultCategories.includes(file.category);
+
+            // For new 'results' category, optionally filter by resultTags
+            let tagsMatch = true;
+            if (categoryMatch && file.category === 'results' && this.resultTags && this.resultTags.length > 0) {
+              const fileTags = file.tags || [];
+              tagsMatch = this.resultTags.every(tag => fileTags.includes(tag));
+            }
+
+            // Exclude info and wip files from recent results by default
+            const fileTags = file.tags || [];
+            const notExcluded = !fileTags.includes('info') && !fileTags.includes('wip');
+
+            return isAccepted && categoryMatch && tagsMatch && notExcluded;
           });
 
           // Apply custom filter to recent results if provided
@@ -252,7 +269,14 @@ class FileSelector {
         }
       }
 
-      return isAccepted && categoryMatch && tagsMatch;
+      // Exclude files with certain tags (e.g., 'info', 'wip')
+      let notExcluded = true;
+      if (this.excludeTags && this.excludeTags.length > 0) {
+        const fileTags = file.tags || [];
+        notExcluded = !this.excludeTags.some(tag => fileTags.includes(tag));
+      }
+
+      return isAccepted && categoryMatch && tagsMatch && notExcluded;
     });
   }
 

@@ -105,16 +105,17 @@ class FileService {
       }
     }
 
+    // New metadata system: results category with segmentation/data or segmentation/info tags
     const filesToTrack = [
-      { path: result.output_path, category: 'segmentations' },
-      { path: result.metadata_path, category: 'segmentations' },
-      { path: result.visualization_path, category: 'segmentations' }
+      { path: result.output_path, category: 'results', tags: ['segmentation', 'data'] },
+      { path: result.metadata_path, category: 'results', tags: ['segmentation', 'info'] },
+      { path: result.visualization_path, category: 'results', tags: ['segmentation', 'info'] }
     ];
 
     for (const file of filesToTrack) {
       if (file.path && fs.existsSync(file.path)) {
-        // Pass lineage as part of metadata
-        await this.trackModuleOutput(sessionId, file.path, file.category, { lineage });
+        // Pass lineage and tags as part of metadata
+        await this.trackModuleOutput(sessionId, file.path, file.category, { lineage, tags: file.tags });
         if (this.logger) {
           this.logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
         }

@@ -30,6 +30,131 @@ class WorkspaceManager {
   }
 
   /**
+   * Normalize category to new three-category system
+   * Maps legacy categories to: uploads, models, results
+   * @param {string} category - Original category
+   * @returns {string} Normalized category
+   */
+  normalizeCategory(category) {
+    // Legacy category mappings
+    const categoryMap = {
+      // Legacy upload categories -> uploads
+      'raw': 'uploads',
+      'raw_images': 'uploads',
+      'inference_data': 'uploads',
+      'annotations': 'uploads',
+      'unfinished_annotations': 'results',
+      'unfinished_annotations_sidecar': 'results',
+      // Legacy result categories -> results
+      'segmentations': 'results',
+      'segmented_stack': 'results',
+      'denoised_images': 'results',
+      'meshes': 'results',
+      // These are already correct
+      'uploads': 'uploads',
+      'models': 'models',
+      'results': 'results'
+    };
+
+    return categoryMap[category] || category;
+  }
+
+  /**
+   * Normalize tags based on category and ensure proper structure
+   * Each category has specific allowed tags:
+   * - uploads: raw, annotation (+ optional test-data)
+   * - models: [method: denoising/segmentation/unspecified] + [type: weights/config/info]
+   * - results: [method: denoising/annotation/segmentation/mesh] + [type: data/info/wip]
+   *
+   * @param {string} category - Normalized category (uploads, models, results)
+   * @param {string[]} tags - Existing tags array
+   * @param {object} options - Additional context for tag inference
+   * @param {string} options.legacyCategory - Original category before normalization
+   * @param {string} options.fileName - File name for extension-based inference
+   * @returns {string[]} Normalized tags array
+   */
+  normalizeTags(category, tags = [], options = {}) {
+    const { legacyCategory, fileName } = options;
+    const normalizedTags = [...tags];
+
+    // Helper to check if tag exists
+    const hasTag = (tag) => normalizedTags.includes(tag);
+    const addTag = (tag) => { if (!hasTag(tag)) normalizedTags.push(tag); };
+
+    switch (category) {
+      case 'uploads':
+        // Infer raw/annotation from legacy category if not already tagged
+        if (!hasTag('raw') && !hasTag('annotation')) {
+          if (legacyCategory === 'annotations') {
+            addTag('annotation');
+          } else {
+            // Default to raw for legacy raw_images, inference_data, raw
+            addTag('raw');
+          }
+        }
+        // Convert legacy 'training'/'inference' tags to just 'raw' (they're all raw images)
+        // Keep test-data tag if present
+        break;
+
+      case 'models':
+        // Ensure method tag exists (denoising, segmentation, or unspecified)
+        if (!hasTag('denoising') && !hasTag('segmentation') && !hasTag('unspecified')) {
+          // Try to infer from existing tags or default to unspecified
+          addTag('unspecified');
+        }
+        // Ensure type tag exists (weights, config, info)
+        if (!hasTag('weights') && !hasTag('config') && !hasTag('info')) {
+          // Infer from filename
+          if (fileName) {
+            const ext = path.extname(fileName).toLowerCase();
+            if (ext === '.pth' || ext === '.pt') {
+              addTag('weights');
+            } else if (ext === '.json' && fileName.includes('config')) {
+              addTag('config');
+            } else if (ext === '.json') {
+              addTag('info');
+            }
+          }
+        }
+        break;
+
+      case 'results':
+        // Infer method tag from legacy category if not already tagged
+        if (!hasTag('denoising') && !hasTag('annotation') && !hasTag('segmentation') && !hasTag('mesh')) {
+          if (legacyCategory === 'denoised_images') {
+            addTag('denoising');
+          } else if (legacyCategory === 'segmentations' || legacyCategory === 'segmented_stack') {
+            addTag('segmentation');
+          } else if (legacyCategory === 'meshes') {
+            addTag('mesh');
+          } else if (legacyCategory === 'unfinished_annotations' || legacyCategory === 'unfinished_annotations_sidecar') {
+            addTag('annotation');
+          }
+        }
+        // Infer type tag if not present
+        if (!hasTag('data') && !hasTag('info') && !hasTag('wip')) {
+          if (legacyCategory === 'unfinished_annotations') {
+            addTag('wip');
+          } else if (legacyCategory === 'unfinished_annotations_sidecar') {
+            addTag('info');
+          } else if (fileName) {
+            // Infer from filename
+            if (fileName.includes('metadata') || fileName.includes('_info') || fileName.endsWith('_meta.json')) {
+              addTag('info');
+            } else {
+              addTag('data');
+            }
+          } else {
+            addTag('data');
+          }
+        }
+        break;
+    }
+
+    return normalizedTags;
+  }
+
+  /**
    * Get workspace path for a session
    */
   getWorkspacePath(sessionId) {

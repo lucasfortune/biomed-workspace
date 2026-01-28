@@ -352,8 +352,8 @@ class AnnotationModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'annotation_source',
-        fileType: 'raw',  // Updated to use unified 'raw' category
-        // No filterTags - annotation accepts any raw image (training or inference)
+        fileType: 'uploads',  // New metadata system: uploads category
+        filterTags: ['raw'],  // Filter to raw images only
         title: 'Source Image',
         icon: '🖼️',
         helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
@@ -363,20 +363,38 @@ class AnnotationModule extends BaseModule {
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
-        // Show results from annotations and unfinished_annotations
-        resultCategories: ['annotations', 'unfinished_annotations'],
+        // Recent Results: show denoising and segmentation results (TIFF files users might want to annotate)
+        resultCategories: ['results', 'denoised_images', 'segmentations'],
         resultCategoryLabels: {
-          'annotations': 'Existing Annotation',
-          'unfinished_annotations': 'Unfinished'
+          'results': 'Result',
+          'denoised_images': 'Denoised',
+          'segmentations': 'Segmentation'
         },
-        // Filter workspace files to show raw images (includes inference data)
-        // Keep backward compat for existing workspaces with old categories
+        // Filter recent results to only show data files (denoising or segmentation), not info/wip
+        filterRecentResults: (files) => {
+          return files.filter(f => {
+            // New system: results with denoising or segmentation data tag
+            if (f.category === 'results' && f.tags) {
+              const isDenoising = f.tags.includes('denoising') && f.tags.includes('data');
+              const isSegmentation = f.tags.includes('segmentation') && f.tags.includes('data');
+              return isDenoising || isSegmentation;
+            }
+            // Legacy categories
+            return f.category === 'denoised_images' || f.category === 'segmentations';
+          });
+        },
+        // Filter workspace files to show only raw images (uploads with raw tag)
         filterFiles: (files) => {
-          return files.filter(f =>
-            f.category === 'raw' ||
-            f.category === 'raw_images' ||  // Backward compat
-            f.category === 'inference_data'  // Backward compat
-          );
+          return files.filter(f => {
+            // New system: uploads with raw tag
+            if (f.category === 'uploads' && f.tags && f.tags.includes('raw')) {
+              return true;
+            }
+            // Legacy categories for backward compat
+            return f.category === 'raw' ||
+                   f.category === 'raw_images' ||
+                   f.category === 'inference_data';
+          });
         }
       });
 

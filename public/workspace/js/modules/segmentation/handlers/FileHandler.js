@@ -24,10 +24,11 @@ class FileHandler {
     console.log('[FileHandler] Initializing FileSelectors...');
 
     // Create FileSelector instances with core component API
+    // New metadata system: uploads category with raw/annotation tags
     this.module.rawImageSelector = new FileSelector({
       id: 'raw_images',
-      fileType: 'raw',
-      filterTags: ['training'],
+      fileType: 'uploads',
+      filterTags: ['raw'],
       title: 'Raw Images',
       icon: '📁',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.raw-images'),
@@ -39,7 +40,8 @@ class FileHandler {
 
     this.module.annotationsSelector = new FileSelector({
       id: 'annotations',
-      fileType: 'annotations',
+      fileType: 'uploads',
+      filterTags: ['annotation'],
       title: 'Annotations',
       icon: '🏷️',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.annotations'),
@@ -51,8 +53,8 @@ class FileHandler {
 
     this.module.inferenceSelector = new FileSelector({
       id: 'inference_data',
-      fileType: 'raw',
-      filterTags: ['inference'],
+      fileType: 'uploads',
+      filterTags: ['raw'],
       title: 'Inference Data',
       icon: '📁',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step4.inference-data'),
