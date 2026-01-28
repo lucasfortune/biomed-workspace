@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-01-28 (Metadata System Rework)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-01-28 | [Metadata Category & Tag System Rework](2026-01-28_metadata_system_rework.md) | ♻️ Refactor | ~3 hrs | ✅ Complete |
+
 ### 2026-01-15 (DL Denoising Bug Fixes)
 
 | Date | Session | Type | Duration | Status |
