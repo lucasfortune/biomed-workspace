@@ -244,8 +244,12 @@ class FileSelector {
       let tagsMatch = true;
       if (this.filterTags && this.filterTags.length > 0) {
         const fileTags = file.tags || [];
-        // File must have ALL specified tags
-        tagsMatch = this.filterTags.every(tag => fileTags.includes(tag));
+        // Show files with no tags (unclassified) OR files with matching tags
+        if (fileTags.length === 0) {
+          tagsMatch = true;  // Untagged files appear in all selectors
+        } else {
+          tagsMatch = this.filterTags.every(tag => fileTags.includes(tag));
+        }
       }
 
       return isAccepted && categoryMatch && tagsMatch;

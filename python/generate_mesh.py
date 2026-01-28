@@ -32,12 +32,23 @@ except ImportError:
     sys.exit(1)
 
 
-def emit_progress(class_num, total_classes, status="processing"):
-    """Emit progress update to stdout for Socket.IO."""
+def emit_progress(class_num, total_classes, status="processing", progress_percent=None):
+    """Emit progress update to stdout for Socket.IO.
+
+    Args:
+        class_num: Current class number being processed
+        total_classes: Total number of classes
+        status: Status message
+        progress_percent: If provided, use this exact percentage instead of calculating
+    """
+    if progress_percent is None:
+        # Calculate progress based on class_num/total_classes, scaled to 0-70% (marching cubes phase)
+        progress_percent = round((class_num / total_classes) * 70) if total_classes > 0 else 0
+
     progress = {
         "class": class_num,
         "total_classes": total_classes,
-        "progress_percent": round((class_num / total_classes) * 100) if total_classes > 0 else 0,
+        "progress_percent": progress_percent,
         "status": status
     }
     print(f"MESH_PROGRESS:{json.dumps(progress)}", flush=True)
@@ -523,16 +534,17 @@ def main():
                 return
 
         # Export in requested formats
+        # Progress allocation: 0-70% marching cubes, 70-85% JSON, 85-93% OBJ, 93-98% STL, 98-100% metadata
         exported_formats = []
         total_voxels = 0
 
         if 'json' in formats:
+            emit_progress(total_classes, total_classes, "Exporting JSON data...", progress_percent=70)
             json_path = os.path.join(args.output_dir, 'mesh_data.json')
 
             if args.json_format == 'voxel_slices':
                 # Use voxel-based export for slice visualization
                 print(f"Exporting voxel JSON (slice_count={args.slice_count}, direction={args.slice_direction})...", flush=True)
-                emit_progress(1, 1, "Exporting voxel data")
                 export_voxel_json(
                     data, target_classes, json_path, args.mesh_id,
                     slice_count=args.slice_count,
@@ -545,21 +557,27 @@ def main():
                 export_threejs_json(meshes, json_path, args.mesh_id)
 
             exported_formats.append('json')
+            emit_progress(total_classes, total_classes, "JSON export complete", progress_percent=85)
             print(f"Exported: {json_path}", flush=True)
 
         if 'obj' in formats:
+            emit_progress(total_classes, total_classes, "Exporting OBJ format...", progress_percent=85)
             obj_path = os.path.join(args.output_dir, 'mesh.obj')
             export_obj(meshes, obj_path)
             exported_formats.append('obj')
+            emit_progress(total_classes, total_classes, "OBJ export complete", progress_percent=93)
             print(f"Exported: {obj_path}", flush=True)
 
         if 'stl' in formats:
+            emit_progress(total_classes, total_classes, "Exporting STL format...", progress_percent=93)
             stl_path = os.path.join(args.output_dir, 'mesh.stl')
             export_stl(meshes, stl_path)
             exported_formats.append('stl')
+            emit_progress(total_classes, total_classes, "STL export complete", progress_percent=98)
             print(f"Exported: {stl_path}", flush=True)
 
         # Export metadata
+        emit_progress(total_classes, total_classes, "Finalizing...", progress_percent=98)
         metadata_path = os.path.join(args.output_dir, 'metadata.json')
         if meshes:
             metadata = export_metadata(

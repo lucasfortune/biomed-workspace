@@ -537,7 +537,7 @@
 .viz-module .controls-header h4 {
   margin: 0;
   font-size: var(--module-font-size-md);
-  color: #F8F9FA;;
+  color: var(--module-text-primary);
   flex: 1;
 }
 
@@ -676,6 +676,11 @@
 /* Hidden controls in expanded mode */
 .viz-module.expanded-mode .viz-controls-section.hidden {
   display: none;
+}
+
+/* Expanded mode - controls header needs white text on dark floating panel */
+.viz-module.expanded-mode .controls-header h4 {
+  color: #F8F9FA;
 }
 
 /* Expanded mode - floating toolbar at bottom */
