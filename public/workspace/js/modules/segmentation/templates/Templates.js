@@ -320,12 +320,11 @@ class Templates {
           </div>
 
           <!-- Inference Completion Section -->
-          <div id="inferenceCompletionSection" class="completion-section" style="display: none; margin-top: 25px; padding: 25px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; border: 1px solid #28a745; text-align: center;">
-            <div style="font-size: 48px; margin-bottom: 15px;">✓</div>
-            <h4 style="margin: 0 0 10px 0; font-size: 20px; color: #155724;">Segmentation Complete</h4>
-            <p style="margin: 0 0 20px 0; font-size: 14px; color: #155724;">Your segmentation results are ready. View them in the Image Viewer or start a new analysis.</p>
+          <div id="inferenceCompletionSection" class="completion-section" style="display: none; margin-top: 25px; padding: 25px; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--success-color); text-align: center;">
+            <h4 style="margin: 0 0 10px 0; font-size: 20px; color: var(--text-primary);">Segmentation Complete</h4>
+            <p style="margin: 0 0 20px 0; font-size: 14px; color: var(--text-secondary);">Your segmentation results are ready. View them in the Image Viewer or start a new analysis.</p>
             <div class="completion-actions" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-              <button class="btn" id="openInViewerBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Open in Image Viewer</button>
+              <button class="btn" id="openInViewerBtn" style="background: var(--accent-primary); color: var(--text-on-accent);">Open in Image Viewer</button>
               <button class="btn secondary" id="resetWorkflowBtn">Start New Analysis</button>
             </div>
           </div>

@@ -320,11 +320,12 @@ class FileSelector {
       dropdown.appendChild(workspaceGroup);
     }
 
-    // Add help text if no files, no test data, and no external results
-    if (this.availableFiles.length === 0 && !this.showTestData && !this.hasExternalRecentResults()) {
+    // Add help text only if dropdown has no selectable files at all
+    const hasAnyFiles = dropdown.querySelectorAll('option:not([disabled])').length > 1; // >1 because placeholder
+    if (!hasAnyFiles) {
       const helpOption = document.createElement('option');
       helpOption.value = '';
-      helpOption.textContent = '📤 No files available - upload one above';
+      helpOption.textContent = '📤 No files available - upload one below';
       helpOption.disabled = true;
       dropdown.appendChild(helpOption);
     }

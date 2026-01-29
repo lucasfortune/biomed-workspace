@@ -59,6 +59,8 @@ class FileHandler {
       icon: '📁',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step4.inference-data'),
       showTestData: true,
+      showRecentResults: true,
+      resultTags: ['denoising', 'data'],
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('inference_data', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('inference_data', file, uploadedInfo)
