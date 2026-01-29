@@ -580,7 +580,7 @@ class WorkspaceManager {
     }
 
     // Clean up slice cache files (in main .slices directory)
-    this.cleanupSliceCache(workspacePath, fileId);
+    this.cleanupSliceCache(workspacePath, fileId, filePath);
 
     // Clean up slice cache in the file's directory (for result files)
     const fileDir = path.dirname(filePath);
@@ -591,6 +591,19 @@ class WorkspaceManager {
 
     // Clean up mesh preview cache files
     this.cleanupMeshPreviewCache(workspacePath, filePath);
+
+    // Clean up empty .thumbnails directory
+    const thumbnailsDir = path.join(workspacePath, '.thumbnails');
+    if (fs.existsSync(thumbnailsDir)) {
+      try {
+        const remaining = fs.readdirSync(thumbnailsDir);
+        if (remaining.length === 0) {
+          fs.rmdirSync(thumbnailsDir);
+        }
+      } catch (error) {
+        // Silently ignore cleanup errors
+      }
+    }
 
     // Clean up empty parent directories (for result files in nested structures)
     this.cleanupEmptyDirectories(fileDir, workspacePath);
@@ -603,11 +616,16 @@ class WorkspaceManager {
   }
 
   /**
-   * Clean up slice cache files for a given fileId
+   * Clean up slice cache files for a given file
+   * Handles all cache naming conventions:
+   *   - Standard slices: {fileId}_{slice}_{size}.jpg
+   *   - Annotation slices: {fileHash}_{slice}_raw.png (fileHash = base64 of filePath)
+   *   - DL denoising slices: dl_{pathHash}_{slice}_{size}.jpg (pathHash = md5 of normalized path)
    * @param {string} workspacePath - Workspace path
    * @param {string} fileId - File ID
+   * @param {string} filePath - Full file path (for computing path-based hashes)
    */
-  cleanupSliceCache(workspacePath, fileId) {
+  cleanupSliceCache(workspacePath, fileId, filePath) {
     const slicesDir = path.join(workspacePath, '.slices');
     if (!fs.existsSync(slicesDir)) {
       return;
@@ -615,11 +633,33 @@ class WorkspaceManager {
 
     try {
       const files = fs.readdirSync(slicesDir);
-      const prefix = `${fileId}_`;
+
+      // Build all possible prefixes for this file's cache entries
+      const prefixes = [`${fileId}_`];
+
+      if (filePath) {
+        // Annotation slice cache prefix (base64 of filePath)
+        const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32);
+        prefixes.push(`${fileHash}_`);
+
+        // DL denoising slice cache prefix (md5 of normalized path)
+        // Normalize: use the relative path within workspace (e.g., "uploads/raw/file.tif")
+        const relativePath = path.relative(workspacePath, filePath);
+        const normalizedPath = relativePath.replace(/\\/g, '/');
+        const pathHash = crypto.createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
+        prefixes.push(`dl_${pathHash}_`);
+      }
+
       for (const file of files) {
-        if (file.startsWith(prefix)) {
+        if (prefixes.some(prefix => file.startsWith(prefix))) {
           fs.unlinkSync(path.join(slicesDir, file));
         }
+      }
+
+      // Remove .slices directory if empty
+      const remaining = fs.readdirSync(slicesDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(slicesDir);
       }
     } catch (error) {
       // Silently ignore cleanup errors
