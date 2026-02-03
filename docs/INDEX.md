@@ -204,7 +204,7 @@ Documentation templates for consistency.
 **Need Help?**
 - Check [Troubleshooting Guide](guides/TROUBLESHOOTING.md)
 - Review [Recent Sessions](sessions/INDEX.md) for similar issues
-- Check [GitHub Issues](https://github.com/yourusername/viz_app/issues)
+- Check [GitHub Issues](https://github.com/lucasfortune/viz_app/issues)
 
 **Contributing Documentation?**
 - Use appropriate [template](templates/)

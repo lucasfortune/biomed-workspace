@@ -210,7 +210,7 @@ pm2 --version
 ```bash
 # Clone to home directory
 cd ~
-git clone https://github.com/yourusername/viz_app.git
+git clone https://github.com/lucasfortune/viz_app.git
 cd viz_app
 
 # Or pull latest changes

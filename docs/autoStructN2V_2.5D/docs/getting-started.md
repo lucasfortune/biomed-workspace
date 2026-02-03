@@ -15,7 +15,7 @@ Before installing autoStructN2V, ensure you have:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/autoStructN2V.git
+git clone https://github.com/lucasfortune/autoStructN2V.git
 cd autoStructN2V
 ```
 

@@ -332,7 +332,7 @@ class WelcomeHub {
             <h4>Resources</h4>
             <a href="#" class="resource-link">📚 Documentation</a>
             <a href="#" class="resource-link">🔬 Publications</a>
-            <a href="https://github.com/yourusername/viz_app" 
+            <a href="https://github.com/lucasfortune/viz_app" 
                class="resource-link">💻 GitHub</a>
           </div>
         </footer>
