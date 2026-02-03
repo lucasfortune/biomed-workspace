@@ -14,8 +14,8 @@ PyWavelets>=1.4.0     # Required for skimage.restoration.estimate_sigma
 scipy>=1.9.0,<2.0.0
 
 # For specific CUDA versions, uncomment and modify as needed:
-torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
-torchvision==0.16.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+# torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+# torchvision==0.16.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
 
 # Development and debugging (optional)
 matplotlib>=3.5.0  # For plotting training curves (optional)
