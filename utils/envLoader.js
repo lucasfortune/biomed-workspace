@@ -80,6 +80,10 @@ function loadEnvironment() {
     lines.push('# Use 0.0.0.0 to bind to all interfaces (not recommended for production)');
     lines.push(`# HOST=127.0.0.1`);
     lines.push('');
+    lines.push('# Allowed Origins for CORS (required for production deployments)');
+    lines.push('# Comma-separated list of allowed origins, e.g.:');
+    lines.push('# ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com');
+    lines.push('');
 
     try {
       fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
@@ -104,7 +108,8 @@ function loadEnvironment() {
     SESSION_SECRET: process.env.SESSION_SECRET,
     DEBUG: process.env.DEBUG === 'true',
     PORT: process.env.PORT || 3000,
-    HOST: process.env.HOST || '127.0.0.1'
+    HOST: process.env.HOST || '127.0.0.1',
+    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || null
   };
 }
 
@@ -120,6 +125,7 @@ function initializeEnvironment() {
     console.log(`[ENV] DEBUG mode: ${env.DEBUG ? 'ENABLED' : 'DISABLED'}`);
     console.log(`[ENV] HOST: ${env.HOST}`);
     console.log(`[ENV] PORT: ${env.PORT}`);
+    console.log(`[ENV] ALLOWED_ORIGINS: ${env.ALLOWED_ORIGINS || '(not set, using localhost defaults)'}`);
     return env;
   } catch (error) {
     console.error('[ENV] FATAL: Failed to initialize environment:', error.message);

@@ -26,7 +26,6 @@ matplotlib>=3.5.0  # For plotting training curves (optional)
 tqdm>=4.64.0       # For progress bars (optional)
 
 # Deep Learning Denoising (autoStructN2V)
-# Install separately in editable mode:
-#   pip install -e docs/autoStructN2V/codebase/
-# This enables the DL denoising module with N2V and autoStructN2V methods.
-# Requires: torch, tensorboard, tqdm (all included in base requirements)
+# The autoStructN2V library is bundled in docs/autoStructN2V_2.5D/ and is
+# automatically added to sys.path at runtime by python/denoising/__init__.py.
+# No separate installation is required.
