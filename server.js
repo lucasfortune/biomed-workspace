@@ -159,9 +159,10 @@ configureApp(app, {
 // =============================================================================
 
 const PORT = env.PORT;
+const HOST = env.HOST;
 
-server.listen(PORT, () => {
-  logger.info(`Server running on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  logger.info(`Server running on http://${HOST}:${PORT}`);
 
   // Start cleanup service for abandoned workspaces
   if (CLEANUP_CONFIG.enableOnStartup) {

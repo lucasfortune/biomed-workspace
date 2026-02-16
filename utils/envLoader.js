@@ -76,6 +76,10 @@ function loadEnvironment() {
     lines.push('# Server Port (optional, defaults to 3000)');
     lines.push(`# PORT=3000`);
     lines.push('');
+    lines.push('# Server Host (optional, defaults to 127.0.0.1 for security)');
+    lines.push('# Use 0.0.0.0 to bind to all interfaces (not recommended for production)');
+    lines.push(`# HOST=127.0.0.1`);
+    lines.push('');
 
     try {
       fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
@@ -99,7 +103,8 @@ function loadEnvironment() {
   return {
     SESSION_SECRET: process.env.SESSION_SECRET,
     DEBUG: process.env.DEBUG === 'true',
-    PORT: process.env.PORT || 3000
+    PORT: process.env.PORT || 3000,
+    HOST: process.env.HOST || '127.0.0.1'
   };
 }
 
@@ -113,6 +118,7 @@ function initializeEnvironment() {
     const env = loadEnvironment();
     console.log('[ENV] Environment configuration loaded successfully');
     console.log(`[ENV] DEBUG mode: ${env.DEBUG ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`[ENV] HOST: ${env.HOST}`);
     console.log(`[ENV] PORT: ${env.PORT}`);
     return env;
   } catch (error) {
