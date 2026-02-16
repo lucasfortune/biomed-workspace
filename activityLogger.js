@@ -1,13 +1,34 @@
 const fs = require('fs');
 const path = require('path');
 
-// Ensure logs directory exists
-const logsDir = path.join(__dirname, 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+// Lazy initialization - paths are set when initialize() is called
+let logsDir = null;
+let logFilePath = null;
+let initialized = false;
+
+/**
+ * Initialize the activity logger with the specified data directory
+ * @param {string} dataDir - Data directory path (defaults to __dirname for backward compat)
+ */
+function initialize(dataDir) {
+  if (initialized) return;
+
+  logsDir = dataDir ? path.join(dataDir, 'logs') : path.join(__dirname, 'logs');
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  logFilePath = path.join(logsDir, 'activity.log');
+  initialized = true;
 }
 
-const logFilePath = path.join(logsDir, 'activity.log');
+/**
+ * Ensure logger is initialized (fallback for direct requires without explicit init)
+ */
+function ensureInitialized() {
+  if (!initialized) {
+    initialize(null); // Use default (project root)
+  }
+}
 
 /**
  * Log user activity to file
@@ -16,6 +37,8 @@ const logFilePath = path.join(logsDir, 'activity.log');
  * @param {object} details - Additional details about the action
  */
 function logActivity(username, action, details = {}) {
+  ensureInitialized();
+
   const timestamp = new Date().toISOString();
   const logEntry = {
     timestamp,
@@ -23,9 +46,9 @@ function logActivity(username, action, details = {}) {
     action,
     details
   };
-  
+
   const logLine = JSON.stringify(logEntry) + '\n';
-  
+
   try {
     fs.appendFileSync(logFilePath, logLine);
   } catch (error) {
@@ -81,6 +104,7 @@ function logRegistration(username, institution) {
 }
 
 module.exports = {
+  initialize,
   logActivity,
   logTrainingStart,
   logInferenceStart,

@@ -31,7 +31,7 @@ class CleanupService {
     this.logger = dependencies.logger;
 
     // Configuration with defaults
-    this.sessionsDir = './sessions';
+    this.sessionsDir = options.sessionsDir || './sessions';
     this.cleanupIntervalMs = options.intervalMs || 15 * 60 * 1000;  // 15 minutes
     this.gracePeriodMs = options.gracePeriodMs || 60 * 60 * 1000;   // 1 hour
 

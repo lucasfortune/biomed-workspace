@@ -17,10 +17,13 @@ const socketIo = require('socket.io');
 const path = require('path');
 
 // Configuration
-const { PYTHON_PATH, validatePythonPath, CLEANUP_CONFIG } = require('./src/config/constants');
+const { PYTHON_PATH, validatePythonPath, CLEANUP_CONFIG, DATA_DIR, DATA_PATHS, ensureDataDirectories } = require('./src/config/constants');
 
 // Core modules
 const activityLogger = require('./activityLogger');
+// Initialize activity logger with DATA_DIR before any logging occurs
+activityLogger.initialize(DATA_DIR);
+
 const WorkspaceManager = require('./WorkspaceManager');
 
 // Services
@@ -51,11 +54,17 @@ if (!validatePythonPath()) {
 }
 logger.info('Python interpreter found at:', PYTHON_PATH);
 
+// Ensure data directories exist (workspaces, sessions, logs in DATA_DIR)
+ensureDataDirectories();
+logger.info('Data directory:', DATA_DIR);
+
 // =============================================================================
 // INITIALIZE CORE MODULES
 // =============================================================================
 
-const workspaceManager = new WorkspaceManager();
+const workspaceManager = new WorkspaceManager({
+  workspacesBaseDir: DATA_PATHS.workspaces
+});
 
 // =============================================================================
 // INITIALIZE SERVICES
@@ -74,7 +83,7 @@ const fileService = new FileService({
 });
 
 const authService = new AuthService({
-  usersFilePath: path.join(process.cwd(), 'users.json'),
+  usersFilePath: DATA_PATHS.usersFile,
   activityLogger,
   logger
 });
@@ -111,7 +120,8 @@ const cleanupService = new CleanupService(
   },
   {
     intervalMs: CLEANUP_CONFIG.intervalMs,
-    gracePeriodMs: CLEANUP_CONFIG.gracePeriodMs
+    gracePeriodMs: CLEANUP_CONFIG.gracePeriodMs,
+    sessionsDir: DATA_PATHS.sessions
   }
 );
 

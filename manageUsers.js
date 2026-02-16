@@ -3,7 +3,15 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const path = require('path');
 
-const usersFilePath = path.join(__dirname, 'users.json');
+// Load environment variables from .env (for DATA_DIR)
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Resolve DATA_DIR (defaults to project root for backward compatibility)
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : __dirname;
+
+const usersFilePath = path.join(DATA_DIR, 'users.json');
 
 /**
  * Load users from file

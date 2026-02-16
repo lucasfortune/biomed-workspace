@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
-const { PYTHON_PATH } = require('../config/constants');
+const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
 
 /**
@@ -1387,7 +1387,7 @@ function createDenoisingRoutes(dependencies) {
       // Security: ensure path is within the workspaces directory
       // (relaxed check since these paths come from our own training results)
       const normalizedPath = path.normalize(absolutePath);
-      const workspacesDir = path.normalize(path.join(process.cwd(), 'workspaces'));
+      const workspacesDir = path.normalize(DATA_PATHS.workspaces);
       if (!normalizedPath.startsWith(workspacesDir)) {
         if (logger) {
           logger.error('[Denoising] Access denied - path outside workspaces:', normalizedPath);
@@ -1516,7 +1516,7 @@ function createDenoisingRoutes(dependencies) {
       // Security: ensure path is within the workspaces directory
       // (relaxed check since these paths come from our own training results)
       const normalizedPath = path.normalize(absolutePath);
-      const workspacesDir = path.normalize(path.join(process.cwd(), 'workspaces'));
+      const workspacesDir = path.normalize(DATA_PATHS.workspaces);
       if (!normalizedPath.startsWith(workspacesDir)) {
         if (logger) {
           logger.error('[Denoising] Access denied - path outside workspaces:', normalizedPath);

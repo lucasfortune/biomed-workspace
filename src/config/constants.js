@@ -7,8 +7,22 @@
 const path = require('path');
 const fs = require('fs');
 
-// Base directory (project root)
+// Base directory (project root) - for application code
 const BASE_DIR = path.resolve(__dirname, '..', '..');
+
+// Data directory (user data) - defaults to BASE_DIR if DATA_DIR env var is not set
+// This allows storing user data (workspaces, sessions, logs, users.json) on a separate volume
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : BASE_DIR;
+
+// Absolute paths for user data directories
+const DATA_PATHS = {
+  workspaces: path.join(DATA_DIR, 'workspaces'),
+  sessions: path.join(DATA_DIR, 'sessions'),
+  logs: path.join(DATA_DIR, 'logs'),
+  usersFile: path.join(DATA_DIR, 'users.json')
+};
 
 // Python interpreter - use venv Python to ensure all dependencies are available
 // Cross-platform: Windows uses Scripts\python.exe, Unix uses bin/python
@@ -100,7 +114,7 @@ function validatePythonPath() {
 }
 
 /**
- * Ensure required directories exist
+ * Ensure required directories exist (code directories in BASE_DIR)
  */
 function ensureDirectories() {
   const requiredDirs = [
@@ -119,6 +133,24 @@ function ensureDirectories() {
 }
 
 /**
+ * Ensure data directories exist (user data directories in DATA_DIR)
+ * Creates workspaces, sessions, and logs directories
+ */
+function ensureDataDirectories() {
+  const dataDirs = [
+    DATA_PATHS.workspaces,
+    DATA_PATHS.sessions,
+    DATA_PATHS.logs
+  ];
+
+  dataDirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+}
+
+/**
  * Get absolute path from relative path
  * @param {string} relativePath - Path relative to BASE_DIR
  * @returns {string} Absolute path
@@ -129,6 +161,8 @@ function getAbsolutePath(relativePath) {
 
 module.exports = {
   BASE_DIR,
+  DATA_DIR,
+  DATA_PATHS,
   PYTHON_PATH,
   DIRECTORIES,
   UPLOAD_LIMITS,
@@ -140,5 +174,6 @@ module.exports = {
   REQUIRED_TRAINING_FIELDS,
   validatePythonPath,
   ensureDirectories,
+  ensureDataDirectories,
   getAbsolutePath
 };

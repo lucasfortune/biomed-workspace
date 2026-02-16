@@ -84,6 +84,11 @@ function loadEnvironment() {
     lines.push('# Comma-separated list of allowed origins, e.g.:');
     lines.push('# ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com');
     lines.push('');
+    lines.push('# Data Directory (optional, defaults to project root)');
+    lines.push('# Set this to store user data (workspaces, sessions, logs, users.json) separately');
+    lines.push('# Useful for production deployments with external storage volumes');
+    lines.push('# DATA_DIR=/mnt/volume/app_data');
+    lines.push('');
 
     try {
       fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
@@ -109,7 +114,8 @@ function loadEnvironment() {
     DEBUG: process.env.DEBUG === 'true',
     PORT: process.env.PORT || 3000,
     HOST: process.env.HOST || '127.0.0.1',
-    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || null
+    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || null,
+    DATA_DIR: process.env.DATA_DIR || null  // null means use project root
   };
 }
 
@@ -126,6 +132,7 @@ function initializeEnvironment() {
     console.log(`[ENV] HOST: ${env.HOST}`);
     console.log(`[ENV] PORT: ${env.PORT}`);
     console.log(`[ENV] ALLOWED_ORIGINS: ${env.ALLOWED_ORIGINS || '(not set, using localhost defaults)'}`);
+    console.log(`[ENV] DATA_DIR: ${env.DATA_DIR || '(not set, using project root)'}`);
     return env;
   } catch (error) {
     console.error('[ENV] FATAL: Failed to initialize environment:', error.message);

@@ -6,8 +6,13 @@ const path = require('path');
  * WorkspaceManager - Handles workspace initialization and file management
  */
 class WorkspaceManager {
-  constructor() {
-    this.workspacesBaseDir = 'workspaces';
+  /**
+   * Create a WorkspaceManager instance
+   * @param {object} options - Configuration options
+   * @param {string} options.workspacesBaseDir - Base directory for workspaces (defaults to 'workspaces')
+   */
+  constructor(options = {}) {
+    this.workspacesBaseDir = options.workspacesBaseDir || 'workspaces';
     this.ensureWorkspacesDirectory();
   }
 

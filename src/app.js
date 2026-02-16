@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Configuration
-const { PYTHON_PATH, ensureDirectories } = require('./config/constants');
+const { PYTHON_PATH, ensureDirectories, DATA_PATHS } = require('./config/constants');
 
 // Middleware
 const { createSessionMiddleware } = require('./middleware/session.middleware');
@@ -297,7 +297,7 @@ function configureApp(app, dependencies) {
   }));
 
   // Session middleware
-  app.use(createSessionMiddleware(env));
+  app.use(createSessionMiddleware(env, { sessionsDir: DATA_PATHS.sessions }));
 
   // CORS configuration
   const allowedOrigins = env.ALLOWED_ORIGINS
