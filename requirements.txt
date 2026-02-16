@@ -1,7 +1,11 @@
 # Biomedical Image Segmentation Visualizer - Python Dependencies
+
 # Core deep learning framework
-torch>=2.0.0,<2.7.0
-torchvision>=0.15.0,<0.20.0
+# NOTE: Install PyTorch manually BEFORE running pip install -r requirements.txt
+# This allows selecting the correct CUDA version for your system. Example:
+#   pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# See https://pytorch.org/get-started/locally/ for options.
+# Minimum required: torch>=2.0.0, torchvision>=0.15.0, torchaudio>=2.0.0
 
 # Image processing and data handling
 tifffile>=2023.7.10
