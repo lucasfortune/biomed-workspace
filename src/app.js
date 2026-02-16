@@ -270,6 +270,12 @@ function configureApp(app, dependencies) {
   // MIDDLEWARE CONFIGURATION
   // =============================================================================
 
+  // Trust proxy - required when behind a reverse proxy (Caddy, Nginx, etc.)
+  // This allows Express to correctly handle secure cookies over HTTPS
+  if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+  }
+
   // Security headers with Helmet
   app.use(helmet({
     contentSecurityPolicy: {
