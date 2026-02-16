@@ -179,6 +179,8 @@ lerna-debug.log*
 # User uploads and generated data
 uploads/
 models/
+# Exception: don't ignore autoStructN2V library's models module
+!docs/autoStructN2V_2.5D/autoStructN2V/models/
 results/
 outputs/
 workspaces/
