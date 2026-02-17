@@ -676,16 +676,41 @@ body {
 }
 
 /* ============================================================================
-   Responsive
+   Responsive — Tablet (768px)
    ============================================================================ */
 
 @media (max-width: 768px) {
+    /* Header: stack title and actions */
     .admin-header {
         padding: 15px 20px;
     }
 
+    .header-content {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .admin-header h1 {
+        font-size: 1.4em;
+    }
+
+    .header-actions {
+        gap: 10px;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    /* Nav tabs: compact */
+    .nav-tab {
+        padding: 14px 12px;
+        font-size: 0.9em;
+    }
+
+    /* Content area */
     .admin-content {
         padding: 0 20px;
+        margin: 20px auto;
     }
 
     .content-header {
@@ -694,15 +719,208 @@ body {
         gap: 15px;
     }
 
+    /* Filter controls: wrap */
+    .filter-controls {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .filter-controls select,
+    .filter-controls input {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    /* User cards */
     .user-meta {
         grid-template-columns: 1fr;
     }
 
+    /* Session cards */
     .session-details {
         grid-template-columns: 1fr;
     }
 
-    .header-actions {
-        gap: 10px;
+    /* Activity table: card layout */
+    .activity-table thead {
+        display: none;
+    }
+
+    .activity-table,
+    .activity-table tbody {
+        display: block;
+        width: 100%;
+    }
+
+    .activity-table tr {
+        display: block;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 12px 15px;
+        margin-bottom: 10px;
+        background: var(--bg-secondary);
+    }
+
+    .activity-table tr:hover {
+        background: var(--bg-tertiary);
+    }
+
+    .activity-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: none;
+        font-size: 0.9em;
+    }
+
+    .activity-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--text-secondary);
+        font-size: 0.85em;
+        margin-right: 12px;
+        flex-shrink: 0;
+    }
+
+    .activity-table td:not(:last-child) {
+        border-bottom: 1px solid var(--border-light);
+    }
+}
+
+/* ============================================================================
+   Responsive — Phone (480px)
+   ============================================================================ */
+
+@media (max-width: 480px) {
+    /* Header: even more compact */
+    .admin-header {
+        padding: 12px 16px;
+    }
+
+    .admin-header h1 {
+        font-size: 1.2em;
+    }
+
+    .admin-user-info {
+        display: none;
+    }
+
+    .header-actions .btn {
+        padding: 6px 12px;
+        font-size: 0.8em;
+    }
+
+    /* Nav tabs: scrollable */
+    .admin-nav {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .nav-tab {
+        flex: none;
+        white-space: nowrap;
+        padding: 12px 14px;
+        font-size: 0.85em;
+    }
+
+    .badge {
+        font-size: 0.7em;
+        padding: 1px 6px;
+    }
+
+    /* Content area */
+    .admin-content {
+        padding: 0 12px;
+        margin: 15px auto;
+    }
+
+    .data-content {
+        padding: 15px;
+        border-radius: 8px;
+    }
+
+    /* User cards: compact with stacked header */
+    .user-card {
+        padding: 15px;
+    }
+
+    .user-card-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .user-name {
+        font-size: 1.05em;
+    }
+
+    .user-actions {
+        flex-direction: column;
+    }
+
+    .user-actions .btn {
+        width: 100%;
+        padding: 10px;
+        text-align: center;
+    }
+
+    /* Session cards: compact */
+    .session-card {
+        padding: 15px;
+    }
+
+    .session-header {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .session-type {
+        font-size: 1em;
+    }
+
+    /* Filter controls: full width */
+    .filter-controls select,
+    .filter-controls input {
+        width: 100%;
+        min-width: unset;
+    }
+
+    /* Modal: tighter */
+    .modal-content {
+        padding: 20px;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .modal-actions .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Empty state: less padding */
+    .empty-state {
+        padding: 30px 15px;
+    }
+
+    .empty-state-icon {
+        font-size: 3em;
+    }
+
+    /* Activity table cards: tighter on phone */
+    .activity-table tr {
+        padding: 10px 12px;
+    }
+
+    .activity-table td {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+
+    .activity-table td::before {
+        margin-right: 0;
     }
 }

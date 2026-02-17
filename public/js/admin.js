@@ -172,7 +172,6 @@ function displayUsers(users) {
     if (users.length === 0) {
         content.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">👥</div>
                 <h3>No users found</h3>
                 <p>No users match the selected filter.</p>
             </div>
@@ -248,7 +247,6 @@ function displayPendingUsers(users) {
     if (users.length === 0) {
         content.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">✅</div>
                 <h3>No pending approvals</h3>
                 <p>All user registrations have been reviewed.</p>
             </div>
@@ -314,7 +312,7 @@ async function approveUser(username) {
         }
         
         console.log('User approved successfully');
-        alert(`✅ User "${username}" has been approved successfully!`);
+        alert(`User "${username}" has been approved successfully!`);
         
         // Reload data
         console.log('Reloading user data...');
@@ -363,7 +361,7 @@ async function rejectUser(username) {
         }
         
         console.log('User rejected successfully');
-        alert(`❌ User "${username}" has been rejected.`);
+        alert(`User "${username}" has been rejected.`);
         
         // Reload data
         console.log('Reloading user data...');
@@ -425,7 +423,6 @@ function displayActivityLogs(logs, users) {
     if (logs.length === 0) {
         content.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">📊</div>
                 <h3>No activity logs</h3>
                 <p>No activity logs match the selected filters.</p>
             </div>
@@ -446,10 +443,10 @@ function displayActivityLogs(logs, users) {
             <tbody>
                 ${logs.map(log => `
                     <tr>
-                        <td class="timestamp">${formatDateTime(log.timestamp)}</td>
-                        <td><strong>${escapeHtml(log.username)}</strong></td>
-                        <td><span class="activity-type ${getActivityClass(log.action)}">${formatAction(log.action)}</span></td>
-                        <td>${escapeHtml(formatDetails(log.details))}</td>
+                        <td data-label="Time" class="timestamp">${formatDateTime(log.timestamp)}</td>
+                        <td data-label="User"><strong>${escapeHtml(log.username)}</strong></td>
+                        <td data-label="Action"><span class="activity-type ${getActivityClass(log.action)}">${formatAction(log.action)}</span></td>
+                        <td data-label="Details">${escapeHtml(formatDetails(log.details))}</td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -492,7 +489,6 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
     if (training.length === 0 && inference.length === 0 && mesh.length === 0 && denoising.length === 0) {
         content.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">🔄</div>
                 <h3>No sessions found</h3>
                 <p>There are no active sessions in the system.</p>
             </div>
@@ -503,7 +499,7 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
     let sessionsHTML = '';
     
     if (training.length > 0) {
-        sessionsHTML += '<h3 style="margin-top: 0;">🎓 Training Sessions</h3>';
+        sessionsHTML += '<h3 style="margin-top: 0;">Training Sessions</h3>';
         training.forEach(session => {
             sessionsHTML += `
                 <div class="session-card training">
@@ -534,7 +530,7 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
     }
     
     if (inference.length > 0) {
-        sessionsHTML += '<h3 style="margin-top: 20px;">🔬 Inference Sessions</h3>';
+        sessionsHTML += '<h3 style="margin-top: 20px;">Inference Sessions</h3>';
         inference.forEach(session => {
             sessionsHTML += `
                 <div class="session-card inference">
@@ -567,7 +563,7 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
     }
 
     if (mesh.length > 0) {
-        sessionsHTML += '<h3 style="margin-top: 20px;">🧊 Mesh Sessions</h3>';
+        sessionsHTML += '<h3 style="margin-top: 20px;">Mesh Sessions</h3>';
         mesh.forEach(session => {
             sessionsHTML += `
                 <div class="session-card mesh">
@@ -600,7 +596,7 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
     }
 
     if (denoising.length > 0) {
-        sessionsHTML += '<h3 style="margin-top: 20px;">🔇 Denoising Sessions</h3>';
+        sessionsHTML += '<h3 style="margin-top: 20px;">Denoising Sessions</h3>';
         denoising.forEach(session => {
             sessionsHTML += `
                 <div class="session-card denoising">
@@ -705,9 +701,9 @@ async function handleLogout() {
 // Utility functions
 function getStatusText(status) {
     const statusMap = {
-        'active': '✅ Active',
-        'pending': '⏳ Pending',
-        'rejected': '❌ Rejected'
+        'active': 'Active',
+        'pending': 'Pending',
+        'rejected': 'Rejected'
     };
     return statusMap[status] || status;
 }
