@@ -124,6 +124,12 @@ async function handleRegister(event) {
     const institution = document.getElementById('registerInstitution').value.trim();
 
     // Validation
+    const privacyConsent = document.getElementById('privacyConsent');
+    if (!privacyConsent || !privacyConsent.checked) {
+        showError('registerError', 'Please accept the privacy policy to register / Bitte akzeptieren Sie die Datenschutzerklärung');
+        return;
+    }
+
     if (password !== confirmPassword) {
         showError('registerError', 'Passwords do not match');
         return;

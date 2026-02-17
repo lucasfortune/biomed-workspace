@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/privacy-policy.css">
 </head>
 <body>
     <div class="logo-container">
@@ -83,6 +84,14 @@
                     <p>You'll be notified once your account is approved for full access.</p>
                 </div>
                 
+                <div class="privacy-consent">
+                    <input type="checkbox" id="privacyConsent" name="privacyConsent">
+                    <label for="privacyConsent">
+                        I have read and accept the <a href="#" onclick="openPrivacyPolicy(event)">Privacy Policy</a>
+                        / Ich habe die <a href="#" onclick="openPrivacyPolicy(event)">Datenschutzerkl&auml;rung</a> gelesen und akzeptiere diese
+                    </label>
+                </div>
+
                 <button type="submit" class="btn btn-primary btn-full">Register</button>
             </form>
             
@@ -103,6 +112,7 @@
     </div>
     
     <script src="js/utils.js"></script>
+    <script src="js/privacy-policy.js"></script>
     <script src="js/register.js"></script>
 </body>
 </html>

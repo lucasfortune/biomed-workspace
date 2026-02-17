@@ -6,6 +6,7 @@
     <title>Biomedical Image Processing Platform</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="css/welcome.css">
+    <link rel="stylesheet" href="css/privacy-policy.css">
 </head>
 <body>
     <!-- Logo Row: Top-right corner -->
@@ -119,6 +120,14 @@
                     </div>
                 </div>
 
+                <div class="privacy-consent">
+                    <input type="checkbox" id="privacyConsent" name="privacyConsent">
+                    <label for="privacyConsent">
+                        I have read and accept the <a href="#" onclick="openPrivacyPolicy(event)">Privacy Policy</a>
+                        / Ich habe die <a href="#" onclick="openPrivacyPolicy(event)">Datenschutzerkl&auml;rung</a> gelesen und akzeptiere diese
+                    </label>
+                </div>
+
                 <button type="submit" class="btn-primary">Register</button>
             </form>
         </div>
@@ -140,6 +149,7 @@
         </div>
     </div>
 
+    <script src="js/privacy-policy.js"></script>
     <script src="js/welcome.js"></script>
 </body>
 </html>

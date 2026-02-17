@@ -11,6 +11,13 @@ async function handleRegister(event) {
     const fullName = document.getElementById('fullName').value.trim();
     const institution = document.getElementById('institution').value.trim();
     
+    // Validate privacy consent
+    const privacyConsent = document.getElementById('privacyConsent');
+    if (!privacyConsent || !privacyConsent.checked) {
+        displayError('Please accept the privacy policy to register / Bitte akzeptieren Sie die Datenschutzerklärung');
+        return;
+    }
+
     // Validate passwords match
     if (password !== confirmPassword) {
         displayError('Passwords do not match');
