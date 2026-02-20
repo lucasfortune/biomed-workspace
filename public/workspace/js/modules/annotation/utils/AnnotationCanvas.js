@@ -48,6 +48,15 @@ class AnnotationCanvas {
     this.panStart = { x: 0, y: 0 };
     this.spacePressed = false;
 
+    // Touch/pointer tracking for multi-finger gestures
+    this.activePointers = new Map();  // pointerId -> {x, y, type}
+    this.lastPinchDistance = 0;
+    this.lastPinchCenter = null;
+    this.isTwoFingerGesture = false;
+
+    // Callback for notifying BrushEngine when two-finger gesture starts
+    this.onTwoFingerStart = null;
+
     // DOM elements (created in init)
     this.viewport = null;
     this.transformContainer = null;
@@ -67,9 +76,10 @@ class AnnotationCanvas {
 
     // Bind methods
     this.handleWheel = this.handleWheel.bind(this);
-    this.handleMouseDown = this.handleMouseDown.bind(this);
-    this.handleMouseMove = this.handleMouseMove.bind(this);
-    this.handleMouseUp = this.handleMouseUp.bind(this);
+    this.handlePointerDown = this.handlePointerDown.bind(this);
+    this.handlePointerMove = this.handlePointerMove.bind(this);
+    this.handlePointerUp = this.handlePointerUp.bind(this);
+    this.handlePointerCancel = this.handlePointerCancel.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleKeyUp = this.handleKeyUp.bind(this);
     this.handleContextMenu = this.handleContextMenu.bind(this);
@@ -111,6 +121,7 @@ class AnnotationCanvas {
       overflow: hidden;
       position: relative;
       background: #1a1a2e;
+      touch-action: none;
     `;
 
     // Create transform container (handles zoom/pan)
@@ -166,6 +177,7 @@ class AnnotationCanvas {
       width: 100%;
       height: 100%;
       cursor: crosshair;
+      touch-action: none;
     `;
 
     // Get contexts
@@ -188,10 +200,11 @@ class AnnotationCanvas {
     // Wheel zoom
     this.viewport.addEventListener('wheel', this.handleWheel, { passive: false });
 
-    // Pan with mouse
-    this.viewport.addEventListener('mousedown', this.handleMouseDown);
-    window.addEventListener('mousemove', this.handleMouseMove);
-    window.addEventListener('mouseup', this.handleMouseUp);
+    // Pointer events (unified mouse/touch/pen)
+    this.viewport.addEventListener('pointerdown', this.handlePointerDown);
+    window.addEventListener('pointermove', this.handlePointerMove);
+    window.addEventListener('pointerup', this.handlePointerUp);
+    window.addEventListener('pointercancel', this.handlePointerCancel);
 
     // Keyboard (space for pan)
     window.addEventListener('keydown', this.handleKeyDown);
@@ -206,9 +219,10 @@ class AnnotationCanvas {
    */
   detachEventListeners() {
     this.viewport.removeEventListener('wheel', this.handleWheel);
-    this.viewport.removeEventListener('mousedown', this.handleMouseDown);
-    window.removeEventListener('mousemove', this.handleMouseMove);
-    window.removeEventListener('mouseup', this.handleMouseUp);
+    this.viewport.removeEventListener('pointerdown', this.handlePointerDown);
+    window.removeEventListener('pointermove', this.handlePointerMove);
+    window.removeEventListener('pointerup', this.handlePointerUp);
+    window.removeEventListener('pointercancel', this.handlePointerCancel);
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     this.viewport.removeEventListener('contextmenu', this.handleContextMenu);
@@ -492,11 +506,57 @@ class AnnotationCanvas {
   }
 
   /**
-   * Handle mouse down for pan
+   * Handle pointer down for pan (unified mouse/touch/pen)
+   * @param {PointerEvent} e
    */
-  handleMouseDown(e) {
-    // Right-click or middle-click for pan
-    if (e.button === 2 || e.button === 1 || this.spacePressed) {
+  handlePointerDown(e) {
+    // Track all active pointers
+    this.activePointers.set(e.pointerId, {
+      x: e.clientX,
+      y: e.clientY,
+      type: e.pointerType
+    });
+
+    // Check for two-finger gesture (touch only)
+    const touchPointers = this._getTouchPointers();
+    if (touchPointers.length >= 2 && !this.isTwoFingerGesture) {
+      // Transition to two-finger gesture mode
+      this.isTwoFingerGesture = true;
+
+      // Notify BrushEngine to cancel any in-progress stroke
+      if (this.onTwoFingerStart) {
+        this.onTwoFingerStart();
+      }
+
+      // Initialize pinch state from the two touch pointers
+      const [p1, p2] = touchPointers;
+      this.lastPinchDistance = this._getDistance(p1, p2);
+      this.lastPinchCenter = this._getCenter(p1, p2);
+
+      // Start panning from pinch center
+      this.isPanning = true;
+      this.panStart = {
+        x: this.lastPinchCenter.x - this.pan.x,
+        y: this.lastPinchCenter.y - this.pan.y
+      };
+      this.viewport.style.cursor = 'grabbing';
+      e.preventDefault();
+      return;
+    }
+
+    // Mouse: right-click, middle-click, or space for pan
+    if (e.pointerType === 'mouse') {
+      if (e.button === 2 || e.button === 1 || this.spacePressed) {
+        e.preventDefault();
+        this.isPanning = true;
+        this.panStart = { x: e.clientX - this.pan.x, y: e.clientY - this.pan.y };
+        this.viewport.style.cursor = 'grabbing';
+      }
+    }
+
+    // Pen and single touch: don't pan here (BrushEngine handles drawing)
+    // Space + pen/touch: pan mode
+    if (e.pointerType !== 'mouse' && this.spacePressed) {
       e.preventDefault();
       this.isPanning = true;
       this.panStart = { x: e.clientX - this.pan.x, y: e.clientY - this.pan.y };
@@ -505,9 +565,56 @@ class AnnotationCanvas {
   }
 
   /**
-   * Handle mouse move for pan and coordinate tracking
+   * Handle pointer move for pan, pinch-to-zoom, and coordinate tracking
+   * @param {PointerEvent} e
    */
-  handleMouseMove(e) {
+  handlePointerMove(e) {
+    // Update tracked pointer position
+    if (this.activePointers.has(e.pointerId)) {
+      this.activePointers.set(e.pointerId, {
+        x: e.clientX,
+        y: e.clientY,
+        type: e.pointerType
+      });
+    }
+
+    // Two-finger gesture: pinch-to-zoom + pan
+    if (this.isTwoFingerGesture) {
+      const touchPointers = this._getTouchPointers();
+      if (touchPointers.length >= 2) {
+        const [p1, p2] = touchPointers;
+        const currentDistance = this._getDistance(p1, p2);
+        const currentCenter = this._getCenter(p1, p2);
+
+        // Pinch-to-zoom
+        if (this.lastPinchDistance > 0) {
+          const scale = currentDistance / this.lastPinchDistance;
+          if (Math.abs(scale - 1) > 0.01) {
+            const newZoom = this.zoom * scale;
+            this.setZoom(newZoom, currentCenter);
+          }
+        }
+
+        // Pan with two fingers
+        if (this.lastPinchCenter) {
+          const dx = currentCenter.x - this.lastPinchCenter.x;
+          const dy = currentCenter.y - this.lastPinchCenter.y;
+          this.pan.x += dx;
+          this.pan.y += dy;
+          this.applyTransform();
+
+          if (this.onPanChange) {
+            this.onPanChange(this.pan);
+          }
+        }
+
+        this.lastPinchDistance = currentDistance;
+        this.lastPinchCenter = currentCenter;
+      }
+      return;
+    }
+
+    // Single-pointer panning (mouse right-click/middle or space+drag)
     if (this.isPanning) {
       this.pan.x = e.clientX - this.panStart.x;
       this.pan.y = e.clientY - this.panStart.y;
@@ -518,7 +625,7 @@ class AnnotationCanvas {
       }
     }
 
-    // Track mouse position for coordinate display
+    // Track pointer position for coordinate display
     if (this.onMouseMove && this.isLoaded) {
       const source = this.screenToSource(e.clientX, e.clientY);
       this.onMouseMove({
@@ -530,13 +637,37 @@ class AnnotationCanvas {
   }
 
   /**
-   * Handle mouse up to end pan
+   * Handle pointer up
+   * @param {PointerEvent} e
    */
-  handleMouseUp(e) {
+  handlePointerUp(e) {
+    this.activePointers.delete(e.pointerId);
+
+    // End two-finger gesture when fewer than 2 touch pointers remain
+    if (this.isTwoFingerGesture) {
+      const touchPointers = this._getTouchPointers();
+      if (touchPointers.length < 2) {
+        this.isTwoFingerGesture = false;
+        this.isPanning = false;
+        this.lastPinchDistance = 0;
+        this.lastPinchCenter = null;
+        this.viewport.style.cursor = this.spacePressed ? 'grab' : 'crosshair';
+      }
+      return;
+    }
+
     if (this.isPanning) {
       this.isPanning = false;
       this.viewport.style.cursor = this.spacePressed ? 'grab' : 'crosshair';
     }
+  }
+
+  /**
+   * Handle pointer cancel (interrupted gesture)
+   * @param {PointerEvent} e
+   */
+  handlePointerCancel(e) {
+    this.handlePointerUp(e);
   }
 
   /**
@@ -567,6 +698,49 @@ class AnnotationCanvas {
    */
   handleContextMenu(e) {
     e.preventDefault();
+  }
+
+  // ===========================================================================
+  // TOUCH HELPERS
+  // ===========================================================================
+
+  /**
+   * Get all active touch pointers (excludes mouse and pen)
+   * @returns {Array<{x: number, y: number}>}
+   */
+  _getTouchPointers() {
+    const pointers = [];
+    for (const [id, pointer] of this.activePointers) {
+      if (pointer.type === 'touch') {
+        pointers.push(pointer);
+      }
+    }
+    return pointers;
+  }
+
+  /**
+   * Get distance between two pointer positions
+   * @param {{x: number, y: number}} p1
+   * @param {{x: number, y: number}} p2
+   * @returns {number}
+   */
+  _getDistance(p1, p2) {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * Get center point between two pointer positions
+   * @param {{x: number, y: number}} p1
+   * @param {{x: number, y: number}} p2
+   * @returns {{x: number, y: number}}
+   */
+  _getCenter(p1, p2) {
+    return {
+      x: (p1.x + p2.x) / 2,
+      y: (p1.y + p2.y) / 2
+    };
   }
 
   // ===========================================================================

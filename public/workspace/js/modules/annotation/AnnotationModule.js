@@ -724,6 +724,16 @@ class AnnotationModule extends BaseModule {
           this.updateSaveButtonState();
         };
 
+        // Cancel stroke and undo when two-finger gesture interrupts drawing
+        this.brushEngine.onStrokeCancel = () => {
+          this.undo();
+        };
+
+        // Wire up two-finger gesture detection to stroke cancellation
+        this.canvas.onTwoFingerStart = () => {
+          this.brushEngine.cancelCurrentStroke();
+        };
+
         // Render initial class list
         this.renderClassList();
       }

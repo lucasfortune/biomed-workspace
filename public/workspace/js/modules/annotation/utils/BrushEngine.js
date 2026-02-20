@@ -80,15 +80,23 @@ class BrushEngine {
     this.onStrokeStart = null;     // Called when stroke starts
     this.onStrokeEnd = null;       // Called when stroke ends
     this.onAnnotationChange = null; // Called when annotation data changes
+    this.onStrokeCancel = null;    // Called when stroke is cancelled (e.g., two-finger gesture)
+
+    // =========================================================================
+    // POINTER TRACKING
+    // =========================================================================
+
+    this.drawingPointerId = null;  // Active pointer ID for drawing
 
     // =========================================================================
     // BIND METHODS
     // =========================================================================
 
-    this.handleMouseDown = this.handleMouseDown.bind(this);
-    this.handleMouseMove = this.handleMouseMove.bind(this);
-    this.handleMouseUp = this.handleMouseUp.bind(this);
-    this.handleMouseLeave = this.handleMouseLeave.bind(this);
+    this.handlePointerDown = this.handlePointerDown.bind(this);
+    this.handlePointerMove = this.handlePointerMove.bind(this);
+    this.handlePointerUp = this.handlePointerUp.bind(this);
+    this.handlePointerLeave = this.handlePointerLeave.bind(this);
+    this.handlePointerCancel = this.handlePointerCancel.bind(this);
   }
 
   // ===========================================================================
@@ -111,7 +119,7 @@ class BrushEngine {
   }
 
   /**
-   * Attach mouse event listeners to the canvas
+   * Attach pointer event listeners to the canvas
    */
   attachEventListeners() {
     const canvasArea = this.canvas.canvasArea;
@@ -120,32 +128,34 @@ class BrushEngine {
       return;
     }
 
-    // Mouse down on canvas area starts stroke
-    canvasArea.addEventListener('mousedown', this.handleMouseDown);
+    // Pointer down on canvas area starts stroke
+    canvasArea.addEventListener('pointerdown', this.handlePointerDown);
 
-    // Mouse move and up are global to handle dragging outside canvas
-    window.addEventListener('mousemove', this.handleMouseMove);
-    window.addEventListener('mouseup', this.handleMouseUp);
+    // Pointer move and up are global to handle dragging outside canvas
+    window.addEventListener('pointermove', this.handlePointerMove);
+    window.addEventListener('pointerup', this.handlePointerUp);
+    window.addEventListener('pointercancel', this.handlePointerCancel);
 
-    // Mouse leave clears preview
-    canvasArea.addEventListener('mouseleave', this.handleMouseLeave);
+    // Pointer leave clears preview
+    canvasArea.addEventListener('pointerleave', this.handlePointerLeave);
 
     console.log('[BrushEngine] Event listeners attached');
   }
 
   /**
-   * Detach mouse event listeners
+   * Detach pointer event listeners
    */
   detachEventListeners() {
     const canvasArea = this.canvas.canvasArea;
 
     if (canvasArea) {
-      canvasArea.removeEventListener('mousedown', this.handleMouseDown);
-      canvasArea.removeEventListener('mouseleave', this.handleMouseLeave);
+      canvasArea.removeEventListener('pointerdown', this.handlePointerDown);
+      canvasArea.removeEventListener('pointerleave', this.handlePointerLeave);
     }
 
-    window.removeEventListener('mousemove', this.handleMouseMove);
-    window.removeEventListener('mouseup', this.handleMouseUp);
+    window.removeEventListener('pointermove', this.handlePointerMove);
+    window.removeEventListener('pointerup', this.handlePointerUp);
+    window.removeEventListener('pointercancel', this.handlePointerCancel);
   }
 
   // ===========================================================================
@@ -213,82 +223,178 @@ class BrushEngine {
   }
 
   // ===========================================================================
-  // MOUSE EVENT HANDLERS
+  // POINTER EVENT HANDLERS
   // ===========================================================================
 
   /**
-   * Handle mouse down - start stroke
-   * @param {MouseEvent} e - Mouse event
+   * Handle pointer down - start stroke
+   * Accepts mouse (left-click), pen, and single touch for drawing.
+   * @param {PointerEvent} e
    */
-  handleMouseDown(e) {
-    // Only handle left-click for painting
-    // Right-click and middle-click are for pan (handled by AnnotationCanvas)
-    if (e.button !== 0) return;
+  handlePointerDown(e) {
+    // For mouse: only handle left-click (right/middle are for pan)
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
 
-    // Don't paint if space is held (pan mode)
+    // Don't paint if space is held (pan mode) or already panning
     if (this.canvas.isPanning || this.canvas.spacePressed) return;
+
+    // Don't paint during two-finger gesture
+    if (this.canvas.isTwoFingerGesture) return;
+
+    // Only one pointer can draw at a time
+    if (this.drawingPointerId !== null) return;
 
     const source = this.canvas.screenToSource(e.clientX, e.clientY);
     const inBounds = this.canvas.isInBounds(source.x, source.y);
     if (!inBounds) return;
 
-    // Only prevent default for actual painting (not pan)
     e.preventDefault();
+
+    // Track this pointer as the drawing pointer
+    this.drawingPointerId = e.pointerId;
+
+    // Capture pointer for reliable tracking even outside canvas bounds
+    const canvasArea = this.canvas.canvasArea;
+    if (canvasArea) {
+      try {
+        canvasArea.setPointerCapture(e.pointerId);
+      } catch (err) {
+        // Pointer capture may fail in some edge cases, non-fatal
+      }
+    }
 
     this.startStroke(source.x, source.y);
   }
 
   /**
-   * Handle mouse move - continue stroke or update preview
-   * @param {MouseEvent} e - Mouse event
+   * Handle pointer move - continue stroke or update preview
+   * @param {PointerEvent} e
    */
-  handleMouseMove(e) {
+  handlePointerMove(e) {
     // Skip if canvas not ready
     if (!this.canvas || !this.imageWidth) return;
+
+    // Skip during two-finger gesture
+    if (this.canvas.isTwoFingerGesture) {
+      if (this.isDrawing) {
+        this.clearPreview();
+      }
+      return;
+    }
+
+    // Only process the drawing pointer for stroke continuation
+    if (this.isDrawing && e.pointerId !== this.drawingPointerId) return;
+
+    // For preview: only show for mouse/pen or the single active touch
+    if (!this.isDrawing && e.pointerType === 'touch') return;
 
     const source = this.canvas.screenToSource(e.clientX, e.clientY);
     const inBounds = this.canvas.isInBounds(source.x, source.y);
 
-    // Continue stroke if drawing (even outside bounds for smooth edges)
+    // Continue stroke if drawing
     if (this.isDrawing) {
       if (inBounds) {
         this.continueStroke(source.x, source.y);
       }
     }
 
-    // Only update preview when mouse is over canvas
-    if (inBounds) {
-      const coords = { source, inBounds };
-      this.updatePreview(coords);
-    } else {
+    // Update preview (mouse/pen only - touch has no hover state)
+    if (e.pointerType !== 'touch') {
+      if (inBounds) {
+        const coords = { source, inBounds };
+        this.updatePreview(coords);
+      } else {
+        this.clearPreview();
+      }
+    }
+  }
+
+  /**
+   * Handle pointer up - end stroke
+   * @param {PointerEvent} e
+   */
+  handlePointerUp(e) {
+    // Only process the drawing pointer
+    if (e.pointerId !== this.drawingPointerId) return;
+
+    // For mouse: only handle left-click release
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    // Release pointer capture
+    const canvasArea = this.canvas.canvasArea;
+    if (canvasArea) {
+      try {
+        canvasArea.releasePointerCapture(e.pointerId);
+      } catch (err) {
+        // May fail if already released, non-fatal
+      }
+    }
+
+    this.drawingPointerId = null;
+
+    if (this.isDrawing) {
+      this.endStroke();
+    }
+  }
+
+  /**
+   * Handle pointer leave - clear preview
+   * @param {PointerEvent} e
+   */
+  handlePointerLeave(e) {
+    // Clear preview (only for non-captured pointers)
+    if (!this.isDrawing || e.pointerId !== this.drawingPointerId) {
       this.clearPreview();
     }
   }
 
   /**
-   * Handle mouse up - end stroke
-   * @param {MouseEvent} e - Mouse event
+   * Handle pointer cancel - end stroke cleanly
+   * @param {PointerEvent} e
    */
-  handleMouseUp(e) {
-    if (e.button !== 0) return;
+  handlePointerCancel(e) {
+    if (e.pointerId !== this.drawingPointerId) return;
+
+    this.drawingPointerId = null;
 
     if (this.isDrawing) {
       this.endStroke();
     }
+
+    this.clearPreview();
   }
 
   /**
-   * Handle mouse leave - end stroke if active
-   * @param {MouseEvent} e - Mouse event
+   * Cancel the current stroke (called when two-finger gesture starts)
+   * Ends the stroke and triggers undo via onStrokeCancel callback
    */
-  handleMouseLeave(e) {
-    // Clear preview
-    this.clearPreview();
+  cancelCurrentStroke() {
+    if (!this.isDrawing) return;
 
-    // End stroke if active
-    if (this.isDrawing) {
-      this.endStroke();
+    // End the in-progress stroke
+    this.isDrawing = false;
+    this.lastPoint = null;
+
+    // Release pointer capture if active
+    if (this.drawingPointerId !== null) {
+      const canvasArea = this.canvas.canvasArea;
+      if (canvasArea) {
+        try {
+          canvasArea.releasePointerCapture(this.drawingPointerId);
+        } catch (err) {
+          // Non-fatal
+        }
+      }
+      this.drawingPointerId = null;
     }
+
+    // Notify that stroke was cancelled (so AnnotationModule can undo)
+    if (this.onStrokeCancel) {
+      this.onStrokeCancel();
+    }
+
+    this.clearPreview();
+    console.log('[BrushEngine] Stroke cancelled (two-finger gesture)');
   }
 
   // ===========================================================================
