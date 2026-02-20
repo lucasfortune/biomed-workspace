@@ -109,6 +109,14 @@ class AuthService {
       };
     }
 
+    // Check if email is banned
+    if (this.isEmailBanned(email)) {
+      return {
+        success: false,
+        error: 'Registration is not available with this email address. Please contact the administrator.'
+      };
+    }
+
     try {
       // Hash password
       const passwordHash = await bcrypt.hash(password, this.saltRounds);
@@ -210,6 +218,15 @@ class AuthService {
         };
       }
 
+      // Check if user is removed
+      if (user.status === 'removed') {
+        return {
+          success: false,
+          error: 'Your account has been removed. Please contact the administrator.',
+          rejected: true
+        };
+      }
+
       // Log successful login
       if (this.activityLogger) {
         this.activityLogger.logLogin(username, true);
@@ -296,7 +313,9 @@ class AuthService {
       status: user.status,
       isAdmin: user.isAdmin,
       createdAt: user.createdAt,
-      approvedAt: user.approvedAt || null
+      approvedAt: user.approvedAt || null,
+      removedAt: user.removedAt || null,
+      removedBy: user.removedBy || null
     }));
   }
 
@@ -353,6 +372,133 @@ class AuthService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Remove a user (soft-delete)
+   * @param {string} username - Username to remove
+   * @param {string} removedBy - Admin username performing the action
+   * @returns {object} Result { success, error? }
+   */
+  removeUser(username, removedBy) {
+    const usersData = this.loadUsers();
+    const userIndex = usersData.users.findIndex(u => u.username === username);
+
+    if (userIndex === -1) {
+      return { success: false, error: 'User not found' };
+    }
+
+    if (usersData.users[userIndex].isAdmin) {
+      return { success: false, error: 'Cannot remove admin users. Use the CLI tool instead.' };
+    }
+
+    usersData.users[userIndex].status = 'removed';
+    usersData.users[userIndex].removedAt = new Date().toISOString();
+    usersData.users[userIndex].removedBy = removedBy;
+    this.saveUsers(usersData);
+
+    if (this.logger) {
+      this.logger.info(`User removed: ${username} by ${removedBy}`);
+    }
+
+    return { success: true };
+  }
+
+  // ===========================================================================
+  // EMAIL BAN LIST OPERATIONS
+  // ===========================================================================
+
+  /**
+   * Add an email to the ban list
+   * @param {string} email - Email to ban
+   * @param {string} bannedBy - Admin username performing the action
+   * @returns {object} Result { success, error? }
+   */
+  banEmail(email, bannedBy) {
+    const usersData = this.loadUsers();
+
+    if (!usersData.bannedEmails) {
+      usersData.bannedEmails = [];
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Protect admin email addresses
+    const adminUser = usersData.users.find(
+      u => u.email.toLowerCase().trim() === normalizedEmail && u.isAdmin
+    );
+    if (adminUser) {
+      return { success: false, error: 'Cannot ban admin email addresses. Use the CLI tool instead.' };
+    }
+
+    if (usersData.bannedEmails.some(entry => entry.email === normalizedEmail)) {
+      return { success: false, error: 'Email is already banned' };
+    }
+
+    usersData.bannedEmails.push({
+      email: normalizedEmail,
+      bannedAt: new Date().toISOString(),
+      bannedBy: bannedBy
+    });
+    this.saveUsers(usersData);
+
+    if (this.logger) {
+      this.logger.info(`Email banned: ${normalizedEmail} by ${bannedBy}`);
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Remove an email from the ban list
+   * @param {string} email - Email to unban
+   * @returns {object} Result { success, error? }
+   */
+  unbanEmail(email) {
+    const usersData = this.loadUsers();
+
+    if (!usersData.bannedEmails || usersData.bannedEmails.length === 0) {
+      return { success: false, error: 'Email is not banned' };
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const index = usersData.bannedEmails.findIndex(entry => entry.email === normalizedEmail);
+
+    if (index === -1) {
+      return { success: false, error: 'Email is not banned' };
+    }
+
+    usersData.bannedEmails.splice(index, 1);
+    this.saveUsers(usersData);
+
+    if (this.logger) {
+      this.logger.info(`Email unbanned: ${normalizedEmail}`);
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Get all banned emails
+   * @returns {Array} Array of banned email entries
+   */
+  getBannedEmails() {
+    const usersData = this.loadUsers();
+    return usersData.bannedEmails || [];
+  }
+
+  /**
+   * Check if an email is banned
+   * @param {string} email - Email to check
+   * @returns {boolean} True if email is banned
+   */
+  isEmailBanned(email) {
+    const usersData = this.loadUsers();
+    if (!usersData.bannedEmails || usersData.bannedEmails.length === 0) {
+      return false;
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    return usersData.bannedEmails.some(entry => entry.email === normalizedEmail);
   }
 
   /**

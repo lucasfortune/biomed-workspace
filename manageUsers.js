@@ -131,7 +131,7 @@ function listUsers() {
   
   console.log('\n📋 All Users:\n');
   usersData.users.forEach(user => {
-    const statusEmoji = user.status === 'active' ? '✅' : user.status === 'pending' ? '⏳' : '❌';
+    const statusEmoji = user.status === 'active' ? '✅' : user.status === 'pending' ? '⏳' : user.status === 'removed' ? '🚫' : '❌';
     const adminBadge = user.isAdmin ? ' [ADMIN]' : '';
     console.log(`${statusEmoji} ${user.username}${adminBadge}`);
     console.log(`   Name: ${user.fullName}`);
@@ -165,6 +165,100 @@ function listPending() {
     console.log(`   Email: ${user.email}`);
     console.log(`   Institution: ${user.institution}`);
     console.log(`   Registered: ${new Date(user.createdAt).toLocaleString()}`);
+    console.log('');
+  });
+}
+
+/**
+ * Remove a user (soft-delete, CLI - no admin protection)
+ */
+function removeUser(username) {
+  const usersData = loadUsers();
+  const user = usersData.users.find(u => u.username === username);
+
+  if (!user) {
+    console.error(`Error: User '${username}' not found`);
+    process.exit(1);
+  }
+
+  if (user.status === 'removed') {
+    console.log(`User '${username}' is already removed`);
+    process.exit(0);
+  }
+
+  user.status = 'removed';
+  user.removedAt = new Date().toISOString();
+  user.removedBy = 'cli';
+
+  saveUsers(usersData);
+  console.log(`User '${username}' removed successfully`);
+}
+
+/**
+ * Ban an email address
+ */
+function banEmail(email) {
+  const usersData = loadUsers();
+  if (!usersData.bannedEmails) {
+    usersData.bannedEmails = [];
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  if (usersData.bannedEmails.some(e => e.email === normalizedEmail)) {
+    console.log(`Email '${normalizedEmail}' is already banned`);
+    process.exit(0);
+  }
+
+  usersData.bannedEmails.push({
+    email: normalizedEmail,
+    bannedAt: new Date().toISOString(),
+    bannedBy: 'cli'
+  });
+
+  saveUsers(usersData);
+  console.log(`Email '${normalizedEmail}' banned successfully`);
+}
+
+/**
+ * Unban an email address
+ */
+function unbanEmail(email) {
+  const usersData = loadUsers();
+  if (!usersData.bannedEmails || usersData.bannedEmails.length === 0) {
+    console.error(`Error: Email '${email}' is not banned`);
+    process.exit(1);
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const index = usersData.bannedEmails.findIndex(e => e.email === normalizedEmail);
+
+  if (index === -1) {
+    console.error(`Error: Email '${normalizedEmail}' is not banned`);
+    process.exit(1);
+  }
+
+  usersData.bannedEmails.splice(index, 1);
+  saveUsers(usersData);
+  console.log(`Email '${normalizedEmail}' unbanned successfully`);
+}
+
+/**
+ * List banned emails
+ */
+function listBanned() {
+  const usersData = loadUsers();
+  const bannedEmails = usersData.bannedEmails || [];
+
+  if (bannedEmails.length === 0) {
+    console.log('No banned emails');
+    return;
+  }
+
+  console.log('\nBanned Emails:\n');
+  bannedEmails.forEach(entry => {
+    console.log(`  ${entry.email}`);
+    console.log(`    Banned: ${new Date(entry.bannedAt).toLocaleString()} by ${entry.bannedBy}`);
     console.log('');
   });
 }
@@ -226,6 +320,34 @@ const args = process.argv.slice(3);
       listPending();
       break;
       
+    case 'remove':
+      if (args.length < 1) {
+        console.log('Usage: node manageUsers.js remove <username>');
+        process.exit(1);
+      }
+      removeUser(args[0]);
+      break;
+
+    case 'ban-email':
+      if (args.length < 1) {
+        console.log('Usage: node manageUsers.js ban-email <email>');
+        process.exit(1);
+      }
+      banEmail(args[0]);
+      break;
+
+    case 'unban-email':
+      if (args.length < 1) {
+        console.log('Usage: node manageUsers.js unban-email <email>');
+        process.exit(1);
+      }
+      unbanEmail(args[0]);
+      break;
+
+    case 'list-banned':
+      listBanned();
+      break;
+
     case 'reset-password':
       if (args.length < 2) {
         console.log('Usage: node manageUsers.js reset-password <username> <newPassword>');
@@ -233,14 +355,18 @@ const args = process.argv.slice(3);
       }
       await resetPassword(args[0], args[1]);
       break;
-      
+
     default:
       console.log('Available commands:');
       console.log('  add-admin <username> <password> <fullName> <email> <institution>');
       console.log('  approve <username> [approvedBy]');
       console.log('  reject <username>');
+      console.log('  remove <username>');
       console.log('  list');
       console.log('  list-pending');
+      console.log('  list-banned');
+      console.log('  ban-email <email>');
+      console.log('  unban-email <email>');
       console.log('  reset-password <username> <newPassword>');
       process.exit(1);
   }

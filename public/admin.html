@@ -43,6 +43,9 @@
             <button class="nav-tab" data-tab="sessions">
                 Active Sessions
             </button>
+            <button class="nav-tab" data-tab="banlist">
+                Banned Emails <span id="bannedCount" class="badge">0</span>
+            </button>
         </nav>
 
         <main class="admin-content">
@@ -56,6 +59,7 @@
                             <option value="active">Active Only</option>
                             <option value="pending">Pending Only</option>
                             <option value="rejected">Rejected Only</option>
+                            <option value="removed">Removed Only</option>
                         </select>
                     </div>
                 </div>
@@ -106,6 +110,19 @@
                 </div>
                 <div id="sessionsContent" class="data-content">
                     <div class="loading-spinner">Loading sessions...</div>
+                </div>
+            </div>
+
+            <!-- Banned Emails Tab -->
+            <div id="banlistTab" class="tab-content">
+                <div class="content-header">
+                    <h2>Banned Email Addresses</h2>
+                    <div class="filter-controls">
+                        <button class="btn btn-danger" onclick="showBanEmailForm()">Ban New Email</button>
+                    </div>
+                </div>
+                <div id="banlistContent" class="data-content">
+                    <div class="loading-spinner">Loading banned emails...</div>
                 </div>
             </div>
         </main>

@@ -25,7 +25,7 @@ const { requireAdmin } = require('../middleware/auth.middleware');
  */
 function createAdminRoutes(dependencies) {
   const router = express.Router();
-  const { authService, sessionTracker, denoisingService, logger } = dependencies;
+  const { authService, sessionTracker, denoisingService, logger, activityLogger } = dependencies;
 
   // ===========================================================================
   // USER MANAGEMENT
@@ -128,6 +128,127 @@ function createAdminRoutes(dependencies) {
         logger.error('Error rejecting user:', error);
       }
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Remove a user (soft-delete)
+   * POST /admin/remove-user
+   * Body: { username: string }
+   */
+  router.post('/remove-user', requireAdmin, (req, res) => {
+    try {
+      const { username } = req.body;
+
+      if (!username) {
+        return res.status(400).json({ success: false, error: 'Username is required' });
+      }
+
+      const adminUsername = req.session.user.username;
+      const result = authService.removeUser(username, adminUsername);
+
+      if (result.success) {
+        if (logger) {
+          logger.info(`Admin ${adminUsername} removed user: ${username}`);
+        }
+        if (activityLogger) {
+          activityLogger.logActivity(adminUsername, 'user_removed', { targetUser: username });
+        }
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ success: false, error: result.error });
+      }
+    } catch (error) {
+      if (logger) {
+        logger.error('Error removing user:', error);
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Ban an email address
+   * POST /admin/ban-email
+   * Body: { email: string }
+   */
+  router.post('/ban-email', requireAdmin, (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'Email is required' });
+      }
+
+      const adminUsername = req.session.user.username;
+      const result = authService.banEmail(email, adminUsername);
+
+      if (result.success) {
+        if (logger) {
+          logger.info(`Admin ${adminUsername} banned email: ${email}`);
+        }
+        if (activityLogger) {
+          activityLogger.logActivity(adminUsername, 'email_banned', { email: email.toLowerCase().trim() });
+        }
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ success: false, error: result.error });
+      }
+    } catch (error) {
+      if (logger) {
+        logger.error('Error banning email:', error);
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Unban an email address
+   * POST /admin/unban-email
+   * Body: { email: string }
+   */
+  router.post('/unban-email', requireAdmin, (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'Email is required' });
+      }
+
+      const adminUsername = req.session.user.username;
+      const result = authService.unbanEmail(email);
+
+      if (result.success) {
+        if (logger) {
+          logger.info(`Admin ${adminUsername} unbanned email: ${email}`);
+        }
+        if (activityLogger) {
+          activityLogger.logActivity(adminUsername, 'email_unbanned', { email: email.toLowerCase().trim() });
+        }
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ success: false, error: result.error });
+      }
+    } catch (error) {
+      if (logger) {
+        logger.error('Error unbanning email:', error);
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Get all banned emails
+   * GET /admin/banned-emails
+   */
+  router.get('/banned-emails', requireAdmin, (req, res) => {
+    try {
+      const bannedEmails = authService.getBannedEmails();
+      res.json({ bannedEmails });
+    } catch (error) {
+      if (logger) {
+        logger.error('Error getting banned emails:', error);
+      }
+      res.status(500).json({ error: error.message });
     }
   });
 

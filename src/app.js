@@ -411,7 +411,8 @@ function configureApp(app, dependencies) {
     authService,
     sessionTracker,
     denoisingService,
-    logger
+    logger,
+    activityLogger
   }));
 
   // Ensure directories exist

@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadPendingUsers();
     loadActivityLogs();
     loadActiveSessions();
+    loadBannedEmails();
 
     // Set up event listeners for static elements
     setupEventListeners();
@@ -134,6 +135,8 @@ function switchTab(tabName) {
         loadActivityLogs();
     } else if (tabName === 'sessions') {
         loadActiveSessions();
+    } else if (tabName === 'banlist') {
+        loadBannedEmails();
     }
 }
 
@@ -168,7 +171,7 @@ async function loadUsers() {
  */
 function displayUsers(users) {
     const content = document.getElementById('usersContent');
-    
+
     if (users.length === 0) {
         content.innerHTML = `
             <div class="empty-state">
@@ -178,34 +181,59 @@ function displayUsers(users) {
         `;
         return;
     }
-    
-    const usersHTML = users.map(user => `
-        <div class="user-card">
-            <div class="user-card-header">
-                <div class="user-info-main">
-                    <div class="user-name">
-                        ${escapeHtml(user.fullName)}
-                        ${user.isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}
+
+    const usersHTML = users.map(user => {
+        // Build action buttons based on user status and admin status
+        let actionsHTML = '';
+        if (!user.isAdmin) {
+            const actions = [];
+
+            if (user.status === 'pending') {
+                actions.push(`<button class="btn btn-primary" onclick="approveUser('${escapeHtml(user.username)}')">Approve</button>`);
+                actions.push(`<button class="btn btn-danger" onclick="rejectUser('${escapeHtml(user.username)}')">Reject</button>`);
+            }
+
+            if (user.status !== 'removed') {
+                actions.push(`<button class="btn btn-warning" onclick="removeUser('${escapeHtml(user.username)}')">Remove</button>`);
+            }
+
+            actions.push(`<button class="btn btn-danger-outline" onclick="banUserEmail('${escapeHtml(user.email)}', '${escapeHtml(user.username)}')">Ban Email</button>`);
+
+            if (actions.length > 0) {
+                actionsHTML = `<div class="user-actions">${actions.join('')}</div>`;
+            }
+        }
+
+        // Show removed metadata
+        let removedInfo = '';
+        if (user.status === 'removed' && user.removedAt) {
+            removedInfo = `<div class="user-meta-item"><strong>Removed:</strong> ${formatDate(user.removedAt)} by ${escapeHtml(user.removedBy || 'Unknown')}</div>`;
+        }
+
+        return `
+            <div class="user-card ${user.status === 'removed' ? 'user-card-removed' : ''}">
+                <div class="user-card-header">
+                    <div class="user-info-main">
+                        <div class="user-name">
+                            ${escapeHtml(user.fullName)}
+                            ${user.isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}
+                        </div>
+                        <div class="user-username">@${escapeHtml(user.username)}</div>
                     </div>
-                    <div class="user-username">@${escapeHtml(user.username)}</div>
+                    <span class="status-badge ${escapeHtml(user.status)}">${getStatusText(user.status)}</span>
                 </div>
-                <span class="status-badge ${escapeHtml(user.status)}">${getStatusText(user.status)}</span>
-            </div>
-            <div class="user-meta">
-                <div class="user-meta-item"><strong>Email:</strong> ${escapeHtml(user.email)}</div>
-                <div class="user-meta-item"><strong>Institution:</strong> ${escapeHtml(user.institution)}</div>
-                <div class="user-meta-item"><strong>Registered:</strong> ${formatDate(user.createdAt)}</div>
-                ${user.approvedAt ? `<div class="user-meta-item"><strong>Approved:</strong> ${formatDate(user.approvedAt)}</div>` : ''}
-            </div>
-            ${user.status === 'pending' && !user.isAdmin ? `
-                <div class="user-actions">
-                    <button class="btn btn-primary" onclick="approveUser('${escapeHtml(user.username)}')">Approve</button>
-                    <button class="btn btn-danger" onclick="rejectUser('${escapeHtml(user.username)}')">Reject</button>
+                <div class="user-meta">
+                    <div class="user-meta-item"><strong>Email:</strong> ${escapeHtml(user.email)}</div>
+                    <div class="user-meta-item"><strong>Institution:</strong> ${escapeHtml(user.institution)}</div>
+                    <div class="user-meta-item"><strong>Registered:</strong> ${formatDate(user.createdAt)}</div>
+                    ${user.approvedAt ? `<div class="user-meta-item"><strong>Approved:</strong> ${formatDate(user.approvedAt)}</div>` : ''}
+                    ${removedInfo}
                 </div>
-            ` : ''}
-        </div>
-    `).join('');
-    
+                ${actionsHTML}
+            </div>
+        `;
+    }).join('');
+
     content.innerHTML = usersHTML;
 }
 
@@ -271,6 +299,7 @@ function displayPendingUsers(users) {
             <div class="user-actions">
                 <button class="btn btn-primary" onclick="approveUser('${escapeHtml(user.username)}')">Approve User</button>
                 <button class="btn btn-danger" onclick="rejectUser('${escapeHtml(user.username)}')">Reject</button>
+                <button class="btn btn-warning" onclick="removeUser('${escapeHtml(user.username)}')">Remove</button>
             </div>
         </div>
     `).join('');
@@ -373,6 +402,232 @@ async function rejectUser(username) {
     } catch (error) {
         console.error('Error rejecting user:', error);
         alert(`Error rejecting user: ${error.message}`);
+    }
+}
+
+/**
+ * Remove user (soft-delete)
+ */
+async function removeUser(username) {
+    const confirmed = await showConfirmModal(
+        'Remove User',
+        `Are you sure you want to remove user "${username}"? They will no longer be able to log in. Their account record will be preserved for audit purposes.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch('/admin/remove-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to remove user');
+        }
+
+        alert(`User "${username}" has been removed.`);
+        await loadUsers();
+        await loadPendingUsers();
+        await loadActivityLogs();
+
+    } catch (error) {
+        console.error('Error removing user:', error);
+        alert(`Error removing user: ${error.message}`);
+    }
+}
+
+/**
+ * Ban a user's email address
+ */
+async function banUserEmail(email, username) {
+    const confirmed = await showConfirmModal(
+        'Ban Email',
+        `Are you sure you want to ban the email "${email}" (user: ${username})? This will prevent any future registrations with this email address. Note: this does NOT automatically remove the user's account.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch('/admin/ban-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to ban email');
+        }
+
+        alert(`Email "${email}" has been banned.`);
+        await loadBannedEmails();
+        await loadActivityLogs();
+
+    } catch (error) {
+        console.error('Error banning email:', error);
+        alert(`Error banning email: ${error.message}`);
+    }
+}
+
+/**
+ * Load banned emails
+ */
+async function loadBannedEmails() {
+    const content = document.getElementById('banlistContent');
+    if (!content) return;
+
+    content.innerHTML = '<div class="loading-spinner">Loading banned emails...</div>';
+
+    try {
+        const response = await fetch('/admin/banned-emails');
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to load banned emails');
+        }
+
+        const bannedEmails = data.bannedEmails || [];
+
+        const badge = document.getElementById('bannedCount');
+        if (badge) badge.textContent = bannedEmails.length;
+
+        displayBannedEmails(bannedEmails);
+
+    } catch (error) {
+        console.error('Error loading banned emails:', error);
+        content.innerHTML = `<div class="empty-state"><p>Error loading banned emails: ${error.message}</p></div>`;
+    }
+}
+
+/**
+ * Display banned emails
+ */
+function displayBannedEmails(bannedEmails) {
+    const content = document.getElementById('banlistContent');
+
+    if (bannedEmails.length === 0) {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h3>No banned emails</h3>
+                <p>No email addresses have been banned.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const emailsHTML = `
+        <table class="activity-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Banned At</th>
+                    <th>Banned By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${bannedEmails.map(entry => `
+                    <tr>
+                        <td data-label="Email"><strong>${escapeHtml(entry.email)}</strong></td>
+                        <td data-label="Banned At" class="timestamp">${formatDateTime(entry.bannedAt)}</td>
+                        <td data-label="Banned By">${escapeHtml(entry.bannedBy)}</td>
+                        <td data-label="Actions">
+                            <button class="btn btn-secondary" onclick="unbanEmail('${escapeHtml(entry.email)}')">Unban</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    content.innerHTML = emailsHTML;
+}
+
+/**
+ * Unban an email
+ */
+async function unbanEmail(email) {
+    const confirmed = await showConfirmModal(
+        'Unban Email',
+        `Are you sure you want to unban "${email}"? This will allow new registrations with this email address.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch('/admin/unban-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to unban email');
+        }
+
+        alert(`Email "${email}" has been unbanned.`);
+        await loadBannedEmails();
+        await loadActivityLogs();
+
+    } catch (error) {
+        console.error('Error unbanning email:', error);
+        alert(`Error unbanning email: ${error.message}`);
+    }
+}
+
+/**
+ * Show form to ban a new email (not tied to existing user)
+ */
+function showBanEmailForm() {
+    const email = prompt('Enter the email address to ban:');
+    if (!email || !email.trim()) return;
+
+    if (!email.includes('@') || !email.includes('.')) {
+        alert('Please enter a valid email address.');
+        return;
+    }
+
+    banEmailDirect(email.trim());
+}
+
+/**
+ * Ban an email directly (from the ban list tab)
+ */
+async function banEmailDirect(email) {
+    const confirmed = await showConfirmModal(
+        'Ban Email',
+        `Are you sure you want to ban "${email}"? This will prevent any future registrations with this email address.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch('/admin/ban-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to ban email');
+        }
+
+        alert(`Email "${email}" has been banned.`);
+        await loadBannedEmails();
+        await loadActivityLogs();
+
+    } catch (error) {
+        console.error('Error banning email:', error);
+        alert(`Error banning email: ${error.message}`);
     }
 }
 
@@ -703,7 +958,8 @@ function getStatusText(status) {
     const statusMap = {
         'active': 'Active',
         'pending': 'Pending',
-        'rejected': 'Rejected'
+        'rejected': 'Rejected',
+        'removed': 'Removed'
     };
     return statusMap[status] || status;
 }
@@ -734,6 +990,7 @@ function getActivityClass(action) {
     if (action.includes('inference')) return 'inference';
     if (action.includes('upload')) return 'upload';
     if (action.includes('logout')) return 'logout';
+    if (action.includes('removed') || action.includes('banned')) return 'admin-action';
     return 'login';
 }
 

@@ -676,6 +676,62 @@ body {
 }
 
 /* ============================================================================
+   Removed User Styling
+   ============================================================================ */
+
+.status-badge.removed {
+    background: rgba(108, 117, 125, 0.15);
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .status-badge.removed {
+    background: rgba(108, 117, 125, 0.25);
+    color: var(--text-muted);
+}
+
+.user-card-removed {
+    opacity: 0.7;
+    border-style: dashed;
+}
+
+/* ============================================================================
+   Additional Button Styles
+   ============================================================================ */
+
+.btn-warning {
+    background: var(--warning-color);
+    color: #212529;
+}
+
+.btn-warning:hover {
+    filter: brightness(0.9);
+}
+
+[data-theme="dark"] .btn-warning {
+    color: #212529;
+}
+
+.btn-danger-outline {
+    background: transparent;
+    color: var(--danger-color);
+    border: 2px solid var(--danger-color);
+}
+
+.btn-danger-outline:hover {
+    background: var(--danger-color);
+    color: var(--text-on-accent);
+}
+
+/* ============================================================================
+   Admin Action Activity Log Styling
+   ============================================================================ */
+
+.activity-type.admin-action {
+    background: rgba(220, 53, 69, 0.15);
+    color: var(--danger-color);
+}
+
+/* ============================================================================
    Responsive — Tablet (768px)
    ============================================================================ */
 
