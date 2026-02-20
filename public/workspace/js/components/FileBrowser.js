@@ -1083,9 +1083,10 @@ class FileBrowser {
     const file = this.state.get('workspace.files').find(f => f.id === fileId);
     if (!file) return;
 
-    // Check if file is a TIFF
+    // Check file type
     const ext = file.name.split('.').pop().toLowerCase();
     const isTiff = ['tif', 'tiff'].includes(ext);
+    const isJson = ext === 'json';
 
     // Build base menu items
     const menuItems = [
@@ -1105,6 +1106,16 @@ class FileBrowser {
         onClick: () => this.renameFile(fileId)
       }
     ];
+
+    // Add JSON-specific operation
+    if (isJson) {
+      menuItems.push({ separator: true });
+      menuItems.push({
+        icon: '{ }',
+        label: 'View JSON',
+        onClick: () => this.showJsonViewer(fileId)
+      });
+    }
 
     // Add TIFF-specific operations if applicable
     if (isTiff) {
@@ -1282,6 +1293,96 @@ class FileBrowser {
       console.error('[FileBrowser] Error fetching lineage:', error);
       lineageRow.style.display = 'none';
     }
+  }
+
+  /**
+   * Show JSON viewer modal with syntax-highlighted content
+   * @param {string} fileId - File ID
+   */
+  async showJsonViewer(fileId) {
+    const file = this.state.get('workspace.files').find(f => f.id === fileId);
+    if (!file) return;
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'file-info-modal';
+    modal.innerHTML = `
+      <div class="file-info-overlay"></div>
+      <div class="json-viewer-content">
+        <div class="file-info-header">
+          <h3>${this.escapeHtml(file.name)}</h3>
+          <button class="file-info-close" title="Close">&#10005;</button>
+        </div>
+        <div class="json-viewer-body">
+          <div class="json-viewer-loading">Loading...</div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close handlers
+    const closeModal = () => {
+      if (modal.parentNode) {
+        modal.parentNode.removeChild(modal);
+      }
+      document.removeEventListener('keydown', handleEscape);
+    };
+
+    const closeBtn = modal.querySelector('.file-info-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+    const overlay = modal.querySelector('.file-info-overlay');
+    if (overlay) overlay.addEventListener('click', closeModal);
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') closeModal();
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Fetch and display JSON content
+    const bodyEl = modal.querySelector('.json-viewer-body');
+    try {
+      const response = await fetch(`/api/workspace/file/${fileId}/content`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        const formatted = JSON.stringify(data.content, null, 2);
+        bodyEl.innerHTML = `<pre class="json-viewer-pre"><code>${this.highlightJson(formatted)}</code></pre>`;
+      } else {
+        bodyEl.innerHTML = `<div class="json-viewer-error">Failed to load file: ${this.escapeHtml(data.error || 'Unknown error')}</div>`;
+      }
+    } catch (error) {
+      console.error('[FileBrowser] Error loading JSON:', error);
+      bodyEl.innerHTML = `<div class="json-viewer-error">Failed to load file</div>`;
+    }
+  }
+
+  /**
+   * Apply syntax highlighting to a JSON string
+   * @param {string} json - Pretty-printed JSON string
+   * @returns {string} HTML with syntax highlighting spans
+   */
+  highlightJson(json) {
+    const escaped = this.escapeHtml(json);
+    return escaped.replace(
+      /("(?:\\.|[^"\\])*")\s*:/g,
+      '<span class="json-key">$1</span>:'
+    ).replace(
+      /:\s*("(?:\\.|[^"\\])*")/g,
+      (match, str) => match.replace(str, `<span class="json-string">${str}</span>`)
+    ).replace(
+      /:\s*(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g,
+      (match, num) => match.replace(num, `<span class="json-number">${num}</span>`)
+    ).replace(
+      /:\s*(true|false)/g,
+      (match, bool) => match.replace(bool, `<span class="json-boolean">${bool}</span>`)
+    ).replace(
+      /:\s*(null)/g,
+      (match, n) => match.replace(n, `<span class="json-null">${n}</span>`)
+    );
   }
 
   /**

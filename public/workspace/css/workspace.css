@@ -1657,6 +1657,75 @@ body {
   font-style: italic;
 }
 
+/* ==================== JSON Viewer Modal ==================== */
+
+.json-viewer-content {
+  position: relative;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-width: 700px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  animation: modalSlideIn 0.2s ease-out;
+}
+
+.json-viewer-body {
+  padding: 16px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.json-viewer-pre {
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--text-primary);
+  tab-size: 2;
+}
+
+.json-viewer-loading {
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+}
+
+.json-viewer-error {
+  color: var(--error-color, #e74c3c);
+  padding: 20px;
+  text-align: center;
+}
+
+.json-key {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.json-string {
+  color: var(--success-color, #1DA924);
+}
+
+.json-number {
+  color: #e67e22;
+}
+
+.json-boolean {
+  color: #3498db;
+  font-weight: 600;
+}
+
+.json-null {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 /* ==================== Batch Operations & Selection ==================== */
 
 /* File selection checkbox */

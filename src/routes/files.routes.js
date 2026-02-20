@@ -169,6 +169,44 @@ function createFilesRoutes(dependencies) {
     }
   });
 
+  /**
+   * Read file content (for JSON viewer)
+   * GET /api/workspace/file/:fileId/content
+   */
+  router.get('/file/:fileId/content', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const sessionId = req.session.id;
+
+      const file = await workspaceService.getFile(sessionId, fileId);
+      const filePath = workspaceService.getFilePath(sessionId, file);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext !== 'json') {
+        return res.status(400).json({ success: false, error: 'Only JSON files can be viewed' });
+      }
+
+      const stats = fs.statSync(filePath);
+      if (stats.size > 10 * 1024 * 1024) {
+        return res.status(413).json({ success: false, error: 'File too large to view (max 10MB)' });
+      }
+
+      const rawContent = fs.readFileSync(filePath, 'utf-8');
+      const content = JSON.parse(rawContent);
+
+      res.json({ success: true, content, filename: file.name });
+    } catch (error) {
+      if (logger) {
+        logger.error('Read file content error:', error);
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ===========================================================================
   // TIFF STACK OPERATIONS
   // ===========================================================================
