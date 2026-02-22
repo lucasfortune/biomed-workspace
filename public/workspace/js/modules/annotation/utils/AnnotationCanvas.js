@@ -295,6 +295,48 @@ class AnnotationCanvas {
   }
 
   /**
+   * Initialize a blank canvas with given dimensions (no source image)
+   * Used when editing annotations that have no associated source image.
+   * @param {number} width - Canvas width in pixels
+   * @param {number} height - Canvas height in pixels
+   * @param {number} [sliceIndex=0] - Current slice index
+   */
+  initBlankCanvas(width, height, sliceIndex = 0) {
+    // Set dimensions
+    this.imageSize.width = width;
+    this.imageSize.height = height;
+    this.isLoaded = true;
+    this.currentFileId = null;
+    this.currentSliceIndex = sliceIndex;
+
+    // Hide the source image element and set placeholder dimensions
+    // so the transform container has the correct bounding box for zoom/pan
+    this.sourceImage.style.display = 'none';
+    this.sourceImage.style.width = `${width}px`;
+    this.sourceImage.style.height = `${height}px`;
+
+    // Resize canvases
+    this.resizeCanvases();
+
+    // Fit to container on first load
+    if (sliceIndex === 0) {
+      this.zoomToFit();
+    }
+
+    // Notify listeners
+    if (this.onSliceLoaded) {
+      this.onSliceLoaded({
+        fileId: null,
+        sliceIndex,
+        width,
+        height
+      });
+    }
+
+    console.log(`[AnnotationCanvas] Blank canvas slice ${sliceIndex}: ${width}x${height}`);
+  }
+
+  /**
    * Resize canvases to match image dimensions
    */
   resizeCanvases() {

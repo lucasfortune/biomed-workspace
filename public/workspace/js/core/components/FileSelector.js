@@ -88,10 +88,15 @@ class FileSelector {
     // External recent results (passed via config, not fetched from API)
     this.externalRecentResults = config.recentResults || null;
 
+    // Custom sections (rendered between Recent Results and Workspace Files)
+    this.customSections = config.customSections || [];
+    this.workspaceFilesLabel = config.workspaceFilesLabel || 'Workspace Files';
+
     // State
     this.selectedFile = null;
     this.availableFiles = [];
     this.recentResults = [];
+    this.customSectionFiles = {};
     this.container = null;
     this.isLoading = false;
   }
@@ -192,6 +197,21 @@ class FileSelector {
         // Apply custom filter if provided
         if (this.filterFiles) {
           this.availableFiles = this.filterFiles(this.availableFiles);
+        }
+
+        // Populate custom sections from allFiles
+        this.customSectionFiles = {};
+        for (const section of this.customSections) {
+          this.customSectionFiles[section.id] = section.filter(allFiles);
+        }
+
+        // Exclude custom section files from workspace files to avoid duplicates
+        if (this.customSections.length > 0) {
+          const customFileIds = new Set();
+          for (const section of this.customSections) {
+            (this.customSectionFiles[section.id] || []).forEach(f => customFileIds.add(f.id || f.path));
+          }
+          this.availableFiles = this.availableFiles.filter(f => !customFileIds.has(f.id || f.path));
         }
 
         this.populateDropdown();
@@ -304,10 +324,15 @@ class FileSelector {
       this.addRecentResultsOptions(dropdown);
     }
 
+    // Add custom sections
+    for (const section of this.customSections) {
+      this.addCustomSectionOptions(dropdown, section);
+    }
+
     // Add workspace files
     if (this.availableFiles.length > 0) {
       const workspaceGroup = document.createElement('optgroup');
-      workspaceGroup.label = 'Workspace Files';
+      workspaceGroup.label = this.workspaceFilesLabel;
 
       this.availableFiles.forEach(file => {
         const option = document.createElement('option');
@@ -427,6 +452,39 @@ class FileSelector {
     }
 
     dropdown.appendChild(resultsGroup);
+  }
+
+  /**
+   * Add custom section options to dropdown
+   * @param {HTMLSelectElement} dropdown
+   * @param {object} section - Custom section config with id, label, filter, formatLabel, emptyText
+   */
+  addCustomSectionOptions(dropdown, section) {
+    const files = this.customSectionFiles[section.id] || [];
+    if (files.length === 0 && !section.emptyText) return;
+
+    const group = document.createElement('optgroup');
+    group.label = section.label;
+
+    if (files.length > 0) {
+      files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.path || file.id;
+        option.textContent = section.formatLabel
+          ? section.formatLabel(file, this)
+          : `${file.name} (${this.formatFileSize(file.size)})`;
+        option.dataset.fileInfo = JSON.stringify(file);
+        group.appendChild(option);
+      });
+    } else {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = section.emptyText;
+      placeholder.disabled = true;
+      group.appendChild(placeholder);
+    }
+
+    dropdown.appendChild(group);
   }
 
   /**

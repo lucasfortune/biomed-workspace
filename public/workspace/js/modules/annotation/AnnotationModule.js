@@ -79,6 +79,7 @@ class AnnotationModule extends BaseModule {
     // Annotation file info (for resume/edit scenarios)
     this.annotationFile = null;
     this.isResuming = false;
+    this.isEditing = false;  // True when editing a finished annotation in-place
     this.currentAnnotationId = null;  // ID of current unfinished annotation (for updates)
 
     // Slice navigation
@@ -380,6 +381,7 @@ class AnnotationModule extends BaseModule {
         accept: '.tif,.tiff',
         showTestData: false,
         showRecentResults: true,
+        workspaceFilesLabel: 'Raw Images',
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
@@ -403,9 +405,32 @@ class AnnotationModule extends BaseModule {
             return f.category === 'denoised_images' || f.category === 'segmentations';
           });
         },
+        // Custom section: Annotations (finished + WIP)
+        customSections: [{
+          id: 'annotations',
+          label: 'Annotations',
+          filter: (allFiles) => {
+            return allFiles.filter(f => {
+              const isFinished = f.category === 'uploads' && f.tags && f.tags.includes('annotation');
+              const isWip = f.category === 'results' && f.tags && f.tags.includes('annotation') && f.tags.includes('wip');
+              const isNotSidecar = !f.tags || (!f.tags.includes('info') && !f.tags.includes('filaments'));
+              return (isFinished || isWip) && isNotSidecar;
+            });
+          },
+          formatLabel: (file, selector) => {
+            const isWip = file.tags && file.tags.includes('wip');
+            const prefix = isWip ? '[In Progress] ' : '';
+            return `${prefix}${file.name} (${selector.formatFileSize(file.size)})`;
+          },
+          emptyText: 'No annotations yet'
+        }],
         // Filter workspace files to show only raw images (uploads with raw tag)
         filterFiles: (files) => {
           return files.filter(f => {
+            // Exclude finished annotations from workspace files (they go in custom section)
+            if (f.tags && f.tags.includes('annotation')) {
+              return false;
+            }
             // New system: uploads with raw tag
             if (f.category === 'uploads' && f.tags && f.tags.includes('raw')) {
               return true;
@@ -848,15 +873,21 @@ class AnnotationModule extends BaseModule {
       return;
     }
 
-    const fileId = this.sourceFile?.id || this.sourceFile?.path;
-    if (!fileId || !this.canvas) {
+    if (!this.canvas) {
       return;
     }
+
+    const fileId = this.sourceFile?.id || this.sourceFile?.path;
 
     this.showCanvasLoading(true);
 
     try {
-      await this.canvas.loadSlice(fileId, index);
+      if (fileId) {
+        await this.canvas.loadSlice(fileId, index);
+      } else {
+        // No source image — update blank canvas for new slice index
+        this.canvas.initBlankCanvas(this.tiffInfo.width, this.tiffInfo.height, index);
+      }
       this.currentSlice = index;
       this.updateSliceIndicator();
       this.updateSliceButtons();
@@ -1536,6 +1567,9 @@ class AnnotationModule extends BaseModule {
     }
 
     // Restore slice annotations (handles both sparse and dense encoding)
+    // Also collect all unique class IDs found in the pixel data
+    const foundClassIds = new Set();
+
     if (annotationData.sliceData) {
       const width = annotationData.width || this.tiffInfo?.width;
       const height = annotationData.height || this.tiffInfo?.height;
@@ -1557,8 +1591,41 @@ class AnnotationModule extends BaseModule {
           uint8Array = this.base64ToUint8Array(sliceInfo);
         }
 
+        // Scan for unique class IDs
+        for (let i = 0; i < uint8Array.length; i++) {
+          if (uint8Array[i] !== 0) {
+            foundClassIds.add(uint8Array[i]);
+          }
+        }
+
         this.brushEngine.setAnnotationData(sliceIndex, uint8Array);
       }
+    }
+
+    // Auto-generate class definitions for any class IDs found in pixel data
+    // that don't have a corresponding class definition (e.g. uploaded annotations
+    // without a sidecar file)
+    const existingIds = new Set(this.brushEngine.classes.map(c => c.id));
+    const missingIds = [...foundClassIds].filter(id => !existingIds.has(id)).sort((a, b) => a - b);
+
+    if (missingIds.length > 0) {
+      console.log(`[AnnotationModule] Auto-generating classes for IDs: ${missingIds.join(', ')}`);
+      for (const classId of missingIds) {
+        // Manually insert a class with the exact ID found in the data
+        const newClass = {
+          id: classId,
+          name: `Class ${classId}`,
+          color: this.brushEngine.getNextColor(),
+          visible: true
+        };
+        this.brushEngine.classes.push(newClass);
+      }
+      // Sort classes by ID for consistent ordering
+      this.brushEngine.classes.sort((a, b) => a.id - b.id);
+      // Update nextClassId to be above all existing IDs
+      const maxId = Math.max(...this.brushEngine.classes.map(c => c.id));
+      this.brushEngine.nextClassId = maxId + 1;
+      this.brushEngine.activeClassId = this.brushEngine.classes[0].id;
     }
 
     // Re-render class list
@@ -1629,15 +1696,24 @@ class AnnotationModule extends BaseModule {
       this.updateSliceIndicator();
       this.updateSliceButtons();
 
-      // Load source image slice
+      // Load source image slice or init blank canvas
       const sourceFileId = this.sourceFile?.id;
       if (sourceFileId) {
         console.log('[AnnotationModule] Loading source image:', sourceFileId);
-        await this.canvas.loadSlice(sourceFileId, this.currentSlice);
+        try {
+          await this.canvas.loadSlice(sourceFileId, this.currentSlice);
+        } catch (sliceError) {
+          // Source image no longer available — fall back to blank canvas
+          console.warn('[AnnotationModule] Source image unavailable, using blank canvas:', sliceError.message);
+          this.sourceFile = null;
+          this.canvas.initBlankCanvas(result.width, result.height);
+        }
         this.updateZoomIndicator(this.canvas.getZoom());
       } else {
-        console.error('[AnnotationModule] Cannot load source image: sourceFileId is missing');
-        throw new Error('Source image not found. The original image may have been deleted.');
+        // No source image (e.g. uploaded annotation) — show blank canvas
+        console.log('[AnnotationModule] No source image, initializing blank canvas');
+        this.canvas.initBlankCanvas(result.width, result.height);
+        this.updateZoomIndicator(this.canvas.getZoom());
       }
 
       // Restore annotation data (classes and slice annotations)
@@ -1901,6 +1977,7 @@ class AnnotationModule extends BaseModule {
     this.annotationFile = null;
     this.tiffInfo = null;
     this.isResuming = false;
+    this.isEditing = false;
     this.sourceFileLoaded = false;
     this.currentAnnotationId = null;
 
@@ -1920,15 +1997,23 @@ class AnnotationModule extends BaseModule {
     this.validationDisplay.showLoading('Loading file information...');
 
     try {
-      // Determine scenario based on file category or test data flag
+      // Determine scenario based on file tags/category
       if (file.isTestData) {
         // Test data scenario - treat as new annotation
         await this.handleNewAnnotation(file);
+      } else if (file.tags && file.tags.includes('annotation')) {
+        if (file.tags.includes('wip')) {
+          // WIP annotation - resume
+          await this.handleResumeAnnotation(file);
+        } else {
+          // Finished annotation - edit in-place
+          await this.handleEditAnnotation(file);
+        }
       } else if (file.category === 'unfinished_annotations') {
-        // Resume unfinished annotation
+        // Legacy fallback
         await this.handleResumeAnnotation(file);
       } else if (file.category === 'annotations') {
-        // Edit existing annotation
+        // Legacy fallback
         await this.handleEditAnnotation(file);
       } else {
         // New annotation from raw image
@@ -2037,14 +2122,14 @@ class AnnotationModule extends BaseModule {
 
     // Store as annotation file - source will be loaded from sidecar in Step 2
     this.annotationFile = file;
-    this.isResuming = true;  // Similar flow to resume
+    this.isResuming = true;  // Similar flow to resume (loads existing data)
+    this.isEditing = true;   // Flag for in-place saves
     this.sourceFileLoaded = true;
 
-    // For Phase 2, just show info - actual loading happens in later phases
     this.validationDisplay.showSuccess('Existing Annotation Selected', [
       { label: 'File', value: file.name },
-      { label: 'Mode', value: 'Edit Existing (creates new version)' },
-      { label: 'Note', value: 'Changes will be saved as a new file' }
+      { label: 'Mode', value: 'Edit In-Place' },
+      { label: 'Note', value: 'Changes will overwrite the existing annotation' }
     ]);
 
     // Enable next button
@@ -2125,6 +2210,7 @@ class AnnotationModule extends BaseModule {
     this.tiffInfo = null;
     this.annotationFile = null;
     this.isResuming = false;
+    this.isEditing = false;
     this.sourceFileLoaded = false;
     this.currentAnnotationId = null;
     this.currentSlice = 0;

@@ -455,7 +455,8 @@ function createAnnotationRoutes(dependencies) {
         slices,
         sliceData,
         classes,
-        filaments
+        filaments,
+        existingAnnotationId
       } = req.body;
 
       // Validate required fields
@@ -483,16 +484,49 @@ function createAnnotationRoutes(dependencies) {
         fs.mkdirSync(annotationsDir, { recursive: true });
       }
 
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const baseName = sourceFileName
-        ? path.basename(sourceFileName, path.extname(sourceFileName))
-        : 'annotation';
-      const tiffFilename = `${timestamp}_${baseName}_annotation.tif`;
-      const sidecarFilename = `${timestamp}_${baseName}_annotation_classes.json`;
+      // Check if we're updating an existing annotation in-place
+      let existingFile = null;
+      let existingSidecar = null;
+      let existingFilaments = null;
+      let tiffFilename, sidecarFilename, tiffPath, sidecarPath, fileId;
 
-      const tiffPath = path.join(annotationsDir, tiffFilename);
-      const sidecarPath = path.join(annotationsDir, sidecarFilename);
+      if (existingAnnotationId) {
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        existingFile = metadata?.files?.find(f => f.id === existingAnnotationId);
+        if (existingFile) {
+          existingSidecar = metadata?.files?.find(
+            f => f.parentId === existingAnnotationId && (!f.tags || !f.tags.includes('filaments'))
+          );
+          existingFilaments = metadata?.files?.find(
+            f => f.parentId === existingAnnotationId && f.tags && f.tags.includes('filaments')
+          );
+          tiffFilename = existingFile.name;
+          tiffPath = path.join(workspacePath, existingFile.path);
+          fileId = existingAnnotationId;
+          sidecarFilename = existingSidecar
+            ? existingSidecar.name
+            : tiffFilename.replace('.tif', '_classes.json');
+          sidecarPath = existingSidecar
+            ? path.join(workspacePath, existingSidecar.path)
+            : path.join(path.dirname(tiffPath), sidecarFilename);
+          // Ensure directory exists
+          const dir = path.dirname(tiffPath);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          if (logger) logger.info(`[Annotation] Updating existing annotation in-place: ${existingAnnotationId}`);
+        }
+      }
+
+      if (!existingFile) {
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const baseName = sourceFileName
+          ? path.basename(sourceFileName, path.extname(sourceFileName))
+          : 'annotation';
+        tiffFilename = `${timestamp}_${baseName}_annotation.tif`;
+        sidecarFilename = `${timestamp}_${baseName}_annotation_classes.json`;
+        tiffPath = path.join(annotationsDir, tiffFilename);
+        sidecarPath = path.join(annotationsDir, sidecarFilename);
+      }
 
       // Create config file for Python script
       const configData = {
@@ -561,80 +595,131 @@ function createAnnotationRoutes(dependencies) {
           let filamentsSidecarFilename = null;
 
           if (filaments && filaments.filaments && filaments.filaments.length > 0) {
-            filamentsSidecarFilename = sidecarFilename.replace('_classes.json', '_filaments.json');
-            filamentsSidecarPath = path.join(annotationsDir, filamentsSidecarFilename);
+            filamentsSidecarFilename = existingFile
+              ? tiffFilename.replace('.tif', '_filaments.json')
+              : sidecarFilename.replace('_classes.json', '_filaments.json');
+            filamentsSidecarPath = path.join(
+              existingFile ? path.dirname(tiffPath) : annotationsDir,
+              filamentsSidecarFilename
+            );
             fs.writeFileSync(filamentsSidecarPath, JSON.stringify(filaments, null, 2));
           }
 
-          // Generate file ID
-          const fileId = `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-          // Add to workspace metadata
+          // Update or add to workspace metadata
           const metadata = workspaceManager.loadMetadata(sessionId);
           if (!metadata.files) {
             metadata.files = [];
           }
 
-          // Add TIFF file - completed annotations are user-created content
-          // New metadata system: uploads category with annotation tag
-          metadata.files.push({
-            id: fileId,
-            name: tiffFilename,
-            path: path.join('annotations', tiffFilename),
-            category: 'uploads',
-            tags: ['annotation'],
-            uploadedAt: new Date().toISOString(),
-            size: fs.statSync(tiffPath).size,
-            lineage: {
-              processType: 'annotation',
-              inputs: [sourceFileId],
-              status: 'complete'
+          if (existingFile) {
+            // Update existing entries in-place
+            const tiffIdx = metadata.files.findIndex(f => f.id === fileId);
+            if (tiffIdx !== -1) {
+              metadata.files[tiffIdx].size = fs.statSync(tiffPath).size;
+              metadata.files[tiffIdx].lastModifiedAt = new Date().toISOString();
+              // Promote to finished annotation
+              metadata.files[tiffIdx].category = 'uploads';
+              metadata.files[tiffIdx].tags = ['annotation'];
+              if (metadata.files[tiffIdx].lineage) {
+                metadata.files[tiffIdx].lineage.status = 'complete';
+              }
             }
-          });
+            // Update sidecar
+            const sidecarIdx = metadata.files.findIndex(
+              f => f.parentId === fileId && (!f.tags || !f.tags.includes('filaments'))
+            );
+            if (sidecarIdx !== -1) {
+              metadata.files[sidecarIdx].size = fs.statSync(sidecarPath).size;
+              metadata.files[sidecarIdx].lastModifiedAt = new Date().toISOString();
+            }
+            // Handle filaments sidecar
+            if (filamentsSidecarPath) {
+              const filIdx = metadata.files.findIndex(f => f.id === `${fileId}_filaments`);
+              if (filIdx !== -1) {
+                metadata.files[filIdx].size = fs.statSync(filamentsSidecarPath).size;
+                metadata.files[filIdx].lastModifiedAt = new Date().toISOString();
+              } else {
+                metadata.files.push({
+                  id: `${fileId}_filaments`,
+                  name: filamentsSidecarFilename,
+                  path: path.join(path.dirname(existingFile.path), filamentsSidecarFilename),
+                  category: 'results',
+                  tags: ['annotation', 'filaments'],
+                  uploadedAt: new Date().toISOString(),
+                  size: fs.statSync(filamentsSidecarPath).size,
+                  parentId: fileId
+                });
+              }
+            }
+          } else {
+            // Generate file ID for new annotation
+            if (!fileId) {
+              fileId = `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            }
 
-          // Add sidecar file
-          // New metadata system: results category with annotation/info tags
-          metadata.files.push({
-            id: `${fileId}_sidecar`,
-            name: sidecarFilename,
-            path: path.join('annotations', sidecarFilename),
-            category: 'results',
-            tags: ['annotation', 'info'],
-            uploadedAt: new Date().toISOString(),
-            size: fs.statSync(sidecarPath).size,
-            parentId: fileId
-          });
-
-          // Add filaments sidecar if present
-          if (filamentsSidecarPath && filamentsSidecarFilename) {
+            // Add TIFF file - completed annotations are user-created content
+            // New metadata system: uploads category with annotation tag
             metadata.files.push({
-              id: `${fileId}_filaments`,
-              name: filamentsSidecarFilename,
-              path: path.join('annotations', filamentsSidecarFilename),
-              category: 'results',
-              tags: ['annotation', 'filaments'],
+              id: fileId,
+              name: tiffFilename,
+              path: path.join('annotations', tiffFilename),
+              category: 'uploads',
+              tags: ['annotation'],
               uploadedAt: new Date().toISOString(),
-              size: fs.statSync(filamentsSidecarPath).size,
+              size: fs.statSync(tiffPath).size,
+              lineage: {
+                processType: 'annotation',
+                inputs: [sourceFileId],
+                status: 'complete'
+              }
+            });
+
+            // Add sidecar file
+            // New metadata system: results category with annotation/info tags
+            metadata.files.push({
+              id: `${fileId}_sidecar`,
+              name: sidecarFilename,
+              path: path.join('annotations', sidecarFilename),
+              category: 'results',
+              tags: ['annotation', 'info'],
+              uploadedAt: new Date().toISOString(),
+              size: fs.statSync(sidecarPath).size,
               parentId: fileId
             });
+
+            // Add filaments sidecar if present
+            if (filamentsSidecarPath && filamentsSidecarFilename) {
+              metadata.files.push({
+                id: `${fileId}_filaments`,
+                name: filamentsSidecarFilename,
+                path: path.join('annotations', filamentsSidecarFilename),
+                category: 'results',
+                tags: ['annotation', 'filaments'],
+                uploadedAt: new Date().toISOString(),
+                size: fs.statSync(filamentsSidecarPath).size,
+                parentId: fileId
+              });
+            }
           }
 
           workspaceManager.saveMetadata(sessionId, metadata);
 
-          if (logger) logger.info(`[Annotation] Created final annotation: ${tiffFilename}`);
+          const actionVerb = existingFile ? 'Updated' : 'Created';
+          if (logger) logger.info(`[Annotation] ${actionVerb} final annotation: ${tiffFilename}`);
           if (activityLogger) {
             activityLogger.logActivity(req.session.user?.username, 'annotation_create', {
               fileId,
-              sourceFileId
+              sourceFileId,
+              inPlace: !!existingFile
             });
           }
 
           res.json({
             success: true,
             fileId,
-            tiffPath: path.join('annotations', tiffFilename),
-            sidecarPath: path.join('annotations', sidecarFilename),
-            message: 'Annotation created successfully'
+            tiffPath: existingFile ? existingFile.path : path.join('annotations', tiffFilename),
+            sidecarPath: existingSidecar ? existingSidecar.path : path.join('annotations', sidecarFilename),
+            message: existingFile ? 'Annotation updated successfully' : 'Annotation created successfully'
           });
 
         } catch (metadataError) {
