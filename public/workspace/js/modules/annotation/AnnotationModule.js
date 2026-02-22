@@ -1842,8 +1842,13 @@ class AnnotationModule extends BaseModule {
       const result = await this.api.createAnnotation(data);
 
       if (result.success) {
+        let message = 'Annotation created successfully';
+        if (result.directionVolume) {
+          const coverage = result.directionVolume.stats?.coverage_percent;
+          message += `. Direction volume generated (${coverage ?? '?'}% coverage)`;
+        }
         if (this.state?.notify) {
-          this.state.notify('success', 'Annotation created successfully');
+          this.state.notify('success', message);
         }
         console.log('[AnnotationModule] Annotation created:', result);
 

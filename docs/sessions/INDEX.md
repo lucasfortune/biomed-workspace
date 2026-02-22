@@ -15,6 +15,13 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-02-22 (Directional Segmentation: Phases 1-2)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-02-22 | [Phase 2: Direction Volume Pipeline](2026-02-22_phase2_direction_volume_pipeline.md) | ✨ Feature | ~1 hr | ✅ Complete |
+| 2026-02-22 | [Phase 1: Centerpoint Annotation Tooling](2026-02-22_phase1_centerpoint_annotation.md) | ✨ Feature | ~3 hrs | ✅ Complete |
+
 ### 2026-01-28 (Metadata System Rework)
 
 | Date | Session | Type | Duration | Status |
@@ -225,7 +232,7 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 23 |
+| **Total Sessions** | 25 |
 | **Total Development Time** | ~108.25 hours |
 | **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Phase 4 Info Panel complete, Module Framework complete, Data Lineage complete, Annotation Module complete, 2.5D Denoising complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
@@ -579,5 +586,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2026-01-07
-**Total Sessions Documented:** 23
+**Last Updated:** 2026-02-22
+**Total Sessions Documented:** 25

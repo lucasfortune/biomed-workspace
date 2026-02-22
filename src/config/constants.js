@@ -77,7 +77,9 @@ const PYTHON_SCRIPTS = {
   validateTiff: 'python/validate_tiff.py',
   validateInferenceTiff: 'python/validate_inference_tiff.py',
   validateImportedModel: 'python/validate_imported_model.py',
-  generateThumbnail: 'python/generate_thumbnail.py'
+  generateThumbnail: 'python/generate_thumbnail.py',
+  computeDirectionVectors: 'python/compute_direction_vectors.py',
+  validateDirectionVolume: 'python/validate_direction_volume.py'
 };
 
 // Training configuration validation ranges

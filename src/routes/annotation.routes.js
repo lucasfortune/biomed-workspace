@@ -12,7 +12,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { requireAuth } = require('../middleware/auth.middleware');
-const { PYTHON_PATH, DIRECTORIES } = require('../config/constants');
+const { PYTHON_PATH, DIRECTORIES, PYTHON_SCRIPTS } = require('../config/constants');
 
 /**
  * Create annotation routes router
@@ -33,6 +33,81 @@ function createAnnotationRoutes(dependencies) {
     logger,
     io
   } = dependencies;
+
+  // ===========================================================================
+  // HELPER: Generate Direction Volume
+  // ===========================================================================
+
+  /**
+   * Generate a direction vector volume from filament centerpoints and a class mask.
+   * Non-fatal: returns null on failure so the annotation is still saved.
+   *
+   * @param {string} filamentsSidecarPath - Absolute path to _filaments.json
+   * @param {string} classMaskPath - Absolute path to the annotation TIFF (class mask)
+   * @param {string} outputDir - Directory for the output file
+   * @param {string} tiffFilename - Base TIFF filename (used to derive output name)
+   * @returns {Promise<{path: string, filename: string, stats: object} | null>}
+   */
+  function generateDirectionVolume(filamentsSidecarPath, classMaskPath, outputDir, tiffFilename) {
+    const { spawn } = require('child_process');
+
+    return new Promise((resolve) => {
+      const outputFilename = tiffFilename.replace('.tif', '_directions.tif');
+      const outputPath = path.join(outputDir, outputFilename);
+
+      const pythonProcess = spawn(PYTHON_PATH, [
+        PYTHON_SCRIPTS.computeDirectionVectors,
+        '--filaments_json', filamentsSidecarPath,
+        '--class_mask', classMaskPath,
+        '--output', outputPath
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code !== 0 || !stdout.includes('SUCCESS:')) {
+          const errorMsg = stdout.includes('ERROR:')
+            ? stdout.split('ERROR:')[1].split('\n')[0].trim()
+            : stderr || 'Unknown error';
+          if (logger) logger.warn(`[Annotation] Direction volume generation failed (non-fatal): ${errorMsg}`);
+          resolve(null);
+          return;
+        }
+
+        // Parse STATS line
+        let stats = null;
+        const statsMatch = stdout.match(/STATS:(.+)/);
+        if (statsMatch) {
+          try {
+            stats = JSON.parse(statsMatch[1]);
+          } catch (e) {
+            if (logger) logger.warn('[Annotation] Failed to parse direction volume stats');
+          }
+        }
+
+        if (logger) logger.info(`[Annotation] Direction volume generated: ${outputFilename}`);
+        resolve({
+          path: outputPath,
+          filename: outputFilename,
+          stats
+        });
+      });
+
+      pythonProcess.on('error', (err) => {
+        if (logger) logger.warn(`[Annotation] Direction volume process error (non-fatal): ${err.message}`);
+        resolve(null);
+      });
+    });
+  }
 
   // ===========================================================================
   // GET RAW SLICE (Full Resolution)
@@ -615,6 +690,22 @@ function createAnnotationRoutes(dependencies) {
             fs.writeFileSync(filamentsSidecarPath, JSON.stringify(filaments, null, 2));
           }
 
+          // Generate direction volume if filaments with points exist
+          let directionVolumeResult = null;
+          if (filamentsSidecarPath) {
+            try {
+              const filData = JSON.parse(fs.readFileSync(filamentsSidecarPath, 'utf8'));
+              const hasPoints = filData.filaments?.some(f => Object.keys(f.points || {}).length > 0);
+              if (hasPoints) {
+                directionVolumeResult = await generateDirectionVolume(
+                  filamentsSidecarPath, tiffPath, path.dirname(tiffPath), tiffFilename
+                );
+              }
+            } catch (dirErr) {
+              if (logger) logger.warn(`[Annotation] Direction volume check failed (non-fatal): ${dirErr.message}`);
+            }
+          }
+
           // Update or add to workspace metadata
           const metadata = workspaceManager.loadMetadata(sessionId);
           if (!metadata.files) {
@@ -745,6 +836,34 @@ function createAnnotationRoutes(dependencies) {
             }
           }
 
+          // Register direction volume in metadata if generated
+          if (directionVolumeResult) {
+            const dirRelPath = path.join('annotations', directionVolumeResult.filename);
+            const dirEntryId = `${fileId}_directions`;
+            const existingDirIdx = metadata.files.findIndex(f => f.id === dirEntryId);
+            if (existingDirIdx !== -1) {
+              metadata.files[existingDirIdx].size = fs.statSync(directionVolumeResult.path).size;
+              metadata.files[existingDirIdx].lastModifiedAt = new Date().toISOString();
+              metadata.files[existingDirIdx].path = dirRelPath;
+            } else {
+              metadata.files.push({
+                id: dirEntryId,
+                name: directionVolumeResult.filename,
+                path: dirRelPath,
+                category: 'results',
+                tags: ['annotation', 'direction_volume'],
+                uploadedAt: new Date().toISOString(),
+                size: fs.statSync(directionVolumeResult.path).size,
+                parentId: fileId,
+                lineage: {
+                  processType: 'direction_volume',
+                  inputs: [fileId, `${fileId}_filaments`],
+                  status: 'complete'
+                }
+              });
+            }
+          }
+
           workspaceManager.saveMetadata(sessionId, metadata);
 
           const actionVerb = existingFile ? 'Updated' : 'Created';
@@ -762,7 +881,11 @@ function createAnnotationRoutes(dependencies) {
             fileId,
             tiffPath: path.join('annotations', tiffFilename),
             sidecarPath: path.join('annotations', sidecarFilename),
-            message: existingFile ? 'Annotation updated successfully' : 'Annotation created successfully'
+            message: existingFile ? 'Annotation updated successfully' : 'Annotation created successfully',
+            directionVolume: directionVolumeResult ? {
+              path: path.join('annotations', directionVolumeResult.filename),
+              stats: directionVolumeResult.stats
+            } : null
           });
 
         } catch (metadataError) {
