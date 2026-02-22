@@ -703,8 +703,6 @@
    ============================================ */
 
 .annotation-module .classes-section {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -745,11 +743,11 @@
 }
 
 .annotation-module .class-list {
-  flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 200px;
 }
 
 .annotation-module .class-item {
@@ -848,6 +846,128 @@
   margin-top: var(--module-spacing-sm);
   padding-top: var(--module-spacing-sm);
 }
+
+/* ============================================
+   FILAMENT LIST
+   ============================================ */
+
+.annotation-module .filaments-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.annotation-module .filaments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--module-spacing-xs);
+}
+
+.annotation-module .filaments-header h4 {
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.annotation-module .filament-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.annotation-module .filament-empty-state {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  text-align: center;
+  padding: var(--module-spacing-sm);
+  opacity: 0.6;
+}
+
+.annotation-module .filament-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--module-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.annotation-module .filament-item:hover {
+  border-color: var(--module-text-secondary);
+}
+
+.annotation-module .filament-item.active {
+  border-color: var(--module-primary);
+  background: var(--module-primary-light);
+}
+
+.annotation-module .filament-color {
+  width: 14px;
+  height: 14px;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--module-border);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.annotation-module .filament-item.active .filament-color {
+  box-shadow: 0 0 0 2px var(--module-primary);
+}
+
+.annotation-module .filament-name {
+  flex: 1;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.annotation-module .filament-count {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--module-text-secondary);
+  background: var(--module-border);
+  border-radius: 8px;
+  padding: 1px 5px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.annotation-module .filament-item.active .filament-count {
+  background: var(--module-primary);
+  color: white;
+}
+
+.annotation-module .filament-delete {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 0.6;
+  color: var(--module-error-text);
+  transition: all 0.15s ease;
+}
+
+.annotation-module .filament-delete:hover {
+  opacity: 1;
+  background: var(--module-error-bg);
+}
+
 
 /* ============================================
    RESPONSIVE ADJUSTMENTS FOR STEP 2

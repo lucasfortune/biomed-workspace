@@ -54,6 +54,7 @@ class AnnotationAPI {
    * @param {Array} data.classes - Class definitions
    * @param {object} data.sliceData - Map of slice index to base64 encoded data
    * @param {string} [data.existingFileId] - Existing annotation file ID (for updates)
+   * @param {object} [data.filaments] - Filament data (from FilamentManager.toJSON())
    * @returns {Promise<{success: boolean, fileId: string, filePath: string}>}
    */
   async saveProgress(data) {
@@ -76,6 +77,7 @@ class AnnotationAPI {
   /**
    * Create final annotation
    * @param {object} data - Annotation data (same as saveProgress)
+   * @param {object} [data.filaments] - Filament data (from FilamentManager.toJSON())
    * @returns {Promise<{success: boolean, fileId: string, filePath: string}>}
    */
   async createAnnotation(data) {

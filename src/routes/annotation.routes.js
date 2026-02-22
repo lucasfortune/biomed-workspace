@@ -168,7 +168,8 @@ function createAnnotationRoutes(dependencies) {
         slices,
         sliceData,
         classes,
-        existingAnnotationId
+        existingAnnotationId,
+        filaments
       } = req.body;
 
       // Validate required fields
@@ -290,6 +291,21 @@ function createAnnotationRoutes(dependencies) {
 
           fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
 
+          // Write filaments sidecar if present
+          let filamentsSidecarPath = null;
+          let filamentsSidecarFilename = null;
+
+          if (filaments && filaments.filaments && filaments.filaments.length > 0) {
+            filamentsSidecarFilename = existingFile
+              ? tiffFilename.replace('.tif', '_filaments.json')
+              : sidecarFilename.replace('_classes.json', '_filaments.json');
+            filamentsSidecarPath = path.join(
+              path.dirname(sidecarPath),
+              filamentsSidecarFilename
+            );
+            fs.writeFileSync(filamentsSidecarPath, JSON.stringify(filaments, null, 2));
+          }
+
           // Update or add to workspace metadata
           const metadata = workspaceManager.loadMetadata(sessionId);
           if (!metadata.files) {
@@ -354,6 +370,31 @@ function createAnnotationRoutes(dependencies) {
             });
           }
 
+          // Register filaments sidecar in metadata if present
+          if (filamentsSidecarPath && filamentsSidecarFilename) {
+            const existingFilamentsEntry = metadata.files.find(
+              f => f.id === `${fileId}_filaments`
+            );
+            if (existingFilamentsEntry) {
+              existingFilamentsEntry.size = fs.statSync(filamentsSidecarPath).size;
+              existingFilamentsEntry.lastModifiedAt = new Date().toISOString();
+            } else {
+              metadata.files.push({
+                id: `${fileId}_filaments`,
+                name: filamentsSidecarFilename,
+                path: path.join(
+                  existingFile ? path.dirname(existingFile.path) : DIRECTORIES.unfinishedAnnotations,
+                  filamentsSidecarFilename
+                ),
+                category: 'results',
+                tags: ['annotation', 'filaments'],
+                uploadedAt: new Date().toISOString(),
+                size: fs.statSync(filamentsSidecarPath).size,
+                parentId: fileId
+              });
+            }
+          }
+
           workspaceManager.saveMetadata(sessionId, metadata);
 
           if (logger) logger.info(`[Annotation] Saved progress: ${tiffFilename}`);
@@ -413,7 +454,8 @@ function createAnnotationRoutes(dependencies) {
         height,
         slices,
         sliceData,
-        classes
+        classes,
+        filaments
       } = req.body;
 
       // Validate required fields
@@ -514,6 +556,16 @@ function createAnnotationRoutes(dependencies) {
 
           fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
 
+          // Write filaments sidecar if present
+          let filamentsSidecarPath = null;
+          let filamentsSidecarFilename = null;
+
+          if (filaments && filaments.filaments && filaments.filaments.length > 0) {
+            filamentsSidecarFilename = sidecarFilename.replace('_classes.json', '_filaments.json');
+            filamentsSidecarPath = path.join(annotationsDir, filamentsSidecarFilename);
+            fs.writeFileSync(filamentsSidecarPath, JSON.stringify(filaments, null, 2));
+          }
+
           // Generate file ID
           const fileId = `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -552,6 +604,20 @@ function createAnnotationRoutes(dependencies) {
             size: fs.statSync(sidecarPath).size,
             parentId: fileId
           });
+
+          // Add filaments sidecar if present
+          if (filamentsSidecarPath && filamentsSidecarFilename) {
+            metadata.files.push({
+              id: `${fileId}_filaments`,
+              name: filamentsSidecarFilename,
+              path: path.join('annotations', filamentsSidecarFilename),
+              category: 'results',
+              tags: ['annotation', 'filaments'],
+              uploadedAt: new Date().toISOString(),
+              size: fs.statSync(filamentsSidecarPath).size,
+              parentId: fileId
+            });
+          }
 
           workspaceManager.saveMetadata(sessionId, metadata);
 
@@ -639,8 +705,10 @@ function createAnnotationRoutes(dependencies) {
         });
       }
 
-      // Find sidecar JSON
-      const sidecarFile = metadata.files.find(f => f.parentId === fileId);
+      // Find sidecar JSON (classes)
+      const sidecarFile = metadata.files.find(
+        f => f.parentId === fileId && (!f.tags || !f.tags.includes('filaments'))
+      );
       let sidecarData = null;
 
       if (sidecarFile) {
@@ -650,6 +718,23 @@ function createAnnotationRoutes(dependencies) {
             sidecarData = JSON.parse(fs.readFileSync(sidecarPath, 'utf8'));
           } catch (e) {
             if (logger) logger.warn('[Annotation] Failed to read sidecar:', e.message);
+          }
+        }
+      }
+
+      // Find filaments sidecar JSON
+      let filamentsData = null;
+      const filamentsFile = metadata.files.find(
+        f => f.parentId === fileId && f.tags && f.tags.includes('filaments')
+      );
+
+      if (filamentsFile) {
+        const filamentsPath = path.join(workspacePath, filamentsFile.path);
+        if (fs.existsSync(filamentsPath)) {
+          try {
+            filamentsData = JSON.parse(fs.readFileSync(filamentsPath, 'utf8'));
+          } catch (e) {
+            if (logger) logger.warn('[Annotation] Failed to read filaments sidecar:', e.message);
           }
         }
       }
@@ -711,7 +796,8 @@ function createAnnotationRoutes(dependencies) {
             annotatedSlices: tiffData.annotatedSlices,
             status: sidecarData?.status || file.lineage?.status || 'unknown',
             createdAt: sidecarData?.createdAt || file.uploadedAt,
-            lastModifiedAt: sidecarData?.lastModifiedAt || file.uploadedAt
+            lastModifiedAt: sidecarData?.lastModifiedAt || file.uploadedAt,
+            filaments: filamentsData || null
           };
 
           if (logger) logger.info(`[Annotation] Loaded annotation: ${file.name} (${tiffData.annotatedSlices} slices)`);

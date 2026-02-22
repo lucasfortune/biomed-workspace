@@ -47,6 +47,7 @@ class BrushEngine {
     this.activeClassId = 1;        // Current class ID for painting
     this.isDrawing = false;        // Whether currently in a stroke
     this.lastPoint = null;         // Last point for line interpolation
+    this.enabled = true;           // Can be disabled when centerpoint tool is active
 
     // =========================================================================
     // ANNOTATION DATA STORAGE
@@ -222,6 +223,24 @@ class BrushEngine {
     }
   }
 
+  /**
+   * Enable the brush engine (brush/eraser tools active)
+   */
+  enable() {
+    this.enabled = true;
+  }
+
+  /**
+   * Disable the brush engine (centerpoint tool active)
+   */
+  disable() {
+    this.enabled = false;
+    if (this.isDrawing) {
+      this.endStroke();
+    }
+    this.clearPreview();
+  }
+
   // ===========================================================================
   // POINTER EVENT HANDLERS
   // ===========================================================================
@@ -232,6 +251,8 @@ class BrushEngine {
    * @param {PointerEvent} e
    */
   handlePointerDown(e) {
+    if (!this.enabled) return;
+
     // For mouse: only handle left-click (right/middle are for pan)
     if (e.pointerType === 'mouse' && e.button !== 0) return;
 
@@ -271,6 +292,8 @@ class BrushEngine {
    * @param {PointerEvent} e
    */
   handlePointerMove(e) {
+    if (!this.enabled) return;
+
     // Skip if canvas not ready
     if (!this.canvas || !this.imageWidth) return;
 
@@ -314,6 +337,8 @@ class BrushEngine {
    * @param {PointerEvent} e
    */
   handlePointerUp(e) {
+    if (!this.enabled) return;
+
     // Only process the drawing pointer
     if (e.pointerId !== this.drawingPointerId) return;
 
@@ -748,6 +773,8 @@ class BrushEngine {
    * @param {object} coords - Coordinate info from AnnotationCanvas
    */
   updatePreview(coords = null) {
+    if (!this.enabled) return;
+
     const ctx = this.canvas.previewCtx;
     if (!ctx) return;
 

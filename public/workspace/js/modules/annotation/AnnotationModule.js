@@ -24,6 +24,8 @@ import AnnotationAPI from './AnnotationAPI.js';
 import AnnotationCanvas from './utils/AnnotationCanvas.js';
 import BrushEngine from './utils/BrushEngine.js';
 import HistoryManager from './utils/HistoryManager.js';
+import FilamentManager from './utils/FilamentManager.js';
+import CenterpointEngine from './utils/CenterpointEngine.js';
 
 // =============================================================================
 // MODULE CLASS
@@ -63,6 +65,8 @@ class AnnotationModule extends BaseModule {
     this.canvas = null;
     this.brushEngine = null;
     this.historyManager = null;
+    this.filamentManager = null;
+    this.centerpointEngine = null;
 
     // =========================================================================
     // MODULE STATE
@@ -80,6 +84,9 @@ class AnnotationModule extends BaseModule {
     // Slice navigation
     this.currentSlice = 0;
     this.totalSlices = 1;
+
+    // Active tool tracking
+    this.activeTool = 'brush';  // 'brush' | 'eraser' | 'centerpoint'
 
     // Dirty state tracking
     this.isDirty = false;
@@ -235,11 +242,11 @@ class AnnotationModule extends BaseModule {
                     </div>
                     <div class="tool-buttons">
                       <button id="toolBrush" class="tool-btn active" title="Brush (B)">
-                        <span class="tool-icon">🖌️</span>
+                        <span class="tool-icon">&#x1F58C;&#xFE0F;</span>
                         <span class="tool-label">Brush</span>
                       </button>
                       <button id="toolEraser" class="tool-btn" title="Eraser (E)">
-                        <span class="tool-icon">🧹</span>
+                        <span class="tool-icon">&#x1F9F9;</span>
                         <span class="tool-label">Eraser</span>
                       </button>
                     </div> 
@@ -293,6 +300,19 @@ class AnnotationModule extends BaseModule {
                     </div>
                     <div id="classList" class="class-list">
                       <!-- Classes will be rendered dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Filaments Section -->
+                  <div class="toolbar-section filaments-section">
+                    <div class="filaments-header">
+                      <h4>Filaments</h4>
+                      <button id="addFilamentBtn" class="btn-add-class" title="Add filament">+</button>
+                    </div>
+                    <div id="filamentList" class="filament-list">
+                      <div class="filament-empty-state">
+                        No filaments. Click + to add.
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -557,6 +577,12 @@ class AnnotationModule extends BaseModule {
       toolEraser.addEventListener('click', () => this.setTool('eraser'));
     }
 
+    // Add filament button
+    const addFilamentBtn = this.container.querySelector('#addFilamentBtn');
+    if (addFilamentBtn) {
+      addFilamentBtn.addEventListener('click', () => this.addFilament());
+    }
+
     // Brush size slider
     const brushSizeSlider = this.container.querySelector('#brushSizeSlider');
     if (brushSizeSlider) {
@@ -672,8 +698,10 @@ class AnnotationModule extends BaseModule {
 
         this.canvas.onMouseMove = (coords) => {
           this.updateCoordsDisplay(coords);
-          // Update brush preview
-          if (this.brushEngine) {
+          // Route preview to the active engine
+          if (this.activeTool === 'centerpoint' && this.centerpointEngine) {
+            this.centerpointEngine.updatePreview(coords);
+          } else if (this.brushEngine) {
             this.brushEngine.updatePreview(coords);
           }
         };
@@ -684,6 +712,11 @@ class AnnotationModule extends BaseModule {
           if (this.brushEngine) {
             this.brushEngine.initialize(info.width, info.height);
             this.brushEngine.renderAnnotations();
+          }
+          // Re-render filament markers for loaded slice
+          if (this.centerpointEngine) {
+            this.centerpointEngine.setSlice(this.currentSlice);
+            this.centerpointEngine.render();
           }
         };
       }
@@ -737,6 +770,38 @@ class AnnotationModule extends BaseModule {
         // Render initial class list
         this.renderClassList();
       }
+
+      // Create filament manager if not exists
+      if (!this.filamentManager) {
+        this.filamentManager = new FilamentManager();
+
+        this.filamentManager.onChange = () => {
+          this.isDirty = true;
+          this.updateSaveButtonState();
+          this.renderFilamentList();
+        };
+      }
+
+      // Create centerpoint engine if not exists
+      if (!this.centerpointEngine) {
+        this.centerpointEngine = new CenterpointEngine(this.canvas, this.filamentManager);
+        this.centerpointEngine.initialize();
+
+        this.centerpointEngine.onPointPlaced = () => {
+          this.isDirty = true;
+          this.updateSaveButtonState();
+          this.renderFilamentList();
+        };
+
+        this.centerpointEngine.onPointRemoved = () => {
+          this.isDirty = true;
+          this.updateSaveButtonState();
+          this.renderFilamentList();
+        };
+      }
+
+      // Render initial filament list
+      this.renderFilamentList();
 
       // Handle resume/edit workflow
       if (this.isResuming && this.annotationFile) {
@@ -799,6 +864,12 @@ class AnnotationModule extends BaseModule {
       // Re-render annotations for the new slice
       if (this.brushEngine) {
         this.brushEngine.renderAnnotations();
+      }
+
+      // Re-render filament markers for the new slice
+      if (this.centerpointEngine) {
+        this.centerpointEngine.setSlice(index);
+        this.centerpointEngine.render();
       }
 
       // Update history buttons for the new slice
@@ -893,20 +964,44 @@ class AnnotationModule extends BaseModule {
 
   /**
    * Set the active tool
-   * @param {'brush' | 'eraser'} tool - Tool to activate
+   * @param {'brush' | 'eraser' | 'centerpoint'} tool - Tool to activate
    */
   setTool(tool) {
-    if (!this.brushEngine) return;
+    this.activeTool = tool;
 
-    this.brushEngine.setTool(tool);
+    // Toggle engine states
+    if (tool === 'centerpoint') {
+      if (this.brushEngine) this.brushEngine.disable();
+      if (this.centerpointEngine) this.centerpointEngine.enable();
+    } else {
+      if (this.centerpointEngine) this.centerpointEngine.disable();
+      if (this.brushEngine) {
+        this.brushEngine.enable();
+        this.brushEngine.setTool(tool);
+      }
+    }
 
-    // Update UI
+    // Update tool button UI
     const toolBrush = this.container.querySelector('#toolBrush');
     const toolEraser = this.container.querySelector('#toolEraser');
 
-    if (toolBrush && toolEraser) {
-      toolBrush.classList.toggle('active', tool === 'brush');
-      toolEraser.classList.toggle('active', tool === 'eraser');
+    if (toolBrush) toolBrush.classList.toggle('active', tool === 'brush');
+    if (toolEraser) toolEraser.classList.toggle('active', tool === 'eraser');
+
+    // Show/hide brush size section based on tool
+    const brushSizeSection = this.container.querySelector('.brush-size-control')
+      ?.closest('.toolbar-section');
+    if (brushSizeSection) {
+      brushSizeSection.style.display = tool === 'centerpoint' ? 'none' : '';
+    }
+
+    // Re-render both lists so only the active one shows a highlight
+    this.renderClassList();
+    this.renderFilamentList();
+
+    // Re-render filament markers
+    if (this.centerpointEngine) {
+      this.centerpointEngine.render();
     }
   }
 
@@ -976,7 +1071,19 @@ class AnnotationModule extends BaseModule {
     if (!this.brushEngine) return;
 
     this.brushEngine.setActiveClass(classId);
+
+    // Deselect active filament — only one selection across both lists
+    if (this.filamentManager) {
+      this.filamentManager.setActiveFilament(null);
+      this.renderFilamentList();
+    }
+
     this.renderClassList();
+
+    // Auto-switch to brush tool when selecting a class
+    if (this.activeTool === 'centerpoint') {
+      this.setTool('brush');
+    }
   }
 
   /**
@@ -999,9 +1106,10 @@ class AnnotationModule extends BaseModule {
 
     const classes = this.brushEngine.getClasses();
     const activeClass = this.brushEngine.getActiveClass();
+    const showClassHighlight = this.activeTool !== 'centerpoint';
 
     classList.innerHTML = classes.map(cls => `
-      <div class="class-item ${cls.id === activeClass?.id ? 'active' : ''}"
+      <div class="class-item ${showClassHighlight && cls.id === activeClass?.id ? 'active' : ''}"
            data-class-id="${cls.id}">
         <span class="class-color" style="background: ${cls.color};"></span>
         <span class="class-name">${cls.name}</span>
@@ -1044,6 +1152,122 @@ class AnnotationModule extends BaseModule {
           return;
         }
         this.selectClass(classId);
+      });
+    });
+  }
+
+  // ===========================================================================
+  // FILAMENT MANAGEMENT
+  // ===========================================================================
+
+  /**
+   * Add a new filament using the active class ID
+   */
+  addFilament() {
+    if (!this.filamentManager) return;
+
+    const activeClass = this.brushEngine?.getActiveClass();
+    const classId = activeClass ? activeClass.id : 0;
+
+    this.filamentManager.addFilament(classId);
+    this.renderFilamentList();
+
+    // Auto-switch to centerpoint tool when adding a filament (it's auto-selected)
+    this.setTool('centerpoint');
+  }
+
+  /**
+   * Delete a filament
+   * @param {number} filamentId
+   */
+  deleteFilament(filamentId) {
+    if (!this.filamentManager) return;
+
+    const pointCount = this.filamentManager.getPointCount(filamentId);
+    if (pointCount > 0) {
+      if (!confirm(`Delete this filament? It has ${pointCount} point(s) across slices.`)) {
+        return;
+      }
+    }
+
+    this.filamentManager.removeFilament(filamentId);
+    this.isDirty = true;
+    this.renderFilamentList();
+
+    // If no filaments remain, switch back to brush tool
+    if (this.activeTool === 'centerpoint' && this.filamentManager.getAllFilaments().length === 0) {
+      this.setTool('brush');
+    } else if (this.centerpointEngine) {
+      this.centerpointEngine.render();
+    }
+  }
+
+  /**
+   * Select a filament as active
+   * @param {number} filamentId
+   */
+  selectFilament(filamentId) {
+    if (!this.filamentManager) return;
+
+    this.filamentManager.setActiveFilament(filamentId);
+    this.renderFilamentList();
+
+    // Re-render class list to remove its highlight
+    this.renderClassList();
+
+    // Auto-switch to centerpoint tool when selecting a filament
+    this.setTool('centerpoint');
+  }
+
+  /**
+   * Render the filament list UI
+   */
+  renderFilamentList() {
+    const filamentList = this.container?.querySelector('#filamentList');
+    if (!filamentList || !this.filamentManager) return;
+
+    const filaments = this.filamentManager.getAllFilaments();
+    const activeId = this.filamentManager.activeFilamentId;
+    const showFilamentHighlight = this.activeTool === 'centerpoint';
+
+    if (filaments.length === 0) {
+      filamentList.innerHTML = `
+        <div class="filament-empty-state">
+          No filaments. Click + to add.
+        </div>
+      `;
+      return;
+    }
+
+    filamentList.innerHTML = filaments.map(fil => {
+      const pointCount = this.filamentManager.getPointCount(fil.id);
+      return `
+        <div class="filament-item ${showFilamentHighlight && fil.id === activeId ? 'active' : ''}"
+             data-filament-id="${fil.id}">
+          <span class="filament-color" style="background: ${fil.color};"></span>
+          <span class="filament-name">${fil.name}</span>
+          <span class="filament-count" title="${pointCount} point(s)">${pointCount}</span>
+          <button class="filament-delete" title="Delete filament" data-action="delete">&times;</button>
+        </div>
+      `;
+    }).join('');
+
+    // Attach event listeners
+    filamentList.querySelectorAll('.filament-item').forEach(item => {
+      const filamentId = parseInt(item.dataset.filamentId, 10);
+
+      const deleteBtn = item.querySelector('[data-action="delete"]');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.deleteFilament(filamentId);
+        });
+      }
+
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.filament-delete')) return;
+        this.selectFilament(filamentId);
       });
     });
   }
@@ -1195,7 +1419,10 @@ class AnnotationModule extends BaseModule {
       slices: this.tiffInfo.sliceCount,
       sliceData,
       classes: this.brushEngine.getClasses(),
-      existingAnnotationId: this.currentAnnotationId  // For updating existing annotations
+      existingAnnotationId: this.currentAnnotationId,  // For updating existing annotations
+      filaments: this.filamentManager
+        ? this.filamentManager.toJSON(this.sourceFile?.id || this.sourceFile?.path)
+        : null
     };
   }
 
@@ -1342,6 +1569,15 @@ class AnnotationModule extends BaseModule {
     // (onSliceLoaded will call renderAnnotations after image loads)
     if (this.brushEngine.imageWidth > 0 && this.brushEngine.imageHeight > 0) {
       this.brushEngine.renderAnnotations();
+    }
+
+    // Restore filaments if present
+    if (annotationData.filaments && this.filamentManager) {
+      this.filamentManager.fromJSON(annotationData.filaments);
+      this.renderFilamentList();
+      if (this.centerpointEngine) {
+        this.centerpointEngine.render();
+      }
     }
 
     console.log(`[AnnotationModule] Restored annotation with ${annotationData.annotatedSlices || 0} slices`);
@@ -1562,12 +1798,14 @@ class AnnotationModule extends BaseModule {
     const createBtn = this.container?.querySelector('#createAnnotationBtn');
 
     const hasAnnotations = this.brushEngine && this.brushEngine.getAllAnnotations().size > 0;
+    const hasFilaments = this.filamentManager && this.filamentManager.hasAnyPoints();
+    const hasContent = hasAnnotations || hasFilaments;
 
     if (saveBtn) {
-      saveBtn.disabled = !hasAnnotations;
+      saveBtn.disabled = !hasContent;
     }
     if (createBtn) {
-      createBtn.disabled = !hasAnnotations;
+      createBtn.disabled = !hasContent;
     }
   }
 
@@ -1847,6 +2085,18 @@ class AnnotationModule extends BaseModule {
       this.beforeUnloadHandler = null;
     }
 
+    // Clean up centerpoint engine
+    if (this.centerpointEngine) {
+      this.centerpointEngine.destroy();
+      this.centerpointEngine = null;
+    }
+
+    // Clean up filament manager
+    if (this.filamentManager) {
+      this.filamentManager.destroy();
+      this.filamentManager = null;
+    }
+
     // Clean up history manager
     if (this.historyManager) {
       this.historyManager.destroy();
@@ -1880,6 +2130,7 @@ class AnnotationModule extends BaseModule {
     this.currentSlice = 0;
     this.totalSlices = 1;
     this.isDirty = false;
+    this.activeTool = 'brush';
 
     await super.deactivate();
     console.log('[AnnotationModule] Deactivated');

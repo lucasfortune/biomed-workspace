@@ -62,10 +62,12 @@ class AnnotationCanvas {
     this.transformContainer = null;
     this.sourceImage = null;
     this.annotationCanvas = null;
+    this.filamentCanvas = null;
     this.previewCanvas = null;
 
     // Contexts
     this.annotationCtx = null;
+    this.filamentCtx = null;
     this.previewCtx = null;
 
     // Event callbacks
@@ -156,6 +158,17 @@ class AnnotationCanvas {
       pointer-events: none;
     `;
 
+    // Create filament canvas (for centerpoint markers, always visible)
+    this.filamentCanvas = document.createElement('canvas');
+    this.filamentCanvas.className = 'annotation-filaments';
+    this.filamentCanvas.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      image-rendering: pixelated;
+      pointer-events: none;
+    `;
+
     // Create preview canvas (for brush cursor, guides)
     this.previewCanvas = document.createElement('canvas');
     this.previewCanvas.className = 'annotation-preview';
@@ -182,11 +195,13 @@ class AnnotationCanvas {
 
     // Get contexts
     this.annotationCtx = this.annotationCanvas.getContext('2d');
+    this.filamentCtx = this.filamentCanvas.getContext('2d');
     this.previewCtx = this.previewCanvas.getContext('2d');
 
     // Assemble DOM
     this.transformContainer.appendChild(this.sourceImage);
     this.transformContainer.appendChild(this.annotationCanvas);
+    this.transformContainer.appendChild(this.filamentCanvas);
     this.transformContainer.appendChild(this.previewCanvas);
     this.transformContainer.appendChild(this.interactionLayer);
     this.viewport.appendChild(this.transformContainer);
@@ -287,6 +302,8 @@ class AnnotationCanvas {
 
     this.annotationCanvas.width = width;
     this.annotationCanvas.height = height;
+    this.filamentCanvas.width = width;
+    this.filamentCanvas.height = height;
     this.previewCanvas.width = width;
     this.previewCanvas.height = height;
 
@@ -296,6 +313,7 @@ class AnnotationCanvas {
 
     // Reset transform for crisp rendering
     this.annotationCtx.imageSmoothingEnabled = false;
+    this.filamentCtx.imageSmoothingEnabled = false;
     this.previewCtx.imageSmoothingEnabled = false;
   }
 
