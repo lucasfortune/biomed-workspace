@@ -1392,14 +1392,18 @@ class FileBrowser {
    * @returns {Array} Filtered files
    */
   filterFiles(files) {
+    // Hide sidecar files (info JSONs, filaments JSONs) — they have a parentId
+    // linking them to a main file. Users interact with the main file only.
+    let filtered = files.filter(file => !file.parentId);
+
     if (!this.searchQuery.trim()) {
-      return files;
+      return filtered;
     }
 
     const query = this.searchQuery.toLowerCase().trim();
     const queryWords = query.split(/\s+/); // Split by whitespace for multi-word search
 
-    return files.filter(file => {
+    return filtered.filter(file => {
       // Check if ANY word in query matches filename or category
       return queryWords.some(word => {
         // Match 1: Filename (case-insensitive substring match)
