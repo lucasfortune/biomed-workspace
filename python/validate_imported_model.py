@@ -58,16 +58,17 @@ def validate_model(model_path, config):
         if not os.path.exists(model_path):
             return False, "Model file does not exist"
 
-        # Try safe loading first (weights_only=True), fall back if needed
+        # Try safe loading first, with progressively looser restrictions
         try:
-            checkpoint = torch.load(model_path, map_location='cpu', weights_only=True)
+            # PyTorch 2.6+ with safe_globals for numpy scalars
+            import torch.serialization
+            if hasattr(torch.serialization, 'safe_globals'):
+                with torch.serialization.safe_globals(['numpy._core.multiarray.scalar']):
+                    checkpoint = torch.load(model_path, map_location='cpu', weights_only=True)
+            else:
+                checkpoint = torch.load(model_path, map_location='cpu', weights_only=True)
         except Exception:
-            # Fall back for legacy models with numpy objects - log warning
-            import warnings
-            warnings.warn(
-                f"Loading model with weights_only=False. Ensure {model_path} is from a trusted source.",
-                UserWarning
-            )
+            # Fall back for legacy models or older PyTorch versions
             checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
         
         # Check if it's a valid checkpoint with model_state_dict
