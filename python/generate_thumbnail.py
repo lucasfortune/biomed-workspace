@@ -12,9 +12,47 @@ Outputs:
 """
 
 import sys
+import numpy as np
 import tifffile
+from PIL import Image
 
 from utils import extract_middle_slice, extract_slice, save_thumbnail_jpeg
+
+
+def generate_direction_volume_thumbnail(img, output_path, slice_index=None, size=120):
+    """
+    Generate an RGB thumbnail from a 4D direction volume (Z, Y, X, 3).
+
+    Uses DTI colormap convention: |dx| → Red, |dy| → Green, |dz| → Blue.
+
+    Args:
+        img: 4D NumPy array with shape (Z, Y, X, 3)
+        output_path: Path to output JPEG file
+        slice_index: Optional slice index (default: middle slice)
+        size: Target thumbnail size in pixels
+
+    Returns:
+        Output path on success
+    """
+    if slice_index is not None:
+        if slice_index < 0 or slice_index >= img.shape[0]:
+            raise ValueError(f"Slice index {slice_index} out of range (0-{img.shape[0]-1})")
+        direction_slice = img[slice_index]
+    else:
+        middle_idx = img.shape[0] // 2
+        direction_slice = img[middle_idx]
+
+    # DTI colormap: |dx|, |dy|, |dz| → R, G, B
+    abs_dirs = np.abs(direction_slice).astype(np.float64)
+    max_val = abs_dirs.max()
+    if max_val > 0:
+        abs_dirs = abs_dirs / max_val
+    rgb = (abs_dirs * 255).astype(np.uint8)
+
+    pil_img = Image.fromarray(rgb, mode='RGB')
+    pil_img.thumbnail((size, size), Image.Resampling.LANCZOS)
+    pil_img.save(output_path, "JPEG", quality=85)
+    return output_path
 
 
 def generate_thumbnail(input_path, output_path, slice_index=None):
@@ -34,6 +72,10 @@ def generate_thumbnail(input_path, output_path, slice_index=None):
     """
     # Load TIFF
     img = tifffile.imread(input_path)
+
+    # Handle 4D direction volumes (Z, Y, X, 3)
+    if img.ndim == 4 and img.shape[-1] == 3:
+        return generate_direction_volume_thumbnail(img, output_path, slice_index)
 
     # Extract appropriate slice
     if slice_index is not None:

@@ -274,19 +274,17 @@ function createAnnotationRoutes(dependencies) {
         const metadata = workspaceManager.loadMetadata(sessionId);
         existingFile = metadata?.files?.find(f => f.id === existingAnnotationId);
         if (existingFile) {
-          existingSidecar = metadata?.files?.find(f => f.parentId === existingAnnotationId);
-          // Reuse existing filenames and paths
+          existingSidecar = metadata?.files?.find(
+            f => f.parentId === existingAnnotationId && (!f.tags || !f.tags.includes('filaments'))
+          );
+          // Always save WIP data to unfinished_annotations/
           tiffFilename = existingFile.name;
-          tiffPath = path.join(workspacePath, existingFile.path);
           fileId = existingAnnotationId;
-          if (existingSidecar) {
-            sidecarFilename = existingSidecar.name;
-            sidecarPath = path.join(workspacePath, existingSidecar.path);
-          } else {
-            // Create sidecar filename based on TIFF name
-            sidecarFilename = tiffFilename.replace('.tif', '_classes.json');
-            sidecarPath = path.join(annotationsDir, sidecarFilename);
-          }
+          tiffPath = path.join(annotationsDir, tiffFilename);
+          sidecarFilename = existingSidecar
+            ? existingSidecar.name
+            : tiffFilename.replace('.tif', '_classes.json');
+          sidecarPath = path.join(annotationsDir, sidecarFilename);
           if (logger) logger.info(`[Annotation] Updating existing annotation: ${existingAnnotationId}`);
         }
       }
@@ -388,20 +386,42 @@ function createAnnotationRoutes(dependencies) {
           }
 
           if (existingFile) {
-            // Update existing file entries
+            // Check if this annotation was finished (being demoted to WIP for editing)
+            const wasFinished = !existingFile.path.includes(DIRECTORIES.unfinishedAnnotations);
+
+            // Update TIFF metadata entry
             const tiffIndex = metadata.files.findIndex(f => f.id === fileId);
             if (tiffIndex !== -1) {
+              if (wasFinished) {
+                // Delete old TIFF from its original location
+                const oldPath = path.join(workspacePath, metadata.files[tiffIndex].path);
+                if (oldPath !== tiffPath && fs.existsSync(oldPath)) {
+                  try { fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
+                }
+                metadata.files[tiffIndex].path = path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename);
+                metadata.files[tiffIndex].category = 'results';
+                metadata.files[tiffIndex].tags = ['annotation', 'wip'];
+              }
               metadata.files[tiffIndex].size = fs.statSync(tiffPath).size;
               metadata.files[tiffIndex].lastModifiedAt = new Date().toISOString();
             }
 
-            const sidecarIndex = metadata.files.findIndex(f => f.parentId === fileId);
+            // Update sidecar metadata entry
+            const sidecarIndex = metadata.files.findIndex(
+              f => f.parentId === fileId && (!f.tags || !f.tags.includes('filaments'))
+            );
             if (sidecarIndex !== -1) {
+              if (wasFinished) {
+                const oldPath = path.join(workspacePath, metadata.files[sidecarIndex].path);
+                if (oldPath !== sidecarPath && fs.existsSync(oldPath)) {
+                  try { fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
+                }
+                metadata.files[sidecarIndex].path = path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename);
+              }
               metadata.files[sidecarIndex].size = fs.statSync(sidecarPath).size;
               metadata.files[sidecarIndex].lastModifiedAt = new Date().toISOString();
             } else {
               // Add sidecar if it didn't exist
-              // New metadata system: results category with annotation/info tags
               metadata.files.push({
                 id: `${fileId}_sidecar`,
                 name: sidecarFilename,
@@ -410,8 +430,27 @@ function createAnnotationRoutes(dependencies) {
                 tags: ['annotation', 'info'],
                 uploadedAt: new Date().toISOString(),
                 size: fs.statSync(sidecarPath).size,
-                parentId: fileId
+                parentId: fileId,
+                lineage: {
+                  processType: 'annotation',
+                  inputs: [sourceFileId],
+                  status: 'in_progress'
+                }
               });
+            }
+
+            // When demoting from finished, clean up old direction volume (will be regenerated on finalize)
+            if (wasFinished) {
+              const dirVolIdx = metadata.files.findIndex(
+                f => f.parentId === fileId && f.tags && f.tags.includes('direction_volume')
+              );
+              if (dirVolIdx !== -1) {
+                const oldDirPath = path.join(workspacePath, metadata.files[dirVolIdx].path);
+                if (fs.existsSync(oldDirPath)) {
+                  try { fs.unlinkSync(oldDirPath); } catch (e) { /* ignore */ }
+                }
+                metadata.files.splice(dirVolIdx, 1);
+              }
             }
           } else {
             // Add new TIFF file
@@ -441,7 +480,12 @@ function createAnnotationRoutes(dependencies) {
               tags: ['annotation', 'info'],
               uploadedAt: new Date().toISOString(),
               size: fs.statSync(sidecarPath).size,
-              parentId: fileId
+              parentId: fileId,
+              lineage: {
+                processType: 'annotation',
+                inputs: [sourceFileId],
+                status: 'in_progress'
+              }
             });
           }
 
@@ -451,21 +495,29 @@ function createAnnotationRoutes(dependencies) {
               f => f.id === `${fileId}_filaments`
             );
             if (existingFilamentsEntry) {
+              // Delete old filaments file if it was in a different location
+              const oldPath = path.join(workspacePath, existingFilamentsEntry.path);
+              if (oldPath !== filamentsSidecarPath && fs.existsSync(oldPath)) {
+                try { fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
+              }
+              existingFilamentsEntry.path = path.join(DIRECTORIES.unfinishedAnnotations, filamentsSidecarFilename);
               existingFilamentsEntry.size = fs.statSync(filamentsSidecarPath).size;
               existingFilamentsEntry.lastModifiedAt = new Date().toISOString();
             } else {
               metadata.files.push({
                 id: `${fileId}_filaments`,
                 name: filamentsSidecarFilename,
-                path: path.join(
-                  existingFile ? path.dirname(existingFile.path) : DIRECTORIES.unfinishedAnnotations,
-                  filamentsSidecarFilename
-                ),
+                path: path.join(DIRECTORIES.unfinishedAnnotations, filamentsSidecarFilename),
                 category: 'results',
                 tags: ['annotation', 'filaments'],
                 uploadedAt: new Date().toISOString(),
                 size: fs.statSync(filamentsSidecarPath).size,
-                parentId: fileId
+                parentId: fileId,
+                lineage: {
+                  processType: 'annotation',
+                  inputs: [sourceFileId],
+                  status: 'in_progress'
+                }
               });
             }
           }
@@ -578,26 +630,14 @@ function createAnnotationRoutes(dependencies) {
           tiffFilename = existingFile.name;
           fileId = existingAnnotationId;
 
-          // If the existing file is in unfinished_annotations, write to annotations/ instead
-          const isWip = existingFile.path.includes(DIRECTORIES.unfinishedAnnotations);
-          if (isWip) {
-            tiffPath = path.join(annotationsDir, tiffFilename);
-          } else {
-            tiffPath = path.join(workspacePath, existingFile.path);
-          }
-
+          // Always write final annotations to annotations/ directory
+          tiffPath = path.join(annotationsDir, tiffFilename);
           sidecarFilename = existingSidecar
             ? existingSidecar.name
             : tiffFilename.replace('.tif', '_classes.json');
-          sidecarPath = isWip
-            ? path.join(annotationsDir, sidecarFilename)
-            : (existingSidecar
-              ? path.join(workspacePath, existingSidecar.path)
-              : path.join(path.dirname(tiffPath), sidecarFilename));
+          sidecarPath = path.join(annotationsDir, sidecarFilename);
 
-          // Ensure target directory exists
-          if (!fs.existsSync(annotationsDir)) fs.mkdirSync(annotationsDir, { recursive: true });
-          if (logger) logger.info(`[Annotation] Finalizing annotation: ${existingAnnotationId}${isWip ? ' (moving from WIP)' : ''}`);
+          if (logger) logger.info(`[Annotation] Finalizing annotation: ${existingAnnotationId}`);
         }
       }
 
@@ -680,13 +720,10 @@ function createAnnotationRoutes(dependencies) {
           let filamentsSidecarFilename = null;
 
           if (filaments && filaments.filaments && filaments.filaments.length > 0) {
-            filamentsSidecarFilename = existingFile
+            filamentsSidecarFilename = tiffFilename
               ? tiffFilename.replace('.tif', '_filaments.json')
               : sidecarFilename.replace('_classes.json', '_filaments.json');
-            filamentsSidecarPath = path.join(
-              existingFile ? path.dirname(tiffPath) : annotationsDir,
-              filamentsSidecarFilename
-            );
+            filamentsSidecarPath = path.join(annotationsDir, filamentsSidecarFilename);
             fs.writeFileSync(filamentsSidecarPath, JSON.stringify(filaments, null, 2));
           }
 
@@ -713,65 +750,82 @@ function createAnnotationRoutes(dependencies) {
           }
 
           if (existingFile) {
-            // Check if files were moved from unfinished_annotations to annotations
-            const wasWip = existingFile.path.includes(DIRECTORIES.unfinishedAnnotations);
             const newTiffRelPath = path.join('annotations', tiffFilename);
             const newSidecarRelPath = path.join('annotations', sidecarFilename);
 
-            // Clean up old WIP files if they were moved
-            if (wasWip) {
-              const oldTiffPath = path.join(workspacePath, existingFile.path);
-              if (oldTiffPath !== tiffPath && fs.existsSync(oldTiffPath)) {
-                try { fs.unlinkSync(oldTiffPath); } catch (e) { /* ignore */ }
+            // Clean up old files from any previous location (WIP, uploads, etc.)
+            const oldTiffPath = path.join(workspacePath, existingFile.path);
+            if (oldTiffPath !== tiffPath && fs.existsSync(oldTiffPath)) {
+              try { fs.unlinkSync(oldTiffPath); } catch (e) { /* ignore */ }
+            }
+            if (existingSidecar) {
+              const oldSidecarPath = path.join(workspacePath, existingSidecar.path);
+              if (oldSidecarPath !== sidecarPath && fs.existsSync(oldSidecarPath)) {
+                try { fs.unlinkSync(oldSidecarPath); } catch (e) { /* ignore */ }
               }
-              if (existingSidecar) {
-                const oldSidecarPath = path.join(workspacePath, existingSidecar.path);
-                if (oldSidecarPath !== sidecarPath && fs.existsSync(oldSidecarPath)) {
-                  try { fs.unlinkSync(oldSidecarPath); } catch (e) { /* ignore */ }
-                }
+            }
+            if (existingFilaments) {
+              const oldFilamentsPath = path.join(workspacePath, existingFilaments.path);
+              const newFilamentsPath = filamentsSidecarPath || path.join(annotationsDir, existingFilaments.name);
+              if (oldFilamentsPath !== newFilamentsPath && fs.existsSync(oldFilamentsPath)) {
+                try { fs.unlinkSync(oldFilamentsPath); } catch (e) { /* ignore */ }
               }
-              if (existingFilaments) {
-                const oldFilamentsPath = path.join(workspacePath, existingFilaments.path);
-                if (fs.existsSync(oldFilamentsPath)) {
-                  try { fs.unlinkSync(oldFilamentsPath); } catch (e) { /* ignore */ }
-                }
+            }
+            // Clean up old direction volume from previous location
+            const existingDirVolume = metadata.files.find(
+              f => f.parentId === fileId && f.tags && f.tags.includes('direction_volume')
+            );
+            if (existingDirVolume) {
+              const oldDirPath = path.join(workspacePath, existingDirVolume.path);
+              const newDirName = tiffFilename.replace('.tif', '_directions.tif');
+              const newDirPath = path.join(annotationsDir, newDirName);
+              if (oldDirPath !== newDirPath && fs.existsSync(oldDirPath)) {
+                try { fs.unlinkSync(oldDirPath); } catch (e) { /* ignore */ }
               }
             }
 
-            // Update TIFF metadata entry
+            // Update TIFF metadata — always point to annotations/
             const tiffIdx = metadata.files.findIndex(f => f.id === fileId);
             if (tiffIdx !== -1) {
+              metadata.files[tiffIdx].path = newTiffRelPath;
               metadata.files[tiffIdx].size = fs.statSync(tiffPath).size;
               metadata.files[tiffIdx].lastModifiedAt = new Date().toISOString();
-              metadata.files[tiffIdx].path = wasWip ? newTiffRelPath : metadata.files[tiffIdx].path;
-              // Promote to finished annotation
               metadata.files[tiffIdx].category = 'uploads';
               metadata.files[tiffIdx].tags = ['annotation'];
-              if (metadata.files[tiffIdx].lineage) {
-                metadata.files[tiffIdx].lineage.status = 'complete';
-              }
+              // Ensure lineage exists and is complete
+              metadata.files[tiffIdx].lineage = {
+                processType: 'annotation',
+                inputs: [sourceFileId],
+                status: 'complete'
+              };
             }
-            // Update sidecar metadata entry
+            // Update sidecar metadata — always point to annotations/
             const sidecarIdx = metadata.files.findIndex(
               f => f.parentId === fileId && (!f.tags || !f.tags.includes('filaments'))
             );
             if (sidecarIdx !== -1) {
+              metadata.files[sidecarIdx].path = newSidecarRelPath;
               metadata.files[sidecarIdx].size = fs.statSync(sidecarPath).size;
               metadata.files[sidecarIdx].lastModifiedAt = new Date().toISOString();
-              if (wasWip) {
-                metadata.files[sidecarIdx].path = newSidecarRelPath;
-              }
+              metadata.files[sidecarIdx].lineage = {
+                processType: 'annotation',
+                inputs: [sourceFileId],
+                status: 'complete'
+              };
             }
-            // Handle filaments sidecar
-            if (filamentsSidecarPath) {
+            // Handle filaments sidecar — always point to annotations/
+            if (filamentsSidecarPath && filamentsSidecarFilename) {
               const newFilamentsRelPath = path.join('annotations', filamentsSidecarFilename);
               const filIdx = metadata.files.findIndex(f => f.id === `${fileId}_filaments`);
               if (filIdx !== -1) {
+                metadata.files[filIdx].path = newFilamentsRelPath;
                 metadata.files[filIdx].size = fs.statSync(filamentsSidecarPath).size;
                 metadata.files[filIdx].lastModifiedAt = new Date().toISOString();
-                if (wasWip) {
-                  metadata.files[filIdx].path = newFilamentsRelPath;
-                }
+                metadata.files[filIdx].lineage = {
+                  processType: 'annotation',
+                  inputs: [sourceFileId],
+                  status: 'complete'
+                };
               } else {
                 metadata.files.push({
                   id: `${fileId}_filaments`,
@@ -781,7 +835,12 @@ function createAnnotationRoutes(dependencies) {
                   tags: ['annotation', 'filaments'],
                   uploadedAt: new Date().toISOString(),
                   size: fs.statSync(filamentsSidecarPath).size,
-                  parentId: fileId
+                  parentId: fileId,
+                  lineage: {
+                    processType: 'annotation',
+                    inputs: [sourceFileId],
+                    status: 'complete'
+                  }
                 });
               }
             }
@@ -818,7 +877,12 @@ function createAnnotationRoutes(dependencies) {
               tags: ['annotation', 'info'],
               uploadedAt: new Date().toISOString(),
               size: fs.statSync(sidecarPath).size,
-              parentId: fileId
+              parentId: fileId,
+              lineage: {
+                processType: 'annotation',
+                inputs: [sourceFileId],
+                status: 'complete'
+              }
             });
 
             // Add filaments sidecar if present
@@ -831,7 +895,12 @@ function createAnnotationRoutes(dependencies) {
                 tags: ['annotation', 'filaments'],
                 uploadedAt: new Date().toISOString(),
                 size: fs.statSync(filamentsSidecarPath).size,
-                parentId: fileId
+                parentId: fileId,
+                lineage: {
+                  processType: 'annotation',
+                  inputs: [sourceFileId],
+                  status: 'complete'
+                }
               });
             }
           }
@@ -845,6 +914,11 @@ function createAnnotationRoutes(dependencies) {
               metadata.files[existingDirIdx].size = fs.statSync(directionVolumeResult.path).size;
               metadata.files[existingDirIdx].lastModifiedAt = new Date().toISOString();
               metadata.files[existingDirIdx].path = dirRelPath;
+              metadata.files[existingDirIdx].lineage = {
+                processType: 'direction_volume',
+                inputs: [fileId],
+                status: 'complete'
+              };
             } else {
               metadata.files.push({
                 id: dirEntryId,
@@ -857,7 +931,7 @@ function createAnnotationRoutes(dependencies) {
                 parentId: fileId,
                 lineage: {
                   processType: 'direction_volume',
-                  inputs: [fileId, `${fileId}_filaments`],
+                  inputs: [fileId],
                   status: 'complete'
                 }
               });

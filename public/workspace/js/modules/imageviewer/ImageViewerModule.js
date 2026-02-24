@@ -138,6 +138,8 @@ class ImageViewerModule extends BaseModule {
       showTestData: false,
       showRecentResults: true,
       acceptAllTiff: true,
+      filterFiles: (files) => files.filter(f => !f.tags || !f.tags.includes('direction_volume')),
+      filterRecentResults: (files) => files.filter(f => !f.tags || !f.tags.includes('direction_volume')),
       onSelect: this.onFileSelect,
       onUpload: this.onFileUpload,
       stateManager: this.state

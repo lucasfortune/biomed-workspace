@@ -156,6 +156,7 @@ function getProcessingHistoryString(fileId, allFiles) {
     'segmentation': 'Segmentation',
     'meshGeneration': 'Mesh Generation',
     'annotation': 'Annotation',
+    'direction_volume': 'Direction Volume',
     'duplicate': 'Duplicated',
     'split': 'Split'
   };

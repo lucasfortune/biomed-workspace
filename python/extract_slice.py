@@ -66,11 +66,21 @@ def get_tiff_info(input_path, detect_classes=True):
                 "height": int(shape[1]),
                 "dtype": dtype
             }
+        elif len(shape) == 4 and shape[-1] == 3:
+            # 4D direction volume (Z, Y, X, 3) — per-voxel unit tangent vectors
+            info = {
+                "sliceCount": int(shape[0]),
+                "width": int(shape[2]),
+                "height": int(shape[1]),
+                "channels": 3,
+                "dtype": dtype,
+                "volumeType": "direction_volume"
+            }
         else:
             raise ValueError(f"Unexpected image shape: {shape}")
 
-    # Detect unique classes if requested
-    if detect_classes:
+    # Detect unique classes if requested (skip for direction volumes — float32 vectors)
+    if detect_classes and info.get("volumeType") != "direction_volume":
         try:
             data = tifffile.imread(input_path)
             unique_values = np.unique(data)
@@ -108,28 +118,44 @@ def extract_slice(input_path, slice_index, output_path, size=512):
     # Load TIFF
     img = tifffile.imread(input_path)
 
-    # Handle 3D: extract slice
-    if len(img.shape) == 3:
+    # Handle different dimensionalities
+    if len(img.shape) == 4 and img.shape[-1] == 3:
+        # 4D direction volume (Z, Y, X, 3): render as RGB from direction vectors
+        if slice_index < 0 or slice_index >= img.shape[0]:
+            raise ValueError(f"Slice index {slice_index} out of range (0-{img.shape[0]-1})")
+        direction_slice = img[slice_index]  # (Y, X, 3)
+        # DTI colormap: map |dx|, |dy|, |dz| to R, G, B
+        abs_dirs = np.abs(direction_slice).astype(np.float64)
+        max_val = abs_dirs.max()
+        if max_val > 0:
+            abs_dirs = abs_dirs / max_val
+        rgb = (abs_dirs * 255).astype(np.uint8)
+        pil_img = Image.fromarray(rgb, mode='RGB')
+    elif len(img.shape) == 3:
         if slice_index < 0 or slice_index >= img.shape[0]:
             raise ValueError(f"Slice index {slice_index} out of range (0-{img.shape[0]-1})")
         img = img[slice_index]
+        # Normalize to 0-255
+        img_min = float(img.min())
+        img_max = float(img.max())
+        if img_max > img_min:
+            img = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+        else:
+            img = np.zeros_like(img, dtype=np.uint8)
+        pil_img = Image.fromarray(img)
     elif len(img.shape) == 2:
         if slice_index != 0:
             raise ValueError(f"2D image only has slice 0, requested {slice_index}")
+        # Normalize to 0-255
+        img_min = float(img.min())
+        img_max = float(img.max())
+        if img_max > img_min:
+            img = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+        else:
+            img = np.zeros_like(img, dtype=np.uint8)
+        pil_img = Image.fromarray(img)
     else:
         raise ValueError(f"Expected 2D or 3D image, got shape {img.shape}")
-
-    # Normalize to 0-255
-    img_min = float(img.min())
-    img_max = float(img.max())
-
-    if img_max > img_min:
-        img = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
-    else:
-        img = np.zeros_like(img, dtype=np.uint8)
-
-    # Convert to PIL Image
-    pil_img = Image.fromarray(img)
 
     # Resize maintaining aspect ratio
     pil_img.thumbnail((size, size), Image.Resampling.LANCZOS)

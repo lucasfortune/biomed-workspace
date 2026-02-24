@@ -1392,9 +1392,16 @@ class FileBrowser {
    * @returns {Array} Filtered files
    */
   filterFiles(files) {
-    // Hide sidecar files (info JSONs, filaments JSONs) — they have a parentId
-    // linking them to a main file. Users interact with the main file only.
-    let filtered = files.filter(file => !file.parentId);
+    // Hide internal sidecar files that have a parentId, but show annotation-related
+    // sidecars (classes JSON, filaments JSON, direction volumes) since they are
+    // meaningful pipeline artifacts the user should be aware of.
+    let filtered = files.filter(file => {
+      if (!file.parentId) return true;
+      // Show annotation sidecars: classes, filaments, and direction volumes
+      const tags = file.tags || [];
+      if (tags.includes('annotation')) return true;
+      return false;
+    });
 
     if (!this.searchQuery.trim()) {
       return filtered;
