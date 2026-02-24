@@ -179,6 +179,24 @@ class TrainingHandler {
       if (el) el.textContent = metrics.val_dice.toFixed(4);
     }
 
+    // Update direction sub-loss metric cards when present
+    if (metrics.train_seg_loss !== undefined) {
+      const cards = [
+        { id: 'trainSegLossCard', valueId: 'trainSegLoss', key: 'train_seg_loss' },
+        { id: 'trainDirLossCard', valueId: 'trainDirLoss', key: 'train_dir_loss' },
+        { id: 'valSegLossCard', valueId: 'valSegLoss', key: 'val_seg_loss' },
+        { id: 'valDirLossCard', valueId: 'valDirLoss', key: 'val_dir_loss' }
+      ];
+      for (const card of cards) {
+        const cardEl = document.getElementById(card.id);
+        const valueEl = document.getElementById(card.valueId);
+        if (cardEl) cardEl.style.display = 'block';
+        if (valueEl && metrics[card.key] !== undefined) {
+          valueEl.textContent = metrics[card.key].toFixed(4);
+        }
+      }
+    }
+
     // Update status
     const statusText = document.getElementById('trainingStatusText');
     if (statusText) {

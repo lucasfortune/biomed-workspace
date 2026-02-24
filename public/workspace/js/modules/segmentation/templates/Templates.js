@@ -68,12 +68,36 @@ class Templates {
                 <span class="workflow-title">Train from Scratch</span>
                 <span class="workflow-subtitle">Upload training images and annotations</span>
               </div>
+              <!-- 2D / 2.5D Mode Toggle (right-aligned in header) -->
+              <div class="mode-toggle-section" id="segModeToggleSection">
+                <div class="mode-toggle-container">
+                  <span class="mode-label mode-label-left active">2D</span>
+                  <label class="mode-toggle-switch">
+                    <input type="checkbox" id="seg-mode-toggle">
+                    <span class="mode-toggle-slider"></span>
+                  </label>
+                  <span class="mode-label mode-label-right">2.5D</span>
+                  ${this.renderHelpIcon('segmentation.step1.mode')}
+                </div>
+              </div>
             </div>
             <div class="workflow-body">
               <div class="section-card-inner">
                 <!-- FileSelector components will be inserted here -->
                 <div id="rawImagesSelectorContainer"></div>
                 <div id="annotationsSelectorContainer"></div>
+
+                <!-- Direction-Aware Detection (auto-shown when direction volume found) -->
+                <div id="directionAwareSection" style="display: none;">
+                  <div class="filament-annotation-row">
+                    <label class="checkbox-inline">
+                      <input type="checkbox" id="useFilamentAnnotations" checked>
+                      <span>Use filament annotations</span>
+                    </label>
+                    <span class="filament-info-text" id="directionVolumeInfo"></span>
+                  </div>
+                </div>
+
                 <div id="validationResult"></div>
               </div>
             </div>
@@ -185,6 +209,40 @@ class Templates {
               <input type="number" id="numEpochs" value="100" min="10" max="500">
             </div>
           </div>
+
+          <!-- Direction-Aware Training Config (visible when filament annotations active) -->
+          <div class="config-group" id="directionConfigGroup" style="display: none;">
+            <h3>Direction-Aware Training</h3>
+            <div class="form-field">
+              <label for="contextSlices">Input Slices${this.renderHelpIcon('segmentation.config.context-slices')}</label>
+              <select id="contextSlices">
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+                <option value="7">7</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="alpha">Alpha (orientation weight)${this.renderHelpIcon('segmentation.config.alpha')}</label>
+              <input type="number" id="alpha" value="1.0" min="0" max="10" step="0.1">
+            </div>
+            <div class="form-field">
+              <label for="lambdaDir">Lambda Dir (direction loss weight)${this.renderHelpIcon('segmentation.config.lambda-dir')}</label>
+              <input type="number" id="lambdaDir" value="0.3" min="0" max="5" step="0.05">
+            </div>
+          </div>
+
+          <!-- Context Slices Only (visible when 2.5D mode without direction volume) -->
+          <div class="config-group" id="contextSlicesOnlyGroup" style="display: none;">
+            <h3>2.5D Configuration</h3>
+            <div class="form-field">
+              <label for="contextSlicesOnly">Input Slices${this.renderHelpIcon('segmentation.config.context-slices')}</label>
+              <select id="contextSlicesOnly">
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+                <option value="7">7</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div class="navigation-buttons">
@@ -252,6 +310,23 @@ class Templates {
           <div class="metric-card">
             <div class="metric-value" id="valDice">--</div>
             <div class="metric-label">Validation Dice</div>
+          </div>
+          <!-- Direction sub-loss metrics (hidden by default, shown during direction-aware training) -->
+          <div class="metric-card direction-metric" id="trainSegLossCard" style="display: none;">
+            <div class="metric-value" id="trainSegLoss">--</div>
+            <div class="metric-label">Train Seg Loss</div>
+          </div>
+          <div class="metric-card direction-metric" id="trainDirLossCard" style="display: none;">
+            <div class="metric-value" id="trainDirLoss">--</div>
+            <div class="metric-label">Train Dir Loss</div>
+          </div>
+          <div class="metric-card direction-metric" id="valSegLossCard" style="display: none;">
+            <div class="metric-value" id="valSegLoss">--</div>
+            <div class="metric-label">Val Seg Loss</div>
+          </div>
+          <div class="metric-card direction-metric" id="valDirLossCard" style="display: none;">
+            <div class="metric-value" id="valDirLoss">--</div>
+            <div class="metric-label">Val Dir Loss</div>
           </div>
         </div>
 

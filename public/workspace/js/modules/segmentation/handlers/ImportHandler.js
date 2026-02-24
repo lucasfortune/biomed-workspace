@@ -223,12 +223,14 @@ class ImportHandler {
     if (overallContainer) {
       if (this.module.importValidated) {
         const configInfo = this.module.importedModelConfig;
+        const modeSummary = this._formatModeSummary(configInfo);
         overallContainer.innerHTML = `
           <div class="overall-import-validation success">
             <strong>✓ Model Ready for Inference</strong>
             <p style="margin: 8px 0 0 0; font-size: 13px; color: #28a745;">
               Features: ${configInfo?.features || 'N/A'} | Layers: ${configInfo?.num_layers || 'N/A'} | Classes: ${configInfo?.num_classes || 'N/A'}
             </p>
+            ${modeSummary ? `<p style="margin: 4px 0 0 0; font-size: 13px; color: #28a745;">${modeSummary}</p>` : ''}
           </div>
         `;
       } else if (this.module.importFiles.model && this.module.importFiles.config) {
@@ -280,6 +282,29 @@ class ImportHandler {
       this.module.state.notify('error', `Import failed: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Format a human-readable mode summary from config data
+   * @param {Object} configInfo - The config.json contents
+   * @returns {string} Formatted summary or empty string
+   */
+  _formatModeSummary(configInfo) {
+    if (!configInfo) return '';
+    const mode = configInfo.mode;
+    if (mode === 'direction_aware') {
+      const cs = configInfo.context_slices || 3;
+      const alpha = configInfo.alpha ?? 'N/A';
+      const lambda = configInfo.lambda_dir ?? 'N/A';
+      return `Mode: 2.5D Direction-Aware | Input Slices: ${cs} | Alpha: ${alpha} | Lambda Dir: ${lambda}`;
+    } else if (mode === '2.5d') {
+      const cs = configInfo.context_slices || 3;
+      return `Mode: 2.5D | Input Slices: ${cs}`;
+    } else if (mode === '2d') {
+      return 'Mode: 2D';
+    }
+    // Fallback for models trained before mode field was added
+    return '';
   }
 }
 

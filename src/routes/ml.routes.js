@@ -390,6 +390,11 @@ function createMLRoutes(dependencies) {
         }
       }
 
+      // Add context_slices for 2.5D mode (with or without direction volume)
+      if (config.context_slices) {
+        trainingParams.context_slices = config.context_slices;
+      }
+
       if (!fs.existsSync(trainingParams.output_dir)) {
         fs.mkdirSync(trainingParams.output_dir, { recursive: true });
       }

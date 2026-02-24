@@ -91,6 +91,12 @@ class SegmentationModule extends BaseModule {
     this.importValidated = false;
     this.importedModelConfig = null;
 
+    // Direction-aware / 2.5D state
+    this.selectedMode = '2d';
+    this.directionVolumePath = null;
+    this.useFilamentAnnotations = false;
+    this.isDirectionAwareTraining = false;
+
     // File uploads
     this.uploadedFiles = {
       raw_images: null,
@@ -524,6 +530,12 @@ class SegmentationModule extends BaseModule {
     this.diceChart.data.datasets[0].data = [];
     this.diceChart.data.datasets[1].data = [];
 
+    // Check if history contains direction sub-losses and enable datasets
+    const hasDirectionData = history.some(p => p.train_seg_loss != null);
+    if (hasDirectionData && this.chartHandler) {
+      this.chartHandler.enableDirectionDatasets();
+    }
+
     // Add all historical data points (only valid ones with epoch > 0)
     let addedCount = 0;
     for (const point of history) {
@@ -533,6 +545,15 @@ class SegmentationModule extends BaseModule {
           this.lossChart.data.labels.push(point.epoch);
           this.lossChart.data.datasets[0].data.push(point.train_loss);
           this.lossChart.data.datasets[1].data.push(point.val_loss);
+
+          // Restore direction sub-losses if datasets are enabled
+          if (hasDirectionData && this.lossChart.data.datasets.length > 2) {
+            this.lossChart.data.datasets[2].data.push(point.train_seg_loss ?? null);
+            this.lossChart.data.datasets[3].data.push(point.train_dir_loss ?? null);
+            this.lossChart.data.datasets[4].data.push(point.val_seg_loss ?? null);
+            this.lossChart.data.datasets[5].data.push(point.val_dir_loss ?? null);
+          }
+
           addedCount++;
         }
         // Dice chart - require valid dice values
@@ -826,6 +847,8 @@ class SegmentationModule extends BaseModule {
     } else if (this.workflowMode === 'import') {
       // Set hasImportedModel flag
       this.hasImportedModel = true;
+      // Set global for NavigationHandler compatibility
+      window.importedModelInfo = this.importedModelConfig || true;
       // Store imported model in session
       await this.importHandler.storeImportedModelInSession();
       // Skip to Step 4
@@ -1075,6 +1098,9 @@ class SegmentationModule extends BaseModule {
       resetWorkflowBtn.onclick = () => this.resetWorkflow();
     }
 
+    // Set up direction-aware / mode toggle listeners
+    this.fileHandler.setupDirectionListeners();
+
     console.log('[SegmentationModule] Event listeners set up');
   }
 
@@ -1108,6 +1134,17 @@ class SegmentationModule extends BaseModule {
       const step2Next = document.getElementById('step2Next');
       if (step2Next && this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
         step2Next.disabled = false;
+      }
+
+      // Show/hide direction config groups based on mode
+      const directionConfigGroup = document.getElementById('directionConfigGroup');
+      const contextSlicesOnlyGroup = document.getElementById('contextSlicesOnlyGroup');
+      if (directionConfigGroup) {
+        directionConfigGroup.style.display = this.useFilamentAnnotations ? 'block' : 'none';
+      }
+      if (contextSlicesOnlyGroup) {
+        contextSlicesOnlyGroup.style.display =
+          (this.selectedMode === '2.5d' && !this.useFilamentAnnotations) ? 'block' : 'none';
       }
     } else if (stepNumber === 3) {
       // Step 3: Initialize charts now that canvas is visible
@@ -1170,6 +1207,26 @@ class SegmentationModule extends BaseModule {
       learning_rate: parseFloat(document.getElementById('learningRate').value),
       num_epochs: parseInt(document.getElementById('numEpochs').value)
     };
+
+    // Add mode and mode-specific parameters
+    if (this.useFilamentAnnotations && this.directionVolumePath) {
+      // Direction-aware 2.5D mode
+      config.mode = 'direction_aware';
+      config.direction_volume_path = this.directionVolumePath;
+      config.context_slices = parseInt(document.getElementById('contextSlices').value);
+      config.alpha = parseFloat(document.getElementById('alpha').value);
+      config.lambda_dir = parseFloat(document.getElementById('lambdaDir').value);
+      this.isDirectionAwareTraining = true;
+    } else if (this.selectedMode === '2.5d') {
+      // 2.5D without direction volume
+      config.mode = '2.5d';
+      config.context_slices = parseInt(document.getElementById('contextSlicesOnly').value);
+      this.isDirectionAwareTraining = false;
+    } else {
+      // Standard 2D mode
+      config.mode = '2d';
+      this.isDirectionAwareTraining = false;
+    }
 
     try {
       const response = await fetch('/configure-training', {
@@ -1433,10 +1490,11 @@ class SegmentationModule extends BaseModule {
       // Clear training session persistence (localStorage) - MUST be first to prevent reconnect attempts
       TrainingSessionPersistence.clearAll();
 
-      // Clear global inference result
+      // Clear global inference result and imported model info
       if (typeof window.inferenceResult !== 'undefined') {
         window.inferenceResult = null;
       }
+      window.importedModelInfo = null;
 
       // Destroy existing charts before reinitializing
       if (this.lossChart) {
@@ -1464,6 +1522,30 @@ class SegmentationModule extends BaseModule {
       // Reset IDs
       this.currentTrainingId = null;
       this.currentInferenceId = null;
+
+      // Reset direction-aware state
+      this.selectedMode = '2d';
+      this.directionVolumePath = null;
+      this.useFilamentAnnotations = false;
+      this.isDirectionAwareTraining = false;
+
+      // Reset direction-aware UI
+      const dirAwareSection = document.getElementById('directionAwareSection');
+      if (dirAwareSection) dirAwareSection.style.display = 'none';
+      const toggleSection = document.getElementById('segModeToggleSection');
+      if (toggleSection) toggleSection.classList.remove('disabled');
+      const modeToggle = document.getElementById('seg-mode-toggle');
+      if (modeToggle) modeToggle.checked = false;
+      const dirConfigGroup = document.getElementById('directionConfigGroup');
+      if (dirConfigGroup) dirConfigGroup.style.display = 'none';
+      const ctxOnlyGroup = document.getElementById('contextSlicesOnlyGroup');
+      if (ctxOnlyGroup) ctxOnlyGroup.style.display = 'none';
+
+      // Reset direction metric cards
+      ['trainSegLossCard', 'trainDirLossCard', 'valSegLossCard', 'valDirLossCard'].forEach(id => {
+        const card = document.getElementById(id);
+        if (card) card.style.display = 'none';
+      });
 
       // Reset workflow mode and collapse workflow sections (Step 1)
       this.workflowMode = null;

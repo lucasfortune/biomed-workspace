@@ -769,3 +769,128 @@ body {
   border: 1px solid var(--module-error-border);
 }
 
+/* ============================================
+   MODE TOGGLE (2D / 2.5D)
+   ============================================ */
+
+.segmentation-module .mode-toggle-section {
+  margin-left: auto;
+  padding: 0;
+}
+
+.segmentation-module .mode-toggle-section.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.segmentation-module .mode-toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segmentation-module .mode-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+  user-select: none;
+}
+
+.segmentation-module .mode-label.active {
+  color: var(--module-primary);
+  font-weight: 600;
+}
+
+.segmentation-module .mode-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.segmentation-module .mode-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.segmentation-module .mode-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--module-border);
+  transition: 0.3s;
+  border-radius: 20px;
+}
+
+.segmentation-module .mode-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.segmentation-module .mode-toggle-switch input:checked + .mode-toggle-slider:before {
+  transform: translateX(20px);
+}
+
+/* ============================================
+   FILAMENT ANNOTATION ROW
+   ============================================ */
+
+.segmentation-module .filament-annotation-row {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-md);
+  padding: var(--module-spacing-sm) 0;
+  margin-top: var(--module-spacing-sm);
+}
+
+.segmentation-module .checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-primary);
+  font-weight: 500;
+}
+
+.segmentation-module .checkbox-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.segmentation-module .filament-info-text {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  font-style: italic;
+}
+
+/* ============================================
+   DIRECTION METRIC CARDS
+   ============================================ */
+
+.segmentation-module .metric-card.direction-metric {
+  border-left: 3px solid #FF9F40;
+}
+
+.segmentation-module .metric-card.direction-metric .metric-value {
+  font-size: 1.6em;
+}
+
+.segmentation-module .metric-card.direction-metric .metric-label {
+  font-size: 11px;
+}
+

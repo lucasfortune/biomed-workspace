@@ -32,7 +32,12 @@ class StateHandler {
       workflowMode: this.module.workflowMode,
       importFiles: this.module.importFiles,
       importValidated: this.module.importValidated,
-      importedModelConfig: this.module.importedModelConfig
+      importedModelConfig: this.module.importedModelConfig,
+      // Direction-aware / 2.5D state
+      selectedMode: this.module.selectedMode,
+      directionVolumePath: this.module.directionVolumePath,
+      useFilamentAnnotations: this.module.useFilamentAnnotations,
+      isDirectionAwareTraining: this.module.isDirectionAwareTraining
     };
 
     // Preserve currentTask if it exists
@@ -57,6 +62,11 @@ class StateHandler {
     this.module.state.update('modules.segmentation.importFiles', this.module.importFiles);
     this.module.state.update('modules.segmentation.importValidated', this.module.importValidated);
     this.module.state.update('modules.segmentation.importedModelConfig', this.module.importedModelConfig);
+    // Persist direction-aware / 2.5D state
+    this.module.state.update('modules.segmentation.selectedMode', this.module.selectedMode);
+    this.module.state.update('modules.segmentation.directionVolumePath', this.module.directionVolumePath);
+    this.module.state.update('modules.segmentation.useFilamentAnnotations', this.module.useFilamentAnnotations);
+    this.module.state.update('modules.segmentation.isDirectionAwareTraining', this.module.isDirectionAwareTraining);
     if (state.currentTask) {
       this.module.state.update('modules.segmentation.currentTask', state.currentTask);
     }
@@ -102,6 +112,9 @@ class StateHandler {
     }
     if (segmentationState.hasImportedModel !== undefined) {
       this.module.hasImportedModel = segmentationState.hasImportedModel;
+      if (this.module.hasImportedModel) {
+        window.importedModelInfo = this.module.importedModelConfig || true;
+      }
     }
     console.log('[StateHandler] Restored step flags:', {
       filesValidated: this.module.filesValidated,
@@ -127,6 +140,20 @@ class StateHandler {
       workflowMode: this.module.workflowMode,
       importValidated: this.module.importValidated
     });
+
+    // Restore direction-aware / 2.5D state
+    if (segmentationState.selectedMode) {
+      this.module.selectedMode = segmentationState.selectedMode;
+    }
+    if (segmentationState.directionVolumePath) {
+      this.module.directionVolumePath = segmentationState.directionVolumePath;
+    }
+    if (segmentationState.useFilamentAnnotations !== undefined) {
+      this.module.useFilamentAnnotations = segmentationState.useFilamentAnnotations;
+    }
+    if (segmentationState.isDirectionAwareTraining !== undefined) {
+      this.module.isDirectionAwareTraining = segmentationState.isDirectionAwareTraining;
+    }
 
     // Restore training/inference IDs
     if (segmentationState.currentTrainingId) {

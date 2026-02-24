@@ -60,8 +60,8 @@ def load_model(model_path, device):
         # Branch on model type
         model_type = model_config.get('model_type', 'standard')
 
-        if model_type == 'direction_aware':
-            has_dir_head = model_config.get('has_direction_head', True)
+        if model_type in ('direction_aware', 'standard_25d'):
+            has_dir_head = model_config.get('has_direction_head', model_type == 'direction_aware')
             model = UNet25D(
                 features=model_config['features'],
                 num_layers=model_config['num_layers'],
@@ -69,7 +69,7 @@ def load_model(model_path, device):
                 num_classes=model_config['num_classes'],
                 has_direction_head=has_dir_head,
             ).to(device)
-            print(f"Created UNet25D model (direction_head={has_dir_head})", flush=True)
+            print(f"Created UNet25D model (type={model_type}, direction_head={has_dir_head})", flush=True)
         else:
             model = UNet(
                 features=model_config['features'],
@@ -366,15 +366,17 @@ def main():
         model_type = model_config.get('model_type', 'standard')
         direction_stack = None
 
-        if model_type == 'direction_aware':
+        if model_type in ('direction_aware', 'standard_25d'):
             context_slices = model_config.get('context_slices', 3)
-            print(f"Running 2.5D inference (context={context_slices})...", flush=True)
+            print(f"Running 2.5D inference (type={model_type}, context={context_slices})...", flush=True)
             segmented_stack, direction_stack = run_inference_25d(
                 model, input_stack, device,
                 context_slices=context_slices,
                 batch_size=args.batch_size,
                 inference_id=args.inference_id
             )
+            if model_type != 'direction_aware':
+                direction_stack = None  # No direction output for standard_25d
         else:
             print("Running standard 2D inference...", flush=True)
             segmented_stack = run_inference_on_stack(

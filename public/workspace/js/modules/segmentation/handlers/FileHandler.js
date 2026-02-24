@@ -18,6 +18,149 @@ class FileHandler {
   }
 
   /**
+   * Set up event listeners for direction-aware UI controls
+   */
+  setupDirectionListeners() {
+    // Prevent clicks on the mode toggle from toggling the workflow header
+    const toggleSection = document.getElementById('segModeToggleSection');
+    if (toggleSection) {
+      toggleSection.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    // Filament checkbox toggle
+    const filamentCheckbox = document.getElementById('useFilamentAnnotations');
+    if (filamentCheckbox) {
+      filamentCheckbox.onchange = () => {
+        const checked = filamentCheckbox.checked;
+        const toggleSection = document.getElementById('segModeToggleSection');
+        const modeToggle = document.getElementById('seg-mode-toggle');
+
+        if (checked && this.module.directionVolumePath) {
+          // Lock to 2.5D, disable toggle
+          this.module.useFilamentAnnotations = true;
+          this.module.selectedMode = '2.5d';
+          if (modeToggle) modeToggle.checked = true;
+          if (toggleSection) toggleSection.classList.add('disabled');
+          this._updateModeLabels('2.5d');
+        } else {
+          // Enable toggle, default to 2D
+          this.module.useFilamentAnnotations = false;
+          this.module.directionVolumePath = null;
+          this.module.selectedMode = '2d';
+          if (modeToggle) modeToggle.checked = false;
+          if (toggleSection) toggleSection.classList.remove('disabled');
+          this._updateModeLabels('2d');
+
+          // If re-checked, restore direction volume path
+          if (checked && this._savedDirectionVolumePath) {
+            this.module.directionVolumePath = this._savedDirectionVolumePath;
+          }
+        }
+        this.module.stateHandler.saveState();
+      };
+    }
+
+    // Mode toggle (2D / 2.5D)
+    const modeToggle = document.getElementById('seg-mode-toggle');
+    if (modeToggle) {
+      modeToggle.onchange = () => {
+        const toggleSection = document.getElementById('segModeToggleSection');
+        if (toggleSection && toggleSection.classList.contains('disabled')) {
+          return; // Ignore when disabled
+        }
+        this.module.selectedMode = modeToggle.checked ? '2.5d' : '2d';
+        this._updateModeLabels(this.module.selectedMode);
+        this.module.stateHandler.saveState();
+      };
+    }
+  }
+
+  /**
+   * Update mode toggle label active states
+   * @param {string} mode - '2d' or '2.5d'
+   */
+  _updateModeLabels(mode) {
+    const section = document.getElementById('segModeToggleSection');
+    if (!section) return;
+    const leftLabel = section.querySelector('.mode-label-left');
+    const rightLabel = section.querySelector('.mode-label-right');
+    if (leftLabel && rightLabel) {
+      leftLabel.classList.toggle('active', mode === '2d');
+      rightLabel.classList.toggle('active', mode === '2.5d');
+    }
+  }
+
+  /**
+   * Check for direction volume associated with selected annotation
+   * @param {Object} annotationFileInfo - The selected annotation file info
+   */
+  async checkForDirectionVolume(annotationFileInfo) {
+    const dirAwareSection = document.getElementById('directionAwareSection');
+    const toggleSection = document.getElementById('segModeToggleSection');
+    const modeToggle = document.getElementById('seg-mode-toggle');
+    const dirVolumeInfo = document.getElementById('directionVolumeInfo');
+
+    // Clear direction state if no annotation or test data
+    if (!annotationFileInfo || annotationFileInfo.isTestData) {
+      if (dirAwareSection) dirAwareSection.style.display = 'none';
+      if (toggleSection) toggleSection.classList.remove('disabled');
+      this.module.directionVolumePath = null;
+      this.module.useFilamentAnnotations = false;
+      this._savedDirectionVolumePath = null;
+      return;
+    }
+
+    try {
+      // Fetch workspace files to find direction volume sidecar
+      const response = await fetch('/api/workspace/files');
+      const data = await response.json();
+
+      if (!data.success || !data.files) return;
+
+      // Search for direction volume linked to this annotation
+      const annotationId = annotationFileInfo.id;
+      const dirVolume = data.files.find(f =>
+        f.parentId === annotationId && f.tags && f.tags.includes('direction_volume')
+      );
+
+      if (dirVolume) {
+        // Found direction volume
+        this._savedDirectionVolumePath = dirVolume.path;
+        this.module.directionVolumePath = dirVolume.path;
+        this.module.useFilamentAnnotations = true;
+        this.module.selectedMode = '2.5d';
+
+        // Show filament section
+        if (dirAwareSection) dirAwareSection.style.display = 'block';
+        if (dirVolumeInfo) dirVolumeInfo.textContent = `Direction volume: ${dirVolume.name || dirVolume.path.split('/').pop()}`;
+
+        // Set checkbox to checked
+        const filamentCheckbox = document.getElementById('useFilamentAnnotations');
+        if (filamentCheckbox) filamentCheckbox.checked = true;
+
+        // Lock mode toggle to 2.5D
+        if (modeToggle) modeToggle.checked = true;
+        if (toggleSection) toggleSection.classList.add('disabled');
+        this._updateModeLabels('2.5d');
+
+        console.log('[FileHandler] Direction volume found:', dirVolume.path);
+      } else {
+        // No direction volume found
+        if (dirAwareSection) dirAwareSection.style.display = 'none';
+        if (toggleSection) toggleSection.classList.remove('disabled');
+        this.module.directionVolumePath = null;
+        this.module.useFilamentAnnotations = false;
+        this._savedDirectionVolumePath = null;
+      }
+    } catch (error) {
+      console.error('[FileHandler] Error checking for direction volume:', error);
+      // On error, just leave direction UI hidden
+      if (dirAwareSection) dirAwareSection.style.display = 'none';
+      if (toggleSection) toggleSection.classList.remove('disabled');
+    }
+  }
+
+  /**
    * Initialize FileSelector components
    */
   async initializeFileSelectors() {
@@ -99,6 +242,11 @@ class FileHandler {
 
     // Update uploadedFiles
     this.module.uploadedFiles[type] = fileInfo;
+
+    // Check for direction volume when annotations are selected
+    if (type === 'annotations') {
+      await this.checkForDirectionVolume(fileInfo);
+    }
 
     // Handle based on file type
     if (type === 'raw_images' || type === 'annotations') {

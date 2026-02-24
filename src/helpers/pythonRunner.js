@@ -187,6 +187,10 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
     spawnArgs.push('--direction_volume', params.direction_volume);
   }
 
+  if (params.context_slices) {
+    spawnArgs.push('--context_slices', String(params.context_slices));
+  }
+
   const pythonScript = spawn(pythonPath, spawnArgs);
 
   // Register process for cancellation support
@@ -242,13 +246,22 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
 
             if (epoch != null && epoch > 0 && trainLoss != null && valLoss != null) {
               if (!training.history) training.history = [];
-              training.history.push({
+              const historyEntry = {
                 epoch: epoch,
                 train_loss: trainLoss,
                 val_loss: valLoss,
                 train_dice: trainDice,
                 val_dice: valDice
-              });
+              };
+
+              // Store direction sub-losses when present (direction-aware training)
+              const metrics = progress.metrics;
+              if (metrics.train_seg_loss != null) historyEntry.train_seg_loss = metrics.train_seg_loss;
+              if (metrics.train_dir_loss != null) historyEntry.train_dir_loss = metrics.train_dir_loss;
+              if (metrics.val_seg_loss != null) historyEntry.val_seg_loss = metrics.val_seg_loss;
+              if (metrics.val_dir_loss != null) historyEntry.val_dir_loss = metrics.val_dir_loss;
+
+              training.history.push(historyEntry);
             }
           }
 

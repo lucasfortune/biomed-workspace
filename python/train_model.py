@@ -265,7 +265,7 @@ class Imagedataset25D(Dataset):
             direction_volume: (Z, H, W, 3) unit direction vectors or None
             patch_size: spatial patch size
             patches_per_slice: patches sampled per valid center slice
-            context_slices: odd number of context slices (3 or 5)
+            context_slices: odd number of context slices (3, 5, or 7)
             augment: whether to apply augmentation
             augment_prob: probability per augmentation type
             num_classes: number of segmentation classes
@@ -346,7 +346,10 @@ class Imagedataset25D(Dataset):
         # Direction: (H, W, 3) → (3, H, W)
         dir_tensor = torch.from_numpy(dir_patch.transpose(2, 0, 1).astype(np.float32))
 
-        return image_tensor, mask_onehot, dir_tensor
+        if self.direction is not None:
+            return image_tensor, mask_onehot, dir_tensor
+        else:
+            return image_tensor, mask_onehot
 
     def _augment(self, image, mask, direction):
         """
@@ -562,7 +565,13 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
     best_val_loss = float('inf')
     best_val_dice = 0.0
 
-    context_slices = config.get('context_slices', 3) if direction_aware else 1
+    # Determine context_slices for checkpoint metadata
+    if direction_aware:
+        context_slices = config.get('context_slices', 3)
+    else:
+        # Check if this is standard 2.5D (multi-slice without direction)
+        cs = config.get('context_slices', None)
+        context_slices = cs if (cs is not None and cs > 1) else 1
 
     # Training loop
     for epoch in range(num_epochs):
@@ -673,12 +682,16 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
             model_config = {
                 'features': config['features'],
                 'num_layers': config['num_layers'],
-                'in_channels': context_slices if direction_aware else 1,
+                'in_channels': context_slices if (direction_aware or context_slices > 1) else 1,
                 'num_classes': config.get('num_classes', 3),
             }
             if direction_aware:
                 model_config['model_type'] = 'direction_aware'
                 model_config['has_direction_head'] = True
+                model_config['context_slices'] = context_slices
+            elif context_slices > 1:
+                model_config['model_type'] = 'standard_25d'
+                model_config['has_direction_head'] = False
                 model_config['context_slices'] = context_slices
 
             model_save_dict = {
@@ -755,6 +768,8 @@ def main():
     parser.add_argument('--training_id', type=str, required=True, help='Training session ID')
     parser.add_argument('--direction_volume', type=str, default=None,
                         help='Path to direction volume TIFF (enables 2.5D mode)')
+    parser.add_argument('--context_slices', type=int, default=None,
+                        help='Context slices for 2.5D mode (3, 5, or 7). Enables 2.5D even without direction volume.')
 
     args = parser.parse_args()
 
@@ -780,10 +795,28 @@ def main():
         print(f"Warning: direction_volume path does not exist: {args.direction_volume}", flush=True)
         print("Falling back to standard 2D training", flush=True)
 
+    # Determine context_slices from CLI arg or config
+    cli_context = args.context_slices
+    config_context = config.get('context_slices', None)
+    context_slices = cli_context or config_context
+
+    # 2.5D mode: either direction-aware or standalone multi-slice
+    mode_25d = direction_aware or (context_slices is not None and context_slices > 1)
+
+    if not mode_25d:
+        context_slices = 1  # 2D mode
+    elif context_slices is None:
+        context_slices = 3  # default for 2.5D
+
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}", flush=True)
-    print(f"Training mode: {'2.5D direction-aware' if direction_aware else 'standard 2D'}", flush=True)
+    if direction_aware:
+        print(f"Training mode: 2.5D direction-aware (context={context_slices})", flush=True)
+    elif mode_25d:
+        print(f"Training mode: 2.5D standard (context={context_slices}, no direction head)", flush=True)
+    else:
+        print(f"Training mode: standard 2D", flush=True)
 
     try:
         num_classes = config.get('num_classes', 3)
@@ -883,6 +916,93 @@ def main():
                 training_id=args.training_id,
                 config=config,
                 direction_aware=True,
+            )
+
+        elif mode_25d and not direction_aware:
+            # ===== 2.5D standard path (multi-slice context, no direction head) =====
+            print(f"Standard 2.5D params: context_slices={context_slices}", flush=True)
+
+            # Prepare data from stacks (no temp files, no direction volume)
+            print("Preparing 2.5D data from TIFF stacks...", flush=True)
+            splits = prepare_data_25d(
+                args.raw_images, args.annotations, dir_vol_path=None
+            )
+
+            # Create datasets (direction_volume=None → returns 2-tuple)
+            print("Creating 2.5D datasets...", flush=True)
+            train_dataset = Imagedataset25D(
+                raw_stack=splits['train_raw'],
+                mask_stack=splits['train_mask'],
+                direction_volume=None,
+                patch_size=config['patch_size'],
+                patches_per_slice=config['patches_per_image'],
+                context_slices=context_slices,
+                augment=config.get('augment', False),
+                augment_prob=0.5,
+                num_classes=num_classes,
+            )
+            val_dataset = Imagedataset25D(
+                raw_stack=splits['val_raw'],
+                mask_stack=splits['val_mask'],
+                direction_volume=None,
+                patch_size=config['patch_size'],
+                patches_per_slice=max(1, config.get('patches_per_image', 10) // 2),
+                context_slices=context_slices,
+                augment=False,
+                num_classes=num_classes,
+            )
+            test_dataset = Imagedataset25D(
+                raw_stack=splits['test_raw'],
+                mask_stack=splits['test_mask'],
+                direction_volume=None,
+                patch_size=config['patch_size'],
+                patches_per_slice=max(1, config.get('patches_per_image', 10) // 3),
+                context_slices=context_slices,
+                augment=False,
+                num_classes=num_classes,
+            )
+
+            # Data loaders
+            train_loader = DataLoader(train_dataset, batch_size=config['batch_size'],
+                                      shuffle=True, num_workers=2)
+            val_loader = DataLoader(val_dataset, batch_size=config['batch_size'],
+                                    shuffle=False, num_workers=2)
+            test_loader = DataLoader(test_dataset, batch_size=config.get('test_batch_size', 3),
+                                     shuffle=False, num_workers=2)
+
+            # Create model (no direction head)
+            print("Creating UNet25D model (no direction head)...", flush=True)
+            model = UNet25D(
+                features=config['features'],
+                num_layers=config['num_layers'],
+                in_channels=context_slices,
+                num_classes=num_classes,
+                has_direction_head=False,
+            ).to(device)
+
+            # Standard CE loss (no direction loss)
+            criterion = nn.CrossEntropyLoss()
+            optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
+
+            # Save config
+            with open(os.path.join(args.output_dir, 'config.json'), 'w') as f:
+                json.dump(config, f, indent=2)
+
+            # Train (direction_aware=False so training loop unpacks 2-tuple)
+            print("Starting 2.5D standard training...", flush=True)
+            results = train_model_with_progress(
+                model=model,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                test_loader=test_loader,
+                criterion=criterion,
+                optimizer=optimizer,
+                num_epochs=config['num_epochs'],
+                device=device,
+                save_dir=args.output_dir,
+                training_id=args.training_id,
+                config=config,
+                direction_aware=False,
             )
 
         else:

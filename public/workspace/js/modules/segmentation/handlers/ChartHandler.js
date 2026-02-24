@@ -11,6 +11,7 @@ class ChartHandler {
    */
   constructor(module) {
     this.module = module;
+    this.directionDatasetsEnabled = false;
   }
 
   /**
@@ -40,6 +41,11 @@ class ChartHandler {
     }
 
     try {
+      // Auto-detect direction-aware training and enable extra datasets
+      if (metrics.train_seg_loss != null && !this.directionDatasetsEnabled) {
+        this.enableDirectionDatasets();
+      }
+
       // Update loss chart
       if (metrics.train_loss !== undefined && metrics.val_loss !== undefined &&
         !isNaN(metrics.train_loss) && !isNaN(metrics.val_loss)) {
@@ -48,6 +54,15 @@ class ChartHandler {
           lossChart.data.labels.push(epoch);
           lossChart.data.datasets[0].data.push(metrics.train_loss);
           lossChart.data.datasets[1].data.push(metrics.val_loss);
+
+          // Push direction sub-loss values if datasets are enabled
+          if (this.directionDatasetsEnabled) {
+            lossChart.data.datasets[2].data.push(metrics.train_seg_loss ?? null);
+            lossChart.data.datasets[3].data.push(metrics.train_dir_loss ?? null);
+            lossChart.data.datasets[4].data.push(metrics.val_seg_loss ?? null);
+            lossChart.data.datasets[5].data.push(metrics.val_dir_loss ?? null);
+          }
+
           lossChart.update('none'); // Use 'none' mode for better performance
         }
       }
@@ -69,6 +84,61 @@ class ChartHandler {
   }
 
   /**
+   * Dynamically add 4 direction sub-loss datasets to the loss chart
+   */
+  enableDirectionDatasets() {
+    const lossChart = this.module.lossChart;
+    if (!lossChart || this.directionDatasetsEnabled) return;
+
+    lossChart.data.datasets.push(
+      {
+        label: 'Train Seg Loss',
+        data: [],
+        borderColor: 'rgba(255, 99, 132, 0.5)',
+        borderWidth: 1.5,
+        borderDash: [5, 3],
+        pointRadius: 0,
+        tension: 0.1,
+        fill: false
+      },
+      {
+        label: 'Train Dir Loss',
+        data: [],
+        borderColor: '#FF9F40',
+        borderWidth: 1.5,
+        borderDash: [5, 3],
+        pointRadius: 0,
+        tension: 0.1,
+        fill: false
+      },
+      {
+        label: 'Val Seg Loss',
+        data: [],
+        borderColor: 'rgba(54, 162, 235, 0.5)',
+        borderWidth: 1.5,
+        borderDash: [5, 3],
+        pointRadius: 0,
+        tension: 0.1,
+        fill: false
+      },
+      {
+        label: 'Val Dir Loss',
+        data: [],
+        borderColor: '#9966FF',
+        borderWidth: 1.5,
+        borderDash: [5, 3],
+        pointRadius: 0,
+        tension: 0.1,
+        fill: false
+      }
+    );
+
+    this.directionDatasetsEnabled = true;
+    lossChart.update();
+    console.log('[ChartHandler] Direction sub-loss datasets enabled');
+  }
+
+  /**
    * Clear all chart data (for reset workflow)
    */
   clearCharts() {
@@ -76,6 +146,12 @@ class ChartHandler {
       this.module.lossChart.data.labels = [];
       this.module.lossChart.data.datasets[0].data = [];
       this.module.lossChart.data.datasets[1].data = [];
+
+      // Remove direction datasets if they were added (splice back to 2)
+      if (this.module.lossChart.data.datasets.length > 2) {
+        this.module.lossChart.data.datasets.splice(2);
+      }
+
       this.module.lossChart.update();
     }
 
@@ -85,6 +161,8 @@ class ChartHandler {
       this.module.diceChart.data.datasets[1].data = [];
       this.module.diceChart.update();
     }
+
+    this.directionDatasetsEnabled = false;
   }
 
   /**

@@ -25,7 +25,7 @@ class InferenceHandler {
     }
 
     // Check if we're using imported model OR have training session
-    const usingImportedModel = window.importedModelInfo;
+    const usingImportedModel = this.module.hasImportedModel;
     const trainingId = this.module.currentTrainingId;
     if (!trainingId && !usingImportedModel) {
       this.showError('No training session found and no imported model. Please complete training or import a model first.');
@@ -239,7 +239,7 @@ class InferenceHandler {
         console.log('[InferenceHandler] No data.result found, creating fallback result');
 
         // Handle both training and imported model cases
-        const usingImportedModel = window.importedModelInfo;
+        const usingImportedModel = this.module.hasImportedModel;
         const trainingId = this.module.currentTrainingId;
         const baseResultPath = usingImportedModel
           ? `/results/segmentation/imported_model_${Date.now()}`
@@ -257,6 +257,22 @@ class InferenceHandler {
       if (inferenceId) {
         window.inferenceResult.inference_id = inferenceId;
         console.log('[InferenceHandler] Stored inference ID:', inferenceId);
+      }
+
+      // Show direction volume info if present
+      if (data.result && data.result.direction_output_path) {
+        const completionSection = document.getElementById('inferenceCompletionSection');
+        if (completionSection) {
+          // Add direction info before showing
+          let dirInfo = completionSection.querySelector('.direction-info-note');
+          if (!dirInfo) {
+            dirInfo = document.createElement('p');
+            dirInfo.className = 'direction-info-note';
+            dirInfo.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin-top: 12px; font-style: italic;';
+            dirInfo.textContent = 'Direction volume also generated. Direction overlay visualization will be available in a future update.';
+            completionSection.querySelector('.completion-actions')?.before(dirInfo);
+          }
+        }
       }
 
       // Show completion section with viewer button

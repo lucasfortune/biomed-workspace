@@ -172,8 +172,8 @@ function configureApp(app, dependencies) {
     if (config.lambda_dir !== undefined && (config.lambda_dir < 0 || config.lambda_dir > 5)) {
       errors.push('lambda_dir must be between 0 and 5');
     }
-    if (config.context_slices !== undefined && ![1, 3, 5].includes(config.context_slices)) {
-      errors.push('context_slices must be 1, 3, or 5');
+    if (config.context_slices !== undefined && ![3, 5, 7].includes(config.context_slices)) {
+      errors.push('context_slices must be 3, 5, or 7');
     }
 
     return { valid: errors.length === 0, errors };
