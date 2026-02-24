@@ -174,14 +174,20 @@ function generateThumbnail(pythonPath, inputPath, outputPath, options = {}) {
 function startTrainingProcess(pythonPath, params, io, trainingSessions, options = {}) {
   const { logger, onComplete, onProcessStart, onProcessEnd } = options;
 
-  const pythonScript = spawn(pythonPath, [
+  const spawnArgs = [
     'python/train_model.py',
     '--config', JSON.stringify(params.config),
     '--raw_images', params.raw_images,
     '--annotations', params.annotations,
     '--output_dir', params.output_dir,
     '--training_id', params.training_id
-  ]);
+  ];
+
+  if (params.direction_volume) {
+    spawnArgs.push('--direction_volume', params.direction_volume);
+  }
+
+  const pythonScript = spawn(pythonPath, spawnArgs);
 
   // Register process for cancellation support
   if (onProcessStart) {

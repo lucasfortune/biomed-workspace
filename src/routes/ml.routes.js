@@ -378,6 +378,18 @@ function createMLRoutes(dependencies) {
         output_dir: path.join(workspacePath, 'models', 'segmentation', trainingId)
       };
 
+      // Add direction volume path for 2.5D training if provided
+      if (config.direction_volume_path) {
+        const dirVolPath = path.isAbsolute(config.direction_volume_path)
+          ? config.direction_volume_path
+          : path.join(workspacePath, config.direction_volume_path);
+        if (fs.existsSync(dirVolPath)) {
+          trainingParams.direction_volume = dirVolPath;
+        } else if (logger) {
+          logger.warn(`Direction volume not found: ${dirVolPath}, falling back to 2D training`);
+        }
+      }
+
       if (!fs.existsSync(trainingParams.output_dir)) {
         fs.mkdirSync(trainingParams.output_dir, { recursive: true });
       }

@@ -181,6 +181,8 @@ uploads/
 models/
 # Exception: don't ignore autoStructN2V library's models module
 !docs/autoStructN2V_2.5D/autoStructN2V/models/
+# Exception: don't ignore shared ML model definitions
+!python/models/
 results/
 outputs/
 workspaces/

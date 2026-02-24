@@ -78,9 +78,10 @@ def validate_model(model_path, config):
         model_state = checkpoint['model_state_dict']
         
         # Basic validation - check for U-Net-like structure
-        expected_keys = ['encoder_layers', 'bottleneck', 'decoder_layers', 'final_conv']
+        # Accept both standard UNet (final_conv) and UNet25D (seg_head, dir_head)
+        expected_keys = ['encoder_layers', 'bottleneck', 'decoder_layers', 'final_conv', 'seg_head', 'dir_head']
         unet_keys = [key for key in model_state.keys() if any(exp in key for exp in expected_keys)]
-        
+
         if len(unet_keys) == 0:
             return False, "Model does not appear to be a U-Net architecture"
         

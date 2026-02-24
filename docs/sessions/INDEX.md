@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-02-24 (Directional Segmentation: Phases 3-4)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-02-24 | [Phase 3+4: Direction-Aware 2.5D U-Net](2026-02-24_phase3_4_direction_aware_unet.md) | ✨ Feature | ~1.5 hrs | ✅ Complete |
+
 ### 2026-02-22 (Directional Segmentation: Phases 1-2)
 
 | Date | Session | Type | Duration | Status |
@@ -586,5 +592,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2026-02-22
-**Total Sessions Documented:** 25
+**Last Updated:** 2026-02-24
+**Total Sessions Documented:** 26

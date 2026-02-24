@@ -165,6 +165,17 @@ function configureApp(app, dependencies) {
       errors.push('learning_rate must be between 0 and 1');
     }
 
+    // Optional direction-aware training parameters
+    if (config.alpha !== undefined && (config.alpha < 0 || config.alpha > 10)) {
+      errors.push('alpha must be between 0 and 10');
+    }
+    if (config.lambda_dir !== undefined && (config.lambda_dir < 0 || config.lambda_dir > 5)) {
+      errors.push('lambda_dir must be between 0 and 5');
+    }
+    if (config.context_slices !== undefined && ![1, 3, 5].includes(config.context_slices)) {
+      errors.push('context_slices must be 1, 3, or 5');
+    }
+
     return { valid: errors.length === 0, errors };
   }
 
@@ -234,6 +245,9 @@ function configureApp(app, dependencies) {
     if (result.original_data_overlay_path) {
       convertedResult.original_data_overlay_path = `/workspaces/${sessionId}/results/` + path.relative(resultsDir, result.original_data_overlay_path);
     }
+    if (result.direction_output_path) {
+      convertedResult.direction_output_path = `/workspaces/${sessionId}/results/` + path.relative(resultsDir, result.direction_output_path);
+    }
 
     return convertedResult;
   }
@@ -252,7 +266,8 @@ function configureApp(app, dependencies) {
     const filesToTrack = [
       { path: result.output_path, category: 'results', tags: ['segmentation', 'data'] },
       { path: result.metadata_path, category: 'results', tags: ['segmentation', 'info'] },
-      { path: result.visualization_path, category: 'results', tags: ['segmentation', 'info'] }
+      { path: result.visualization_path, category: 'results', tags: ['segmentation', 'info'] },
+      { path: result.direction_output_path, category: 'results', tags: ['direction_volume', 'inference'] }
     ];
 
     for (const file of filesToTrack) {
