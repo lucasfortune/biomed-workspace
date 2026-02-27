@@ -42,6 +42,7 @@ class AnnotationCanvas {
     this.isLoaded = false;
     this.currentFileId = null;
     this.currentSliceIndex = 0;
+    this.hasInitialFit = false;
 
     // Pan state
     this.isPanning = false;
@@ -254,6 +255,11 @@ class AnnotationCanvas {
    * @returns {Promise<void>}
    */
   async loadSlice(fileId, sliceIndex) {
+    // Reset fit state when switching to a different file
+    if (fileId !== this.currentFileId) {
+      this.hasInitialFit = false;
+    }
+
     return new Promise((resolve, reject) => {
       const url = `/api/annotation/raw-slice/${encodeURIComponent(fileId)}/${sliceIndex}`;
 
@@ -268,8 +274,13 @@ class AnnotationCanvas {
         // Resize canvases to match image
         this.resizeCanvases();
 
-        // Fit to container on first load
-        this.zoomToFit();
+        // Fit to container on first load, preserve zoom/pan on slice changes
+        if (!this.hasInitialFit) {
+          this.zoomToFit();
+          this.hasInitialFit = true;
+        } else {
+          this.applyTransform();
+        }
 
         // Notify
         if (this.onSliceLoaded) {

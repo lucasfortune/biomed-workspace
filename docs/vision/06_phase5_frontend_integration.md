@@ -171,13 +171,13 @@ Not included in Phase 5. Future implementation will add:
 
 - [x] Backward compat: annotation without direction volume → standard 2D workflow unchanged
 - [x] 2.5D without direction: multi-slice context training works, `model_type: 'standard_25d'`
+- [x] Import pretrained model: mode info shown in validation summary
 - [ ] Auto-detection: annotation with direction volume → checkbox + auto 2.5D *(requires direction volume — to test)*
 - [ ] Opt-out: uncheck filament annotations → mode toggle re-enabled *(requires direction volume — to test)*
 - [ ] Direction-aware training: combined loss, dual chart lines, direction metric cards *(requires direction volume — to test)*
 - [ ] Inference with direction model: produces direction volume output + info message *(requires direction volume — to test)*
 - [ ] Chart resume: direction datasets restored from training history *(requires direction volume — to test)*
 - [ ] `context_slices=7`: accepted by backend and Python *(not yet tested)*
-- [ ] Import pretrained model: mode info shown in validation summary *(not yet tested)*
 - [ ] Import pretrained 2.5D model: inference runs correctly *(not yet tested)*
 
 ### Additional observations from testing
@@ -200,3 +200,4 @@ The following changes were made after the initial implementation based on testin
 
 **Navigation:**
 ← [Phase 3+4: Direction-Aware 2.5D U-Net](completed/06_phase3_4_25d_dual_head_unet.md) | [Session Index](../sessions/INDEX.md) →
+
