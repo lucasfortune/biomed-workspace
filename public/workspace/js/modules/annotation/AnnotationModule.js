@@ -243,14 +243,18 @@ class AnnotationModule extends BaseModule {
                     </div>
                     <div class="tool-buttons">
                       <button id="toolBrush" class="tool-btn active" title="Brush (B)">
-                        <span class="tool-icon">&#x1F58C;&#xFE0F;</span>
+                        <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m11 10 3 3"/><path d="M6.5 21A3.5 3.5 0 1 0 3 17.5a2.62 2.62 0 0 1-.708 1.792A1 1 0 0 0 3 21z"/><path d="M9.969 17.031 21.378 5.624a1 1 0 0 0-3.002-3.002L6.967 14.031"/></svg></span>
                         <span class="tool-label">Brush</span>
                       </button>
                       <button id="toolEraser" class="tool-btn" title="Eraser (E)">
-                        <span class="tool-icon">&#x1F9F9;</span>
+                        <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></svg></span>
                         <span class="tool-label">Eraser</span>
                       </button>
-                    </div> 
+                      <button id="toolFill" class="tool-btn" title="Fill (G)">
+                        <span class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7 6 2"/><path d="M18.992 12H2.041"/><path d="M21.145 18.38A3.34 3.34 0 0 1 20 16.5a3.3 3.3 0 0 1-1.145 1.88c-.575.46-.855 1.02-.855 1.595A2 2 0 0 0 20 22a2 2 0 0 0 2-2.025c0-.58-.285-1.13-.855-1.595"/><path d="m8.5 4.5 2.148-2.148a1.205 1.205 0 0 1 1.704 0l7.296 7.296a1.205 1.205 0 0 1 0 1.704l-7.592 7.592a3.615 3.615 0 0 1-5.112 0l-3.888-3.888a3.615 3.615 0 0 1 0-5.112L5.67 7.33"/></svg></span>
+                        <span class="tool-label">Fill</span>
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Brush Size Section -->
@@ -579,6 +583,8 @@ class AnnotationModule extends BaseModule {
         this.setTool('brush');
       } else if (e.key === 'e' || e.key === 'E') {
         this.setTool('eraser');
+      } else if (e.key === 'g' || e.key === 'G') {
+        this.setTool('fill');
       } else if (e.key === '[') {
         this.adjustBrushSize(-5);
       } else if (e.key === ']') {
@@ -600,6 +606,11 @@ class AnnotationModule extends BaseModule {
     }
     if (toolEraser) {
       toolEraser.addEventListener('click', () => this.setTool('eraser'));
+    }
+
+    const toolFill = this.container.querySelector('#toolFill');
+    if (toolFill) {
+      toolFill.addEventListener('click', () => this.setTool('fill'));
     }
 
     // Add filament button
@@ -995,7 +1006,7 @@ class AnnotationModule extends BaseModule {
 
   /**
    * Set the active tool
-   * @param {'brush' | 'eraser' | 'centerpoint'} tool - Tool to activate
+   * @param {'brush' | 'eraser' | 'fill' | 'centerpoint'} tool - Tool to activate
    */
   setTool(tool) {
     this.activeTool = tool;
@@ -1015,15 +1026,17 @@ class AnnotationModule extends BaseModule {
     // Update tool button UI
     const toolBrush = this.container.querySelector('#toolBrush');
     const toolEraser = this.container.querySelector('#toolEraser');
+    const toolFill = this.container.querySelector('#toolFill');
 
     if (toolBrush) toolBrush.classList.toggle('active', tool === 'brush');
     if (toolEraser) toolEraser.classList.toggle('active', tool === 'eraser');
+    if (toolFill) toolFill.classList.toggle('active', tool === 'fill');
 
-    // Show/hide brush size section based on tool
+    // Show/hide brush size section based on tool (fill and centerpoint don't use brush size)
     const brushSizeSection = this.container.querySelector('.brush-size-control')
       ?.closest('.toolbar-section');
     if (brushSizeSection) {
-      brushSizeSection.style.display = tool === 'centerpoint' ? 'none' : '';
+      brushSizeSection.style.display = (tool === 'centerpoint' || tool === 'fill') ? 'none' : '';
     }
 
     // Re-render both lists so only the active one shows a highlight

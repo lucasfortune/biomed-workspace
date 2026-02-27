@@ -165,10 +165,10 @@ class BrushEngine {
 
   /**
    * Set the active tool
-   * @param {'brush' | 'eraser'} tool - Tool to activate
+   * @param {'brush' | 'eraser' | 'fill'} tool - Tool to activate
    */
   setTool(tool) {
-    if (tool === 'brush' || tool === 'eraser') {
+    if (tool === 'brush' || tool === 'eraser' || tool === 'fill') {
       this.tool = tool;
       this.updateCursor();
       console.log(`[BrushEngine] Tool set to: ${tool}`);
@@ -270,6 +270,16 @@ class BrushEngine {
     if (!inBounds) return;
 
     e.preventDefault();
+
+    // Handle fill tool as a single-click action
+    if (this.tool === 'fill') {
+      if (this.onStrokeStart) this.onStrokeStart();
+      this.floodFill(source.x, source.y);
+      this.renderAnnotations();
+      if (this.onStrokeEnd) this.onStrokeEnd();
+      if (this.onAnnotationChange) this.onAnnotationChange();
+      return;
+    }
 
     // Track this pointer as the drawing pointer
     this.drawingPointerId = e.pointerId;
@@ -600,6 +610,83 @@ class BrushEngine {
   }
 
   // ===========================================================================
+  // FLOOD FILL
+  // ===========================================================================
+
+  /**
+   * Perform scanline flood fill at the given position.
+   * Replaces all contiguous pixels matching the clicked pixel's class
+   * with the current activeClassId.
+   * @param {number} clickX - X coordinate in source pixels
+   * @param {number} clickY - Y coordinate in source pixels
+   */
+  floodFill(clickX, clickY) {
+    const data = this.getAnnotationData();
+    if (!data) return;
+
+    const width = this.imageWidth;
+    const height = this.imageHeight;
+
+    const startX = Math.floor(clickX);
+    const startY = Math.floor(clickY);
+
+    if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
+
+    const targetClassId = data[startY * width + startX];
+    const fillClassId = this.activeClassId;
+
+    // No-op if target already matches fill color
+    if (targetClassId === fillClassId) return;
+
+    // Scanline flood fill using a stack of seed points
+    const stack = [{ x: startX, y: startY }];
+
+    while (stack.length > 0) {
+      const { x, y } = stack.pop();
+      const rowStart = y * width;
+
+      // Skip if this pixel no longer matches (already filled)
+      if (data[rowStart + x] !== targetClassId) continue;
+
+      // Scan left to find span start
+      let spanLeft = x;
+      while (spanLeft > 0 && data[rowStart + spanLeft - 1] === targetClassId) {
+        spanLeft--;
+      }
+
+      // Scan right to find span end
+      let spanRight = x;
+      while (spanRight < width - 1 && data[rowStart + spanRight + 1] === targetClassId) {
+        spanRight++;
+      }
+
+      // Fill the span
+      for (let i = spanLeft; i <= spanRight; i++) {
+        data[rowStart + i] = fillClassId;
+      }
+
+      // Check row above and row below for new seeds
+      for (const newY of [y - 1, y + 1]) {
+        if (newY < 0 || newY >= height) continue;
+        const newRowStart = newY * width;
+
+        let i = spanLeft;
+        while (i <= spanRight) {
+          if (data[newRowStart + i] === targetClassId) {
+            stack.push({ x: i, y: newY });
+            // Skip past this contiguous run to avoid duplicate seeds
+            while (i <= spanRight && data[newRowStart + i] === targetClassId) {
+              i++;
+            }
+          } else {
+            i++;
+          }
+        }
+      }
+    }
+  }
+
+  // ===========================================================================
   // ANNOTATION DATA MANAGEMENT
   // ===========================================================================
 
@@ -791,6 +878,27 @@ class BrushEngine {
 
     const x = coords.source.x;
     const y = coords.source.y;
+
+    // Fill tool preview: small crosshair at cursor position
+    if (this.tool === 'fill') {
+      const px = Math.floor(x);
+      const py = Math.floor(y);
+      if (px >= 0 && px < this.imageWidth && py >= 0 && py < this.imageHeight) {
+        const activeClass = this.classes.find(c => c.id === this.activeClassId);
+        const rgb = this.hexToRgb(activeClass ? activeClass.color : '#FF6B6B');
+        const imageData = ctx.createImageData(this.imageWidth, this.imageHeight);
+        const data = imageData.data;
+
+        const idx = (py * this.imageWidth + px) * 4;
+        data[idx] = rgb.r;
+        data[idx + 1] = rgb.g;
+        data[idx + 2] = rgb.b;
+        data[idx + 3] = 200;
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+      return;
+    }
 
     // Get color for preview - use semi-transparent solid color
     let previewColor;

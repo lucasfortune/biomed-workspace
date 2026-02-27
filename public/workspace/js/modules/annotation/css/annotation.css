@@ -558,6 +558,14 @@
 
 .annotation-module .tool-btn .tool-icon {
   font-size: 18px;
+  color: var(--module-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.annotation-module .tool-btn.active .tool-icon {
+  color: var(--module-primary);
 }
 
 .annotation-module .tool-btn .tool-label {
