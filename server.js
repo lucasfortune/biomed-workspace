@@ -36,6 +36,7 @@ const {
   DenoisingService,
   CleanupService
 } = require('./src/services');
+const TelegramService = require('./src/services/TelegramService');
 const sessionTracker = require('./src/services/SessionTracker');
 
 // Socket.IO handlers
@@ -110,6 +111,9 @@ const denoisingService = new DenoisingService({
   logger
 });
 
+// Telegram notification service
+const telegramService = new TelegramService();
+
 // Cleanup service for abandoned workspaces
 const cleanupService = new CleanupService(
   {
@@ -159,7 +163,8 @@ configureApp(app, {
     authService,
     trainingService,
     inferenceService,
-    denoisingService
+    denoisingService,
+    telegramService
   },
   activityLogger
 });

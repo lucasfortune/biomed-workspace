@@ -14,11 +14,12 @@ const express = require('express');
  * @param {object} dependencies.logger - Logger instance
  * @param {object} dependencies.workspaceManager - WorkspaceManager instance (for cleanup on logout)
  * @param {object} dependencies.sessionTracker - SessionTracker instance (for cleanup on logout)
+ * @param {object} dependencies.telegramService - TelegramService instance (for signup notifications)
  * @returns {Router} Express router
  */
 function createAuthRoutes(dependencies) {
   const router = express.Router();
-  const { authService, activityLogger, logger, workspaceManager, sessionTracker } = dependencies;
+  const { authService, activityLogger, logger, workspaceManager, sessionTracker, telegramService } = dependencies;
 
   // ===========================================================================
   // AUTH STATUS
@@ -55,6 +56,11 @@ function createAuthRoutes(dependencies) {
 
       if (!result.success) {
         return res.status(400).json(result);
+      }
+
+      // Send Telegram notification (non-blocking, fire-and-forget)
+      if (telegramService) {
+        telegramService.notifyNewUser({ username, fullName, email, institution });
       }
 
       res.json(result);
