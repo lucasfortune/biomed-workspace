@@ -314,13 +314,13 @@ class InferenceHandler {
       loadingDescription.innerHTML = `
         <div id="inferenceProgressContainer" style="margin-top: 20px; text-align: center;">
           <div style="margin-bottom: 15px; font-size: 16px;">
-            Slice <span id="currentSlice" style="font-weight: bold; color: #4CAF50;">0</span>
-            of <span id="totalSlices" style="font-weight: bold; color: #4CAF50;">...</span>
+            Slice <span id="currentSlice" style="font-weight: bold; color: var(--accent-primary, #EB1F17);">0</span>
+            of <span id="totalSlices" style="font-weight: bold; color: var(--accent-primary, #EB1F17);">...</span>
           </div>
           <div style="background: #e0e0e0; height: 15px; border-radius: 8px; margin: 15px 0; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
-            <div id="inferenceProgressBar" style="background: linear-gradient(90deg, #4CAF50, #81C784); height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 8px;"></div>
+            <div id="inferenceProgressBar" style="background: var(--accent-primary, #EB1F17); height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 8px;"></div>
           </div>
-          <div id="inferenceProgressPercent" style="font-size: 18px; font-weight: bold; color: #4CAF50;">0%</div>
+          <div id="inferenceProgressPercent" style="font-size: 18px; font-weight: bold; color: var(--accent-primary, #EB1F17);">0%</div>
           <div style="margin-top: 15px; font-size: 14px; color: #666;">
             <div>Initializing segmentation process...</div>
             <div style="margin-top: 5px; font-size: 12px; color: #999;">

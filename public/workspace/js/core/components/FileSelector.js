@@ -337,7 +337,7 @@ class FileSelector {
       this.availableFiles.forEach(file => {
         const option = document.createElement('option');
         option.value = file.path;
-        option.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+        option.textContent = this.formatFileOption(file);
         option.dataset.fileInfo = JSON.stringify(file);
         workspaceGroup.appendChild(option);
       });
@@ -437,8 +437,10 @@ class FileSelector {
         const categoryLabel = this.resultCategoryLabels[result.category] || 'Result';
         const displayName = result.name || `Result (${result.id})`;
         const sizeInfo = result.size ? ` (${this.formatFileSize(result.size)})` : '';
+        const timeInfo = this.formatTimeAgo(result.uploadedAt);
+        const timeSuffix = timeInfo ? ` - ${timeInfo}` : '';
 
-        option.textContent = `${categoryLabel}: ${displayName}${sizeInfo}`;
+        option.textContent = `${categoryLabel}: ${displayName}${sizeInfo}${timeSuffix}`;
         option.dataset.fileInfo = JSON.stringify(result);
         option.dataset.isResult = 'true';
         resultsGroup.appendChild(option);
@@ -472,7 +474,7 @@ class FileSelector {
         option.value = file.path || file.id;
         option.textContent = section.formatLabel
           ? section.formatLabel(file, this)
-          : `${file.name} (${this.formatFileSize(file.size)})`;
+          : this.formatFileOption(file);
         option.dataset.fileInfo = JSON.stringify(file);
         group.appendChild(option);
       });
@@ -750,6 +752,38 @@ class FileSelector {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  }
+
+  /**
+   * Format relative time from a date string
+   * @param {string} dateString - ISO date string
+   * @returns {string} e.g., "just now", "5m ago", "2h ago"
+   */
+  formatTimeAgo(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
+
+  /**
+   * Format file option text with size and time
+   * @param {Object} file - File object with name, size, uploadedAt
+   * @returns {string}
+   */
+  formatFileOption(file) {
+    const size = this.formatFileSize(file.size);
+    const time = this.formatTimeAgo(file.uploadedAt);
+    return time ? `${file.name} (${size} - ${time})` : `${file.name} (${size})`;
   }
 
   /**

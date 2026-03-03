@@ -151,6 +151,29 @@
         "labels"
       ]
     },
+    "annotation.step2.filaments": {
+      "id": "annotation.step2.filaments",
+      "title": "Filament Annotation",
+      "displayTitle": "Filament Annotation",
+      "category": "tools",
+      "module": "annotation",
+      "tags": [
+        "annotation",
+        "filaments",
+        "centerpoints",
+        "tracking",
+        "direction"
+      ],
+      "path": "modules/annotation/step2-filaments.md",
+      "seeAlsoManual": [
+        "annotation.step2.tools",
+        "annotation.step2.classes"
+      ],
+      "seeAlsoTags": [
+        "annotation",
+        "tools"
+      ]
+    },
     "denoising-dl": {
       "id": "denoising-dl",
       "title": "Deep Learning Denoising",
@@ -1511,6 +1534,28 @@
         "annotations"
       ]
     },
+    "segmentation.step1.mode": {
+      "id": "segmentation.step1.mode",
+      "title": "2D / 2.5D Mode",
+      "displayTitle": "2D / 2.5D Mode",
+      "category": "configuration",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "mode",
+        "2.5D",
+        "configuration"
+      ],
+      "path": "modules/segmentation/step1-mode.md",
+      "seeAlsoManual": [
+        "segmentation.config.context-slices"
+      ],
+      "seeAlsoTags": [
+        "segmentation",
+        "training",
+        "configuration"
+      ]
+    },
     "segmentation.config.patch-size": {
       "id": "segmentation.config.patch-size",
       "title": "Patch Size",
@@ -1687,6 +1732,77 @@
       "seeAlsoTags": [
         "training",
         "duration"
+      ]
+    },
+    "segmentation.config.context-slices": {
+      "id": "segmentation.config.context-slices",
+      "title": "Input Slices",
+      "displayTitle": "Input Slices",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "context",
+        "2.5D",
+        "configuration"
+      ],
+      "path": "modules/segmentation/config-context-slices.md",
+      "seeAlsoManual": [
+        "segmentation.step1.mode",
+        "segmentation.config.patch-size"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "configuration"
+      ]
+    },
+    "segmentation.config.alpha": {
+      "id": "segmentation.config.alpha",
+      "title": "Alpha (Orientation Weight)",
+      "displayTitle": "Alpha (Orientation Weight)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "direction",
+        "loss",
+        "configuration"
+      ],
+      "path": "modules/segmentation/config-alpha.md",
+      "seeAlsoManual": [
+        "segmentation.config.lambda-dir",
+        "segmentation.step1.mode"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "configuration",
+        "direction"
+      ]
+    },
+    "segmentation.config.lambda-dir": {
+      "id": "segmentation.config.lambda-dir",
+      "title": "Lambda Dir (Direction Loss Weight)",
+      "displayTitle": "Lambda Dir (Direction Loss Weight)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "direction",
+        "loss",
+        "configuration"
+      ],
+      "path": "modules/segmentation/config-lambda-dir.md",
+      "seeAlsoManual": [
+        "segmentation.config.alpha",
+        "segmentation.step1.mode"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "configuration",
+        "direction"
       ]
     },
     "segmentation.step3": {
@@ -1880,6 +1996,10 @@
         "articleId": "denoising-dl"
       },
       {
+        "term": "2D / 2.5D Mode",
+        "articleId": "segmentation.step1.mode"
+      },
+      {
         "term": "2D vs 2.5D Processing Mode",
         "articleId": "denoising-dl.step1.mode"
       }
@@ -2069,6 +2189,10 @@
         "articleId": "denoising-dl.step2.mask-extractor.adaptive"
       },
       {
+        "term": "Alpha (Orientation Weight)",
+        "articleId": "segmentation.config.alpha"
+      },
+      {
         "term": "Annotation",
         "definition": "A labeled mask where each pixel is assigned to a class (background or object categories)",
         "articleId": "annotation"
@@ -2136,6 +2260,10 @@
       {
         "term": "Inference Data",
         "articleId": "segmentation.step4.inference-data"
+      },
+      {
+        "term": "Input Slices",
+        "articleId": "segmentation.config.context-slices"
       },
       {
         "term": "Input Image Stack (DL Denoising)",
@@ -2306,6 +2434,10 @@
         "articleId": "segmentation.config.learning-rate"
       },
       {
+        "term": "Lambda Dir (Direction Loss Weight)",
+        "articleId": "segmentation.config.lambda-dir"
+      },
+      {
         "term": "Lineage",
         "definition": "The processing history of a file, tracking which source files were used to create it",
         "articleId": "visualization"
@@ -2366,6 +2498,10 @@
         "term": "Faces",
         "definition": "Triangular surfaces in a mesh, each defined by three vertices",
         "articleId": "mesh"
+      },
+      {
+        "term": "Filament Annotation",
+        "articleId": "annotation.step2.filaments"
       },
       {
         "term": "File Browser & Workspace",

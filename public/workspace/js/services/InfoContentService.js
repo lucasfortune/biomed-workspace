@@ -49,7 +49,7 @@ class InfoContentService {
    */
   async _loadManifest() {
     try {
-      const response = await fetch(`${this.basePath}/manifest.json`);
+      const response = await fetch(`${this.basePath}/manifest.json?v=${Date.now()}`);
       if (!response.ok) {
         throw new Error(`Failed to load manifest: ${response.status}`);
       }

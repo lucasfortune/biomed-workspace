@@ -255,17 +255,18 @@ class Workspace {
       themeToggle.addEventListener('click', () => this.toggleTheme());
     }
 
-    // Global help icon click handler
+    // Global help icon click handler (capture phase to fire before element handlers)
     document.addEventListener('click', (e) => {
       const helpIcon = e.target.closest('.help-icon');
       if (helpIcon && this.infoPanel) {
         const articleId = helpIcon.dataset.infoId;
         if (articleId) {
           e.preventDefault();
+          e.stopPropagation();
           this.infoPanel.onHelpIconClick(articleId);
         }
       }
-    });
+    }, true);
 
     // Workspace download button
     const downloadBtn = document.getElementById('btn-download-workspace');

@@ -570,6 +570,7 @@ class DLDenoisingModule extends BaseModule {
     // Workflow section toggle handlers
     document.querySelectorAll('.workflow-header').forEach(header => {
       header.addEventListener('click', (e) => {
+        if (e.target.closest('.help-icon') || e.target.closest('.mode-toggle-section')) return;
         const workflow = header.dataset.workflow;
         if (workflow) {
           this.fileHandler.onWorkflowSectionToggle(workflow);

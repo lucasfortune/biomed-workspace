@@ -1042,7 +1042,9 @@ class SegmentationModule extends BaseModule {
     // Workflow section toggle handlers
     // Use onclick instead of addEventListener to prevent duplicate handlers
     document.querySelectorAll('.workflow-header').forEach(header => {
-      header.onclick = () => {
+      header.onclick = (e) => {
+        // Don't toggle section when clicking help icons or mode toggle
+        if (e.target.closest('.help-icon') || e.target.closest('.mode-toggle-section')) return;
         const workflow = header.dataset.workflow;
         if (workflow) {
           this.onWorkflowSectionToggle(workflow);
@@ -1482,9 +1484,6 @@ class SegmentationModule extends BaseModule {
    * Reset entire workflow (frontend only - files are preserved in workspace)
    */
   async resetWorkflow() {
-    const confirmed = confirm('Are you sure you want to start a new analysis? This will reset the current workflow. Your workspace files will be preserved.');
-
-    if (confirmed) {
       console.log('[SegmentationModule] Resetting workflow (frontend only)...');
 
       // Clear training session persistence (localStorage) - MUST be first to prevent reconnect attempts
@@ -1594,7 +1593,6 @@ class SegmentationModule extends BaseModule {
 
       // Note: Do NOT call initialize() here - it would add duplicate event listeners
       // and trigger checkForActiveSession() which tries to reconnect to old training
-    }
   }
 
   /**

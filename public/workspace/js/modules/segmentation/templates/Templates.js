@@ -385,7 +385,7 @@ class Templates {
                 <span id="inferenceProgressPercent">0%</span>
               </div>
               <div style="width: 100%; height: 8px; background: #e1e4e8; border-radius: 4px; overflow: hidden;">
-                <div id="inferenceProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
+                <div id="inferenceProgressBar" style="width: 0%; height: 100%; background: var(--accent-primary, #EB1F17); transition: width 0.3s; border-radius: 4px;"></div>
               </div>
             </div>
 

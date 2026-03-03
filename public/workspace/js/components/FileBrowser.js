@@ -601,11 +601,22 @@ class FileBrowser {
       return '';
     }
 
+    const allSelected = files.length > 0 && files.every(f => this.selectedFiles.has(f.id));
+    const someSelected = files.some(f => this.selectedFiles.has(f.id));
+
     return `
       <div class="fb-search-results">
         <div class="fb-search-header">
           <span class="fb-search-count">${files.length} result${files.length !== 1 ? 's' : ''}</span>
           <span class="fb-search-query">matching "${this.escapeHtml(this.searchQuery)}"</span>
+        </div>
+        <div class="fb-search-select-all-row">
+          <input type="checkbox"
+                 class="fb-search-select-all-checkbox"
+                 id="fb-search-select-all"
+                 ${allSelected ? 'checked' : ''}
+                 title="Select all search results">
+          <label for="fb-search-select-all" class="fb-search-select-all-label">Select all</label>
         </div>
         ${files.map(file => this.renderSearchResultItem(file)).join('')}
       </div>
@@ -701,6 +712,19 @@ class FileBrowser {
         this.searchQuery = '';
         if (searchInput) searchInput.value = '';
         this.render();
+      });
+    }
+
+    // Select all search results checkbox
+    const searchSelectAllCheckbox = this.container.querySelector('.fb-search-select-all-checkbox');
+    if (searchSelectAllCheckbox) {
+      searchSelectAllCheckbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        if (e.target.checked) {
+          this.selectAll();
+        } else {
+          this.clearSelection();
+        }
       });
     }
 

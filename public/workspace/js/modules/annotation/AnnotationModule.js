@@ -312,6 +312,7 @@ class AnnotationModule extends BaseModule {
                   <div class="toolbar-section filaments-section">
                     <div class="filaments-header">
                       <h4>Filaments</h4>
+                      ${this.renderHelpIcon('annotation.step2.filaments')}
                       <button id="addFilamentBtn" class="btn-add-class" title="Add filament">+</button>
                     </div>
                     <div id="filamentList" class="filament-list">
@@ -1283,12 +1284,17 @@ class AnnotationModule extends BaseModule {
       return;
     }
 
+    const classes = this.brushEngine?.getClasses() || [];
+
     filamentList.innerHTML = filaments.map(fil => {
       const pointCount = this.filamentManager.getPointCount(fil.id);
+      const parentClass = classes.find(c => c.id === fil.classId);
+      const classColor = parentClass?.color || '#999';
+      const className = parentClass?.name || 'Unknown';
       return `
         <div class="filament-item ${showFilamentHighlight && fil.id === activeId ? 'active' : ''}"
              data-filament-id="${fil.id}">
-          <span class="filament-color" style="background: ${fil.color};"></span>
+          <span class="filament-color" style="background: ${fil.color}; border-color: ${classColor};" title="Class: ${className}"></span>
           <span class="filament-name">${fil.name}</span>
           <span class="filament-count" title="${pointCount} point(s)">${pointCount}</span>
           <button class="filament-delete" title="Delete filament" data-action="delete">&times;</button>
