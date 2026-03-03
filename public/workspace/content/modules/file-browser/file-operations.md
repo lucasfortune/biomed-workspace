@@ -10,6 +10,7 @@ tags:
   - delete
   - duplicate
   - split
+  - json
 seeAlsoManual:
   - file-browser.batch-operations
   - file-browser
@@ -40,6 +41,8 @@ Permanently removes the file from your workspace. A confirmation dialog appears 
 ## Right-click any file to access these options plus
 
 - View Info: Shows detailed metadata including file size, upload date, path, and processing history
+
+- View JSON: Available for .json files only. Opens a modal viewer displaying the file contents with syntax highlighting (color-coded keys, strings, numbers, and booleans). Useful for examining mesh metadata, model configurations, training results, and processing parameters.
 
 ## TIFF Stack Operations
 

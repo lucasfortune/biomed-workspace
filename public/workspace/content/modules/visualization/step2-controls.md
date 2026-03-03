@@ -9,6 +9,7 @@ tags:
   - opacity
   - visibility
   - clipping
+  - filaments
 seeAlsoManual:
   - visualization
   - visualization.step1.mesh-data
@@ -46,6 +47,16 @@ If lineage data is available, you can enable the original data overlay:
 - Adjust opacity to blend with the mesh
 
 - Set slice range to show specific depth regions
+
+## Filament Network (Optional)
+
+If the loaded mesh was generated from segmentation data that included filament annotations, an additional Filament Network control panel appears below the class controls.
+
+- Visibility Toggle: Show or hide the filament centerline network overlaid on the mesh
+
+- Z Range: Clip the filament network to a specific depth range, matching the class slice range controls. Only available for multi-slice meshes.
+
+The filament network is rendered as colored line segments tracing the paths of annotated structures. This is useful for validating that filament annotations align with the segmented volumes.
 
 ## View Controls
 

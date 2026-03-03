@@ -7,6 +7,7 @@ tags:
   - annotation
   - brush
   - eraser
+  - fill
   - tools
 seeAlsoManual:
   - annotation.step2.brush-size
@@ -30,11 +31,17 @@ Eraser (E)
 
 Removes annotations by painting with transparent (background). Useful for correcting mistakes or refining boundaries.
 
+Fill (G)
+
+Fills a contiguous region of the same class with the currently selected class color. Click on any pixel to flood-fill all connected pixels of the same value. Useful for quickly filling large uniform areas instead of painting with the brush. Brush size has no effect on this tool.
+
 ## Keyboard Shortcuts
 
 - B - Switch to brush tool
 
 - E - Switch to eraser tool
+
+- G - Switch to fill tool
 
 - [ - Decrease brush size
 

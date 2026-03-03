@@ -8,10 +8,12 @@ tags:
   - segmentation
   - labels
   - brush
+  - filaments
   - training-data
 seeAlsoManual:
   - annotation.step1.source-image
   - annotation.step2.tools
+  - annotation.step2.filaments
 seeAlsoTags:
   - annotation
   - segmentation
@@ -27,7 +29,9 @@ The Quick Annotation Tool provides a browser-based painting interface for creati
 
 - Multi-class support with color-coded labels
 
-- Brush and eraser tools with adjustable size
+- Brush, eraser, and fill tools with adjustable size
+
+- Filament annotation for tracing tubular structures (e.g., microtubules)
 
 - Full undo/redo history for each slice
 
@@ -39,8 +43,8 @@ The Quick Annotation Tool provides a browser-based painting interface for creati
 
 1. Select Source Image: Choose a TIFF stack to annotate
 
-2. Annotate: Paint labels on each slice using the brush tool
+2. Annotate: Paint labels on each slice using the brush, eraser, and fill tools. Optionally trace filament centerpoints for direction-aware segmentation.
 
 3. Save: Create a final annotation file or save progress for later
 
-The resulting annotation file can be used directly with the U-Net Segmentation module for training.
+The resulting annotation file can be used directly with the U-Net Segmentation module for training. If filament annotations were created, a direction volume is also generated for direction-aware training.

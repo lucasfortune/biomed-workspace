@@ -901,7 +901,7 @@ class DLDenoisingModule extends BaseModule {
    * @returns {boolean} false to block deactivation, true to allow
    */
   async beforeDeactivate() {
-    if (this.trainingId) {
+    if (this.trainingId && !this.trainingComplete) {
       const shouldLeave = await ExitWarningDialog.show();
       if (!shouldLeave) {
         return false; // Stay in module

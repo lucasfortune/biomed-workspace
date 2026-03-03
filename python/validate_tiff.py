@@ -102,8 +102,8 @@ def validate_tiff_stacks(raw_path, annotation_path):
         
         if not set(unique_values).issubset(expected_values):
             # Values are not 0,1,2 - need to convert them
-            print(f"[Annotation Conversion] Original values detected: {unique_values.tolist()}", file=sys.stderr, flush=True)
-            print(f"[Annotation Conversion] Converting to sequential 0,1,2,...", file=sys.stderr, flush=True)
+            print(f"[Annotation Conversion] Original values detected: {unique_values.tolist()}", flush=True)
+            print(f"[Annotation Conversion] Converting to sequential 0,1,2,...", flush=True)
             
             # Convert the annotation stack
             annotation_stack, value_mapping = convert_annotation_values(annotation_stack)
@@ -113,8 +113,8 @@ def validate_tiff_stacks(raw_path, annotation_path):
             try:
                 tifffile.imwrite(annotation_path, annotation_stack)
                 conversion_performed = True
-                print(f"[Annotation Conversion] Conversion successful!", file=sys.stderr, flush=True)
-                print(f"[Annotation Conversion] Mapping applied: {value_mapping}", file=sys.stderr, flush=True)
+                print(f"[Annotation Conversion] Conversion successful!", flush=True)
+                print(f"[Annotation Conversion] Mapping applied: {value_mapping}", flush=True)
             except Exception as e:
                 return {
                     "valid": False,
@@ -125,7 +125,7 @@ def validate_tiff_stacks(raw_path, annotation_path):
             unique_values = np.unique(annotation_stack)
         else:
             # Values are already 0,1,2 - no conversion needed
-            print("[Annotation Conversion] Values are already in expected format (0,1,2)", file=sys.stderr, flush=True)
+            print("[Annotation Conversion] Values are already in expected format (0,1,2)", flush=True)
             conversion_performed = False
         
         # Calculate file sizes
