@@ -4,8 +4,6 @@
  * Handles training initiation and configuration preparation.
  */
 
-import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
-
 class TrainingHandler {
   /**
    * @param {DLDenoisingModule} module - Reference to the parent module
@@ -19,14 +17,6 @@ class TrainingHandler {
    */
   async startTraining() {
     console.log('[TrainingHandler] Starting training...');
-
-    // Check global training lock
-    const lockOwner = TrainingSessionPersistence.getLockOwner();
-    if (lockOwner && lockOwner.moduleType !== 'denoising-dl') {
-      const ownerName = TrainingSessionPersistence.getModuleName(lockOwner.moduleType);
-      this.module.state.notify('error', `Training already in progress in ${ownerName} module. Please wait for it to complete or cancel it first.`);
-      return;
-    }
 
     if (!this.module.uploadedFile || !this.module.selectedMethod) {
       this.module.state.notify('error', 'Please select a file and method first');
@@ -64,25 +54,11 @@ class TrainingHandler {
       if (result.success) {
         this.module.trainingId = result.trainingId;
 
-        // Save training ID to state for resume capability
+        // Save training ID to state
         this.module.state.update(`modules.denoising-dl.trainingId`, this.module.trainingId);
 
-        // Acquire global training lock
-        TrainingSessionPersistence.acquireLock('denoising-dl', result.trainingId);
-
-        // Save session to localStorage for persistence across page refresh
-        // Include method in config so we can restore charts correctly on resume
-        TrainingSessionPersistence.save({
-          moduleType: 'denoising-dl',
-          trainingId: result.trainingId,
-          stage: 'training',
-          config: {
-            ...this.module.trainingConfig,
-            method: this.module.selectedMethod,
-            mode: this.module.selectedMode
-          },
-          status: 'running'
-        });
+        // Register beforeunload handler to warn on tab close during training
+        this.module._addBeforeUnloadHandler();
 
         // Connect to Socket.IO for progress updates
         this.module.connectToTrainingSocket();

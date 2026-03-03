@@ -5,8 +5,6 @@
  * stage transitions, and completion events.
  */
 
-import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
-
 class ProgressHandler {
   /**
    * @param {DLDenoisingModule} module - Reference to the parent module
@@ -242,9 +240,6 @@ class ProgressHandler {
    * Handle Stage 1 progress update
    */
   handleStage1Progress(data) {
-    // Update progress timestamp for stale detection
-    TrainingSessionPersistence.updateProgress();
-
     // Determine prefix based on method
     const prefix = this.module.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
 
@@ -398,9 +393,6 @@ class ProgressHandler {
   handleTrainingPaused(data) {
     console.log('[ProgressHandler] Training paused, awaiting mask approval');
 
-    // Update localStorage stage to paused_at_mask
-    TrainingSessionPersistence.updateStage('paused_at_mask');
-
     // Update mask status to show awaiting approval
     this.module.updateStageStatus('mask', 'completed', 'Awaiting Approval');
 
@@ -476,13 +468,6 @@ class ProgressHandler {
    * Handle Stage 2 progress update
    */
   handleStage2Progress(data) {
-    // Update localStorage stage to stage2 (only on first progress update)
-    if (data.epoch === 1) {
-      TrainingSessionPersistence.updateStage('stage2');
-    }
-    // Update progress timestamp for stale detection
-    TrainingSessionPersistence.updateProgress();
-
     // Update progress bar
     const progressPercent = data.totalEpochs > 0 ? (data.epoch / data.totalEpochs) * 100 : 0;
     const progressFill = document.getElementById('stage2ProgressFill');
@@ -596,8 +581,8 @@ class ProgressHandler {
     // Clear saved training ID from state (training is done)
     this.module.state.update(`modules.denoising-dl.trainingId`, null);
 
-    // Clear localStorage session - training is done
-    TrainingSessionPersistence.clearAll();
+    // Remove beforeunload handler since training is done
+    this.module._removeBeforeUnloadHandler();
 
     // Disconnect socket
     this.disconnectSocket();
@@ -628,8 +613,8 @@ class ProgressHandler {
     // Clear saved training ID
     this.module.state.update(`modules.denoising-dl.trainingId`, null);
 
-    // Clear localStorage session - training failed
-    TrainingSessionPersistence.clearAll();
+    // Remove beforeunload handler
+    this.module._removeBeforeUnloadHandler();
 
     // Disconnect socket
     this.disconnectSocket();
@@ -648,8 +633,8 @@ class ProgressHandler {
     this.module.trainingId = null;
     this.module.state.update(`modules.denoising-dl.trainingId`, null);
 
-    // Clear localStorage session
-    TrainingSessionPersistence.clearAll();
+    // Remove beforeunload handler
+    this.module._removeBeforeUnloadHandler();
 
     // Disconnect socket
     this.disconnectSocket();
@@ -678,8 +663,8 @@ class ProgressHandler {
       this.module.trainingId = null;
       this.module.state.update(`modules.denoising-dl.trainingId`, null);
 
-      // Clear localStorage session - training cancelled
-      TrainingSessionPersistence.clearAll();
+      // Remove beforeunload handler
+      this.module._removeBeforeUnloadHandler();
     } catch (error) {
       console.error('[ProgressHandler] Error cancelling training:', error);
       this.module.state.notify('error', 'Failed to cancel training');

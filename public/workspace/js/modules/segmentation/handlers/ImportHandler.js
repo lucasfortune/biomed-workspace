@@ -252,7 +252,6 @@ class ImportHandler {
     }
 
     this.module.updateStep1NextButton();
-    this.module.stateHandler.saveState();
   }
 
   /**

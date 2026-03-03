@@ -52,20 +52,37 @@ function runPythonScript(pythonPath, args, options = {}) {
     });
 
     pythonScript.on('close', (code) => {
+      // Try parsing the full output as JSON first
       try {
         const result = JSON.parse(output);
         resolve(result);
+        return;
       } catch (e) {
-        if (logger) {
-          logger.error('Failed to parse Python output:', output);
-          logger.error('Stderr:', error);
-        }
-        resolve({
-          valid: false,
-          success: false,
-          error: error || 'Invalid output - failed to parse JSON response'
-        });
+        // Full output isn't valid JSON - try extracting JSON from it
+        // (handles cases where diagnostic messages are printed before the JSON)
       }
+
+      // Fallback: find the last JSON object in the output
+      const jsonMatch = output.match(/\{[\s\S]*\}\s*$/);
+      if (jsonMatch) {
+        try {
+          const result = JSON.parse(jsonMatch[0]);
+          resolve(result);
+          return;
+        } catch (e2) {
+          // Still couldn't parse
+        }
+      }
+
+      if (logger) {
+        logger.error('Failed to parse Python output:', output);
+        logger.error('Stderr:', error);
+      }
+      resolve({
+        valid: false,
+        success: false,
+        error: error || 'Invalid output - failed to parse JSON response'
+      });
     });
   });
 }

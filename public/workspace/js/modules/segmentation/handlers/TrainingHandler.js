@@ -5,8 +5,6 @@
  * Converted from global functions to ES6 class for better maintainability.
  */
 
-import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
-
 class TrainingHandler {
   /**
    * @param {SegmentationModule} module - Reference to the parent module
@@ -20,14 +18,6 @@ class TrainingHandler {
    * Start training with current configuration
    */
   async startTraining() {
-    // Check global training lock
-    const lockOwner = TrainingSessionPersistence.getLockOwner();
-    if (lockOwner && lockOwner.moduleType !== 'segmentation') {
-      const ownerName = TrainingSessionPersistence.getModuleName(lockOwner.moduleType);
-      this.module.state.notify('error', `Training already in progress in ${ownerName} module. Please wait for it to complete or cancel it first.`);
-      return;
-    }
-
     // Get configuration from form
     const config = {
       patch_size: parseInt(document.getElementById('patchSize').value),

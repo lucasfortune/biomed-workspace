@@ -125,7 +125,7 @@ def validate_tiff_stacks(raw_path, annotation_path):
             unique_values = np.unique(annotation_stack)
         else:
             # Values are already 0,1,2 - no conversion needed
-            print("[Annotation Conversion] Values are already in expected format (0,1,2)", flush=True)
+            print("[Annotation Conversion] Values are already in expected format (0,1,2)", file=sys.stderr, flush=True)
             conversion_performed = False
         
         # Calculate file sizes
@@ -205,7 +205,7 @@ def generate_training_preview(raw_path, annotation_path):
             return None
 
     except Exception as e:
-        print(f"Preview generation failed: {str(e)}", flush=True)
+        print(f"Preview generation failed: {str(e)}", file=sys.stderr, flush=True)
         return None
 
 def main():

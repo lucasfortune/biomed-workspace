@@ -5,7 +5,7 @@
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
-import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
+import ExitWarningDialog from '/workspace/js/core/components/ExitWarningDialog.js';
 import SegmentationAPI from './SegmentationAPI.js';
 import Templates from './templates/Templates.js';
 import TrainingHandler from './handlers/TrainingHandler.js';
@@ -156,9 +156,6 @@ class SegmentationModule extends BaseModule {
       // Initialize components
       await this.initialize();
 
-      // Check for resume
-      await this.stateHandler.checkForResume();
-
       console.log('[SegmentationModule] Activation complete');
 
     } catch (error) {
@@ -266,7 +263,7 @@ class SegmentationModule extends BaseModule {
     // Initialize Socket.IO
     this.initializeSocketConnection();
 
-    // Note: Charts are initialized in goToStep(3) or resumeTrainingSession()
+    // Note: Charts are initialized in goToStep(3)
     // to ensure they're created when the canvas is visible
 
     // Set up event listeners
@@ -280,397 +277,7 @@ class SegmentationModule extends BaseModule {
       this.stepNavigator.update(this.currentStep);
     }
 
-    // Check for active training session that can be resumed
-    await this.checkForActiveSession();
-
     console.log('[SegmentationModule] Initialization complete');
-  }
-
-  /**
-   * Check for active training session in localStorage and prompt user
-   */
-  async checkForActiveSession() {
-    console.log('[SegmentationModule] Checking for active session...');
-    console.log('[SegmentationModule] Current state:', {
-      currentStep: this.currentStep,
-      currentTrainingId: this.currentTrainingId
-    });
-
-    const ResumeDialog = window.ResumeDialog;
-
-    if (!TrainingSessionPersistence || !ResumeDialog) {
-      console.warn('[SegmentationModule] TrainingSessionPersistence or ResumeDialog not available');
-      return;
-    }
-
-    const session = TrainingSessionPersistence.load();
-    console.log('[SegmentationModule] Loaded session from localStorage:', session);
-
-    if (!session) {
-      console.log('[SegmentationModule] No active session in localStorage');
-      return;
-    }
-
-    // Only handle sessions for this module
-    if (session.moduleType !== 'segmentation') {
-      console.log('[SegmentationModule] Active session belongs to different module:', session.moduleType);
-      return;
-    }
-
-    console.log('[SegmentationModule] Found active training session, showing dialog:', session);
-
-    // Show resume dialog
-    const choice = await ResumeDialog.show({
-      moduleType: session.moduleType,
-      trainingId: session.trainingId,
-      startedAt: session.startedAt,
-      stage: session.stage
-    });
-
-    console.log('[SegmentationModule] User chose:', choice);
-
-    // Set flag to prevent checkForResume() from restoring step
-    // (we handle navigation here based on user's choice)
-    this._resumedViaDialog = true;
-
-    if (choice === 'resume') {
-      await this.resumeTrainingSession(session);
-    } else {
-      await this.cleanupAndStartFresh(session);
-    }
-  }
-
-  /**
-   * Resume an active training session
-   * @param {Object} session - Session data from localStorage
-   */
-  async resumeTrainingSession(session) {
-    console.log('[SegmentationModule] Resuming training session:', session.trainingId);
-
-    // Set training ID
-    this.currentTrainingId = session.trainingId;
-
-    // Navigate to step 3 (training) - this triggers chart initialization after 50ms
-    this.goToStep(3);
-
-    // Wait for DOM to be fully ready after step change
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Show training in progress UI
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-    console.log('[SegmentationModule] DOM elements found:', {
-      trainingActionContent: !!trainingActionContent,
-      trainingProgressContent: !!trainingProgressContent
-    });
-
-    if (trainingActionContent) trainingActionContent.style.display = 'none';
-    if (trainingProgressContent) trainingProgressContent.style.display = 'block';
-
-    // Ensure charts are initialized (goToStep should have done this, but be safe)
-    this.initializeCharts();
-    console.log('[SegmentationModule] Charts after init:', { loss: !!this.lossChart, dice: !!this.diceChart });
-
-    // Join training room
-    if (this.socket) {
-      this.socket.emit('join-training', session.trainingId);
-    } else {
-      console.warn('[SegmentationModule] Socket not available for joining training room');
-    }
-
-    // Fetch current status from backend
-    try {
-      const status = await this.api.getTrainingStatus(session.trainingId);
-
-      if (status.success) {
-        // Restore charts from history if available
-        if (status.history && status.history.length > 0) {
-          this.restoreChartsFromHistory(status.history);
-        }
-
-        // Update epoch counter from status
-        if (status.current_epoch != null && status.total_epochs != null) {
-          const currentEpochEl = document.getElementById('currentEpoch');
-          const totalEpochsEl = document.getElementById('totalEpochs');
-          if (currentEpochEl) currentEpochEl.textContent = status.current_epoch;
-          if (totalEpochsEl) totalEpochsEl.textContent = status.total_epochs;
-          const progress = status.total_epochs > 0 ? (status.current_epoch / status.total_epochs) * 100 : 0;
-          const progressFill = document.getElementById('trainingProgressFill');
-          if (progressFill) progressFill.style.width = `${progress}%`;
-        }
-
-        if (status.status === 'completed') {
-          // Training finished while we were away
-          this.showTrainingCompleteUI(status);
-          TrainingSessionPersistence.clearAll();
-          this.state.notify('info', 'Training completed. You can proceed to inference.');
-        } else if (status.status === 'failed') {
-          // Training failed
-          this.state.notify('error', 'Training failed while you were away.');
-          TrainingSessionPersistence.clearAll();
-          // Reset UI
-          if (trainingActionContent) trainingActionContent.style.display = 'block';
-          if (trainingProgressContent) trainingProgressContent.style.display = 'none';
-        } else if (status.status === 'unknown') {
-          // Session not in server memory - server may have restarted
-          // DON'T clear localStorage or hide epoch counter - training might still be running
-          // We're already connected to Socket.IO, so we'll receive updates if training is active
-          this.state.notify('info', 'Reconnecting to training session...');
-
-          // Show the epoch counter with a "reconnecting" state
-          const epochInfo = document.querySelector('.epoch-info');
-          if (epochInfo) {
-            epochInfo.style.display = 'block';
-          }
-          const statusText = document.getElementById('trainingStatusText');
-          if (statusText) {
-            statusText.textContent = 'Reconnecting...';
-          }
-
-          // Start polling as backup to Socket.IO
-          if (typeof startTrainingPolling === 'function') {
-            startTrainingPolling();
-          }
-
-          // If we receive Socket.IO updates within 5 seconds, training is still running
-          // If not, assume training completed or was cancelled
-          setTimeout(() => {
-            // Check if we've received any updates (currentEpoch would be > 0)
-            const currentEpochEl = document.getElementById('currentEpoch');
-            const epochValue = parseInt(currentEpochEl?.textContent || '0');
-
-            if (epochValue > 0) {
-              // Received updates - training is running
-              const statusTextEl = document.getElementById('trainingStatusText');
-              if (statusTextEl) {
-                statusTextEl.textContent = 'Training in progress...';
-              }
-              this.state.notify('success', 'Reconnected to running training.');
-            } else {
-              // No updates received - training likely completed or server restarted
-              // Enable the Next button so user can proceed to inference
-              this.trainingComplete = true;
-              const trainingNextBtn = document.getElementById('trainingNextBtn');
-              if (trainingNextBtn) trainingNextBtn.disabled = false;
-
-              const statusTextEl = document.getElementById('trainingStatusText');
-              if (statusTextEl) {
-                statusTextEl.textContent = 'Training session status unclear';
-                statusTextEl.style.color = '#f0ad4e';
-              }
-
-              TrainingSessionPersistence.clearAll();
-              this.state.notify('warning', 'Could not reconnect to training. If training completed, proceed to Inference.');
-            }
-          }, 5000);
-        } else if (status.status === 'training') {
-          // Still running - chart data already restored above
-          this.state.notify('success', 'Reconnected to training session.');
-        } else {
-          // Unknown status, assume it might still be running
-          this.state.notify('info', 'Reconnected to training session.');
-        }
-      }
-    } catch (error) {
-      console.error('[SegmentationModule] Error fetching training status:', error);
-      // On error, don't hide the epoch counter - training might still be running
-      // The Socket.IO connection will provide updates if training is active
-      this.state.notify('warning', 'Could not check training status. Waiting for updates...');
-
-      // Show epoch counter
-      const epochInfo = document.querySelector('.epoch-info');
-      if (epochInfo) {
-        epochInfo.style.display = 'block';
-      }
-
-      // Start polling as backup to Socket.IO
-      if (typeof startTrainingPolling === 'function') {
-        startTrainingPolling();
-      }
-
-      // Wait 5 seconds and check if we received any Socket.IO updates
-      setTimeout(() => {
-        const currentEpochEl = document.getElementById('currentEpoch');
-        const epochValue = parseInt(currentEpochEl?.textContent || '0');
-
-        if (epochValue > 0) {
-          // Received updates - training is running
-          this.state.notify('success', 'Reconnected to running training.');
-        } else {
-          // No updates - assume training completed
-          this.trainingComplete = true;
-          const trainingNextBtn = document.getElementById('trainingNextBtn');
-          if (trainingNextBtn) trainingNextBtn.disabled = false;
-
-          TrainingSessionPersistence.clearAll();
-          this.state.notify('info', 'Training session state unclear. You can proceed to inference if training completed.');
-        }
-      }, 5000);
-    }
-  }
-
-  /**
-   * Restore charts from training history
-   * @param {Array} history - Array of {epoch, train_loss, val_loss, train_dice, val_dice}
-   */
-  restoreChartsFromHistory(history) {
-    if (!history || history.length === 0) return;
-
-    // Make sure charts are initialized
-    if (!this.lossChart || !this.diceChart) {
-      console.warn('[SegmentationModule] Charts not initialized, cannot restore history');
-      return;
-    }
-
-    // Clear existing chart data
-    this.lossChart.data.labels = [];
-    this.lossChart.data.datasets[0].data = [];
-    this.lossChart.data.datasets[1].data = [];
-    this.diceChart.data.labels = [];
-    this.diceChart.data.datasets[0].data = [];
-    this.diceChart.data.datasets[1].data = [];
-
-    // Check if history contains direction sub-losses and enable datasets
-    const hasDirectionData = history.some(p => p.train_seg_loss != null);
-    if (hasDirectionData && this.chartHandler) {
-      this.chartHandler.enableDirectionDatasets();
-    }
-
-    // Add all historical data points (only valid ones with epoch > 0)
-    let addedCount = 0;
-    for (const point of history) {
-      if (point.epoch != null && point.epoch > 0) {
-        // Loss chart - require valid loss values
-        if (point.train_loss != null && point.val_loss != null) {
-          this.lossChart.data.labels.push(point.epoch);
-          this.lossChart.data.datasets[0].data.push(point.train_loss);
-          this.lossChart.data.datasets[1].data.push(point.val_loss);
-
-          // Restore direction sub-losses if datasets are enabled
-          if (hasDirectionData && this.lossChart.data.datasets.length > 2) {
-            this.lossChart.data.datasets[2].data.push(point.train_seg_loss ?? null);
-            this.lossChart.data.datasets[3].data.push(point.train_dir_loss ?? null);
-            this.lossChart.data.datasets[4].data.push(point.val_seg_loss ?? null);
-            this.lossChart.data.datasets[5].data.push(point.val_dir_loss ?? null);
-          }
-
-          addedCount++;
-        }
-        // Dice chart - require valid dice values
-        if (point.train_dice != null && point.val_dice != null) {
-          this.diceChart.data.labels.push(point.epoch);
-          this.diceChart.data.datasets[0].data.push(point.train_dice);
-          this.diceChart.data.datasets[1].data.push(point.val_dice);
-        }
-      }
-    }
-
-    // Update charts
-    this.lossChart.update();
-    this.diceChart.update();
-
-    console.log('[SegmentationModule] Charts restored with', addedCount, 'valid data points from', history.length, 'history entries');
-  }
-
-  /**
-   * Show training complete UI state
-   * @param {Object} status - Optional status object with history and epoch info
-   */
-  showTrainingCompleteUI(status = {}) {
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-    if (trainingActionContent) trainingActionContent.style.display = 'none';
-    if (trainingProgressContent) trainingProgressContent.style.display = 'block';
-
-    // Update status text and progress bar
-    const statusText = document.getElementById('trainingStatusText');
-    if (statusText) {
-      statusText.textContent = 'Training complete!';
-      statusText.style.color = '#50C878';
-    }
-
-    const progressFill = document.getElementById('trainingProgressFill');
-    if (progressFill) progressFill.style.width = '100%';
-
-    // Show epoch counter with final values if we have history
-    const epochInfo = document.querySelector('.epoch-info');
-    if (status.history && status.history.length > 0) {
-      const lastEpoch = status.history[status.history.length - 1].epoch;
-      const totalEpochs = status.total_epochs || lastEpoch;
-      document.getElementById('currentEpoch').textContent = lastEpoch;
-      document.getElementById('totalEpochs').textContent = totalEpochs;
-      if (epochInfo) epochInfo.style.display = 'block';
-    } else if (status.current_epoch && status.total_epochs) {
-      document.getElementById('currentEpoch').textContent = status.current_epoch;
-      document.getElementById('totalEpochs').textContent = status.total_epochs;
-      if (epochInfo) epochInfo.style.display = 'block';
-    } else {
-      // Hide epoch counter if we don't have the data
-      if (epochInfo) epochInfo.style.display = 'none';
-    }
-
-    const stageStatus = document.getElementById('trainingStageStatus');
-    if (stageStatus) {
-      stageStatus.textContent = 'Complete';
-      stageStatus.className = 'stage-status completed';
-    }
-
-    // Hide cancel button
-    const cancelBtn = document.getElementById('cancelTrainingBtn');
-    if (cancelBtn) cancelBtn.style.display = 'none';
-
-    // Enable navigation buttons
-    const nextBtn = document.getElementById('trainingNextBtn');
-    if (nextBtn) nextBtn.disabled = false;
-    const backBtn = document.getElementById('trainingBackBtn');
-    if (backBtn) backBtn.disabled = false;
-
-    // Update module state
-    this.trainingComplete = true;
-
-    // Update helper script state if loaded (for step navigation)
-    if (typeof window.stepStates !== 'undefined') {
-      window.stepStates[3] = window.stepStates[3] || {};
-      window.stepStates[3].completed = true;
-      window.stepStates[3].trainingCompleted = true;
-      window.stepStates[4] = window.stepStates[4] || {};
-      window.stepStates[4].canNavigate = true;
-    }
-    if (typeof window.processStates !== 'undefined') {
-      window.processStates.trainingInProgress = false;
-    }
-    if (typeof window.markStepCompleted === 'function') {
-      window.markStepCompleted(3);
-    }
-
-    // Update step navigator if available
-    if (this.stepNavigator) {
-      this.stepNavigator.update(this.currentStep);
-    }
-  }
-
-  /**
-   * Clean up active session and start fresh
-   * @param {Object} session - Session data from localStorage
-   */
-  async cleanupAndStartFresh(session) {
-    console.log('[SegmentationModule] Cleaning up and starting fresh');
-
-    try {
-      // Cancel the training on the backend
-      await this.api.cancelTraining(session.trainingId);
-      this.state.notify('info', 'Previous training cancelled. Ready to start new training.');
-    } catch (error) {
-      console.error('[SegmentationModule] Error cancelling training:', error);
-      // Still clear local state even if backend cancel fails
-    }
-
-    // Clear localStorage
-    TrainingSessionPersistence.clearAll();
-
-    // Reset UI state
-    this.currentTrainingId = null;
   }
 
   /**
@@ -813,7 +420,6 @@ class SegmentationModule extends BaseModule {
     }
 
     this.updateStep1NextButton();
-    this.stateHandler.saveState();
   }
 
   /**
@@ -883,8 +489,8 @@ class SegmentationModule extends BaseModule {
       // Mark training as complete for step navigation
       this.trainingComplete = true;
 
-      // Clear localStorage session - training is done
-      TrainingSessionPersistence.clearAll();
+      // Remove beforeunload handler since training is done
+      this._removeBeforeUnloadHandler();
 
       this.trainingHandler.onTrainingComplete(data);
     });
@@ -1180,9 +786,6 @@ class SegmentationModule extends BaseModule {
     if (mainContent) {
       mainContent.scrollTop = 0;
     }
-
-    // Save state to persist current step
-    this.stateHandler.saveState();
   }
 
   /**
@@ -1260,14 +863,6 @@ class SegmentationModule extends BaseModule {
   async startTraining() {
     console.log('[SegmentationModule] Starting training...');
 
-    // Check global training lock
-    const lockOwner = TrainingSessionPersistence.getLockOwner();
-    if (lockOwner && lockOwner.moduleType !== 'segmentation') {
-      const ownerName = TrainingSessionPersistence.getModuleName(lockOwner.moduleType);
-      this.state.notify('error', `Training already in progress in ${ownerName} module. Please wait for it to complete or cancel it first.`);
-      return;
-    }
-
     try {
       // Switch from action button to progress display
       const trainingActionContent = document.getElementById('trainingActionContent');
@@ -1295,20 +890,8 @@ class SegmentationModule extends BaseModule {
           this.socket.emit('join-training', result.training_id);
         }
 
-        // Acquire global training lock
-        TrainingSessionPersistence.acquireLock('segmentation', result.training_id);
-
-        // Save session to localStorage for persistence across page refresh
-        TrainingSessionPersistence.save({
-          moduleType: 'segmentation',
-          trainingId: result.training_id,
-          stage: 'training',
-          config: this.trainingConfig || {},
-          status: 'running'
-        });
-
-        // Save state to persist training ID
-        this.stateHandler.saveState();
+        // Register beforeunload handler to warn on tab close during training
+        this._addBeforeUnloadHandler();
 
         this.state.notify('success', 'Training started successfully');
       } else {
@@ -1333,8 +916,8 @@ class SegmentationModule extends BaseModule {
       const result = await this.api.cancelTraining(this.currentTrainingId);
 
       if (result.success) {
-        // Clear localStorage session
-        TrainingSessionPersistence.clearAll();
+        // Remove beforeunload handler
+        this._removeBeforeUnloadHandler();
 
         // Reset UI
         const trainingActionContent = document.getElementById('trainingActionContent');
@@ -1351,7 +934,6 @@ class SegmentationModule extends BaseModule {
 
         // Clear training ID
         this.currentTrainingId = null;
-        this.stateHandler.saveState();
 
         this.state.notify('info', 'Training cancelled');
       } else {
@@ -1448,9 +1030,6 @@ class SegmentationModule extends BaseModule {
           this.socket.emit('join-inference', result.inference_id);
         }
 
-        // Save state to persist inference ID
-        this.stateHandler.saveState();
-
         this.state.notify('success', 'Inference started successfully');
       } else {
         throw new Error(result.error || 'Failed to start inference');
@@ -1486,8 +1065,8 @@ class SegmentationModule extends BaseModule {
   async resetWorkflow() {
       console.log('[SegmentationModule] Resetting workflow (frontend only)...');
 
-      // Clear training session persistence (localStorage) - MUST be first to prevent reconnect attempts
-      TrainingSessionPersistence.clearAll();
+      // Remove beforeunload handler
+      this._removeBeforeUnloadHandler();
 
       // Clear global inference result and imported model info
       if (typeof window.inferenceResult !== 'undefined') {
@@ -1592,7 +1171,6 @@ class SegmentationModule extends BaseModule {
       this.goToStep(1);
 
       // Note: Do NOT call initialize() here - it would add duplicate event listeners
-      // and trigger checkForActiveSession() which tries to reconnect to old training
   }
 
   /**
@@ -1732,10 +1310,30 @@ class SegmentationModule extends BaseModule {
   // ===========================================================================
 
   /**
+   * Called by ModuleLoader before deactivation.
+   * If training is in progress, shows a warning dialog.
+   * @returns {boolean} false to block deactivation, true to allow
+   */
+  async beforeDeactivate() {
+    if (this.currentTrainingId) {
+      const shouldLeave = await ExitWarningDialog.show();
+      if (!shouldLeave) {
+        return false; // Stay in module
+      }
+      // User confirmed leaving - cancel training
+      await this.cancelTraining();
+    }
+    return true;
+  }
+
+  /**
    * Deactivate the module
    */
   async deactivate() {
     console.log('[SegmentationModule] Deactivating...');
+
+    // Remove beforeunload handler
+    this._removeBeforeUnloadHandler();
 
     // Disconnect Socket.IO
     if (this.socket) {
@@ -1765,16 +1363,22 @@ class SegmentationModule extends BaseModule {
       this.trainingHandler.cleanup();
     }
 
-    // Reset step to 1 so next activate starts fresh
-    // (localStorage session will still trigger resume dialog)
+    // Reset all module state for fresh start on next activation
     this.currentStep = 1;
-
-    // Clear training ID so resume check works correctly
-    // (the actual training ID is stored in localStorage, not here)
     this.currentTrainingId = null;
-
-    // Clear the resume flag
-    this._resumedViaDialog = false;
+    this.currentInferenceId = null;
+    this.filesValidated = false;
+    this.configSaved = false;
+    this.trainingComplete = false;
+    this.hasImportedModel = false;
+    this.workflowMode = null;
+    this.importValidated = false;
+    this.importedModelConfig = null;
+    this.uploadedFiles = { raw_images: null, annotations: null, inference_data: null };
+    this.selectedMode = '2d';
+    this.directionVolumePath = null;
+    this.useFilamentAnnotations = false;
+    this.isDirectionAwareTraining = false;
 
     // Clear container
     if (this.container) {
@@ -1782,6 +1386,26 @@ class SegmentationModule extends BaseModule {
     }
 
     console.log('[SegmentationModule] Deactivation complete');
+  }
+
+  // ===========================================================================
+  // BEFOREUNLOAD HANDLER (tab close protection during training)
+  // ===========================================================================
+
+  _addBeforeUnloadHandler() {
+    if (!this._beforeUnloadHandler) {
+      this._beforeUnloadHandler = (e) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+    }
+    window.addEventListener('beforeunload', this._beforeUnloadHandler);
+  }
+
+  _removeBeforeUnloadHandler() {
+    if (this._beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+    }
   }
 
   /**

@@ -56,7 +56,7 @@ class FileHandler {
             this.module.directionVolumePath = this._savedDirectionVolumePath;
           }
         }
-        this.module.stateHandler.saveState();
+
       };
     }
 
@@ -70,7 +70,7 @@ class FileHandler {
         }
         this.module.selectedMode = modeToggle.checked ? '2.5d' : '2d';
         this._updateModeLabels(this.module.selectedMode);
-        this.module.stateHandler.saveState();
+
       };
     }
   }
@@ -268,7 +268,7 @@ class FileHandler {
         if (runInferenceBtn) {
           runInferenceBtn.disabled = false;
         }
-        this.module.stateHandler.saveState();
+
       }
     }
   }
@@ -348,7 +348,7 @@ class FileHandler {
 
         this.module.filesValidated = true;
         this.module.updateStep1NextButton();
-        this.module.stateHandler.saveState();
+
 
         if (window.workspace?.fileBrowser) {
           window.workspace.fileBrowser.refresh();
@@ -410,7 +410,7 @@ class FileHandler {
         }
 
         this.module.pendingFiles = {};
-        this.module.stateHandler.saveState();
+
 
         this.module.state.notify('success', 'Files validated successfully');
       } else {
@@ -457,7 +457,7 @@ class FileHandler {
           runInferenceBtn.disabled = false;
         }
 
-        this.module.stateHandler.saveState();
+
         this.module.state.notify('success', 'Test inference data loaded successfully');
       } else {
         throw new Error(result.error || 'Failed to load test inference data');
@@ -507,7 +507,7 @@ class FileHandler {
           this.module.inferenceSelector.setSelectedFile(this.module.uploadedFiles.inference_data);
         }
 
-        this.module.stateHandler.saveState();
+
         this.module.state.notify('success', 'Inference file validated successfully');
       } else {
         throw new Error(result.error || 'Validation failed');

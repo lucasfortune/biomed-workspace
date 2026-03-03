@@ -153,7 +153,13 @@ class ModuleLoader {
     try {
       // Deactivate current module if any
       if (this.activeModule) {
-        await this.deactivate();
+        const deactivated = await this.deactivate();
+        if (deactivated === false) {
+          // Module blocked deactivation (e.g. training in progress)
+          this.isLoading = false;
+          this.state.update('ui.loading', false);
+          return null;
+        }
       }
 
       // Load module if not already loaded
@@ -195,6 +201,7 @@ class ModuleLoader {
 
   /**
    * Deactivate current module
+   * @returns {boolean|undefined} false if module blocked deactivation
    */
   async deactivate() {
     if (!this.activeModule) {
@@ -206,6 +213,15 @@ class ModuleLoader {
     console.log(`[ModuleLoader] Deactivating module: ${module.name}`);
 
     try {
+      // Check if module wants to block deactivation (e.g. training in progress)
+      if (module.instance && typeof module.instance.beforeDeactivate === 'function') {
+        const allowed = await module.instance.beforeDeactivate();
+        if (allowed === false) {
+          console.log(`[ModuleLoader] Module ${module.name} blocked deactivation`);
+          return false;
+        }
+      }
+
       // Call module's deactivate method
       if (module.instance && typeof module.instance.deactivate === 'function') {
         await module.instance.deactivate();
@@ -226,7 +242,11 @@ class ModuleLoader {
    * Return to welcome/hub view
    */
   async returnToHub() {
-    await this.deactivate();
+    const deactivated = await this.deactivate();
+    if (deactivated === false) {
+      // Module blocked deactivation
+      return;
+    }
     this.state.update('workspace.activeModule', null);
     this.state.update('ui.currentView', 'welcome');
 
