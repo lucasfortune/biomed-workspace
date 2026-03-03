@@ -19,6 +19,7 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Date | Session | Type | Duration | Status |
 |------|---------|------|----------|--------|
+| 2026-03-03 | [Loss Spike Investigation](2026-03-03_loss_spike_investigation.md) | 🔍 Investigation / 🐛 Bug Fix | ~1.5 hrs | ✅ Complete |
 | 2026-03-03 | [Remove Session Persistence](2026-03-03_remove_session_persistence.md) | ♻️ Refactor | ~2 hrs | ✅ Complete |
 | 2026-03-03 | [Bug Fixes, Help Content & UI Improvements](2026-03-03_bugfixes_and_help_content.md) | 🐛 Bug Fix / ✨ Feature / 📚 Docs | ~2 hrs | ✅ Complete |
 | 2026-03-03 | [Filament Network Visualization](2026-03-03_filament_network_visualization.md) | ✨ Feature | ~2 hrs | ✅ Complete |
@@ -248,7 +249,7 @@ This index provides a chronological record of all development sessions. Sessions
 
 | Metric | Value |
 |--------|-------|
-| **Total Sessions** | 29 |
+| **Total Sessions** | 30 |
 | **Total Development Time** | ~108.25 hours |
 | **Features Implemented** | 2 major phases complete (Phase 1 & 2), Phase 3 in progress, Phase 4 Info Panel complete, Module Framework complete, Data Lineage complete, Annotation Module complete, 2.5D Denoising complete |
 | **Documentation Sprints** | 3 (Days 1-2, Day 4, Day 5) |
@@ -603,4 +604,4 @@ Examples:
 ---
 
 **Last Updated:** 2026-03-03
-**Total Sessions Documented:** 29
+**Total Sessions Documented:** 30
