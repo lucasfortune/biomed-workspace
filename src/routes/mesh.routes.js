@@ -387,7 +387,8 @@ function createMeshRoutes(dependencies) {
     const { spawn } = require('child_process');
 
     try {
-      const { sourceFile, sourceFileId, outputFormats = ['json', 'obj'], targetClasses = 'all' } = req.body;
+      const { sourceFile, sourceFileId, outputFormats = ['json', 'obj'], targetClasses = 'all',
+              includeNetwork = false, directionVolumeId = null } = req.body;
       const sessionId = req.session.id;
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
@@ -443,7 +444,11 @@ function createMeshRoutes(dependencies) {
         result: null,
         error: null,
         // Lineage tracking: store source file ID for provenance
-        sourceFileId: sourceFileId || null
+        sourceFileId: sourceFileId || null,
+        // Network generation
+        includeNetwork: includeNetwork,
+        directionVolumeId: directionVolumeId,
+        networkStatus: includeNetwork ? 'pending' : null
       });
 
       if (activityLogger) {
@@ -552,6 +557,20 @@ function createMeshRoutes(dependencies) {
                   { meshId, outputDir }
                 );
               }
+
+              // Start network generation if requested
+              if (meshSession.includeNetwork && meshSession.directionVolumeId) {
+                const dirVolPath = resolveDirectionVolumePath(meshSession.sessionId, meshSession.directionVolumeId);
+                if (dirVolPath) {
+                  startNetworkGeneration(meshId, sourcePath, dirVolPath, outputDir);
+                } else {
+                  if (logger) logger.error('[Mesh] Direction volume not found for network generation');
+                  io.to(`mesh-${meshId}`).emit('network-error', {
+                    mesh_id: meshId,
+                    error: 'Direction volume file not found'
+                  });
+                }
+              }
             } else {
               meshSession.status = 'failed';
               meshSession.error = result.error;
@@ -587,6 +606,158 @@ function createMeshRoutes(dependencies) {
 
       if (logger) logger.info(`Mesh generation process exited with code ${code}`);
     });
+  }
+
+  /**
+   * Resolve direction volume file path from its metadata ID
+   */
+  function resolveDirectionVolumePath(sessionId, dirVolId) {
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const file = metadata?.files?.find(f => f.id === dirVolId);
+      if (file) {
+        const fullPath = path.join(workspacePath, file.path);
+        if (fs.existsSync(fullPath)) return fullPath;
+      }
+      return null;
+    } catch (e) {
+      if (logger) logger.error('[Mesh] Error resolving direction volume path:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Start network generation Python process after mesh completes
+   */
+  function startNetworkGeneration(meshId, sourcePath, dirVolPath, outputDir) {
+    const { spawn } = require('child_process');
+
+    const meshSession = sessionTracker.meshSessions.get(meshId);
+    if (!meshSession) return;
+
+    meshSession.networkStatus = 'processing';
+
+    const args = [
+      'python/generate_network.py',
+      '--input', sourcePath,
+      '--direction_vol', dirVolPath,
+      '--output_dir', outputDir,
+      '--mesh_id', meshId
+    ];
+
+    if (logger) logger.info('Starting network generation:', args.join(' '));
+
+    const pythonProcess = spawn(PYTHON_PATH, args);
+
+    pythonProcess.stdout.on('data', (data) => {
+      const lines = data.toString().split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('NETWORK_PROGRESS:')) {
+          try {
+            const progress = JSON.parse(line.replace('NETWORK_PROGRESS:', ''));
+            io.to(`mesh-${meshId}`).emit('network-progress', {
+              mesh_id: meshId,
+              ...progress
+            });
+          } catch (e) {
+            if (logger) logger.error('Error parsing network progress:', e);
+          }
+        } else if (line.startsWith('NETWORK_RESULT:')) {
+          try {
+            const result = JSON.parse(line.replace('NETWORK_RESULT:', ''));
+
+            if (result.success) {
+              meshSession.networkStatus = 'completed';
+              meshSession.networkResult = result;
+
+              // Track network output in workspace metadata
+              trackNetworkOutput(meshSession.sessionId, outputDir, meshSession.sourceFileId, meshId);
+
+              io.to(`mesh-${meshId}`).emit('network-complete', {
+                mesh_id: meshId,
+                ...result
+              });
+
+              if (activityLogger) {
+                activityLogger.logActivity(
+                  meshSession.username,
+                  'network_generation_complete',
+                  { meshId, statistics: result.statistics }
+                );
+              }
+            } else {
+              meshSession.networkStatus = 'failed';
+              meshSession.networkError = result.error;
+
+              io.to(`mesh-${meshId}`).emit('network-error', {
+                mesh_id: meshId,
+                error: result.error
+              });
+            }
+          } catch (e) {
+            if (logger) logger.error('Error parsing network result:', e);
+          }
+        } else if (line.trim()) {
+          if (logger) logger.debug('[Network]', line);
+        }
+      }
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      if (logger) logger.error('[Network stderr]', data.toString());
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0 && meshSession.networkStatus !== 'completed') {
+        meshSession.networkStatus = 'failed';
+        meshSession.networkError = `Network process exited with code ${code}`;
+
+        io.to(`mesh-${meshId}`).emit('network-error', {
+          mesh_id: meshId,
+          error: meshSession.networkError
+        });
+      }
+
+      if (logger) logger.info(`Network generation process exited with code ${code}`);
+    });
+  }
+
+  /**
+   * Track network output file in workspace metadata
+   */
+  async function trackNetworkOutput(sessionId, outputDir, sourceFileId, meshId) {
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const networkPath = path.join(outputDir, 'network_data.json');
+
+      if (fs.existsSync(networkPath)) {
+        const relativePath = path.relative(workspacePath, networkPath);
+        const stats = fs.statSync(networkPath);
+
+        let lineage = null;
+        if (sourceFileId) {
+          try {
+            lineage = createLineage('networkGeneration', [sourceFileId], meshId);
+          } catch (e) {
+            if (logger) logger.error('[Network] Failed to build lineage:', e.message);
+          }
+        }
+
+        workspaceManager.addFileToMetadata(sessionId, {
+          name: 'network_data.json',
+          path: relativePath,
+          category: 'results',
+          tags: ['mesh', 'network', 'json'],
+          size: stats.size,
+          folderId: null,
+          ...(lineage && { lineage })
+        });
+      }
+    } catch (error) {
+      if (logger) logger.error('Error tracking network output:', error);
+    }
   }
 
   /**
@@ -645,6 +816,143 @@ function createMeshRoutes(dependencies) {
       if (logger) logger.error('Error tracking mesh outputs:', error);
     }
   }
+
+  // ===========================================================================
+  // DETECT NETWORK DATA
+  // ===========================================================================
+
+  /**
+   * Check if network_data.json exists alongside a mesh file.
+   * GET /api/mesh/has-network/:fileId
+   */
+  router.get('/has-network/:fileId', requireAuth, async (req, res) => {
+    try {
+      const fileId = decodeURIComponent(req.params.fileId);
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Resolve the mesh file path
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const file = metadata?.files?.find(f => f.id === fileId);
+
+      let meshFilePath;
+      if (file) {
+        meshFilePath = path.join(workspacePath, file.path);
+      } else {
+        // Assume fileId is a relative path
+        meshFilePath = path.join(workspacePath, fileId);
+      }
+
+      // Check for network_data.json in the same directory
+      const meshDir = path.dirname(meshFilePath);
+      const networkPath = path.join(meshDir, 'network_data.json');
+
+      if (fs.existsSync(networkPath)) {
+        // Find the network file's metadata ID for download
+        const networkRelPath = path.relative(workspacePath, networkPath);
+        const networkFile = metadata?.files?.find(f => f.path === networkRelPath);
+
+        // Read minimal metadata from network file
+        try {
+          const raw = fs.readFileSync(networkPath, 'utf8');
+          const networkData = JSON.parse(raw);
+          const meta = networkData.metadata || {};
+          return res.json({
+            success: true,
+            hasNetwork: true,
+            networkInfo: {
+              nodeCount: meta.nodeCount || 0,
+              edgeCount: meta.edgeCount || 0,
+              filamentClass: meta.filamentClass || 2
+            },
+            networkFileId: networkFile?.id || null,
+            networkPath: networkRelPath
+          });
+        } catch (parseErr) {
+          // File exists but can't be parsed
+          return res.json({
+            success: true,
+            hasNetwork: true,
+            networkInfo: null,
+            networkFileId: networkFile?.id || null,
+            networkPath: networkRelPath
+          });
+        }
+      }
+
+      res.json({ success: true, hasNetwork: false });
+    } catch (error) {
+      if (logger) logger.error('Error checking network data:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // DETECT DIRECTION VOLUME
+  // ===========================================================================
+
+  /**
+   * Find a direction volume linked to a given source file.
+   * Searches workspace metadata for files tagged 'direction_volume' that
+   * share the same inference processId or have parentId matching sourceFileId.
+   * GET /api/mesh/direction-volume/:sourceFileId
+   */
+  router.get('/direction-volume/:sourceFileId', requireAuth, async (req, res) => {
+    try {
+      const sourceFileId = decodeURIComponent(req.params.sourceFileId);
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const files = metadata?.files || [];
+
+      // Find the source file
+      const sourceFile = files.find(f => f.id === sourceFileId);
+      if (!sourceFile) {
+        return res.json({ success: false, error: 'Source file not found' });
+      }
+
+      // Strategy 1: Direction volume with parentId matching source file
+      let dirVol = files.find(f =>
+        f.parentId === sourceFileId &&
+        f.tags && f.tags.includes('direction_volume')
+      );
+
+      // Strategy 2: Direction volume sharing the same inference processId
+      if (!dirVol && sourceFile.lineage?.processId) {
+        dirVol = files.find(f =>
+          f.tags && f.tags.includes('direction_volume') &&
+          f.lineage?.processId === sourceFile.lineage.processId
+        );
+      }
+
+      // Strategy 3: Direction volume whose lineage inputs include this source file
+      if (!dirVol) {
+        dirVol = files.find(f =>
+          f.tags && f.tags.includes('direction_volume') &&
+          f.lineage?.inputs && f.lineage.inputs.includes(sourceFileId)
+        );
+      }
+
+      if (dirVol) {
+        const fullPath = path.join(workspacePath, dirVol.path);
+        if (fs.existsSync(fullPath)) {
+          return res.json({
+            success: true,
+            directionVolume: {
+              id: dirVol.id,
+              name: dirVol.name,
+              path: dirVol.path
+            }
+          });
+        }
+      }
+
+      res.json({ success: false });
+    } catch (error) {
+      if (logger) logger.error('Error detecting direction volume:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   // ===========================================================================
   // GET MESH STATUS
@@ -713,6 +1021,9 @@ function createMeshRoutes(dependencies) {
         break;
       case 'stl':
         filename = 'mesh.stl';
+        break;
+      case 'network':
+        filename = 'network_data.json';
         break;
       default:
         return res.status(400).json({

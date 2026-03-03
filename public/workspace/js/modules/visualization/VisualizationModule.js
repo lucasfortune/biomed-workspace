@@ -86,6 +86,12 @@ class VisualizationModule extends BaseModule {
     this.originalDataGroup = null;    // THREE.Group containing planes
     this.originalDataMetadata = null; // { numSlices, width, height }
 
+    // Filament network overlay
+    this.networkGroup = null;         // THREE.Group of LineSegments
+    this.networkSliceSegments = null; // { z: THREE.LineSegments }
+    this.networkMetadata = null;      // { nodeCount, edgeCount, sliceCount, ... }
+    this.detectedNetwork = null;      // { networkPath, info } from step 1 detection
+
     // Resize handler reference for cleanup
     this.handleResizeBound = null;
 
@@ -180,6 +186,9 @@ class VisualizationModule extends BaseModule {
 
               <!-- Original Data Info (shown when lineage found) -->
               <div id="originalDataInfo" class="original-data-info" style="display: none;"></div>
+
+              <!-- Network Info (shown when network_data.json found) -->
+              <div id="networkDataInfo" class="original-data-info" style="display: none;"></div>
 
               <!-- Navigation Buttons -->
               <div class="navigation-buttons">
@@ -447,6 +456,9 @@ class VisualizationModule extends BaseModule {
         // Look up original data via lineage
         await this.lookupOriginalData(fileInfo.id);
 
+        // Detect filament network availability
+        await this.detectNetworkData(fileInfo);
+
         // Enable next button
         this.dataValidated = true;
         const step1Next = document.getElementById('step1Next');
@@ -515,6 +527,59 @@ class VisualizationModule extends BaseModule {
     }
   }
 
+  /**
+   * Detect if network_data.json exists alongside the selected mesh file
+   */
+  async detectNetworkData(fileInfo) {
+    const networkDataInfo = document.getElementById('networkDataInfo');
+    const fileId = fileInfo.id || fileInfo.path;
+
+    try {
+      const response = await fetch(`/api/mesh/has-network/${encodeURIComponent(fileId)}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+
+      if (data.success && data.hasNetwork) {
+        // Store for later use during 3D loading
+        this.detectedNetwork = {
+          networkPath: data.networkPath,
+          networkFileId: data.networkFileId,
+          info: data.networkInfo
+        };
+
+        console.log('[VisualizationModule] Network data detected:', data.networkInfo);
+
+        if (networkDataInfo) {
+          const info = data.networkInfo;
+          const edgeStr = info?.edgeCount ? `${info.edgeCount.toLocaleString()} edges` : '';
+          networkDataInfo.style.display = 'block';
+          networkDataInfo.innerHTML = `
+            <div class="info-card success">
+              <div class="info-icon">✓</div>
+              <div class="info-content">
+                <strong>Filament Network Available</strong>
+                <p>${edgeStr ? `Network: ${edgeStr}` : 'Network data found alongside mesh.'}</p>
+                <p class="info-note">Toggle the network overlay in the 3D viewer controls.</p>
+              </div>
+            </div>
+          `;
+        }
+      } else {
+        this.detectedNetwork = null;
+        if (networkDataInfo) {
+          networkDataInfo.style.display = 'none';
+        }
+      }
+    } catch (error) {
+      console.warn('[VisualizationModule] Network detection failed:', error);
+      this.detectedNetwork = null;
+      if (networkDataInfo) {
+        networkDataInfo.style.display = 'none';
+      }
+    }
+  }
+
   async handleValidationFailure(fileInfo, errorMessage) {
     let fileWasDeleted = false;
 
@@ -542,6 +607,7 @@ class VisualizationModule extends BaseModule {
     this.meshInfo = null;
     this.meshData = null;
     this.originalDataFile = null;
+    this.detectedNetwork = null;
     this.dataValidated = false;
 
     // Clear file selector
@@ -553,9 +619,11 @@ class VisualizationModule extends BaseModule {
     const step1Next = document.getElementById('step1Next');
     if (step1Next) step1Next.disabled = true;
 
-    // Hide original data info
+    // Hide original data / network info
     const originalDataInfo = document.getElementById('originalDataInfo');
     if (originalDataInfo) originalDataInfo.style.display = 'none';
+    const networkDataInfo = document.getElementById('networkDataInfo');
+    if (networkDataInfo) networkDataInfo.style.display = 'none';
 
     // Show error
     const fullErrorMessage = fileWasDeleted
@@ -762,6 +830,9 @@ class VisualizationModule extends BaseModule {
 
           // Update control panel with class controls
           this.renderClassControls();
+
+          // Try to load filament network if available
+          await this.tryLoadNetwork();
 
           this.visualizationReady = true;
 
@@ -1212,6 +1283,198 @@ class VisualizationModule extends BaseModule {
 
     console.log(`[VisualizationModule] Created volume: ${depth}x${height}x${width}`);
     return volume;
+  }
+
+  // ===========================================================================
+  // FILAMENT NETWORK
+  // ===========================================================================
+
+  /**
+   * Try to load filament network data from the same directory as mesh
+   */
+  async tryLoadNetwork() {
+    // Determine network data source:
+    // 1. From MeshModule state (came via "Open in 3D" button)
+    // 2. From file-system detection during step 1 validation
+    const meshResult = this.state.get('modules.mesh.result');
+    const meshId = meshResult?.meshId;
+    const hasNetworkFromMesh = meshResult?.hasNetwork && meshId;
+    const hasNetworkFromDetection = this.detectedNetwork?.networkFileId || this.detectedNetwork?.networkPath;
+
+    if (!hasNetworkFromMesh && !hasNetworkFromDetection) {
+      return;
+    }
+
+    try {
+      let fetchUrl;
+      if (hasNetworkFromMesh) {
+        fetchUrl = `/api/mesh/download/${meshId}/network`;
+        console.log('[VisualizationModule] Loading network via mesh download:', meshId);
+      } else if (this.detectedNetwork.networkFileId) {
+        // Use workspace file download with the metadata file ID
+        fetchUrl = `/api/workspace/file/${encodeURIComponent(this.detectedNetwork.networkFileId)}/download`;
+        console.log('[VisualizationModule] Loading network via file ID:', this.detectedNetwork.networkFileId);
+      } else {
+        console.log('[VisualizationModule] Network file detected but no file ID available');
+        return;
+      }
+
+      this.updateLoadingOverlay('Loading filament network...', 'Fetching network data');
+
+      const response = await fetch(fetchUrl, { credentials: 'include' });
+      if (!response.ok) {
+        console.log('[VisualizationModule] No network data found');
+        return;
+      }
+
+      const networkData = await response.json();
+      if (!networkData.metadata || networkData.metadata.type !== 'FilamentNetwork') {
+        console.warn('[VisualizationModule] Invalid network data format');
+        return;
+      }
+
+      console.log(`[VisualizationModule] Network loaded: ${networkData.metadata.nodeCount} nodes, ${networkData.metadata.edgeCount} edges`);
+
+      // Import and create network visualization
+      const networkRenderer = await import('./visualization/networkRenderer.js');
+      const result = networkRenderer.createNetworkVisualization(
+        networkData, this.meshGroup
+      );
+
+      this.networkGroup = result.networkGroup;
+      this.networkSliceSegments = result.sliceSegments;
+      this.networkMetadata = result.metadata;
+
+      // Network starts hidden
+      networkRenderer.setNetworkVisibility(this.networkGroup, false);
+
+      // Render network controls
+      this.renderNetworkControls();
+
+    } catch (error) {
+      console.warn('[VisualizationModule] Failed to load network:', error);
+    }
+  }
+
+  /**
+   * Render network control panel (appended after class controls)
+   */
+  renderNetworkControls() {
+    if (!this.networkMetadata) return;
+
+    const controlsPanel = document.getElementById('classControlPanels');
+    if (!controlsPanel) return;
+
+    const sliceCount = this.networkMetadata.sliceCount;
+
+    const networkHtml = `
+      <div class="class-control-panel network-panel" data-type="network">
+        <div class="class-checkbox-section">
+          <input type="checkbox"
+                 id="networkVisible"
+                 class="class-checkbox"
+                 onchange="vizModule.toggleNetworkVisibility(this.checked)">
+          <label for="networkVisible" class="class-label" style="color: #888">
+            Filament Network
+          </label>
+        </div>
+        ${sliceCount > 1 ? `
+        <div class="class-range-section">
+          <span class="class-range-label">Z Range</span>
+          <div class="dual-range-container" id="rangeContainerNetwork">
+            <div class="dual-range-track"></div>
+            <div class="dual-range-fill" id="rangeFillNetwork"></div>
+            <input type="range"
+                   id="rangeMinNetwork"
+                   class="dual-range-input"
+                   min="0" max="${sliceCount - 1}" value="0"
+                   oninput="vizModule.updateNetworkSliceRange()">
+            <input type="range"
+                   id="rangeMaxNetwork"
+                   class="dual-range-input"
+                   min="0" max="${sliceCount - 1}" value="${sliceCount - 1}"
+                   oninput="vizModule.updateNetworkSliceRange()">
+          </div>
+          <span id="rangeValueNetwork" class="class-range-value">0-100%</span>
+        </div>
+        ` : ''}
+      </div>
+    `;
+
+    // Append to existing controls
+    controlsPanel.insertAdjacentHTML('beforeend', networkHtml);
+
+    // Initialize range fill
+    if (sliceCount > 1) {
+      this.updateNetworkRangeFill();
+    }
+  }
+
+  /**
+   * Toggle filament network visibility
+   */
+  toggleNetworkVisibility(visible) {
+    if (!this.networkGroup) return;
+
+    import('./visualization/networkRenderer.js').then(nr => {
+      nr.setNetworkVisibility(this.networkGroup, visible);
+    });
+  }
+
+  /**
+   * Update network z-range based on slider values
+   */
+  updateNetworkSliceRange() {
+    if (!this.networkSliceSegments) return;
+
+    const minInput = document.getElementById('rangeMinNetwork');
+    const maxInput = document.getElementById('rangeMaxNetwork');
+    if (!minInput || !maxInput) return;
+
+    let min = parseInt(minInput.value);
+    let max = parseInt(maxInput.value);
+
+    // Ensure min <= max
+    if (min > max) {
+      const temp = min;
+      min = max;
+      max = temp;
+      minInput.value = min;
+      maxInput.value = max;
+    }
+
+    import('./visualization/networkRenderer.js').then(nr => {
+      nr.setNetworkSliceRange(this.networkSliceSegments, min, max);
+    });
+
+    // Update display
+    this.updateNetworkRangeFill();
+  }
+
+  /**
+   * Update range fill visual for network z-range slider
+   */
+  updateNetworkRangeFill() {
+    const minInput = document.getElementById('rangeMinNetwork');
+    const maxInput = document.getElementById('rangeMaxNetwork');
+    const fill = document.getElementById('rangeFillNetwork');
+    const rangeValue = document.getElementById('rangeValueNetwork');
+
+    if (!minInput || !maxInput || !fill) return;
+
+    const min = parseInt(minInput.value);
+    const max = parseInt(maxInput.value);
+    const sliceCount = this.networkMetadata?.sliceCount || 1;
+
+    const leftPercent = (min / (sliceCount - 1)) * 100;
+    const rightPercent = (max / (sliceCount - 1)) * 100;
+
+    fill.style.left = `${leftPercent}%`;
+    fill.style.width = `${rightPercent - leftPercent}%`;
+
+    if (rangeValue) {
+      rangeValue.textContent = `${Math.round(leftPercent)}-${Math.round(rightPercent)}%`;
+    }
   }
 
   /**
@@ -1908,6 +2171,13 @@ class VisualizationModule extends BaseModule {
       }).catch(() => {});
     }
 
+    // Clean up filament network
+    if (this.networkGroup || this.networkSliceSegments) {
+      import('./visualization/networkRenderer.js').then(nr => {
+        nr.disposeNetwork(this.networkGroup, this.networkSliceSegments);
+      }).catch(() => {});
+    }
+
     // Clear references
     this.scene = null;
     this.camera = null;
@@ -1921,6 +2191,9 @@ class VisualizationModule extends BaseModule {
     this.originalDataPlanes = null;
     this.originalDataGroup = null;
     this.originalDataMetadata = null;
+    this.networkGroup = null;
+    this.networkSliceSegments = null;
+    this.networkMetadata = null;
 
     // Clean up global references (use try-catch for non-configurable properties)
     const globalsToClean = ['vizModule', 'nextStep', 'previousStep'];

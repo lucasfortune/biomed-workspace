@@ -80,6 +80,11 @@ class MeshModule extends BaseModule {
       targetClasses: 'all'
     };
 
+    // Direction volume / network state
+    this.directionVolume = null;  // { id, name, path } if detected
+    this.includeNetwork = false;
+    this.networkStatus = null;    // null, 'generating', 'complete', 'error'
+
     // =========================================================================
     // BIND METHODS
     // =========================================================================
@@ -189,6 +194,17 @@ class MeshModule extends BaseModule {
                   <select id="classSelection">
                     <option value="all" selected>All Classes</option>
                   </select>
+                </div>
+
+                <!-- Network option (shown only when direction volume detected) -->
+                <div id="networkOption" class="form-field" style="display: none;">
+                  <label>
+                    <input type="checkbox" id="includeNetwork">
+                    Include Filament Network
+                  </label>
+                  <p class="option-description" style="margin-top: 4px; font-size: 0.85em; opacity: 0.7;">
+                    Direction volume: <span id="networkDirInfo">—</span>
+                  </p>
                 </div>
 
                 <button id="startGenerationBtn" class="btn btn-primary" onclick="startGeneration()">
@@ -403,6 +419,33 @@ class MeshModule extends BaseModule {
       this.onGenerationError(data.error || 'Unknown error');
     });
 
+    // Network generation events
+    this.socket.on('network-progress', (data) => {
+      if (data.mesh_id !== this.currentMeshId) return;
+      console.log('[MeshModule] Network progress:', data);
+      this.networkStatus = 'generating';
+      this.updateProgressUI(data.progress_percent, data.status || 'Generating network...', 'Building filament network...');
+    });
+    this.socket.on('network-complete', (data) => {
+      if (data.mesh_id !== this.currentMeshId) return;
+      console.log('[MeshModule] Network generation complete:', data);
+      this.networkStatus = 'complete';
+      // Finalize if mesh was already complete
+      if (this.meshResult && !this.generationComplete) {
+        this.finalizeGeneration();
+      }
+    });
+    this.socket.on('network-error', (data) => {
+      if (data.mesh_id !== this.currentMeshId) return;
+      console.warn('[MeshModule] Network generation failed:', data.error);
+      this.networkStatus = 'error';
+      this.state.notify('warning', `Network generation failed: ${data.error}`);
+      // Finalize anyway — mesh was successful, network is optional
+      if (this.meshResult && !this.generationComplete) {
+        this.finalizeGeneration();
+      }
+    });
+
     console.log('[MeshModule] Socket.IO initialized');
   }
 
@@ -435,6 +478,9 @@ class MeshModule extends BaseModule {
         this.dataValidated = true;
         const step1Next = document.getElementById('step1Next');
         if (step1Next) step1Next.disabled = false;
+
+        // Auto-detect direction volume
+        this.detectDirectionVolume(fileInfo.id);
 
         this.saveState();
       } else {
@@ -632,6 +678,54 @@ class MeshModule extends BaseModule {
   }
 
   // ===========================================================================
+  // DIRECTION VOLUME DETECTION
+  // ===========================================================================
+
+  async detectDirectionVolume(sourceFileId) {
+    if (!sourceFileId) {
+      this.directionVolume = null;
+      this.updateNetworkOptionUI();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/mesh/direction-volume/${encodeURIComponent(sourceFileId)}`);
+      const data = await response.json();
+
+      if (data.success && data.directionVolume) {
+        this.directionVolume = data.directionVolume;
+        console.log('[MeshModule] Direction volume detected:', data.directionVolume.name);
+      } else {
+        this.directionVolume = null;
+      }
+    } catch (error) {
+      console.warn('[MeshModule] Error detecting direction volume:', error);
+      this.directionVolume = null;
+    }
+
+    this.updateNetworkOptionUI();
+  }
+
+  updateNetworkOptionUI() {
+    const optionDiv = document.getElementById('networkOption');
+    const dirInfo = document.getElementById('networkDirInfo');
+    const checkbox = document.getElementById('includeNetwork');
+
+    if (!optionDiv) return;
+
+    if (this.directionVolume) {
+      optionDiv.style.display = 'block';
+      if (dirInfo) dirInfo.textContent = this.directionVolume.name;
+      if (checkbox) checkbox.checked = true; // Default to checked when detected
+      this.includeNetwork = true;
+    } else {
+      optionDiv.style.display = 'none';
+      if (checkbox) checkbox.checked = false;
+      this.includeNetwork = false;
+    }
+  }
+
+  // ===========================================================================
   // MESH GENERATION
   // ===========================================================================
 
@@ -668,6 +762,15 @@ class MeshModule extends BaseModule {
       if (this.selectedFile && this.selectedFile.id) {
         generateOptions.sourceFileId = this.selectedFile.id;
         console.log('[MeshModule] Including sourceFileId for lineage:', this.selectedFile.id);
+      }
+
+      // Include network generation if checkbox is checked
+      const networkCheckbox = document.getElementById('includeNetwork');
+      this.includeNetwork = networkCheckbox?.checked && this.directionVolume;
+      if (this.includeNetwork) {
+        generateOptions.includeNetwork = true;
+        generateOptions.directionVolumeId = this.directionVolume.id;
+        console.log('[MeshModule] Including network generation with direction volume:', this.directionVolume.id);
       }
 
       const result = await this.api.generateMesh(
@@ -722,10 +825,23 @@ class MeshModule extends BaseModule {
 
     if (data.mesh_id !== this.currentMeshId) return;
 
+    this.meshResult = data;
+
+    // If network generation is pending, keep showing progress
+    if (this.includeNetwork && this.networkStatus !== 'complete' && this.networkStatus !== 'error') {
+      this.networkStatus = 'generating';
+      this.updateProgressUI(0, 'Generating filament network...', 'Mesh complete, building network...');
+      this.state.notify('info', 'Mesh complete, generating filament network...');
+      return; // Don't finalize yet — wait for network-complete
+    }
+
+    this.finalizeGeneration();
+  }
+
+  finalizeGeneration() {
     // Stop timer
     this.stopElapsedTimer();
 
-    this.meshResult = data;
     this.generationComplete = true;
 
     // Hide progress, show results
@@ -734,7 +850,7 @@ class MeshModule extends BaseModule {
 
     // Display results with elapsed time
     const elapsedTime = this.getElapsedTime();
-    this.showGenerationResults(data, elapsedTime);
+    this.showGenerationResults(this.meshResult, elapsedTime);
 
     this.saveState();
     this.state.notify('success', 'Mesh generation complete!');
@@ -886,6 +1002,7 @@ class MeshModule extends BaseModule {
         name: 'mesh_data.json',
         id: jsonFilePath
       },
+      hasNetwork: this.includeNetwork && this.networkStatus === 'complete',
       timestamp: Date.now()
     });
 
@@ -1067,6 +1184,9 @@ class MeshModule extends BaseModule {
       this.socket.off('mesh-progress', this.onGenerationProgress);
       this.socket.off('mesh-complete', this.onGenerationComplete);
       this.socket.off('mesh-error');
+      this.socket.off('network-progress');
+      this.socket.off('network-complete');
+      this.socket.off('network-error');
       // Don't disconnect - other modules may need it
     }
 

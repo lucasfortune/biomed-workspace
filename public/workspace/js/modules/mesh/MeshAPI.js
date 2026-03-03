@@ -84,6 +84,12 @@ class MeshAPI {
         requestBody.sourceFileId = options.sourceFileId;
       }
 
+      // Include network generation params if provided
+      if (options.includeNetwork) {
+        requestBody.includeNetwork = true;
+        requestBody.directionVolumeId = options.directionVolumeId;
+      }
+
       const response = await fetch(`${this.baseUrl}/api/mesh/generate`, {
         method: 'POST',
         headers: {
