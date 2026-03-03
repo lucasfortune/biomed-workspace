@@ -644,6 +644,7 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
                 loss = criterion(outputs, masks.argmax(dim=1))
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
             train_loss += loss.item()

@@ -1083,6 +1083,9 @@ class SegmentationModule extends BaseModule {
         this.diceChart.destroy();
         this.diceChart = null;
       }
+      if (this.chartHandler) {
+        this.chartHandler.directionDatasetsEnabled = false;
+      }
 
       // Reset uploaded files (frontend reference only)
       this.uploadedFiles = {
@@ -1341,7 +1344,7 @@ class SegmentationModule extends BaseModule {
       this.socket = null;
     }
 
-    // Destroy charts
+    // Destroy charts and reset chart handler state
     if (this.lossChart) {
       this.lossChart.destroy();
       this.lossChart = null;
@@ -1350,6 +1353,10 @@ class SegmentationModule extends BaseModule {
     if (this.diceChart) {
       this.diceChart.destroy();
       this.diceChart = null;
+    }
+
+    if (this.chartHandler) {
+      this.chartHandler.directionDatasetsEnabled = false;
     }
 
     // Clear intervals (both module and handler)
