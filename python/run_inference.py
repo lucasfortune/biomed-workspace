@@ -86,6 +86,11 @@ def load_model(model_path, device):
         print(f"Model loaded successfully from {model_path}", flush=True)
         print(f"Model has {sum(p.numel() for p in model.parameters())} parameters", flush=True)
 
+        # Extract filament_classes from training config if available
+        training_config = checkpoint.get('training_config', {})
+        if 'filament_classes' not in model_config and 'filament_classes' in training_config:
+            model_config['filament_classes'] = training_config['filament_classes']
+
         # Log additional info if available
         if 'pytorch_version' in checkpoint:
             print(f"Model was trained with PyTorch version: {checkpoint['pytorch_version']}", flush=True)
@@ -382,6 +387,13 @@ def main():
             segmented_stack = run_inference_on_stack(
                 model, input_stack, device, args.batch_size, args.inference_id
             )
+
+        # Mask direction predictions to filament-class pixels only
+        if direction_stack is not None:
+            filament_classes = model_config.get('filament_classes', [2])
+            filament_mask = np.isin(segmented_stack, filament_classes)
+            direction_stack[~filament_mask] = 0.0
+            print(f"Direction masked to filament classes {filament_classes}", flush=True)
 
         # Save results
         print("Saving results...", flush=True)

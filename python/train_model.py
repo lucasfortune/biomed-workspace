@@ -255,23 +255,24 @@ class Imagedataset25D(Dataset):
     Direction-aware augmentation correctly transforms direction vectors.
     """
 
-    def __init__(self, raw_stack, mask_stack, direction_volume=None,
-                 patch_size=128, patches_per_slice=10, context_slices=3,
-                 augment=False, augment_prob=0.5, num_classes=3):
+    def __init__(self, raw_stack, mask_stack, center_indices,
+                 direction_volume=None, patch_size=128, patches_per_slice=10,
+                 context_slices=3, augment=False, augment_prob=0.5,
+                 num_classes=3):
         """
         Args:
-            raw_stack: (Z, H, W) raw image stack
-            mask_stack: (Z, H, W) annotation stack (uint8 class labels)
+            raw_stack: (Z, H, W) full raw image stack (shared across splits)
+            mask_stack: (Z, H, W) full annotation stack (uint8 class labels)
+            center_indices: list of z-indices this dataset uses as centers
             direction_volume: (Z, H, W, 3) unit direction vectors or None
             patch_size: spatial patch size
-            patches_per_slice: patches sampled per valid center slice
+            patches_per_slice: patches sampled per center slice
             context_slices: odd number of context slices (3, 5, or 7)
             augment: whether to apply augmentation
             augment_prob: probability per augmentation type
             num_classes: number of segmentation classes
         """
         assert context_slices % 2 == 1, "context_slices must be odd"
-        self.raw = raw_stack.astype(np.float32)
         self.mask = mask_stack.astype(np.uint8)
         self.direction = direction_volume  # (Z,H,W,3) or None
         self.patch_size = patch_size
@@ -282,22 +283,25 @@ class Imagedataset25D(Dataset):
         self.augment_prob = augment_prob
         self.num_classes = num_classes
 
-        Z, H, W = self.raw.shape
+        Z, H, W = mask_stack.shape
         self.Z, self.H, self.W = Z, H, W
 
-        # Global normalization to [0, 1]
-        rmin, rmax = self.raw.min(), self.raw.max()
+        # Global normalization to [0, 1], then reflect-pad along Z
+        # so boundary slices get valid context windows (matches inference)
+        raw = raw_stack.astype(np.float32)
+        rmin, rmax = raw.min(), raw.max()
         if rmax > rmin:
-            self.raw = (self.raw - rmin) / (rmax - rmin)
+            raw = (raw - rmin) / (rmax - rmin)
         else:
-            self.raw = np.zeros_like(self.raw)
+            raw = np.zeros_like(raw)
+        self.raw_padded = np.pad(
+            raw, ((self.half, self.half), (0, 0), (0, 0)), mode='reflect'
+        )
 
-        # Valid center slice indices: [half, Z - half)
-        self.valid_centers = list(range(self.half, Z - self.half))
+        # Center indices provided by prepare_data_25d split
+        self.valid_centers = list(center_indices)
         if len(self.valid_centers) == 0:
-            raise ValueError(
-                f"Stack too shallow ({Z} slices) for context_slices={context_slices}"
-            )
+            raise ValueError("center_indices must be non-empty")
 
     def __len__(self):
         return len(self.valid_centers) * self.patches_per_slice
@@ -317,10 +321,13 @@ class Imagedataset25D(Dataset):
         top = random.randint(0, max_y)
         left = random.randint(0, max_x)
 
-        # Extract multi-slice context window → (context_slices, pH, pW)
-        z_start = center_z - self.half
-        z_end = center_z + self.half + 1
-        image_patch = self.raw[z_start:z_end, top:top+ps, left:left+ps].copy()
+        # Context window from reflect-padded stack → (context_slices, pH, pW)
+        # In padded coords: original z maps to padded[z : z + context_slices]
+        # because padding added self.half at the front
+        image_patch = self.raw_padded[
+            center_z:center_z + self.context_slices,
+            top:top+ps, left:left+ps
+        ].copy()
 
         # Mask is from center slice only → (pH, pW)
         mask_patch = self.mask[center_z, top:top+ps, left:left+ps].copy()
@@ -518,8 +525,11 @@ def prepare_data_from_tiff_stacks(raw_images_path, annotations_path, output_dir,
 
 def prepare_data_25d(raw_path, ann_path, dir_vol_path=None):
     """
-    Load TIFF stacks and split by z-index (70/15/15) for the 2.5D pipeline.
-    Returns dict of numpy arrays — no temp files needed.
+    Load TIFF stacks and split center indices into train/val/test (70/15/15).
+
+    Returns the full stacks plus lists of center indices per split.
+    Context windows are formed by the dataset class using reflect-padding,
+    so every slice index is a valid center regardless of context_slices.
     """
     raw_stack = tifffile.imread(raw_path)       # (Z, H, W)
     ann_stack = tifffile.imread(ann_path)        # (Z, H, W)
@@ -533,19 +543,42 @@ def prepare_data_25d(raw_path, ann_path, dir_vol_path=None):
         print(f"Direction volume loaded: {dir_vol.shape}", flush=True)
 
     Z = raw_stack.shape[0]
-    train_end = int(0.7 * Z)
-    val_end = int(0.85 * Z)
+    if Z < 5:
+        raise ValueError(
+            f"Stack has only {Z} slices; minimum 5 required for "
+            f"train/val/test splits."
+        )
 
-    splits = {}
-    for name, s, e in [('train', 0, train_end), ('val', train_end, val_end), ('test', val_end, Z)]:
-        splits[f'{name}_raw'] = raw_stack[s:e]
-        splits[f'{name}_mask'] = ann_stack[s:e]
-        if dir_vol is not None:
-            splits[f'{name}_dir'] = dir_vol[s:e]
-        else:
-            splits[f'{name}_dir'] = None
+    # Split all Z indices contiguously: ~70/15/15
+    train_end = max(1, int(0.7 * Z))
+    val_end = max(train_end + 1, int(0.85 * Z))
+    # Ensure test split has at least 1 center
+    if val_end >= Z:
+        val_end = Z - 1
+    # Ensure val split has at least 1 center
+    if val_end <= train_end:
+        train_end = val_end - 1
 
-    return splits
+    train_centers = list(range(0, train_end))
+    val_centers = list(range(train_end, val_end))
+    test_centers = list(range(val_end, Z))
+
+    print(f"Center-index split: train=0..{train_end - 1} "
+          f"({len(train_centers)} centers), "
+          f"val={train_end}..{val_end - 1} "
+          f"({len(val_centers)} centers), "
+          f"test={val_end}..{Z - 1} "
+          f"({len(test_centers)} centers) "
+          f"(context windows may overlap across splits)", flush=True)
+
+    return {
+        'raw': raw_stack,
+        'mask': ann_stack,
+        'dir': dir_vol,
+        'train_centers': train_centers,
+        'val_centers': val_centers,
+        'test_centers': test_centers,
+    }
 
 
 # =============================================================================
@@ -689,6 +722,7 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
                 model_config['model_type'] = 'direction_aware'
                 model_config['has_direction_head'] = True
                 model_config['context_slices'] = context_slices
+                model_config['filament_classes'] = config.get('filament_classes', [2])
             elif context_slices > 1:
                 model_config['model_type'] = 'standard_25d'
                 model_config['has_direction_head'] = False
@@ -833,18 +867,19 @@ def main():
                   f"alpha={alpha}, lambda_dir={lambda_dir}, "
                   f"filament_classes={filament_classes}", flush=True)
 
-            # Prepare data from stacks (no temp files)
+            # Prepare data — returns full stacks + center index lists
             print("Preparing 2.5D data from TIFF stacks...", flush=True)
             splits = prepare_data_25d(
                 args.raw_images, args.annotations, args.direction_volume
             )
 
-            # Create datasets
+            # Create datasets (all share full stacks, differ only in center indices)
             print("Creating 2.5D datasets...", flush=True)
             train_dataset = Imagedataset25D(
-                raw_stack=splits['train_raw'],
-                mask_stack=splits['train_mask'],
-                direction_volume=splits['train_dir'],
+                raw_stack=splits['raw'],
+                mask_stack=splits['mask'],
+                center_indices=splits['train_centers'],
+                direction_volume=splits['dir'],
                 patch_size=config['patch_size'],
                 patches_per_slice=config['patches_per_image'],
                 context_slices=context_slices,
@@ -853,9 +888,10 @@ def main():
                 num_classes=num_classes,
             )
             val_dataset = Imagedataset25D(
-                raw_stack=splits['val_raw'],
-                mask_stack=splits['val_mask'],
-                direction_volume=splits['val_dir'],
+                raw_stack=splits['raw'],
+                mask_stack=splits['mask'],
+                center_indices=splits['val_centers'],
+                direction_volume=splits['dir'],
                 patch_size=config['patch_size'],
                 patches_per_slice=max(1, config.get('patches_per_image', 10) // 2),
                 context_slices=context_slices,
@@ -863,15 +899,20 @@ def main():
                 num_classes=num_classes,
             )
             test_dataset = Imagedataset25D(
-                raw_stack=splits['test_raw'],
-                mask_stack=splits['test_mask'],
-                direction_volume=splits['test_dir'],
+                raw_stack=splits['raw'],
+                mask_stack=splits['mask'],
+                center_indices=splits['test_centers'],
+                direction_volume=splits['dir'],
                 patch_size=config['patch_size'],
                 patches_per_slice=max(1, config.get('patches_per_image', 10) // 3),
                 context_slices=context_slices,
                 augment=False,
                 num_classes=num_classes,
             )
+
+            print(f"Dataset sizes: train={len(train_dataset)} samples, "
+                  f"val={len(val_dataset)} samples, "
+                  f"test={len(test_dataset)} samples", flush=True)
 
             # Data loaders
             train_loader = DataLoader(train_dataset, batch_size=config['batch_size'],
@@ -922,17 +963,18 @@ def main():
             # ===== 2.5D standard path (multi-slice context, no direction head) =====
             print(f"Standard 2.5D params: context_slices={context_slices}", flush=True)
 
-            # Prepare data from stacks (no temp files, no direction volume)
+            # Prepare data — returns full stacks + center index lists
             print("Preparing 2.5D data from TIFF stacks...", flush=True)
             splits = prepare_data_25d(
                 args.raw_images, args.annotations, dir_vol_path=None
             )
 
-            # Create datasets (direction_volume=None → returns 2-tuple)
+            # Create datasets (all share full stacks, differ only in center indices)
             print("Creating 2.5D datasets...", flush=True)
             train_dataset = Imagedataset25D(
-                raw_stack=splits['train_raw'],
-                mask_stack=splits['train_mask'],
+                raw_stack=splits['raw'],
+                mask_stack=splits['mask'],
+                center_indices=splits['train_centers'],
                 direction_volume=None,
                 patch_size=config['patch_size'],
                 patches_per_slice=config['patches_per_image'],
@@ -942,8 +984,9 @@ def main():
                 num_classes=num_classes,
             )
             val_dataset = Imagedataset25D(
-                raw_stack=splits['val_raw'],
-                mask_stack=splits['val_mask'],
+                raw_stack=splits['raw'],
+                mask_stack=splits['mask'],
+                center_indices=splits['val_centers'],
                 direction_volume=None,
                 patch_size=config['patch_size'],
                 patches_per_slice=max(1, config.get('patches_per_image', 10) // 2),
@@ -952,8 +995,9 @@ def main():
                 num_classes=num_classes,
             )
             test_dataset = Imagedataset25D(
-                raw_stack=splits['test_raw'],
-                mask_stack=splits['test_mask'],
+                raw_stack=splits['raw'],
+                mask_stack=splits['mask'],
+                center_indices=splits['test_centers'],
                 direction_volume=None,
                 patch_size=config['patch_size'],
                 patches_per_slice=max(1, config.get('patches_per_image', 10) // 3),
@@ -961,6 +1005,10 @@ def main():
                 augment=False,
                 num_classes=num_classes,
             )
+
+            print(f"Dataset sizes: train={len(train_dataset)} samples, "
+                  f"val={len(val_dataset)} samples, "
+                  f"test={len(test_dataset)} samples", flush=True)
 
             # Data loaders
             train_loader = DataLoader(train_dataset, batch_size=config['batch_size'],
