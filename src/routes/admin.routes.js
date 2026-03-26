@@ -263,7 +263,7 @@ function createAdminRoutes(dependencies) {
   router.get('/activity-logs', requireAdmin, (req, res) => {
     try {
       const { user, type, limit = 100 } = req.query;
-      const logPath = path.join(__dirname, '../../logs/activity.log');
+      const logPath = activityLogger.getLogFilePath();
 
       // Read and parse JSONL file
       let logs = [];
