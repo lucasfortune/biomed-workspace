@@ -14,6 +14,39 @@ import io
 from PIL import Image
 
 
+def safe_imread(path):
+    """
+    Read a TIFF file, handling OME-TIFFs with incorrect metadata.
+
+    Some OME-TIFF files declare fewer frames in their OME XML metadata than
+    actually exist in the file. tifffile.imread() trusts that metadata and
+    returns only the declared frames. This function detects the mismatch and
+    re-reads with OME parsing disabled so all pages are returned.
+
+    Args:
+        path: Path to the TIFF file
+
+    Returns:
+        numpy.ndarray: Image data with all pages/slices
+    """
+    with tifffile.TiffFile(path) as tif:
+        n_pages = len(tif.pages)
+        data = tif.asarray()
+
+        # If the file has multiple pages but the array is only 2D,
+        # the OME metadata likely under-reports the frame count.
+        if n_pages > 1 and data.ndim == 2:
+            print(
+                f"[safe_imread] OME metadata mismatch: {n_pages} pages but "
+                f"shape={data.shape}. Re-reading with is_ome=False.",
+                file=sys.stderr, flush=True
+            )
+            with tifffile.TiffFile(path, is_ome=False) as tif2:
+                data = tif2.asarray()
+
+    return data
+
+
 def get_supported_types():
     """Return list of supported TIFF data types"""
     return [np.uint8, np.uint16, np.int16, np.int32, np.float32, np.float64]

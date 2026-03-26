@@ -20,6 +20,7 @@ from pathlib import Path
 
 import tifffile
 import numpy as np
+from tiff_validation_utils import safe_imread
 
 
 def get_info(input_path):
@@ -33,13 +34,19 @@ def get_info(input_path):
         dict with sliceCount, width, height, dtype
     """
     with tifffile.TiffFile(input_path) as tif:
+        n_pages = len(tif.pages)
+
         if tif.series:
             shape = tif.series[0].shape
             dtype = str(tif.series[0].dtype)
         else:
             page = tif.pages[0]
-            shape = (len(tif.pages), page.shape[0], page.shape[1])
+            shape = (n_pages, page.shape[0], page.shape[1])
             dtype = str(page.dtype)
+
+        # Fix OME-TIFFs with incorrect metadata
+        if len(shape) == 2 and n_pages > 1:
+            shape = (n_pages, shape[0], shape[1])
 
     if len(shape) == 2:
         # Single 2D image
@@ -102,7 +109,7 @@ def split_stack(input_path, output1_path, output2_path, split_at):
         dict with part1 and part2 info
     """
     # Load the TIFF data
-    data = tifffile.imread(input_path)
+    data = safe_imread(input_path)
 
     if data.ndim != 3:
         raise ValueError("Split requires a 3D TIFF stack (multiple slices)")

@@ -22,6 +22,7 @@ import sys
 import numpy as np
 from PIL import Image
 import tifffile
+from tiff_validation_utils import safe_imread
 
 
 def extract_raw_slice(input_path, slice_index, output_path):
@@ -40,7 +41,7 @@ def extract_raw_slice(input_path, slice_index, output_path):
         Exception on any error
     """
     # Load TIFF
-    img = tifffile.imread(input_path)
+    img = safe_imread(input_path)
 
     # Handle 3D: extract slice
     if len(img.shape) == 3:

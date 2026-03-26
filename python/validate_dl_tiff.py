@@ -62,101 +62,101 @@ def validate_tiff(input_path):
         import tifffile
         import numpy as np
 
-        # Read TIFF file
-        with tifffile.TiffFile(input_path) as tif:
-            # Get image data shape
-            data = tif.asarray()
+        from tiff_validation_utils import safe_imread
 
-            # Handle different dimensionalities
-            if data.ndim == 2:
-                # Single 2D image
-                height, width = data.shape
-                num_slices = 1
-            elif data.ndim == 3:
-                # 3D stack (slices, height, width)
-                num_slices, height, width = data.shape
-            elif data.ndim == 4:
-                # 4D with channels (slices, channels, height, width) or similar
-                # Take first interpretation
-                num_slices = data.shape[0]
-                height, width = data.shape[-2], data.shape[-1]
-                result['warnings'].append(
-                    f'4D image detected with shape {data.shape}. '
-                    f'Using first axis as slices.'
-                )
-            else:
-                result['errors'].append(
-                    f'Unsupported image dimensions: {data.ndim}D. '
-                    f'Expected 2D or 3D TIFF stack.'
-                )
-                return result
+        # Read TIFF file (safe_imread handles OME metadata mismatches)
+        data = safe_imread(input_path)
 
-            # Store dimensions
-            result['info']['dimensions'] = {
-                'width': int(width),
-                'height': int(height),
-                'slices': int(num_slices)
-            }
-            result['info']['num_slices'] = int(num_slices)
+        # Handle different dimensionalities
+        if data.ndim == 2:
+            # Single 2D image
+            height, width = data.shape
+            num_slices = 1
+        elif data.ndim == 3:
+            # 3D stack (slices, height, width)
+            num_slices, height, width = data.shape
+        elif data.ndim == 4:
+            # 4D with channels (slices, channels, height, width) or similar
+            # Take first interpretation
+            num_slices = data.shape[0]
+            height, width = data.shape[-2], data.shape[-1]
+            result['warnings'].append(
+                f'4D image detected with shape {data.shape}. '
+                f'Using first axis as slices.'
+            )
+        else:
+            result['errors'].append(
+                f'Unsupported image dimensions: {data.ndim}D. '
+                f'Expected 2D or 3D TIFF stack.'
+            )
+            return result
 
-            # Get dtype info
-            dtype = data.dtype
-            result['info']['dtype'] = str(dtype)
+        # Store dimensions
+        result['info']['dimensions'] = {
+            'width': int(width),
+            'height': int(height),
+            'slices': int(num_slices)
+        }
+        result['info']['num_slices'] = int(num_slices)
 
-            # Determine bit depth
-            if dtype == np.uint8:
-                result['info']['bit_depth'] = 8
-            elif dtype == np.uint16:
-                result['info']['bit_depth'] = 16
-            elif dtype == np.float32:
-                result['info']['bit_depth'] = 32
-                result['warnings'].append(
-                    'Float32 data detected. Will be normalized for training.'
-                )
-            elif dtype == np.float64:
-                result['info']['bit_depth'] = 64
-                result['warnings'].append(
-                    'Float64 data detected. Will be converted to float32.'
-                )
-            else:
-                result['errors'].append(
-                    f'Unsupported data type: {dtype}. '
-                    f'Expected uint8, uint16, float32, or float64.'
-                )
-                return result
+        # Get dtype info
+        dtype = data.dtype
+        result['info']['dtype'] = str(dtype)
 
-            # Validate minimum slices for training
-            min_slices = 10
-            if num_slices < min_slices:
-                result['errors'].append(
-                    f'Insufficient slices for training: {num_slices}. '
-                    f'Minimum required: {min_slices} slices.'
-                )
+        # Determine bit depth
+        if dtype == np.uint8:
+            result['info']['bit_depth'] = 8
+        elif dtype == np.uint16:
+            result['info']['bit_depth'] = 16
+        elif dtype == np.float32:
+            result['info']['bit_depth'] = 32
+            result['warnings'].append(
+                'Float32 data detected. Will be normalized for training.'
+            )
+        elif dtype == np.float64:
+            result['info']['bit_depth'] = 64
+            result['warnings'].append(
+                'Float64 data detected. Will be converted to float32.'
+            )
+        else:
+            result['errors'].append(
+                f'Unsupported data type: {dtype}. '
+                f'Expected uint8, uint16, float32, or float64.'
+            )
+            return result
 
-            # Validate minimum dimensions
-            min_dim = 64
-            if width < min_dim or height < min_dim:
-                result['errors'].append(
-                    f'Image dimensions too small: {width}x{height}. '
-                    f'Minimum required: {min_dim}x{min_dim} pixels.'
-                )
+        # Validate minimum slices for training
+        min_slices = 10
+        if num_slices < min_slices:
+            result['errors'].append(
+                f'Insufficient slices for training: {num_slices}. '
+                f'Minimum required: {min_slices} slices.'
+            )
 
-            # Add recommendations based on image size
-            if num_slices >= min_slices:
-                # Estimate patches per image based on dimensions
-                patch_size = 64
-                patches_x = max(1, width // patch_size)
-                patches_y = max(1, height // patch_size)
-                estimated_patches = patches_x * patches_y * num_slices
+        # Validate minimum dimensions
+        min_dim = 64
+        if width < min_dim or height < min_dim:
+            result['errors'].append(
+                f'Image dimensions too small: {width}x{height}. '
+                f'Minimum required: {min_dim}x{min_dim} pixels.'
+            )
 
-                result['info']['estimated_patches'] = estimated_patches
-                result['info']['recommended_patches_per_image'] = min(
-                    200, max(50, estimated_patches // num_slices)
-                )
+        # Add recommendations based on image size
+        if num_slices >= min_slices:
+            # Estimate patches per image based on dimensions
+            patch_size = 64
+            patches_x = max(1, width // patch_size)
+            patches_y = max(1, height // patch_size)
+            estimated_patches = patches_x * patches_y * num_slices
 
-            # Check if valid
-            if not result['errors']:
-                result['valid'] = True
+            result['info']['estimated_patches'] = estimated_patches
+            result['info']['recommended_patches_per_image'] = min(
+                200, max(50, estimated_patches // num_slices)
+            )
+
+        # Check if valid
+        if not result['errors']:
+            result['valid'] = True
 
     except ImportError as e:
         result['errors'].append(f'Missing required library: {e}')

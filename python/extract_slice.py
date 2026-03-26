@@ -25,6 +25,7 @@ import json
 import numpy as np
 from PIL import Image
 import tifffile
+from tiff_validation_utils import safe_imread
 
 
 def get_tiff_info(input_path, detect_classes=True):
@@ -39,6 +40,8 @@ def get_tiff_info(input_path, detect_classes=True):
         dict with sliceCount, width, height, dtype, and optionally classes
     """
     with tifffile.TiffFile(input_path) as tif:
+        n_pages = len(tif.pages)
+
         # Get shape from first page or series
         if tif.series:
             shape = tif.series[0].shape
@@ -46,8 +49,14 @@ def get_tiff_info(input_path, detect_classes=True):
         else:
             # Fallback: read first page
             page = tif.pages[0]
-            shape = (len(tif.pages), page.shape[0], page.shape[1])
+            shape = (n_pages, page.shape[0], page.shape[1])
             dtype = str(page.dtype)
+
+        # Fix OME-TIFFs with incorrect metadata (declares fewer frames
+        # than actually exist). If the series says 2D but there are
+        # multiple pages, use page count instead.
+        if len(shape) == 2 and n_pages > 1:
+            shape = (n_pages, shape[0], shape[1])
 
         # Handle different dimensionalities
         if len(shape) == 2:
@@ -72,7 +81,7 @@ def get_tiff_info(input_path, detect_classes=True):
     # Detect unique classes if requested
     if detect_classes:
         try:
-            data = tifffile.imread(input_path)
+            data = safe_imread(input_path)
             unique_values = np.unique(data)
             # Convert to Python ints and include all values (including 0 for background)
             info["classes"] = [int(v) for v in unique_values]
@@ -106,7 +115,7 @@ def extract_slice(input_path, slice_index, output_path, size=512):
         Exception on any error
     """
     # Load TIFF
-    img = tifffile.imread(input_path)
+    img = safe_imread(input_path)
 
     # Handle 3D: extract slice
     if len(img.shape) == 3:

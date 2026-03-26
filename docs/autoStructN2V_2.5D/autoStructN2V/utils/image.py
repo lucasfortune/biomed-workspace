@@ -165,8 +165,18 @@ def load_and_preprocess_image(img_path, sigma=300, scale_factor=0.25):
     filtered_img = gaussian_filter(scaled_img, sigma=sigma * scale_factor)
     
     # Normalize and enhance contrast
-    enhanced_img = exposure.equalize_hist(filtered_img)
-    
+    try:
+        enhanced_img = exposure.equalize_hist(filtered_img)
+    except ValueError:
+        # equalize_hist fails when the data range is too narrow for 256 bins
+        # (e.g., low-contrast 16-bit images after heavy gaussian smoothing).
+        # Fall back to simple min-max normalization.
+        fmin, fmax = filtered_img.min(), filtered_img.max()
+        if fmax > fmin:
+            enhanced_img = (filtered_img - fmin) / (fmax - fmin)
+        else:
+            enhanced_img = np.zeros_like(filtered_img, dtype=np.float64)
+
     return enhanced_img
 
 def calculate_autocorrelation(image, normalize=True, log_transform=True, crop_size=None):

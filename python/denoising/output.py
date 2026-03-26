@@ -14,6 +14,7 @@ import shutil
 
 import numpy as np
 import tifffile
+from tiff_validation_utils import safe_imread
 
 from .utils import emit_progress
 
@@ -80,7 +81,7 @@ def create_tiff_stack(slices: list, output_path: str) -> int:
     expected_shape = None
 
     for i, (slice_num, file_path) in enumerate(slices):
-        img = tifffile.imread(file_path)
+        img = safe_imread(file_path)
 
         # Ensure 2D
         if img.ndim == 3 and img.shape[0] == 1:
@@ -116,7 +117,7 @@ def create_tiff_stack(slices: list, output_path: str) -> int:
     tifffile.imwrite(output_path, stack)
 
     # Verify the written file
-    verification = tifffile.imread(output_path)
+    verification = safe_imread(output_path)
     print(f"[DEBUG] Verification - saved file shape: {verification.shape}, dtype: {verification.dtype}")
 
     if verification.ndim == 2:
@@ -180,7 +181,7 @@ def finalize_training_output(config: dict, dirs: dict, results: dict, method: st
     stage1_denoised_stack_path = results.get('stage1_denoised_stack_path')
     if mode == '2.5d' and stage1_denoised_stack_path and os.path.exists(stage1_denoised_stack_path):
         # Read the stack to get slice count
-        stack = tifffile.imread(stage1_denoised_stack_path)
+        stack = safe_imread(stage1_denoised_stack_path)
         slice_count = stack.shape[0] if stack.ndim == 3 else 1
 
         # Determine output filename based on method
@@ -250,7 +251,7 @@ def finalize_training_output(config: dict, dirs: dict, results: dict, method: st
         stage2_denoised_stack_path = results.get('stage2_denoised_stack_path')
         if mode == '2.5d' and stage2_denoised_stack_path and os.path.exists(stage2_denoised_stack_path):
             # Read the stack to get slice count
-            stack = tifffile.imread(stage2_denoised_stack_path)
+            stack = safe_imread(stage2_denoised_stack_path)
             slice_count = stack.shape[0] if stack.ndim == 3 else 1
 
             # Copy to final results directory

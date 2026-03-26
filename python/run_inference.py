@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import tifffile
+from tiff_validation_utils import safe_imread
 import argparse
 import json
 import sys
@@ -351,7 +352,7 @@ def main():
         
         # Load input data
         print(f"Loading input data from: {args.input}", flush=True)
-        input_stack = tifffile.imread(args.input)
+        input_stack = safe_imread(args.input)
         print(f"Input shape: {input_stack.shape}", flush=True)
         
         # Run inference with progress reporting

@@ -36,6 +36,7 @@ import numpy as np
 # Try to import tifffile
 try:
     import tifffile
+    from tiff_validation_utils import safe_imread
 except ImportError:
     print("ERROR:tifffile package not installed. Run: pip install tifffile")
     sys.exit(1)
@@ -51,7 +52,7 @@ def read_annotation_tiff(input_path: str, output_path: str) -> None:
     """
     try:
         # Read TIFF
-        volume = tifffile.imread(input_path)
+        volume = safe_imread(input_path)
     except FileNotFoundError:
         print(f"ERROR:File not found: {input_path}")
         sys.exit(1)

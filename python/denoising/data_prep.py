@@ -9,6 +9,7 @@ import os
 
 import numpy as np
 import tifffile
+from tiff_validation_utils import safe_imread
 
 from .utils import emit_progress
 
@@ -30,7 +31,7 @@ def extract_tiff_stack_to_directory(input_path: str, output_dir: str) -> tuple:
     emit_progress('data', {"status": "extracting_stack"})
 
     # Read the stack
-    stack = tifffile.imread(input_path)
+    stack = safe_imread(input_path)
 
     # Handle 2D images (single slice)
     if stack.ndim == 2:
@@ -103,7 +104,7 @@ def prepare_input_directory(config: dict) -> tuple:
             raise ValueError(f"Invalid input path for 2.5D mode: {input_dir}")
 
         # Get stack info for logging
-        stack = tifffile.imread(stack_path)
+        stack = safe_imread(stack_path)
         if stack.ndim == 2:
             num_slices = 1
         else:
@@ -132,7 +133,7 @@ def prepare_input_directory(config: dict) -> tuple:
         if len(tif_files) == 1:
             # Single file in directory - might be a stack
             single_file = os.path.join(input_dir, tif_files[0])
-            stack = tifffile.imread(single_file)
+            stack = safe_imread(single_file)
             if stack.ndim == 3 and stack.shape[0] > 1:
                 # It's a stack - extract it
                 extracted_dir, num_slices = extract_tiff_stack_to_directory(single_file, output_dir)

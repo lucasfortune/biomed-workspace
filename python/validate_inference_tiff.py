@@ -10,6 +10,7 @@ import tifffile
 import numpy as np
 from pathlib import Path
 from tiff_validation_utils import (
+    safe_imread,
     convert_signed_integer_to_uint16,
     create_preview_image,
     validate_tiff_data_type,
@@ -35,13 +36,13 @@ def validate_inference_tiff(file_path):
         
         # Read TIFF file
         try:
-            tiff_data = tifffile.imread(file_path)
+            tiff_data = safe_imread(file_path)
         except Exception as e:
             return {
                 "valid": False,
                 "error": f"Failed to read TIFF file: {str(e)}"
             }
-        
+
         # Check if data is 3D (stack of images)
         if len(tiff_data.shape) < 2:
             return {
@@ -168,7 +169,7 @@ def generate_inference_preview(file_path):
     """Generate preview image for inference data"""
     try:
         # Read first slice from the stack
-        tiff_data = tifffile.imread(file_path)
+        tiff_data = safe_imread(file_path)
 
         # Handle both 2D and 3D data
         if len(tiff_data.shape) == 2:

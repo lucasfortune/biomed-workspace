@@ -16,6 +16,7 @@ from datetime import datetime
 import torch
 import numpy as np
 import tifffile
+from tiff_validation_utils import safe_imread
 
 from autoStructN2V.models import create_model_from_config
 from autoStructN2V.inference import AutoStructN2VPredictor
@@ -105,7 +106,7 @@ def run_inference(config: dict):
             "mode": mode
         })
 
-        input_stack = tifffile.imread(input_path)
+        input_stack = safe_imread(input_path)
         if input_stack.ndim == 2:
             input_stack = input_stack[np.newaxis, ...]
 
@@ -249,7 +250,7 @@ def run_sequential_inference(config: dict):
             "mode": mode
         })
 
-        input_stack = tifffile.imread(input_path)
+        input_stack = safe_imread(input_path)
         if input_stack.ndim == 2:
             input_stack = input_stack[np.newaxis, ...]
 

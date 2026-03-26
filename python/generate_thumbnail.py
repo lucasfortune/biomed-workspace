@@ -13,6 +13,7 @@ Outputs:
 
 import sys
 import tifffile
+from tiff_validation_utils import safe_imread
 
 from utils import extract_middle_slice, extract_slice, save_thumbnail_jpeg
 
@@ -33,7 +34,7 @@ def generate_thumbnail(input_path, output_path, slice_index=None):
         Exception on any error
     """
     # Load TIFF
-    img = tifffile.imread(input_path)
+    img = safe_imread(input_path)
 
     # Extract appropriate slice
     if slice_index is not None:

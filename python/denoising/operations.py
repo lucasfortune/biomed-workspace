@@ -17,6 +17,7 @@ from datetime import datetime
 import torch
 import numpy as np
 import tifffile
+from tiff_validation_utils import safe_imread
 
 from autoStructN2V.pipeline.config import validate_config
 from autoStructN2V.pipeline.data import create_dataloaders, split_stack_indices
@@ -85,7 +86,7 @@ def extract_mask(config: dict):
         else:
             # Fallback: sample patches from Stage 1 denoised output
             print(f"No saved patches found, sampling from {input_path}")
-            images = tifffile.imread(input_path)
+            images = safe_imread(input_path)
             if images.ndim == 2:
                 images = images[np.newaxis, ...]
 
@@ -328,7 +329,7 @@ def run_stage2_only(config: dict):
                 emit_error('stage2', f'Stack file not found for 2.5D mode: {stack_path}')
                 raise FileNotFoundError(f'Stack file not found: {stack_path}')
 
-            stack = tifffile.imread(stack_path)
+            stack = safe_imread(stack_path)
             if stack.ndim == 2:
                 stack = stack[np.newaxis, ...]
 

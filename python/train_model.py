@@ -18,6 +18,7 @@ import json
 import argparse
 from pathlib import Path
 import tifffile
+from tiff_validation_utils import safe_imread
 import random
 import time
 from datetime import datetime
@@ -113,8 +114,8 @@ class Imagedataset(Dataset):
         mask_path = os.path.join(self.mask_dir, self.images[image_idx].replace('.tif', '_mask.tif'))
         
         # Read images using tifffile for better TIFF support
-        image = tifffile.imread(img_path)
-        mask = tifffile.imread(mask_path)
+        image = safe_imread(img_path)
+        mask = safe_imread(mask_path)
         
         # Normalize image to [0, 1]
         image_array = image.astype(np.float32) / image.max()
@@ -289,8 +290,8 @@ def prepare_data_from_tiff_stacks(raw_images_path, annotations_path, output_dir,
     """Extract individual images from TIFF stacks and organize them"""
 
     # Read TIFF stacks
-    raw_stack = tifffile.imread(raw_images_path)
-    annotation_stack = tifffile.imread(annotations_path)
+    raw_stack = safe_imread(raw_images_path)
+    annotation_stack = safe_imread(annotations_path)
 
     # Use /tmp directory for temporary split images (not in output_dir)
     import tempfile

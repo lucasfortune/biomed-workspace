@@ -11,6 +11,7 @@ import numpy as np
 from pathlib import Path
 from convert_annotations import convert_annotation_values, validate_annotation_classes
 from tiff_validation_utils import (
+    safe_imread,
     convert_signed_integer_to_uint16,
     create_preview_image,
     validate_tiff_data_type,
@@ -43,8 +44,8 @@ def validate_tiff_stacks(raw_path, annotation_path):
         
         # Read TIFF files
         try:
-            raw_stack = tifffile.imread(raw_path)
-            annotation_stack = tifffile.imread(annotation_path)
+            raw_stack = safe_imread(raw_path)
+            annotation_stack = safe_imread(annotation_path)
         except Exception as e:
             return {
                 "valid": False,
@@ -186,8 +187,8 @@ def generate_training_preview(raw_path, annotation_path):
     """Generate preview images for training data"""
     try:
         # Read first slice from each stack
-        raw_stack = tifffile.imread(raw_path)
-        annotation_stack = tifffile.imread(annotation_path)
+        raw_stack = safe_imread(raw_path)
+        annotation_stack = safe_imread(annotation_path)
 
         raw_slice = raw_stack[0]  # First slice
         annotation_slice = annotation_stack[0]  # First slice

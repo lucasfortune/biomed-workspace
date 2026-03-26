@@ -18,6 +18,7 @@ import sys
 import json
 import argparse
 import numpy as np
+from tiff_validation_utils import safe_imread
 import tifffile
 from scipy.ndimage import gaussian_filter
 
@@ -174,7 +175,7 @@ def main():
     try:
         # Load input stack
         emit_progress(0, 1, "Loading input file...")
-        stack = tifffile.imread(args.input)
+        stack = safe_imread(args.input)
 
         # Ensure 3D
         if stack.ndim == 2:

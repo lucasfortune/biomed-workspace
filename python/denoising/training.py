@@ -17,6 +17,7 @@ from datetime import datetime
 import torch
 import numpy as np
 import tifffile
+from tiff_validation_utils import safe_imread
 
 from autoStructN2V.pipeline.config import validate_config, create_output_directories
 from autoStructN2V.pipeline.data import split_dataset, create_dataloaders, split_stack_indices
@@ -144,7 +145,7 @@ def run_training(config: dict):
 
         if mode == '2.5d':
             # 2.5D mode: Split by z-indices, load stack
-            stack = tifffile.imread(config['input_data'])
+            stack = safe_imread(config['input_data'])
             if stack.ndim == 2:
                 stack = stack[np.newaxis, ...]  # Add z dimension
 

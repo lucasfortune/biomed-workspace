@@ -7,6 +7,7 @@ Creates a lightweight version optimized for browser display
 import sys
 import tifffile
 import numpy as np
+from tiff_validation_utils import safe_imread
 from PIL import Image
 import os
 
@@ -25,7 +26,7 @@ def downsample_tiff_for_web(input_path, output_path, downsample_factor=0.5, slic
     """
     try:
         print(f"Loading original TIFF from: {input_path}", flush=True)
-        original_stack = tifffile.imread(input_path)
+        original_stack = safe_imread(input_path)
         
         print(f"Original shape: {original_stack.shape}", flush=True)
         print(f"Original dtype: {original_stack.dtype}", flush=True)

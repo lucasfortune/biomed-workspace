@@ -18,6 +18,7 @@ import os
 import json
 import argparse
 import numpy as np
+from tiff_validation_utils import safe_imread
 import tifffile
 from datetime import datetime
 
@@ -68,7 +69,7 @@ def load_segmentation(input_path):
         tuple: (data array, unique classes excluding background)
     """
     print(f"Loading segmentation from: {input_path}", flush=True)
-    data = tifffile.imread(input_path)
+    data = safe_imread(input_path)
 
     # Ensure 3D
     if len(data.shape) == 2:
