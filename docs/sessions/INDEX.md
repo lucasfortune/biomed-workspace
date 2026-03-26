@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-03-26 (Deployment & Legacy Cleanup)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-03-26 | [Deployment & Legacy Cleanup Bug Fixes](2026-03-26_deployment_bug_fixes.md) | Bug Fix | ~1 hr | Complete |
+
 ### 2026-03-03 (Session Persistence Removal, Bug Fixes, Help Content & UI)
 
 | Date | Session | Type | Duration | Status |
