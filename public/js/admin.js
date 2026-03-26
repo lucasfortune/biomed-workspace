@@ -93,7 +93,7 @@ async function checkAdminAccess() {
         const data = await response.json();
         
         if (!data.authenticated) {
-            window.location.href = '/login';
+            window.location.href = '/';
             return;
         }
         
@@ -110,7 +110,7 @@ async function checkAdminAccess() {
         
     } catch (error) {
         console.error('Error checking admin access:', error);
-        window.location.href = '/login';
+        window.location.href = '/';
     }
 }
 
@@ -946,7 +946,7 @@ async function handleLogout() {
     try {
         const response = await fetch('/logout', { method: 'POST' });
         if (response.ok) {
-            window.location.href = '/login';
+            window.location.href = '/';
         }
     } catch (error) {
         console.error('Logout error:', error);

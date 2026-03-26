@@ -45,7 +45,7 @@ async function checkUserStatusAndInitialize() {
         
         if (!data.authenticated) {
             // Not logged in - redirect to login
-            window.location.href = '/login';
+            window.location.href = '/';
             return;
         }
         
@@ -85,7 +85,7 @@ async function checkUserStatusAndInitialize() {
     } catch (error) {
         console.error('Error checking authentication:', error);
         // If error checking auth, redirect to login
-        window.location.href = '/login';
+        window.location.href = '/';
     }
 }
 
@@ -448,7 +448,7 @@ async function handleLogout() {
     try {
         const response = await fetch('/logout', { method: 'POST' });
         if (response.ok) {
-            window.location.href = '/login';
+            window.location.href = '/';
         }
     } catch (error) {
         console.error('Logout error:', error);

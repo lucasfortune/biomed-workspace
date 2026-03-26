@@ -19,8 +19,8 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Authentication required', authenticated: false });
   }
 
-  // For HTML page routes, redirect to login
-  res.redirect('/login');
+  // For HTML page routes, redirect to welcome/login page
+  res.redirect('/');
 }
 
 /**
@@ -49,9 +49,9 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Admin access required' });
   }
 
-  // For HTML page routes, redirect to login if not authenticated, or show forbidden
+  // For HTML page routes, redirect to welcome/login page if not authenticated, or show forbidden
   if (!req.session || !req.session.user) {
-    return res.redirect('/login');
+    return res.redirect('/');
   }
 
   // User is authenticated but not admin - return 403

@@ -153,11 +153,11 @@ class Workspace {
         console.log('[Workspace] User authenticated:', response.user.username);
       } else {
         // Redirect to login
-        window.location.href = '/login';
+        window.location.href = '/';
       }
     } catch (error) {
       console.error('[Workspace] Auth check error:', error);
-      window.location.href = '/login';
+      window.location.href = '/';
     }
   }
 
