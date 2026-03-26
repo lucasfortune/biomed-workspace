@@ -89,6 +89,14 @@ function loadEnvironment() {
     lines.push('# Useful for production deployments with external storage volumes');
     lines.push('# DATA_DIR=/mnt/volume/app_data');
     lines.push('');
+    lines.push('# Telegram Notifications (optional)');
+    lines.push('# Get notified on your phone when a new user registers');
+    lines.push('# 1. Create a bot via @BotFather on Telegram and copy the token');
+    lines.push('# 2. Message your bot, then run: curl https://api.telegram.org/bot<TOKEN>/getUpdates');
+    lines.push('# 3. Find your chat ID in the response and set both values below');
+    lines.push('# TELEGRAM_BOT_TOKEN=your_bot_token_here');
+    lines.push('# TELEGRAM_CHAT_ID=your_chat_id_here');
+    lines.push('');
 
     try {
       fs.writeFileSync(envPath, lines.join('\n'), 'utf8');

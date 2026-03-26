@@ -69,7 +69,7 @@ async function handleRegister(event) {
             
             // Redirect to login after 3 seconds
             setTimeout(() => {
-                window.location.href = '/login';
+                window.location.href = '/';
             }, 3000);
         } else {
             // Registration failed

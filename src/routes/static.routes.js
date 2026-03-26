@@ -38,10 +38,10 @@ function createStaticRoutes(dependencies) {
   });
 
   /**
-   * Login page
+   * Login page - redirect to welcome page (legacy login.html removed)
    */
   router.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../public', 'login.html'));
+    res.redirect('/');
   });
 
   /**

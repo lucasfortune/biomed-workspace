@@ -73,7 +73,8 @@ function configureApp(app, dependencies) {
     authService,
     trainingService,
     inferenceService,
-    denoisingService
+    denoisingService,
+    telegramService
   } = services;
 
   // Aliases for backward compatibility
@@ -351,7 +352,8 @@ function configureApp(app, dependencies) {
     activityLogger,
     logger,
     workspaceManager,
-    sessionTracker
+    sessionTracker,
+    telegramService
   }));
 
   // Files routes at /api/workspace

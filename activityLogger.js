@@ -103,6 +103,15 @@ function logRegistration(username, institution) {
   logActivity(username, 'user_registration', { institution });
 }
 
+/**
+ * Get the resolved log file path
+ * @returns {string} Absolute path to activity.log
+ */
+function getLogFilePath() {
+  ensureInitialized();
+  return logFilePath;
+}
+
 module.exports = {
   initialize,
   logActivity,
@@ -110,5 +119,6 @@ module.exports = {
   logInferenceStart,
   logFileUpload,
   logLogin,
-  logRegistration
+  logRegistration,
+  getLogFilePath
 };
