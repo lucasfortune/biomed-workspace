@@ -289,65 +289,73 @@ class StructuralNoiseExtractor:
     def _limit_mask_size(self, binary_mask):
         """
         Limit the number of True pixels in the mask to max_true_pixels,
-        keeping only pixels with the highest original autocorrelation values.
-        
+        keeping pixels closest to the center. Ties in distance are broken
+        by autocorrelation intensity (higher intensity kept first).
+
         Args:
             binary_mask (numpy.ndarray): Binary mask
-            
+
         Returns:
             numpy.ndarray: Limited binary mask
         """
         if self.max_true_pixels is None:
             return binary_mask  # No limitation requested
-            
+
         # Count current True pixels
         true_count = np.sum(binary_mask)
-        
+
         # If already below threshold, return as is
         if true_count <= self.max_true_pixels:
             return binary_mask
-            
+
         # Get coordinates of all True pixels
         true_coords = np.where(binary_mask)
-        
+
         # Always ensure center pixel is kept
         center_y, center_x = binary_mask.shape[0] // 2, binary_mask.shape[1] // 2
-        
-        # Get original autocorrelation values for these pixels
+
+        # Compute distance from center for each True pixel
+        distances = np.sqrt(
+            (true_coords[0] - center_y) ** 2 +
+            (true_coords[1] - center_x) ** 2
+        )
+
+        # Get original autocorrelation values for tiebreaking
         values = self._original_autocorr_values[true_coords]
-        
-        # Sort coordinates by autocorrelation value (descending)
-        sort_indices = np.argsort(-values)  # Negative for descending order
-        
-        # Create a new mask with only the top max_true_pixels
+
+        # Sort by distance ascending, then by intensity descending for ties
+        sort_indices = np.lexsort((-values, distances))
+
+        # Create a new mask with only the closest max_true_pixels
         limited_mask = np.zeros_like(binary_mask)
-        
+
         # Always keep center pixel
         limited_mask[center_y, center_x] = True
-        
+
         # Keep track of how many pixels we've added
         pixels_added = 1  # Already added center
-        
-        # Add the highest-value pixels
+
+        # Add the closest pixels
         for idx in sort_indices:
             y, x = true_coords[0][idx], true_coords[1][idx]
-            
+
             # Skip center pixel (already added)
             if y == center_y and x == center_x:
                 continue
-                
+
             limited_mask[y, x] = True
             pixels_added += 1
-            
+
             # Stop when we reach the desired limit
             if pixels_added >= self.max_true_pixels:
                 break
-        
+
         # Report how many pixels were removed
         removed_count = true_count - pixels_added
         if removed_count > 0:
-            print(f"Limited mask size: removed {removed_count} pixels, kept {pixels_added} pixels with highest values")
-            
+            print(f"Limited mask size: removed {removed_count} pixels "
+                  f"(furthest from center), kept {pixels_added}")
+
         return limited_mask
     
     def extract_mask(self, noise_patterns, verbose):
