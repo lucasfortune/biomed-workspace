@@ -93,6 +93,7 @@ const trainingService = new TrainingService({
   pythonPath: PYTHON_PATH,
   sessionTracker,
   fileService,
+  workspaceManager,
   logger
 });
 
@@ -101,6 +102,7 @@ const inferenceService = new InferenceService({
   sessionTracker,
   fileService,
   workspaceService,
+  workspaceManager,
   logger
 });
 

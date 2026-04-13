@@ -24,12 +24,14 @@ class TrainingService {
    * @param {string} options.pythonPath - Path to Python interpreter
    * @param {object} options.sessionTracker - SessionTracker instance
    * @param {object} options.fileService - FileService instance for tracking outputs
+   * @param {object} options.workspaceManager - WorkspaceManager instance
    * @param {object} options.logger - Logger instance
    */
   constructor(options = {}) {
     this.pythonPath = options.pythonPath;
     this.sessionTracker = options.sessionTracker;
     this.fileService = options.fileService;
+    this.workspaceManager = options.workspaceManager;
     this.logger = options.logger;
 
     // Map to track active Python processes (for cancellation)
@@ -202,6 +204,11 @@ class TrainingService {
         training.current_epoch = progress.epoch;
         training.total_epochs = progress.total_epochs;
         training.metrics = progress.metrics;
+      }
+
+      // Keep workspace fresh during long-running training
+      if (training && this.workspaceManager) {
+        this.workspaceManager.touchWorkspace(training.sessionId);
       }
 
       // Send real-time update to clients

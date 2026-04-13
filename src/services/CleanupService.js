@@ -4,9 +4,11 @@
  * Runs periodically to detect and delete workspaces for sessions that:
  * - No longer have an active session file
  * - Have been inactive longer than the grace period
+ * - Have NO active processes (training, inference, mesh, denoising)
  *
  * This ensures workspace files don't accumulate indefinitely when users
- * close their browser without explicitly logging out.
+ * close their browser without explicitly logging out, while protecting
+ * workspaces with long-running processes from premature deletion.
  */
 
 const fs = require('fs');
@@ -185,6 +187,15 @@ class CleanupService {
 
         // Check if session is active
         const hasActiveSession = activeSessionIds.has(workspaceId);
+
+        // Check if workspace has any active processes (training, inference, mesh, denoising)
+        if (this.sessionTracker) {
+          const { hasActive, activeProcesses } = this.sessionTracker.hasActiveProcesses(workspaceId);
+          if (hasActive) {
+            this.logger?.debug(`[CleanupService] Skipping workspace ${workspaceId} — active processes: ${activeProcesses.join(', ')}`);
+            continue;
+          }
+        }
 
         if (!hasActiveSession) {
           // No active session - check workspace metadata for last access time

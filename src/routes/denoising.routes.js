@@ -28,7 +28,8 @@ function createDenoisingRoutes(dependencies) {
     workspaceManager,
     workspaceService,
     activityLogger,
-    logger
+    logger,
+    sessionTracker
   } = dependencies;
 
   // ===========================================================================
@@ -623,6 +624,17 @@ function createDenoisingRoutes(dependencies) {
         inputFileId: inputFileId || null  // Store for lineage tracking
       });
 
+      // Register in centralized SessionTracker for cleanup protection
+      if (sessionTracker) {
+        sessionTracker.createDenoisingSession(trainingId, {
+          sessionId,
+          username: req.session.user?.username || 'unknown',
+          method,
+          status: 'initializing',
+          stage: 'stage1'
+        });
+      }
+
       // Start training asynchronously
       denoisingService.startTraining({
         trainingId,
@@ -752,6 +764,14 @@ function createDenoisingRoutes(dependencies) {
       const cancelled = denoisingService.cancelTraining(trainingId, io);
 
       if (cancelled) {
+        // Update centralized SessionTracker
+        if (sessionTracker) {
+          sessionTracker.updateDenoisingSession(trainingId, {
+            status: 'cancelled',
+            endTime: new Date()
+          });
+        }
+
         if (logger) {
           logger.info(`[Denoising] Training cancelled: ${trainingId}`);
         }

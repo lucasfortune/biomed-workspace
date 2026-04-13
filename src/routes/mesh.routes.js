@@ -517,6 +517,11 @@ function createMeshRoutes(dependencies) {
             meshSession.currentClass = progress.class;
             meshSession.totalClasses = progress.total_classes;
 
+            // Keep workspace fresh during mesh generation
+            if (workspaceManager) {
+              workspaceManager.touchWorkspace(meshSession.sessionId);
+            }
+
             // Emit progress to clients
             io.to(`mesh-${meshId}`).emit('mesh-progress', {
               mesh_id: meshId,

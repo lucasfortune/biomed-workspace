@@ -1,12 +1,12 @@
 /**
  * SessionTracker Service
  *
- * Manages in-memory tracking of training and inference sessions.
+ * Manages in-memory tracking of training, inference, mesh, and denoising sessions.
  * Provides a centralized interface for session state management.
  */
 
 /**
- * SessionTracker class for managing training and inference session state
+ * SessionTracker class for managing training, inference, mesh, and denoising session state
  */
 class SessionTracker {
   constructor() {
@@ -34,6 +34,14 @@ class SessionTracker {
      *          outputFormats, result, error }
      */
     this.meshSessions = new Map();
+
+    /**
+     * Map of denoising sessions
+     * Key: denoisingId (trainingId from DenoisingService)
+     * Value: { sessionId, username, method, status, startTime, endTime,
+     *          stage, progress, error }
+     */
+    this.denoisingSessions = new Map();
   }
 
   // ============================================================================
@@ -293,19 +301,102 @@ class SessionTracker {
   }
 
   // ============================================================================
+  // DENOISING SESSION METHODS
+  // ============================================================================
+
+  /**
+   * Create a new denoising session
+   * @param {string} denoisingId - Unique denoising ID
+   * @param {object} data - Denoising session data
+   * @returns {object} The created denoising session
+   */
+  createDenoisingSession(denoisingId, data) {
+    const session = {
+      sessionId: data.sessionId,
+      username: data.username,
+      method: data.method || 'n2v',
+      status: data.status || 'initializing',
+      startTime: data.startTime || new Date(),
+      endTime: null,
+      stage: data.stage || null,
+      progress: 0,
+      error: null
+    };
+
+    this.denoisingSessions.set(denoisingId, session);
+    return session;
+  }
+
+  /**
+   * Get a denoising session by ID
+   * @param {string} denoisingId - Denoising ID
+   * @returns {object|undefined} Denoising session or undefined
+   */
+  getDenoisingSession(denoisingId) {
+    return this.denoisingSessions.get(denoisingId);
+  }
+
+  /**
+   * Update a denoising session
+   * @param {string} denoisingId - Denoising ID
+   * @param {object} updates - Fields to update
+   * @returns {object|null} Updated session or null if not found
+   */
+  updateDenoisingSession(denoisingId, updates) {
+    const session = this.denoisingSessions.get(denoisingId);
+    if (!session) return null;
+
+    Object.assign(session, updates);
+    return session;
+  }
+
+  /**
+   * Delete a denoising session
+   * @param {string} denoisingId - Denoising ID
+   * @returns {boolean} True if deleted
+   */
+  deleteDenoisingSession(denoisingId) {
+    return this.denoisingSessions.delete(denoisingId);
+  }
+
+  /**
+   * Get all denoising sessions for a specific user session
+   * @param {string} sessionId - User session ID
+   * @returns {Array<[string, object]>} Array of [denoisingId, session] pairs
+   */
+  getDenoisingSessionsBySessionId(sessionId) {
+    const sessions = [];
+    for (const [denoisingId, denoising] of this.denoisingSessions.entries()) {
+      if (denoising.sessionId === sessionId) {
+        sessions.push([denoisingId, denoising]);
+      }
+    }
+    return sessions;
+  }
+
+  /**
+   * Get all denoising sessions
+   * @returns {Map} All denoising sessions
+   */
+  getAllDenoisingSessions() {
+    return this.denoisingSessions;
+  }
+
+  // ============================================================================
   // CLEANUP METHODS
   // ============================================================================
 
   /**
    * Clean up all sessions for a specific user session ID
    * @param {string} sessionId - User session ID
-   * @returns {object} Cleanup results { trainingIds: [], inferenceIds: [], meshIds: [] }
+   * @returns {object} Cleanup results { trainingIds: [], inferenceIds: [], meshIds: [], denoisingIds: [] }
    */
   cleanupSessionById(sessionId) {
     const result = {
       trainingIds: [],
       inferenceIds: [],
-      meshIds: []
+      meshIds: [],
+      denoisingIds: []
     };
 
     // Clean up training sessions
@@ -329,6 +420,14 @@ class SessionTracker {
       if (mesh.sessionId === sessionId) {
         result.meshIds.push(meshId);
         this.meshSessions.delete(meshId);
+      }
+    }
+
+    // Clean up denoising sessions
+    for (const [denoisingId, denoising] of this.denoisingSessions.entries()) {
+      if (denoising.sessionId === sessionId) {
+        result.denoisingIds.push(denoisingId);
+        this.denoisingSessions.delete(denoisingId);
       }
     }
 
@@ -391,10 +490,74 @@ class SessionTracker {
       }
     }
 
+    const denoisingStats = {
+      total: this.denoisingSessions.size,
+      active: 0,
+      completed: 0,
+      failed: 0
+    };
+
+    for (const denoising of this.denoisingSessions.values()) {
+      if (denoising.status === 'running' || denoising.status === 'initializing' || denoising.status === 'pending') {
+        denoisingStats.active++;
+      } else if (denoising.status === 'completed') {
+        denoisingStats.completed++;
+      } else if (denoising.status === 'failed' || denoising.status === 'cancelled') {
+        denoisingStats.failed++;
+      }
+    }
+
     return {
       training: trainingStats,
       inference: inferenceStats,
-      mesh: meshStats
+      mesh: meshStats,
+      denoising: denoisingStats
+    };
+  }
+
+  // ============================================================================
+  // ACTIVE PROCESS DETECTION
+  // ============================================================================
+
+  /**
+   * Check if a session has any active (running) processes
+   * @param {string} sessionId - User session ID
+   * @returns {object} { hasActive: boolean, activeProcesses: string[] }
+   */
+  hasActiveProcesses(sessionId) {
+    const activeProcesses = [];
+
+    for (const [trainingId, training] of this.trainingSessions.entries()) {
+      if (training.sessionId === sessionId &&
+          (training.status === 'training' || training.status === 'initializing')) {
+        activeProcesses.push(`training:${trainingId}`);
+      }
+    }
+
+    for (const [inferenceId, inference] of this.inferenceSessions.entries()) {
+      if (inference.sessionId === sessionId &&
+          (inference.status === 'running' || inference.status === 'initializing')) {
+        activeProcesses.push(`inference:${inferenceId}`);
+      }
+    }
+
+    for (const [meshId, mesh] of this.meshSessions.entries()) {
+      if (mesh.sessionId === sessionId &&
+          (mesh.status === 'processing' || mesh.status === 'starting')) {
+        activeProcesses.push(`mesh:${meshId}`);
+      }
+    }
+
+    for (const [denoisingId, denoising] of this.denoisingSessions.entries()) {
+      if (denoising.sessionId === sessionId &&
+          (denoising.status === 'running' || denoising.status === 'initializing' || denoising.status === 'pending')) {
+        activeProcesses.push(`denoising:${denoisingId}`);
+      }
+    }
+
+    return {
+      hasActive: activeProcesses.length > 0,
+      activeProcesses
     };
   }
 }

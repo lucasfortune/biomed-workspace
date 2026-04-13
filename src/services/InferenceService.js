@@ -28,6 +28,7 @@ class InferenceService {
    * @param {object} options.sessionTracker - SessionTracker instance
    * @param {object} options.fileService - FileService instance for tracking outputs
    * @param {object} options.workspaceService - WorkspaceService instance
+   * @param {object} options.workspaceManager - WorkspaceManager instance
    * @param {object} options.logger - Logger instance
    */
   constructor(options = {}) {
@@ -35,6 +36,7 @@ class InferenceService {
     this.sessionTracker = options.sessionTracker;
     this.fileService = options.fileService;
     this.workspaceService = options.workspaceService;
+    this.workspaceManager = options.workspaceManager;
     this.logger = options.logger;
   }
 
@@ -282,6 +284,11 @@ class InferenceService {
         inference.currentSlice = progress.current_slice;
         inference.totalSlices = progress.total_slices;
         inference.progress = progress.progress_percent;
+      }
+
+      // Keep workspace fresh during long-running inference
+      if (inference && this.workspaceManager) {
+        this.workspaceManager.touchWorkspace(inference.sessionId);
       }
 
       // Send real-time update to clients

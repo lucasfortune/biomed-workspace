@@ -59,9 +59,9 @@ const SESSION_CONFIG = {
 
 // Cleanup service configuration
 const CLEANUP_CONFIG = {
-  intervalMs: 15 * 60 * 1000,    // Run cleanup every 15 minutes
-  gracePeriodMs: 60 * 60 * 1000, // 1 hour before considering a session abandoned
-  enableOnStartup: true          // Start cleanup service when server starts
+  intervalMs: 15 * 60 * 1000,          // Run cleanup every 15 minutes
+  gracePeriodMs: 12 * 60 * 60 * 1000,  // 12 hours before considering a session abandoned
+  enableOnStartup: true                 // Start cleanup service when server starts
 };
 
 // Allowed file types

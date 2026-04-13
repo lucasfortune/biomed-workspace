@@ -405,6 +405,7 @@ function configureApp(app, dependencies) {
     activityLogger,
     logger,
     denoisingService,
+    sessionTracker,
     io
   }));
 

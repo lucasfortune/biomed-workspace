@@ -314,6 +314,29 @@ class WorkspaceManager {
   }
 
   /**
+   * Update workspace lastAccessed timestamp without loading full file tree.
+   * Used to keep workspaces fresh during long-running processes.
+   * Throttled internally — safe to call frequently.
+   * @param {string} sessionId - Session/workspace ID
+   */
+  touchWorkspace(sessionId) {
+    try {
+      // Throttle: only update at most once per 5 minutes per workspace
+      if (!this._touchTimestamps) this._touchTimestamps = new Map();
+      const now = Date.now();
+      const lastTouch = this._touchTimestamps.get(sessionId) || 0;
+      if (now - lastTouch < 5 * 60 * 1000) return;
+
+      const metadata = this.loadMetadata(sessionId);
+      metadata.lastAccessed = new Date().toISOString();
+      this.saveMetadata(sessionId, metadata);
+      this._touchTimestamps.set(sessionId, now);
+    } catch (error) {
+      // Non-critical — don't let this break the calling process
+    }
+  }
+
+  /**
    * Save workspace metadata
    */
   saveMetadata(sessionId, metadata) {

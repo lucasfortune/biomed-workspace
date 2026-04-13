@@ -122,6 +122,16 @@ class DenoisingService {
       if (status === 'completed' || status === 'failed') {
         session.endTime = new Date();
       }
+
+      // Sync status to centralized SessionTracker
+      if (this.sessionTracker) {
+        const trackerUpdates = { status };
+        if (data.stage) trackerUpdates.stage = data.stage;
+        if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+          trackerUpdates.endTime = new Date();
+        }
+        this.sessionTracker.updateDenoisingSession(trainingId, trackerUpdates);
+      }
     }
   }
 
@@ -555,6 +565,11 @@ class DenoisingService {
       } else if (stage === 'mask') {
         session.mask.status = data.status || 'extracting';
       }
+    }
+
+    // Keep workspace fresh during long-running processes
+    if (session && this.workspaceManager) {
+      this.workspaceManager.touchWorkspace(session.sessionId);
     }
 
     // Emit to room
