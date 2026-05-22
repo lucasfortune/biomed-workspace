@@ -299,23 +299,19 @@ def export_obj(meshes, output_path):
     mtl_path = output_path.replace('.obj', '.mtl')
     mtl_name = os.path.basename(mtl_path)
 
-    # Predefined colors for different classes
-    class_colors = {
-        1: (0.8, 0.2, 0.2),   # Red
-        2: (0.2, 0.8, 0.2),   # Green
-        3: (0.2, 0.2, 0.8),   # Blue
-        4: (0.8, 0.8, 0.2),   # Yellow
-        5: (0.8, 0.2, 0.8),   # Magenta
-        6: (0.2, 0.8, 0.8),   # Cyan
-        7: (0.8, 0.5, 0.2),   # Orange
-        8: (0.5, 0.2, 0.8),   # Purple
-    }
+    def generate_class_color(class_id):
+        """Generate a distinct color using the golden angle for hue distribution."""
+        import colorsys
+        golden_angle = 0.618033988749895
+        hue = ((class_id - 1) * golden_angle) % 1.0
+        r, g, b = colorsys.hls_to_rgb(hue, 0.55, 0.75)
+        return (r, g, b)
 
     # Write MTL file
     with open(mtl_path, 'w') as f:
         f.write("# Material file for mesh\n")
         for class_id in meshes.keys():
-            color = class_colors.get(class_id, (0.7, 0.7, 0.7))
+            color = generate_class_color(class_id)
             f.write(f"\nnewmtl class_{class_id}\n")
             f.write(f"Kd {color[0]:.3f} {color[1]:.3f} {color[2]:.3f}\n")
             f.write("Ka 0.1 0.1 0.1\n")

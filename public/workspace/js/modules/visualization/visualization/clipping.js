@@ -6,7 +6,7 @@
  */
 
 import {
-    CLASS_COLORS,
+    getClassColorArray,
     getVoxelValue,
     addQuadFace,
     centerAndScaleGeometry
@@ -153,7 +153,7 @@ function createCrossSectionalCap(volume, shape, classValue, sliceIndex, sliceDir
     geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
 
     // Get color from existing slice mesh or use default
-    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
+    const colorArray = getClassColorArray(classValue);
     let opacity = 0.8;
 
     // Try to get opacity from existing slice mesh

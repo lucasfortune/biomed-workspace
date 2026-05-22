@@ -266,7 +266,8 @@ class FileHandler {
 
         this.module.state.notify('success', 'Files validated successfully');
       } else {
-        throw new Error(result.error || 'Validation failed');
+        const detail = result.details || result.error || 'Validation failed';
+        throw new Error(detail);
       }
     } catch (error) {
       console.error('[FileHandler] Validation error:', error);

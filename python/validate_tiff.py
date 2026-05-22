@@ -90,7 +90,7 @@ def validate_tiff_stacks(raw_path, annotation_path):
         expected_values = {0, 1, 2}
         
         # First, validate that the number of classes is reasonable
-        is_valid_count, count_error = validate_annotation_classes(unique_values, max_classes=10)
+        is_valid_count, count_error = validate_annotation_classes(unique_values, max_classes=100)
         if not is_valid_count:
             return {
                 "valid": False,

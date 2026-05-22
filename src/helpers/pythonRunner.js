@@ -46,7 +46,12 @@ function runPythonScript(pythonPath, args, options = {}) {
       if (logger) {
         const message = data.toString().trim();
         if (message) {
-          logger.error('[Python Error]:', message);
+          const isInfo = message.includes('[Annotation Conversion]') || message.includes('[INFO]');
+          if (isInfo) {
+            logger.info('[Python]:', message);
+          } else {
+            logger.error('[Python Error]:', message);
+          }
         }
       }
     });

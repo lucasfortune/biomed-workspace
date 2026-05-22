@@ -84,11 +84,17 @@ class UNet(nn.Module):
             x = self.decoder_layers[i](x)
             skip = skip_connections.pop()
             
+            # Reflect-pad to match skip connection dimensions.
+            # Assumes x <= skip on both spatial dims (true for this encoder:
+            # skip is saved pre-MaxPool, so ConvTranspose2d stride 2 can only
+            # under-shoot odd skip dims). Negative pad would break reflect mode.
             if x.shape[-2:] != skip.shape[-2:]:
-                raise RuntimeError(
-                    f"Shape mismatch in decoder spatial dimensions: "
-                    f"upsampled={x.shape[-2:]} vs skip={skip.shape[-2:]}"
-                )
+                diff_h = skip.shape[-2] - x.shape[-2]
+                diff_w = skip.shape[-1] - x.shape[-1]
+                x = nn.functional.pad(x, [
+                    diff_w // 2, diff_w - diff_w // 2,
+                    diff_h // 2, diff_h - diff_h // 2
+                ], mode='reflect')
             
             x = torch.cat([x, skip], dim=1)
             x = self.decoder_layers[i + 1](x)

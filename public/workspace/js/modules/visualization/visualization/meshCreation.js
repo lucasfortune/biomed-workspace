@@ -11,7 +11,7 @@
  */
 
 import {
-    CLASS_COLORS,
+    getClassColorArray,
     getVoxelValue,
     addQuadFace,
     centerAndScaleGeometry
@@ -457,7 +457,7 @@ function createMeshFromVertexData(vertices, normals, classValue, shape, scaleFac
     geometry.computeBoundingBox();
 
     // Create material with class-specific color
-    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
+    const colorArray = getClassColorArray(classValue);
     const material = new THREE.MeshPhongMaterial({
         color: new THREE.Color(colorArray[0], colorArray[1], colorArray[2]),
         transparent: true,
@@ -560,7 +560,7 @@ function createSingleSlice(volume, shape, classValue, sliceIndex, sliceBoundarie
     geometry.computeBoundingBox();
 
     // Create material with class-specific color
-    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
+    const colorArray = getClassColorArray(classValue);
     const material = new THREE.MeshPhongMaterial({
         color: new THREE.Color(colorArray[0], colorArray[1], colorArray[2]),
         transparent: true,

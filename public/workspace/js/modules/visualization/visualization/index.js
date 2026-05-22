@@ -66,7 +66,7 @@ export {
 
 // Utility functions
 export {
-    CLASS_COLORS,
+    getClassColorArray,
     getClassColor,
     getClassColorThree,
     getClassColorHex,

@@ -5,18 +5,50 @@
  */
 
 /**
- * Class color definitions - matches the colors used in mesh generation
+ * Generate a distinct RGB color for a class by distributing hues evenly.
+ * Uses the golden angle to maximize perceptual separation between classes.
+ * @param {number} classValue - The class number (1-based)
+ * @returns {Array<number>} - [r, g, b] in 0-1 range
  */
-export const CLASS_COLORS = {
-    1: [0.2, 0.9, 0.2],   // Green
-    2: [0.9, 0.2, 0.2],   // Red
-    3: [0.2, 0.2, 0.9],   // Blue
-    4: [0.9, 0.9, 0.2],   // Yellow
-    5: [0.9, 0.2, 0.9],   // Magenta
-    6: [0.2, 0.9, 0.9],   // Cyan
-    7: [0.9, 0.5, 0.2],   // Orange
-    8: [0.5, 0.2, 0.9]    // Purple
-};
+function generateClassColor(classValue) {
+    // Golden angle in turns — maximizes hue separation for any number of classes
+    const goldenAngle = 0.618033988749895;
+    const hue = ((classValue - 1) * goldenAngle) % 1.0;
+    const saturation = 0.75;
+    const lightness = 0.55;
+
+    // HSL to RGB conversion
+    const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+    const x = c * (1 - Math.abs((hue * 6) % 2 - 1));
+    const m = lightness - c / 2;
+
+    let r, g, b;
+    const h6 = hue * 6;
+    if (h6 < 1)      { r = c; g = x; b = 0; }
+    else if (h6 < 2) { r = x; g = c; b = 0; }
+    else if (h6 < 3) { r = 0; g = c; b = x; }
+    else if (h6 < 4) { r = 0; g = x; b = c; }
+    else if (h6 < 5) { r = x; g = 0; b = c; }
+    else              { r = c; g = 0; b = x; }
+
+    return [r + m, g + m, b + m];
+}
+
+// Cache generated colors
+const _colorCache = {};
+
+/**
+ * Get the RGB color array for a class value.
+ * @param {number} classValue - The class number (1-based)
+ * @returns {Array<number>} - [r, g, b] in 0-1 range
+ */
+export function getClassColorArray(classValue) {
+    if (classValue < 1) return [0.6, 0.6, 0.6];
+    if (!_colorCache[classValue]) {
+        _colorCache[classValue] = generateClassColor(classValue);
+    }
+    return _colorCache[classValue];
+}
 
 /**
  * Get the exact color used for a class in the 3D model
@@ -24,14 +56,10 @@ export const CLASS_COLORS = {
  * @returns {string} - CSS color value that matches the 3D model
  */
 export function getClassColor(classValue) {
-    // Get the RGB array for this class, or default gray
-    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
-
-    // Convert from 0-1 range to 0-255 range and return CSS rgb string
+    const colorArray = getClassColorArray(classValue);
     const r = Math.round(colorArray[0] * 255);
     const g = Math.round(colorArray[1] * 255);
     const b = Math.round(colorArray[2] * 255);
-
     return `rgb(${r}, ${g}, ${b})`;
 }
 
@@ -41,7 +69,7 @@ export function getClassColor(classValue) {
  * @returns {THREE.Color} - Three.js Color object
  */
 export function getClassColorThree(classValue) {
-    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
+    const colorArray = getClassColorArray(classValue);
     return new THREE.Color(colorArray[0], colorArray[1], colorArray[2]);
 }
 
@@ -51,7 +79,7 @@ export function getClassColorThree(classValue) {
  * @returns {number} - Hex color number
  */
 export function getClassColorHex(classValue) {
-    const colorArray = CLASS_COLORS[classValue] || [0.6, 0.6, 0.6];
+    const colorArray = getClassColorArray(classValue);
     const r = Math.round(colorArray[0] * 255);
     const g = Math.round(colorArray[1] * 255);
     const b = Math.round(colorArray[2] * 255);
