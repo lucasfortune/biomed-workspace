@@ -3,31 +3,30 @@ import numpy as np
 
 def create_stage1_mask_kernel(center_size):
     """
-    Create a square numpy array of type bool with a square of True values 
-    in the center surrounded by a 1-cell wide border of False values.
-    
+    Create a square boolean kernel of shape ``(center_size, center_size)``,
+    all True. Used as the per-placement pattern in :func:`create_full_mask`.
+
+    Spacing between placements is enforced by the 8-connectivity dilation of
+    ``forbidden`` after each placement (see ``masking/utilities.py``), not by
+    the kernel geometry itself. The pre-2026-05-13 implementation returned a
+    ``(center_size + 2)`` kernel with a False border serving as that spacing
+    guard — but the border was redundant with the post-placement dilation
+    AND prevented prediction centers from reaching the outer 1 px of the
+    patch, producing an untrained edge band whose corruption swamped the
+    autocorrelation used by the Stage-2 mask extractor.
+
     Args:
-        center_size (int): Size of the center square of True values
-    
+        center_size (int): Side length of the True square. Must be odd so
+            ``pattern_size // 2`` is the geometric center.
+
     Returns:
-        single_stage1_masking_kernel (np.array): A square boolean array with a True center and False border
+        np.ndarray: ``(center_size, center_size)`` all-True boolean kernel.
     """
     if center_size < 1:
         raise ValueError("center_size must be at least 1")
-    
-    # The full array size is the center size plus 2 (for the borders)
-    full_size = center_size + 2
-
-    if full_size % 2 == 0:
-        raise ValueError("kernel_size must be odd")
-    
-    # Create an array of False values
-    single_stage1_masking_kernel = np.zeros((full_size, full_size), dtype=bool)
-    
-    # Set the center square to True
-    single_stage1_masking_kernel[1:-1, 1:-1] = True
-    
-    return single_stage1_masking_kernel
+    if center_size % 2 == 0:
+        raise ValueError("center_size must be odd")
+    return np.ones((center_size, center_size), dtype=bool)
 
 def create_blind_spot_kernel(kernel_size=3):
     """
@@ -52,37 +51,29 @@ def create_blind_spot_kernel(kernel_size=3):
 
 def create_stage1_mask_kernel_3d(center_size=1):
     """
-    Create a 3D square numpy array of type bool for 2.5D Stage 1 masking.
-
-    The kernel has a square of True values in ALL 3 SLICES (dz=-1, dz=0, dz=+1),
-    each surrounded by a 1-cell wide border of False values.
+    Create a 3D boolean kernel of shape ``(3, center_size, center_size)``,
+    all True, for 2.5D Stage 1 masking.
 
     For 2.5D mode:
     - The mask is applied across all 3 input slices
-    - But prediction/loss is only computed on the center slice
-    - The prediction kernel (created by create_full_mask_3d) will only mark
-      center slice positions as True
+    - But prediction/loss is only computed on the center slice (dz=0)
+    - The prediction kernel (created by ``create_full_mask_3d``) will only
+      mark center slice positions as True
+
+    Spacing between placements is enforced by the dilation step in
+    ``create_full_mask_3d``, not by the kernel geometry. See the 2D
+    :func:`create_stage1_mask_kernel` docstring for the rationale behind
+    dropping the False border that the pre-2026-05-13 implementation added.
 
     Args:
-        center_size (int): Size of the center square of True values (per slice)
+        center_size (int): Side length of the True square per slice. Must be
+            odd.
 
     Returns:
-        numpy.ndarray: A 3D boolean array of shape (3, full_size, full_size) where
-            all 3 slices have the same pattern: True center with False border
+        np.ndarray: ``(3, center_size, center_size)`` all-True boolean kernel.
     """
     if center_size < 1:
         raise ValueError("center_size must be at least 1")
-
-    # The 2D full size is the center size plus 2 (for the borders)
-    full_size = center_size + 2
-
-    if full_size % 2 == 0:
-        raise ValueError("kernel_size must be odd")
-
-    # Create 3D array of False values
-    kernel_3d = np.zeros((3, full_size, full_size), dtype=bool)
-
-    # Set the center square to True in ALL 3 slices
-    kernel_3d[:, 1:-1, 1:-1] = True
-
-    return kernel_3d
+    if center_size % 2 == 0:
+        raise ValueError("center_size must be odd")
+    return np.ones((3, center_size, center_size), dtype=bool)

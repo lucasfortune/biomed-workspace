@@ -12,7 +12,7 @@ class StructuralNoiseExtractor:
     It implements a ring-based approach to identify structural patterns in noise.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  norm_autocorr=True,
                  log_autocorr=True,
                  crop_autocorr=True,
@@ -26,10 +26,18 @@ class StructuralNoiseExtractor:
                  use_center_proximity=False,
                  center_proximity_threshold=0.8,
                  keep_center_component_only=True,
-                 max_true_pixels=None):
+                 max_true_pixels=None,
+                 window='none',
+                 window_alpha=0.25,
+                 tighten_output_mask=True,
+                 threshold_method='percentile',
+                 otsu_n_classes=2,
+                 otsu_n_classes_step=0,
+                 otsu_n_classes_max=6,
+                 otsu_nbins=64):
         """
         Initialize the structural noise extractor with configuration parameters.
-        
+
         Args:
             norm_autocorr (bool): Whether to normalize the autocorrelation
             log_autocorr (bool): Whether to apply log to autocorrelation values
@@ -37,7 +45,9 @@ class StructuralNoiseExtractor:
             adapt_autocorr (bool): Whether to use adaptive thresholding
             adapt_CB (float): Base coefficient for adaptive threshold
             adapt_DF (float): Distance factor for adaptive threshold
-            center_size (int): Size of center square to analyze
+            center_size (int): Size of center square analyzed for ring structure.
+                With ``tighten_output_mask=True`` (default) this is now an upper
+                bound on the search radius, not the output mask size.
             base_percentile (float): Base percentile for thresholding
             percentile_decay (float): Decay factor for threshold as rings expand
             center_ratio_threshold (float): Minimum ratio of ring max to center value
@@ -45,6 +55,70 @@ class StructuralNoiseExtractor:
             center_proximity_threshold (float): Threshold for center proximity
             keep_center_component_only (bool): Whether to keep only connected component with center
             max_true_pixels (int): Maximum number of True pixels in mask
+            window (str): Window function applied to each patch before the
+                FFT-based autocorrelation. One of ``'none'``, ``'tukey'``,
+                ``'hann'``, ``'hamming'``. A non-rectangular window suppresses
+                spectral leakage from sharp patch boundaries (the horizontal
+                /vertical "+" artifact through the autocorrelation center).
+                Note: with ``'tukey'`` / ``'hann'`` / ``'hamming'`` the
+                effective sample count is reduced — patch sizes < 64 are
+                discouraged.
+            window_alpha (float): Tukey taper width parameter (only used when
+                ``window='tukey'``). Lower = smaller taper region (less leakage
+                suppression but more interior preserved); 0.25 is a sensible
+                default.
+            tighten_output_mask (bool): If True (default), crop the returned
+                binary mask to the tight rectangle containing all True pixels,
+                centered on the center pixel (preserves 180-deg symmetry).
+                Avoids empty borders that would leave unmasked pixels in
+                Stage 2's tiled mask. Raises ``ValueError`` if no True pixels
+                were found (extractor failure).
+            threshold_method (str): How to pick the per-ring cutoff between
+                "structural" and "noise" pixels. One of:
+                - ``'percentile'`` (default, legacy): cutoff at
+                  ``min + range * base_percentile * percentile_decay**(ring_idx-1) / 100``.
+                  Fixed fraction of pixels per ring; ``percentile_decay``
+                  adjusts that fraction outward.
+                - ``'otsu'``: cutoff via Otsu's method (maximises between-class
+                  variance). Adapts to each ring's actual distribution; well-
+                  suited when outer rings have compressed value ranges where
+                  a fixed-percentile threshold sits in the wrong place.
+                  ``base_percentile`` / ``percentile_decay`` are ignored.
+                  Number of classes controlled by ``otsu_n_classes`` — when
+                  the structural pixels are a small minority, regular 2-class
+                  Otsu lands inside the noise distribution; using 3+ classes
+                  via ``threshold_multiotsu`` and taking only the top class
+                  is the standard remedy.
+                The ``center_ratio_threshold`` ring-level gate and the
+                ``use_center_proximity`` augmentation still apply for both
+                methods.
+            otsu_n_classes (int): Number of classes for Otsu thresholding at
+                the innermost processed ring when ``threshold_method='otsu'``.
+                Must be ``>= 2``. The cutoff used is the highest of the
+                ``n_classes - 1`` thresholds returned by
+                ``skimage.filters.threshold_multiotsu`` (so only pixels in the
+                top class survive). Increase to be stricter when too many
+                pixels are selected; decrease toward 2 to be more permissive.
+            otsu_n_classes_step (int): How much to increase ``n_classes`` per
+                additional ring outward (effective n at ring ``i`` is
+                ``otsu_n_classes + (i - 1) * otsu_n_classes_step``). Outer
+                rings have more pixels but typically the same structural
+                signal, so a fixed n is too permissive outward — set this
+                ``>= 1`` to tighten the threshold progressively. Effective n
+                is capped at the number of unique pixel values in the ring;
+                degenerate rings fall back to standard 2-class Otsu.
+            otsu_n_classes_max (int): Hard cap on the effective ``n_classes``
+                used at any ring. ``threshold_multiotsu`` is exhaustive search
+                over ``C(otsu_nbins, n_classes - 1)`` combinations — cost
+                grows polynomially with ``n_classes``. With the default
+                ``otsu_nbins=64`` and ``otsu_n_classes_max=6`` the most
+                expensive ring is ~8M ops (sub-second). Raising the cap to
+                7+ pushes per-ring cost into the seconds-to-minutes range.
+            otsu_nbins (int): Histogram bin count passed to skimage's
+                ``threshold_multiotsu`` / ``threshold_otsu``. Default 64
+                (skimage's own default is 256). Lower = faster but coarser
+                threshold. For our autocorrelation rings (50-200 pixels)
+                64 bins is more than enough resolution.
         """
         # Store configuration parameters
         self.norm_autocorr = norm_autocorr
@@ -61,6 +135,33 @@ class StructuralNoiseExtractor:
         self.center_proximity_threshold = center_proximity_threshold
         self.keep_center_component_only = keep_center_component_only
         self.max_true_pixels = max_true_pixels
+        self.window = window
+        self.window_alpha = window_alpha
+        self.tighten_output_mask = tighten_output_mask
+        if threshold_method not in ('percentile', 'otsu'):
+            raise ValueError(
+                f"threshold_method must be 'percentile' or 'otsu', "
+                f"got {threshold_method!r}"
+            )
+        if otsu_n_classes < 2:
+            raise ValueError(
+                f"otsu_n_classes must be >= 2, got {otsu_n_classes}"
+            )
+        if otsu_n_classes_step < 0:
+            raise ValueError(
+                f"otsu_n_classes_step must be >= 0, got {otsu_n_classes_step}"
+            )
+        if otsu_n_classes_max < 2:
+            raise ValueError(
+                f"otsu_n_classes_max must be >= 2, got {otsu_n_classes_max}"
+            )
+        if otsu_nbins < 4:
+            raise ValueError(f"otsu_nbins must be >= 4, got {otsu_nbins}")
+        self.threshold_method = threshold_method
+        self.otsu_n_classes = otsu_n_classes
+        self.otsu_n_classes_step = otsu_n_classes_step
+        self.otsu_n_classes_max = otsu_n_classes_max
+        self.otsu_nbins = otsu_nbins
         
         # Initialize cache for intermediate results
         self._autocorr = None
@@ -105,6 +206,28 @@ class StructuralNoiseExtractor:
         
         # Center the noise pattern
         noise_centered = img - np.mean(img)
+
+        # Optional 2D windowing to suppress spectral leakage from the patch
+        # boundary. Without it, the implicit zero-padding outside the patch
+        # contributes a horizontal/vertical "+" artifact through the autocorr
+        # center.
+        if self.window and self.window != 'none':
+            from scipy.signal.windows import tukey, hann, hamming
+            H, W = noise_centered.shape
+            if self.window == 'tukey':
+                win = np.outer(tukey(H, alpha=self.window_alpha),
+                               tukey(W, alpha=self.window_alpha))
+            elif self.window == 'hann':
+                win = np.outer(hann(H), hann(W))
+            elif self.window == 'hamming':
+                win = np.outer(hamming(H), hamming(W))
+            else:
+                raise ValueError(
+                    f"Unknown window: {self.window!r}. "
+                    "Expected one of 'none', 'tukey', 'hann', 'hamming'."
+                )
+            noise_centered = noise_centered * win
+
         # Calculate autocorrelation
         autocorr = signal.fftconvolve(noise_centered, np.flip(np.flip(noise_centered, 0), 1), mode='full')
         
@@ -244,19 +367,59 @@ class StructuralNoiseExtractor:
             tuple: (threshold, should_process, above_threshold_mask)
         """
         ring_pixels = self._extract_ring_pixels(ring_coords)
-        
+
         if len(ring_pixels) == 0:
             return 0.0, False, np.array([], dtype=bool)
-        
-        # Calculate percentile threshold
-        current_percentile = self.base_percentile * (self.percentile_decay ** (ring_idx - 1))
-        
-        # Calculate threshold
+
         min_val = np.min(ring_pixels)
         max_val = np.max(ring_pixels)
         value_range = max_val - min_val
-        threshold = min_val + (value_range * current_percentile / 100)
-        
+
+        # Per-ring threshold according to the configured method. Both methods
+        # operate on this ring's pixel values, so the cutoff is local to the
+        # ring's distribution rather than a global cutoff.
+        if self.threshold_method == 'otsu':
+            # Otsu picks the cutoff that maximises between-class variance.
+            # With ``ring_n_classes > 2`` we use multi-Otsu and take the
+            # highest of the (ring_n_classes - 1) returned thresholds, so
+            # only pixels in the top class survive. This is the standard
+            # remedy when structural pixels are a small minority and 2-class
+            # Otsu would land inside the noise distribution.
+            #
+            # ring_n_classes grows with ring_idx (controlled by
+            # otsu_n_classes_step) — outer rings have more pixels but the
+            # same structural signal, so they need stricter thresholds to
+            # avoid false positives. Capped at the number of unique pixel
+            # values in the ring.
+            n_unique = len(np.unique(ring_pixels))
+            ring_n_classes = self.otsu_n_classes + (ring_idx - 1) * self.otsu_n_classes_step
+            ring_n_classes = max(2, min(ring_n_classes,
+                                        self.otsu_n_classes_max,
+                                        n_unique))
+            nbins = min(self.otsu_nbins, max(n_unique, 4))
+
+            if value_range > 1e-9 and n_unique >= 2:
+                if ring_n_classes == 2:
+                    from skimage.filters import threshold_otsu
+                    threshold = float(threshold_otsu(ring_pixels, nbins=nbins))
+                else:
+                    from skimage.filters import threshold_multiotsu
+                    try:
+                        thresholds = threshold_multiotsu(
+                            ring_pixels, classes=ring_n_classes, nbins=nbins)
+                        threshold = float(thresholds[-1])
+                    except ValueError:
+                        # multiotsu raises if classes can't be separated;
+                        # fall back to standard 2-class Otsu in that case.
+                        from skimage.filters import threshold_otsu
+                        threshold = float(threshold_otsu(ring_pixels, nbins=nbins))
+            else:
+                # Degenerate ring (uniform values): no pixels selected.
+                threshold = float(max_val) + 1.0
+        else:  # 'percentile' (legacy)
+            current_percentile = self.base_percentile * (self.percentile_decay ** (ring_idx - 1))
+            threshold = min_val + (value_range * current_percentile / 100)
+
         # Check if ring contains significant structure
         should_process = max_val >= self._center_value * self.center_ratio_threshold
         if verbose:
@@ -488,15 +651,22 @@ class StructuralNoiseExtractor:
         # Apply size limit if requested
         binary_mask = self._limit_mask_size(binary_mask)
 
+        # Tighten the returned mask to the smallest rectangle that contains
+        # all True pixels, centered on the center pixel (preserving 180-deg
+        # symmetry). Empty borders would otherwise leave unmasked pixel
+        # stripes in Stage 2's tiled mask.
+        if self.tighten_output_mask:
+            binary_mask = self._tighten_to_bounding_rect(binary_mask)
+
         if verbose:
             import matplotlib.pyplot as plt
-            
+
             print("\n=== Structural Noise Extraction ===")
             print(f"Autocorrelation center size: {self._center_square.shape}")
             print(f"Center value: {self._center_value:.6f}")
             print(f"Mask size: {binary_mask.shape}")
             print(f"True values in mask: {np.sum(binary_mask)} ({np.sum(binary_mask)/binary_mask.size*100:.2f}%)")
-            
+
             # Visualize autocorrelation and mask
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
             ax1.imshow(self._center_square, cmap='viridis')
@@ -505,8 +675,30 @@ class StructuralNoiseExtractor:
             ax2.set_title("Extracted Binary Mask")
             plt.tight_layout()
             plt.show()
-        
+
         return binary_mask, self._center_square
+
+    def _tighten_to_bounding_rect(self, mask):
+        """Crop ``mask`` to the smallest rectangle containing all True pixels.
+
+        The crop is symmetric about the original center pixel (i.e. extends
+        to ``±max(|y - cy|)`` along y and ``±max(|x - cx|)`` along x), which
+        preserves 180-deg autocorrelation symmetry.
+
+        Raises:
+            ValueError: if the mask has no True pixels (extractor failure).
+        """
+        if not mask.any():
+            raise ValueError(
+                "StructuralNoiseExtractor produced an empty mask "
+                "(no True pixels). Check input data and extractor parameters."
+            )
+        h, w = mask.shape
+        cy, cx = h // 2, w // 2
+        ys, xs = np.where(mask)
+        dy = int(np.abs(ys - cy).max())
+        dx = int(np.abs(xs - cx).max())
+        return mask[cy - dy:cy + dy + 1, cx - dx:cx + dx + 1]
     
     def _calculate_3d_autocorrelation(self, triplet):
         """

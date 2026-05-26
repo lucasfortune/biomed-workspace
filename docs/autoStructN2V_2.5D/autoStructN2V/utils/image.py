@@ -100,8 +100,10 @@ def load_and_normalize_image(img_path):
                 # 16-bit image, normalize from 0-65535 to 0-1
                 img_normalized = img_array.astype(np.float32) / 65535.0
             elif img_array.dtype in [np.float32, np.float64]:
-                # Floating point image, assume it's already normalized but clip to be safe
-                img_normalized = np.clip(img_array, 0, 1).astype(np.float32)
+                # Floating point image: pass through unchanged. Float TIFFs may
+                # legitimately contain values outside [0, 1] (raw model outputs).
+                # Range bounding belongs at the explicit renormalize step, not here.
+                img_normalized = img_array.astype(np.float32)
             else:
                 # For any other data type, normalize min-max to 0-1 range
                 img_min, img_max = img_array.min(), img_array.max()
@@ -295,8 +297,13 @@ def load_tiff_stack(path):
         elif stack.dtype == np.uint16:
             slice_normalized = slice_data / 65535.0
         elif stack.dtype in [np.float32, np.float64]:
-            # Clip to [0, 1] for float data
-            slice_normalized = np.clip(slice_data, 0, 1)
+            # Pass float data through unchanged. Float TIFFs may legitimately
+            # contain values outside [0, 1] (e.g. raw model outputs saved by
+            # AutoStructN2VPredictor.denoise_stack); clamping here silently
+            # discarded the upper/lower tails before downstream renormalisation
+            # (publication/experiments/shared/metrics.renormalize_to_unit_range).
+            # Callers that need a [0, 1] range should explicitly normalize.
+            slice_normalized = slice_data
         else:
             # Min-max normalization for other dtypes
             s_min, s_max = slice_data.min(), slice_data.max()

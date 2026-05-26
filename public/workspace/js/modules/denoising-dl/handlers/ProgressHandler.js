@@ -374,6 +374,8 @@ class ProgressHandler {
       this.module.updateMaskVisualization({
         mask: maskData,
         kernelSize: data.kernelSize,
+        kernelHeight: data.kernelHeight,
+        kernelWidth: data.kernelWidth,
         activePixels: data.activePixels,
         pattern: data.pattern,
         isEmpty: data.isEmpty
@@ -431,6 +433,8 @@ class ProgressHandler {
     this.module.updateMaskVisualization({
       mask: maskData,
       kernelSize: data.kernelSize,
+      kernelHeight: data.kernelHeight,
+      kernelWidth: data.kernelWidth,
       activePixels: data.activePixels,
       pattern: data.pattern,
       isEmpty: data.activePixels < 2

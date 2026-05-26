@@ -24,10 +24,9 @@ from autoStructN2V.pipeline.data import create_dataloaders, split_stack_indices
 from autoStructN2V.models import create_model_from_config
 from autoStructN2V.masking import (
     StructuralNoiseExtractor,
-    create_full_mask,
-    create_full_mask_3d
 )
 from autoStructN2V.inference import AutoStructN2VPredictor
+from autoStructN2V.utils.image import load_and_normalize_image
 
 from .utils import (
     emit_progress,
@@ -145,20 +144,24 @@ def extract_mask(config: dict):
             max_true_pixels=extractor_params.get('max_true_pixels', 25)
         )
 
-        # Extract mask (different method for 2D vs 2.5D)
+        # Extract mask (different method for 2D vs 2.5D). _tighten_to_bounding_rect
+        # can yield rectangular kernels (e.g. (7, 3) for vertical noise) — track
+        # height and width independently and let the frontend lay out the grid
+        # with the true rectangle, not a square.
         if mode == '2.5d':
             struct_mask, _ = extractor.extract_mask_3d(patches, verbose=False)
             # For 3D mask, center slice contains the main pattern
             active_pixels = int(np.sum(struct_mask[1]))  # Center slice
-            kernel_size = int(struct_mask.shape[1])
+            kh, kw = int(struct_mask.shape[1]), int(struct_mask.shape[2])
             mask_array_for_viz = [s.astype(int).tolist() for s in struct_mask]
             pattern = detect_pattern(struct_mask[1])
         else:
             struct_mask, _ = extractor.extract_mask(patches, verbose=False)
             active_pixels = int(np.sum(struct_mask))
-            kernel_size = int(struct_mask.shape[0])
+            kh, kw = int(struct_mask.shape[0]), int(struct_mask.shape[1])
             mask_array_for_viz = struct_mask.astype(int).tolist()
             pattern = detect_pattern(struct_mask)
+        kernel_size = max(kh, kw)  # back-compat scalar; truth is kh × kw
 
         # Save mask
         os.makedirs(output_dir, exist_ok=True)
@@ -179,11 +182,11 @@ def extract_mask(config: dict):
                 ax.imshow(struct_mask[i], cmap='gray')
                 ax.set_title(f'{label}\nActive: {int(np.sum(struct_mask[i]))}')
                 ax.axis('off')
-            plt.suptitle(f'Extracted 3D Mask ({kernel_size}x{kernel_size})\nTotal active (center): {active_pixels}')
+            plt.suptitle(f'Extracted 3D Mask ({kh}x{kw})\nTotal active (center): {active_pixels}')
         else:
             plt.figure(figsize=(6, 6))
             plt.imshow(struct_mask, cmap='gray')
-            plt.title(f'Extracted Mask ({kernel_size}x{kernel_size})\nActive pixels: {active_pixels}')
+            plt.title(f'Extracted Mask ({kh}x{kw})\nActive pixels: {active_pixels}')
             plt.axis('off')
 
         plt.savefig(preview_path, bbox_inches='tight', dpi=100)
@@ -194,6 +197,8 @@ def extract_mask(config: dict):
             "previewPath": preview_path,
             "mode": mode,
             "kernelSize": kernel_size,
+            "kernelHeight": kh,
+            "kernelWidth": kw,
             "activePixels": active_pixels,
             "pattern": pattern,
             "maskArray": mask_array_for_viz  # 2D or 3D array for visualization
@@ -261,6 +266,19 @@ def run_stage2_only(config: dict):
             if 'input_data' in config:
                 del config['input_data']
 
+        # Apply the same web-app-flavored defaults as run_training() (zscore,
+        # overlap-tile padding, N2V2 architectural fixes). Stage-2-only mode
+        # inherits most of its config from the saved Stage-1 config.json, but
+        # the shallow merge in this function only fills missing top-level keys,
+        # so we re-apply here to backfill anything the user-provided continue
+        # payload supplied a partial stage dict for. Matches training.py.
+        config.setdefault('normalize_method', 'zscore')
+        for _stage in ('stage1', 'stage2'):
+            config.setdefault(_stage, {})
+            config[_stage].setdefault('overlap_tile_pad', 4)
+            config[_stage].setdefault('remove_top_skip', True)
+            config[_stage].setdefault('use_blurpool', True)
+
         # Validate config to ensure all defaults are set (including masking_strategy)
         config = validate_config(config)
         verbose = config.get('verbose', False)
@@ -283,21 +301,9 @@ def run_stage2_only(config: dict):
         struct_mask = np.load(mask_path)
         mode = config.get('mode', '2d')
 
-        # Create full mask (mode-aware: 2.5D uses 3D masks)
-        if mode == '2.5d' and struct_mask.ndim == 3:
-            full_mask, prediction_kernel = create_full_mask_3d(
-                struct_mask,
-                config['stage2']['patch_size'],
-                config['stage2']['mask_percentage'],
-                verbose
-            )
-        else:
-            full_mask, prediction_kernel = create_full_mask(
-                struct_mask,
-                config['stage2']['patch_size'],
-                config['stage2']['mask_percentage'],
-                verbose
-            )
+        # The small structural kernel is what the migrated library expects —
+        # the dataset's _build_mask_pool calls create_full_mask internally per
+        # pool entry. See companion change in training.py.
 
         # Reconstruct directory structure
         dirs = {
@@ -405,6 +411,53 @@ def run_stage2_only(config: dict):
                 results['stage1_denoised_stack_path'] = stage1_denoised_stack_path
                 print(f"[DEBUG] Found Stage 1 denoised stack: {stage1_denoised_stack_path}")
 
+        # Backfill `_norm_stats` when zscore was declared (either by the merge
+        # from Stage 1's config or by our setdefault for pre-migration runs)
+        # but the original training never persisted train stats. Without this,
+        # the predictor reads `_extract_training_hparams → (None, 4)` and
+        # silently skips zscore even though hparams claims it's on — making
+        # the declaration a lie.
+        if config.get('normalize_method') == 'zscore' and not config.get('_norm_stats'):
+            print("[zscore] Stage 2 only: original config missing _norm_stats; recomputing from data")
+            if mode == '2.5d':
+                train_slices = loaded_stack[slice_indices['train']]
+                if np.isnan(train_slices).any():
+                    raise ValueError(
+                        "Stage 2 stack contains NaN values; cannot compute "
+                        "zscore statistics. Clean the input or switch "
+                        "normalize_method to 'unit'."
+                    )
+                mean = float(train_slices.mean())
+                std = float(train_slices.std())
+            else:
+                train_paths = image_paths[0]
+                running_sum = 0.0
+                running_sq = 0.0
+                running_n = 0
+                for p in train_paths:
+                    img = load_and_normalize_image(p)
+                    if np.isnan(img).any():
+                        raise ValueError(
+                            f"Training image contains NaN values: {p}. "
+                            "Clean the input or switch normalize_method to 'unit'."
+                        )
+                    running_sum += float(img.sum())
+                    running_sq += float((img.astype(np.float64) ** 2).sum())
+                    running_n += int(img.size)
+                if running_n == 0:
+                    raise ValueError("zscore normalization requested but no training images found")
+                mean = running_sum / running_n
+                var = max(running_sq / running_n - mean * mean, 0.0)
+                std = float(np.sqrt(var))
+            if std < 1e-8:
+                raise ValueError(
+                    "Stage 2 training data has near-zero standard deviation; "
+                    "cannot zscore normalize. Use normalize_method='unit' or "
+                    "check the input data."
+                )
+            config['_norm_stats'] = {'mean': mean, 'std': std, 'eps': 1e-6}
+            print(f"[zscore] Stage 2 only: stats computed mean={mean:.6f}, std={std:.6f}")
+
         # =====================================================================
         # Stage 2: Structured Noise2Void
         # =====================================================================
@@ -414,14 +467,14 @@ def run_stage2_only(config: dict):
             "totalEpochs": config['stage2'].get('num_epochs', config.get('num_epochs', 100))
         })
 
-        # Create dataloaders with structured mask (different for 2D vs 2.5D)
+        # Create dataloaders with the small structural kernel. The dataset's
+        # _build_mask_pool calls create_full_mask internally per pool entry.
         if mode == '2.5d':
             # 2.5D mode: Use stack and slice_indices
             stage2_train_loader, stage2_val_loader, stage2_test_loader = create_dataloaders(
                 config=config,
                 stage="stage2",
-                structured_mask=full_mask,
-                prediction_kernel=prediction_kernel,
+                structured_mask=struct_mask,
                 verbose=verbose,
                 stack=loaded_stack,
                 slice_indices=slice_indices
@@ -432,8 +485,7 @@ def run_stage2_only(config: dict):
                 image_paths,
                 config,
                 "stage2",
-                structured_mask=full_mask,
-                prediction_kernel=prediction_kernel,
+                structured_mask=struct_mask,
                 verbose=verbose
             )
 
@@ -452,7 +504,9 @@ def run_stage2_only(config: dict):
             stage2_optimizer, mode='min', factor=0.5, patience=5
         )
 
-        # Create trainer with progress callback
+        # Create trainer with progress callback. norm_stats was computed during
+        # Stage 1 and persisted via the experiment's config.json; we read it
+        # back so the aux-PSNR path uses identical (mean, std) to training.
         stage2_trainer = WebAutoStructN2VTrainer(
             model=stage2_model,
             optimizer=stage2_optimizer,
@@ -461,6 +515,7 @@ def run_stage2_only(config: dict):
             hparams=config,
             stage='stage2',
             experiment_name=os.path.join(dirs['stage2']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+            norm_stats=config.get('_norm_stats'),
             progress_callback=create_progress_callback('stage2', training_id)
         )
 
@@ -503,11 +558,17 @@ def run_stage2_only(config: dict):
         stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
         stage2_trained_model.eval()
 
-        # Create predictor and denoise
+        # Create predictor and denoise. stride=patch_size//4 to soften
+        # stride-boundary seams from constant-weight overlap-tile blending
+        # (see training.py for the full rationale).
+        _stage2_ps = config['stage2']['patch_size']
         predictor = AutoStructN2VPredictor(
             model=stage2_trained_model,
-            patch_size=config['stage2']['patch_size'],
-            mode=mode
+            patch_size=_stage2_ps,
+            stride=max(1, _stage2_ps // 4),
+            mode=mode,
+            norm_stats=config.get('_norm_stats'),
+            overlap_tile_pad=config['stage2'].get('overlap_tile_pad', 0),
         )
 
         stage2_denoised_dir = os.path.join(dirs['data'], 'stage2_denoised')

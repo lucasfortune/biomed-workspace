@@ -2,7 +2,9 @@
 from .auto_struct_n2v import AutoStructN2VModel
 
 
-def create_model(stage, use_resize_conv=True, upsampling_mode='bilinear', **kwargs):
+def create_model(stage, use_resize_conv=True, upsampling_mode='bilinear',
+                 remove_top_skip=False, use_blurpool=False, activation='elu',
+                 **kwargs):
     """
     Factory function to create appropriate model based on the stage.
 
@@ -12,6 +14,12 @@ def create_model(stage, use_resize_conv=True, upsampling_mode='bilinear', **kwar
             of transposed convolution. Defaults to True (reduces checkerboard artifacts).
         upsampling_mode (str, optional): Upsampling mode for resize convolution.
             Options: 'bilinear', 'nearest', 'bicubic'. Defaults to 'bilinear'.
+        remove_top_skip (bool, optional): Drop the topmost U-Net skip-connection
+            (N2V2). Defaults to False.
+        use_blurpool (bool, optional): Replace MaxPool with MaxBlurPool (N2V2).
+            Defaults to False.
+        activation (str, optional): 'elu' (legacy) or 'relu' (N2V/N2V2). Defaults
+            to 'elu' for backward compatibility.
         **kwargs: Keyword arguments to pass to the model constructor
 
     Returns:
@@ -19,29 +27,18 @@ def create_model(stage, use_resize_conv=True, upsampling_mode='bilinear', **kwar
 
     Raises:
         ValueError: If stage is not recognized
-
-    Examples:
-        # Create stage1 model with resize convolution (recommended)
-        model = create_model('stage1', features=64, num_layers=3)
-
-        # Create stage2 model with classical transposed convolution
-        model = create_model('stage2', use_resize_conv=False, features=64, num_layers=3)
-
-        # Create model with nearest neighbor upsampling
-        model = create_model('stage1', upsampling_mode='nearest', features=64, num_layers=3)
     """
+    common = dict(
+        use_resize_conv=use_resize_conv,
+        upsampling_mode=upsampling_mode,
+        remove_top_skip=remove_top_skip,
+        use_blurpool=use_blurpool,
+        activation=activation,
+    )
     if stage.lower() == 'stage1':
-        return AutoStructN2VModel.create_stage1_model(
-            use_resize_conv=use_resize_conv,
-            upsampling_mode=upsampling_mode,
-            **kwargs
-        )
+        return AutoStructN2VModel.create_stage1_model(**common, **kwargs)
     elif stage.lower() == 'stage2':
-        return AutoStructN2VModel.create_stage2_model(
-            use_resize_conv=use_resize_conv,
-            upsampling_mode=upsampling_mode,
-            **kwargs
-        )
+        return AutoStructN2VModel.create_stage2_model(**common, **kwargs)
     else:
         raise ValueError(f"Unknown stage: {stage}. Must be 'stage1' or 'stage2'.")
 
@@ -92,7 +89,10 @@ def create_model_from_config(config, stage):
         in_channels=in_channels,
         out_channels=out_channels,
         use_resize_conv=stage_config.get('use_resize_conv', True),
-        upsampling_mode=stage_config.get('upsampling_mode', 'bilinear')
+        upsampling_mode=stage_config.get('upsampling_mode', 'bilinear'),
+        remove_top_skip=stage_config.get('remove_top_skip', False),
+        use_blurpool=stage_config.get('use_blurpool', False),
+        activation=stage_config.get('activation', 'elu'),
     )
 
     return model

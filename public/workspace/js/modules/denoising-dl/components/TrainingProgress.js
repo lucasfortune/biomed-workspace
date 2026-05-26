@@ -37,6 +37,8 @@ class TrainingProgress {
       mask: {
         status: 'pending',
         kernelSize: null,
+        kernelHeight: null,
+        kernelWidth: null,
         activePixels: null,
         pattern: null,
         isEmpty: false
@@ -234,7 +236,7 @@ class TrainingProgress {
           <div class="mask-result">
             <p>Structural pattern detected:</p>
             <div class="mask-info">
-              <span class="mask-detail">Kernel Size: ${mask.kernelSize}x${mask.kernelSize}</span>
+              <span class="mask-detail">Kernel Size: ${mask.kernelHeight ?? mask.kernelSize}x${mask.kernelWidth ?? mask.kernelSize}</span>
               <span class="mask-detail">Active Pixels: ${mask.activePixels}</span>
               <span class="mask-detail">Pattern: ${mask.pattern || 'Unknown'}</span>
             </div>
@@ -357,6 +359,8 @@ class TrainingProgress {
       ...this.state.mask,
       status: 'completed',
       kernelSize: data.kernelSize,
+      kernelHeight: data.kernelHeight,
+      kernelWidth: data.kernelWidth,
       activePixels: data.activePixels,
       pattern: data.pattern,
       isEmpty: data.isEmpty,
@@ -441,6 +445,8 @@ class TrainingProgress {
       mask: {
         status: 'pending',
         kernelSize: null,
+        kernelHeight: null,
+        kernelWidth: null,
         activePixels: null,
         pattern: null,
         isEmpty: false

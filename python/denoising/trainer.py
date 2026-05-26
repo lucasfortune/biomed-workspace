@@ -125,6 +125,11 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
         best_val_loss = float('inf')
         train_loss_history = []
         val_loss_history = []
+        # Tracks whether the loop terminated early. Inferring early_stopped
+        # from EarlyStopping.counter after the loop is unreliable when the
+        # last `patience` epochs happen not to improve but the loop ran to
+        # completion (counter ≥ patience without ever triggering the break).
+        early_stopped_flag = False
 
         for epoch in range(num_epochs):
             # Training phase
@@ -164,8 +169,13 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
                 best_val_loss = val_loss
                 self.save_checkpoint(best_model_path)
 
-            if early_stopping(val_loss) and stage_config.get('early_stopping', self.hparams.get('early_stopping', True)):
+            # Short-circuit so the predicate (which mutates EarlyStopping.counter)
+            # is only called when early stopping is actually enabled. Otherwise
+            # the counter ticks up every epoch a non-improving val_loss is seen
+            # and corrupts the `early_stopped` metric below.
+            if stage_config.get('early_stopping', self.hparams.get('early_stopping', True)) and early_stopping(val_loss):
                 print(f"Early stopping triggered at epoch {epoch}")
+                early_stopped_flag = True
                 # Emit final progress
                 if self.progress_callback:
                     self.progress_callback(epoch + 1, num_epochs, train_loss, val_loss, current_lr, early_stopped=True)
@@ -182,7 +192,7 @@ class WebAutoStructN2VTrainer(AutoStructN2VTrainer):
             'best_val_loss': float(best_val_loss),
             'epochs_completed': epoch + 1,
             'total_epochs': num_epochs,
-            'early_stopped': early_stopping.counter >= patience if hasattr(early_stopping, 'counter') else False,
+            'early_stopped': early_stopped_flag,
             'training_time_seconds': elapsed,
             'train_loss_history': [float(x) for x in train_loss_history],
             'val_loss_history': [float(x) for x in val_loss_history]
