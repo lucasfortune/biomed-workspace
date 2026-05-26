@@ -25,6 +25,84 @@ from .utils import emit_progress, emit_result, emit_error, safe_load_checkpoint
 from .models import CenterChannelWrapper
 
 
+def _extract_training_hparams(checkpoint, stage):
+    """Read norm_stats and overlap_tile_pad out of a saved checkpoint's hparams.
+
+    Both fields are stashed in the trainer's `hparams` dict (the full training
+    config) and persisted by `BaseTrainer.save_checkpoint`. They are needed at
+    inference time so the predictor mirrors the training-time input pipeline.
+    Returns (norm_stats, overlap_tile_pad) — either may be None/0 for models
+    trained before the migration.
+    """
+    if not isinstance(checkpoint, dict):
+        return None, 0
+    hparams = checkpoint.get('hparams') or {}
+    norm_stats = hparams.get('_norm_stats')
+    stage_hp = hparams.get(stage) or {}
+    overlap_tile_pad = int(stage_hp.get('overlap_tile_pad', 0))
+    return norm_stats, overlap_tile_pad
+
+
+def _stage_params_from_checkpoint(checkpoint, stage, fallback):
+    """Build the `stage_params` dict for create_model_from_config.
+
+    The frontend's `model_config` historically only forwarded four fields
+    (features, num_layers, use_resize_conv, upsampling_mode), but the
+    migration added architecture-changing knobs (`remove_top_skip`,
+    `use_blurpool`, `activation`). Building the model from the frontend's
+    fields alone would produce an architecture that doesn't match the
+    checkpoint, causing `load_state_dict` to error out (or silently load
+    a mismatched model on strict=False, which would yield garbage outputs).
+
+    The checkpoint's `hparams[stage]` is the authoritative record of what
+    architecture was actually trained, so we prefer those values and fall
+    back to `model_config` (and finally library defaults) for any keys the
+    checkpoint doesn't carry — keeping pre-migration models loadable.
+    """
+    hparams = checkpoint.get('hparams') if isinstance(checkpoint, dict) else None
+    stage_hp = (hparams or {}).get(stage) or {}
+    def pick(key, default):
+        if key in stage_hp:
+            return stage_hp[key]
+        return fallback.get(key, default)
+    return {
+        'features': pick('features', 64),
+        'num_layers': pick('num_layers', 2),
+        'use_resize_conv': pick('use_resize_conv', True),
+        'upsampling_mode': pick('upsampling_mode', 'bilinear'),
+        'remove_top_skip': pick('remove_top_skip', False),
+        'use_blurpool': pick('use_blurpool', False),
+        'activation': pick('activation', 'elu'),
+        'patch_size': pick('patch_size', 64),
+    }
+
+
+def _dtype_normalize(stack):
+    """Apply the same [0,1] dtype-based normalization training uses.
+
+    Returns (normalized_float32_stack, denorm_fn) where denorm_fn(arr) maps a
+    float array in [0,1] back to the original dtype's range. Used at inference
+    time when norm_stats is set, so the predictor sees the same input domain
+    the train-time z-score stats were computed on.
+    """
+    original_dtype = stack.dtype
+    stack_f = stack.astype(np.float32)
+    if original_dtype == np.uint8:
+        norm = stack_f / 255.0
+        def denorm(arr): return (arr * 255.0).astype(original_dtype)
+    elif original_dtype == np.uint16:
+        norm = stack_f / 65535.0
+        def denorm(arr): return (arr * 65535.0).astype(original_dtype)
+    elif np.issubdtype(original_dtype, np.floating) and (stack_f.max() > 1.0 or stack_f.min() < 0.0):
+        smin, smax = float(stack_f.min()), float(stack_f.max())
+        norm = (stack_f - smin) / (smax - smin + 1e-8)
+        def denorm(arr): return (arr * (smax - smin) + smin).astype(original_dtype)
+    else:
+        norm = stack_f
+        def denorm(arr): return arr.astype(original_dtype)
+    return norm, denorm
+
+
 def run_inference(config: dict):
     """
     Run inference with a trained model.
@@ -64,27 +142,26 @@ def run_inference(config: dict):
             "device": str(device)
         })
 
-        # Build config for create_model_from_config (needs stage-specific nested dict)
-        stage_params = {
-            'features': model_config.get('features', 64),
-            'num_layers': model_config.get('num_layers', 2),
-            'use_resize_conv': model_config.get('use_resize_conv', True),
-            'upsampling_mode': model_config.get('upsampling_mode', 'bilinear')
-        }
+        # Load the checkpoint up front so we can derive the model architecture
+        # from `hparams` (the authoritative record of what was trained) before
+        # instantiating it. Otherwise architecture-changing N2V2 knobs the
+        # frontend never forwarded — remove_top_skip, use_blurpool, activation
+        # — would default to library values that don't match the saved
+        # weights, breaking load_state_dict.
+        checkpoint = safe_load_checkpoint(model_path, device)
+        stage_params = _stage_params_from_checkpoint(checkpoint, stage, model_config)
         inference_config = {
             'mode': mode,
             'run_stage2': method == 'autostructn2v',
             'stage1': stage_params,
-            'stage2': stage_params
+            'stage2': stage_params,
         }
 
-        # Load model (mode-aware)
+        # Build model (mode-aware) and load weights
         model = create_model_from_config(
             config=inference_config,
             stage=stage
         ).to(device)
-
-        checkpoint = safe_load_checkpoint(model_path, device)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.eval()
 
@@ -95,9 +172,21 @@ def run_inference(config: dict):
             print(f"[DEBUG] Wrapping Stage 1 model with CenterChannelWrapper for 2.5D inference")
             inference_model = CenterChannelWrapper(model)
 
+        # Pull train-time normalization params out of the checkpoint so the
+        # predictor reproduces the input pipeline the model was trained on.
+        norm_stats, overlap_tile_pad = _extract_training_hparams(checkpoint, stage)
+        if norm_stats is not None:
+            print(f"[zscore] Inference using train stats mean={norm_stats['mean']:.6f}, std={norm_stats['std']:.6f}, overlap_tile_pad={overlap_tile_pad}")
+
         # Create predictor with mode
         patch_size = model_config.get('patch_size', 64)
-        predictor = AutoStructN2VPredictor(model=inference_model, patch_size=patch_size, mode=mode)
+        predictor = AutoStructN2VPredictor(
+            model=inference_model,
+            patch_size=patch_size,
+            mode=mode,
+            norm_stats=norm_stats,
+            overlap_tile_pad=overlap_tile_pad,
+        )
 
         # Load input
         emit_progress('inference', {
@@ -119,57 +208,37 @@ def run_inference(config: dict):
             "totalSlices": total_slices
         })
 
-        if mode == '2.5d':
-            # 2.5D mode: Use predictor's internal _predict_2_5d method (triplet sliding window)
-            # Note: denoise_stack() expects a file path, but we have the array in memory
-            # Normalize input
+        # Defer to the predictor's slice-level routines (_predict_2d /
+        # _predict_2_5d) for both modes — those internals handle overlap-tile
+        # padding, central-region patch weighting, and slice-level z-score
+        # together. Looping `denoise_tensor` per slice here bypasses the
+        # overlap-tile padding and produces a black border the width of
+        # `overlap_tile_pad` around every output slice. Per-slice progress is
+        # downgraded to start/end events; the predictor's tqdm still streams
+        # progress to stdout for the operator log.
+        if norm_stats is not None:
+            input_norm, denorm = _dtype_normalize(input_stack)
+        else:
             input_min, input_max = input_stack.min(), input_stack.max()
             input_norm = (input_stack - input_min) / (input_max - input_min + 1e-8)
             input_norm = input_norm.astype(np.float32)
+            def denorm(arr):
+                return (arr * (input_max - input_min) + input_min).astype(input_stack.dtype)
 
-            # Denoise using 2.5D sliding window (use internal method for array input)
+        if mode == '2.5d':
             output_stack = predictor._predict_2_5d(input_norm)
-
-            # Rescale to original range
-            output_stack = output_stack * (input_max - input_min) + input_min
-            output_stack = output_stack.astype(input_stack.dtype)
-
-            emit_progress('inference', {
-                "inference_id": inference_id,
-                "currentSlice": total_slices,
-                "totalSlices": total_slices,
-                "progressPercent": 100.0,
-                "mode": mode
-            })
         else:
-            # 2D mode: Process each slice independently
-            output_stack = []
+            output_stack = predictor._predict_2d(input_norm)
 
-            for i, slice_img in enumerate(input_stack):
-                # Normalize
-                slice_norm = (slice_img - slice_img.min()) / (slice_img.max() - slice_img.min() + 1e-8)
-                slice_norm = slice_norm.astype(np.float32)
+        output_stack = denorm(output_stack)
 
-                # Convert to tensor and denoise
-                slice_tensor = torch.from_numpy(slice_norm).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
-                denoised_tensor = predictor.denoise_tensor(slice_tensor)
-                denoised = denoised_tensor.squeeze().cpu().numpy()
-
-                # Rescale to original range
-                denoised_rescaled = denoised * (slice_img.max() - slice_img.min()) + slice_img.min()
-                output_stack.append(denoised_rescaled.astype(slice_img.dtype))
-
-                # Emit progress
-                if (i + 1) % 5 == 0 or i == total_slices - 1:
-                    emit_progress('inference', {
-                        "inference_id": inference_id,
-                        "currentSlice": i + 1,
-                        "totalSlices": total_slices,
-                        "progressPercent": round((i + 1) / total_slices * 100, 1),
-                        "mode": mode
-                    })
-
-            output_stack = np.array(output_stack)
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "currentSlice": total_slices,
+            "totalSlices": total_slices,
+            "progressPercent": 100.0,
+            "mode": mode
+        })
 
         # Save output with proper naming convention
         os.makedirs(output_dir, exist_ok=True)
@@ -256,22 +325,18 @@ def run_sequential_inference(config: dict):
 
         total_slices = len(input_stack)
 
-        # Build config for create_model_from_config (needs stage-specific nested dicts)
+        # Load BOTH checkpoints up front so the per-stage architecture (incl.
+        # N2V2 knobs the frontend never forwards) is derived from each
+        # checkpoint's own hparams. Otherwise the Stage 2 model could be built
+        # with Stage 1's architecture (or vice versa), masking weight load
+        # mismatches.
+        stage1_checkpoint = safe_load_checkpoint(stage1_model_path, device)
+        stage2_checkpoint = safe_load_checkpoint(stage2_model_path, device)
         inference_config = {
             'mode': mode,
             'run_stage2': True,  # Sequential means we have Stage 2
-            'stage1': {
-                'features': stage1_config.get('features', 64),
-                'num_layers': stage1_config.get('num_layers', 2),
-                'use_resize_conv': stage1_config.get('use_resize_conv', True),
-                'upsampling_mode': stage1_config.get('upsampling_mode', 'bilinear')
-            },
-            'stage2': {
-                'features': stage2_config.get('features', 64),
-                'num_layers': stage2_config.get('num_layers', 2),
-                'use_resize_conv': stage2_config.get('use_resize_conv', True),
-                'upsampling_mode': stage2_config.get('upsampling_mode', 'bilinear')
-            }
+            'stage1': _stage_params_from_checkpoint(stage1_checkpoint, 'stage1', stage1_config),
+            'stage2': _stage_params_from_checkpoint(stage2_checkpoint, 'stage2', stage2_config),
         }
 
         # =========== Stage 1: N2V ===========
@@ -283,15 +348,14 @@ def run_sequential_inference(config: dict):
             "device": str(device)
         })
 
-        # Load Stage 1 model (mode-aware)
+        # Build Stage 1 model (mode-aware) and load its weights
         stage1_model = create_model_from_config(
             config=inference_config,
             stage='stage1'
         ).to(device)
-
-        checkpoint = safe_load_checkpoint(stage1_model_path, device)
-        stage1_model.load_state_dict(checkpoint['model_state_dict'])
+        stage1_model.load_state_dict(stage1_checkpoint['model_state_dict'])
         stage1_model.eval()
+        checkpoint = stage1_checkpoint  # alias used by downstream norm_stats lookup
 
         # For 2.5D autoStructN2V Stage 1, the model outputs 3 channels (for autocorrelation).
         # For inference, we only need the center channel. Wrap the model to extract it.
@@ -302,48 +366,43 @@ def run_sequential_inference(config: dict):
             print(f"[DEBUG] Wrapping Stage 1 model with CenterChannelWrapper for 2.5D inference")
             stage1_inference_model = CenterChannelWrapper(stage1_model)
 
+        stage1_norm_stats, stage1_overlap_pad = _extract_training_hparams(checkpoint, 'stage1')
+
         patch_size = stage1_config.get('patch_size', 64)
-        stage1_predictor = AutoStructN2VPredictor(model=stage1_inference_model, patch_size=patch_size, mode=mode)
+        stage1_predictor = AutoStructN2VPredictor(
+            model=stage1_inference_model,
+            patch_size=patch_size,
+            mode=mode,
+            norm_stats=stage1_norm_stats,
+            overlap_tile_pad=stage1_overlap_pad,
+        )
 
-        # Normalize input
-        input_min, input_max = input_stack.min(), input_stack.max()
-        input_normalized = (input_stack - input_min) / (input_max - input_min + 1e-8)
-        input_normalized = input_normalized.astype(np.float32)
-
-        # Process Stage 1
-        if mode == '2.5d':
-            # 2.5D mode: Use predictor's internal _predict_2_5d method
-            # Note: denoise_stack() expects a file path, but we have the array in memory
-            stage1_output = stage1_predictor._predict_2_5d(input_normalized)
-
-            emit_progress('inference', {
-                "inference_id": inference_id,
-                "stage": "stage1",
-                "status": "processing",
-                "mode": mode,
-                "progress_percent": 50
-            })
+        # Match training-time input domain (dtype-based [0,1]) when zscore is
+        # active so the predictor's internal stats apply to the same scale they
+        # were computed on. Otherwise keep the legacy per-stack min-max path.
+        if stage1_norm_stats is not None:
+            input_normalized, _ = _dtype_normalize(input_stack)
         else:
-            # 2D mode: Process each slice independently
-            stage1_output = []
-            for i, img in enumerate(input_normalized):
-                img_tensor = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
-                denoised_tensor = stage1_predictor.denoise_tensor(img_tensor)
-                denoised = denoised_tensor.squeeze().cpu().numpy()
-                stage1_output.append(denoised)
+            input_min, input_max = input_stack.min(), input_stack.max()
+            input_normalized = (input_stack - input_min) / (input_max - input_min + 1e-8)
+            input_normalized = input_normalized.astype(np.float32)
 
-                progress_percent = ((i + 1) / total_slices) * 50
-                emit_progress('inference', {
-                    "inference_id": inference_id,
-                    "stage": "stage1",
-                    "status": "processing",
-                    "mode": mode,
-                    "current_slice": i + 1,
-                    "total_slices": total_slices,
-                    "progress_percent": progress_percent
-                })
+        # Defer to the predictor's slice-level routines for both modes so
+        # overlap-tile padding + central-region weighting are handled
+        # correctly. The per-slice denoise_tensor loop bypassed the outer-pad
+        # band and left a black border the width of overlap_tile_pad.
+        if mode == '2.5d':
+            stage1_output = stage1_predictor._predict_2_5d(input_normalized)
+        else:
+            stage1_output = stage1_predictor._predict_2d(input_normalized)
 
-            stage1_output = np.array(stage1_output)
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "stage": "stage1",
+            "status": "processing",
+            "mode": mode,
+            "progress_percent": 50
+        })
 
         # Save Stage 1 intermediate output
         mode_suffix = '_2.5d' if mode == '2.5d' else ''
@@ -358,54 +417,42 @@ def run_sequential_inference(config: dict):
             "mode": mode
         })
 
-        # Load Stage 2 model (mode-aware)
+        # Build Stage 2 model (mode-aware) and load its weights from the
+        # checkpoint loaded up front.
         stage2_model = create_model_from_config(
             config=inference_config,
             stage='stage2'
         ).to(device)
-
-        checkpoint = safe_load_checkpoint(stage2_model_path, device)
-        stage2_model.load_state_dict(checkpoint['model_state_dict'])
+        stage2_model.load_state_dict(stage2_checkpoint['model_state_dict'])
         stage2_model.eval()
+        checkpoint = stage2_checkpoint  # downstream norm_stats lookup
+
+        stage2_norm_stats, stage2_overlap_pad = _extract_training_hparams(checkpoint, 'stage2')
 
         patch_size = stage2_config.get('patch_size', 64)
-        stage2_predictor = AutoStructN2VPredictor(model=stage2_model, patch_size=patch_size, mode=mode)
+        stage2_predictor = AutoStructN2VPredictor(
+            model=stage2_model,
+            patch_size=patch_size,
+            mode=mode,
+            norm_stats=stage2_norm_stats,
+            overlap_tile_pad=stage2_overlap_pad,
+        )
 
-        # Process Stage 2 using Stage 1 output
+        # Stage 1's output is already in the per-slice [0,1] domain Stage 2 was
+        # trained on; both _predict_2d and _predict_2_5d apply zscore +
+        # overlap-tile padding internally.
         if mode == '2.5d':
-            # 2.5D mode: Use predictor's internal _predict_2_5d method
-            # Note: denoise_stack() expects a file path, but we have the array in memory
-            stage2_output = stage2_predictor._predict_2_5d(stage1_output)
-
-            emit_progress('inference', {
-                "inference_id": inference_id,
-                "stage": "stage2",
-                "status": "processing",
-                "mode": mode,
-                "progress_percent": 100
-            })
+            stage2_output = stage2_predictor._predict_2_5d(stage1_output.astype(np.float32))
         else:
-            # 2D mode: Process each slice independently
-            stage2_output = []
-            for i, img in enumerate(stage1_output):
-                img_float = img.astype(np.float32)
-                img_tensor = torch.from_numpy(img_float).unsqueeze(0).unsqueeze(0)
-                denoised_tensor = stage2_predictor.denoise_tensor(img_tensor)
-                denoised = denoised_tensor.squeeze().cpu().numpy()
-                stage2_output.append(denoised)
+            stage2_output = stage2_predictor._predict_2d(stage1_output.astype(np.float32))
 
-                progress_percent = 50 + ((i + 1) / total_slices) * 50
-                emit_progress('inference', {
-                    "inference_id": inference_id,
-                    "stage": "stage2",
-                    "status": "processing",
-                    "mode": mode,
-                    "current_slice": i + 1,
-                    "total_slices": total_slices,
-                    "progress_percent": progress_percent
-                })
-
-            stage2_output = np.array(stage2_output)
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "stage": "stage2",
+            "status": "processing",
+            "mode": mode,
+            "progress_percent": 100
+        })
 
         # Save final output with proper naming convention
         output_filename = f'asn2v{mode_suffix}_denoised_{inference_id}.tif'

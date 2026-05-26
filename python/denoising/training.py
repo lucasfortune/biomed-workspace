@@ -28,6 +28,7 @@ from autoStructN2V.masking import (
     create_full_mask_3d
 )
 from autoStructN2V.inference import AutoStructN2VPredictor
+from autoStructN2V.utils.image import load_and_normalize_image
 from autoStructN2V.utils.training import set_seed
 
 from .utils import (
@@ -120,6 +121,27 @@ def run_training(config: dict):
         print(f"[DEBUG] extracted_images_dir: {extracted_images_dir}")
         print(f"[DEBUG] original_num_slices: {original_num_slices}")
 
+        # Web-app defaults for the migrated autoStructN2V features. These flip
+        # the library's conservative defaults to the publication-recommended
+        # values so every web-app training run benefits from the upstream
+        # improvements:
+        #   - z-score input normalization (CAREamics-style)
+        #   - overlap-tile patching (eliminates patch-edge artifact)
+        #   - N2V2 architectural fixes (top-skip removal + blurpool) — both
+        #     attack the checkerboard pattern that resize-conv alone doesn't
+        #     fully suppress.
+        # Library defaults are conservative ('unit', 0, False, False, 'elu');
+        # we override before validate_config so the saved config.json reflects
+        # what was actually used, and the checkpoint's hparams carry these for
+        # inference-time reconstruction. `setdefault` means a UI/wrapper that
+        # explicitly sets any of these still wins.
+        config.setdefault('normalize_method', 'zscore')
+        for _stage in ('stage1', 'stage2'):
+            config.setdefault(_stage, {})
+            config[_stage].setdefault('overlap_tile_pad', 4)
+            config[_stage].setdefault('remove_top_skip', True)
+            config[_stage].setdefault('use_blurpool', True)
+
         # Validate configuration
         config = validate_config(config)
         verbose = config.get('verbose', False)
@@ -196,6 +218,40 @@ def run_training(config: dict):
             slice_indices = None
             original_stack_dtype = None  # Will detect from first image if needed
 
+        # Compute train-derived z-score stats when normalize_method == 'zscore'.
+        # Matches autoStructN2V/pipeline/runner.py:348-353 for stack mode and
+        # extends the same computation to 2D path mode (which the upstream
+        # currently raises NotImplementedError for). The stats are stashed in
+        # config['_norm_stats'], which is read by create_dataloaders (data.py:279)
+        # and threaded into datasets, the trainer, and the predictor below.
+        # save_checkpoint persists `hparams=config`, so `_norm_stats` travels
+        # with the model and is read back at inference time.
+        if config.get('normalize_method') == 'zscore':
+            if mode == '2.5d':
+                train_slices = loaded_stack[slice_indices['train']]
+                mean = float(train_slices.mean())
+                std = float(train_slices.std())
+            else:
+                # Stream the (already dtype-normalized [0,1]) training images
+                # via the library's loader so the stats are computed on the
+                # same domain the dataset will see.
+                train_paths = image_paths[0]
+                running_sum = 0.0
+                running_sq = 0.0
+                running_n = 0
+                for p in train_paths:
+                    img = load_and_normalize_image(p)
+                    running_sum += float(img.sum())
+                    running_sq += float((img.astype(np.float64) ** 2).sum())
+                    running_n += int(img.size)
+                if running_n == 0:
+                    raise ValueError("zscore normalization requested but no training images found")
+                mean = running_sum / running_n
+                var = max(running_sq / running_n - mean * mean, 0.0)
+                std = float(np.sqrt(var))
+            config['_norm_stats'] = {'mean': mean, 'std': std, 'eps': 1e-6}
+            print(f"[zscore] Train stats computed: mean={mean:.6f}, std={std:.6f} (mode={mode})")
+
         # Save configuration
         config_path = os.path.join(dirs['experiment'], 'config.json')
         with open(config_path, 'w') as f:
@@ -270,6 +326,7 @@ def run_training(config: dict):
                 hparams=config,
                 stage='stage1',
                 experiment_name=os.path.join(dirs['stage1']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+                norm_stats=config.get('_norm_stats'),
                 progress_callback=create_progress_callback('stage1', training_id)
             )
 
@@ -317,7 +374,9 @@ def run_training(config: dict):
             predictor = AutoStructN2VPredictor(
                 model=inference_model,
                 patch_size=config['stage1']['patch_size'],
-                mode=mode
+                mode=mode,
+                norm_stats=config.get('_norm_stats'),
+                overlap_tile_pad=config['stage1'].get('overlap_tile_pad', 0),
             )
 
             stage1_denoised_dir = os.path.join(dirs['data'], 'stage1_denoised')
@@ -567,6 +626,7 @@ def run_training(config: dict):
                     hparams=config,
                     stage='stage2',
                     experiment_name=os.path.join(dirs['stage2']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+                    norm_stats=config.get('_norm_stats'),
                     progress_callback=create_progress_callback('stage2', training_id)
                 )
 
@@ -615,7 +675,9 @@ def run_training(config: dict):
             predictor = AutoStructN2VPredictor(
                 model=stage2_trained_model,
                 patch_size=config['stage2']['patch_size'],
-                mode=mode
+                mode=mode,
+                norm_stats=config.get('_norm_stats'),
+                overlap_tile_pad=config['stage2'].get('overlap_tile_pad', 0),
             )
 
             stage2_denoised_dir = os.path.join(dirs['data'], 'stage2_denoised')

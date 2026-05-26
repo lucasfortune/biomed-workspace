@@ -261,6 +261,19 @@ def run_stage2_only(config: dict):
             if 'input_data' in config:
                 del config['input_data']
 
+        # Apply the same web-app-flavored defaults as run_training() (zscore,
+        # overlap-tile padding, N2V2 architectural fixes). Stage-2-only mode
+        # inherits most of its config from the saved Stage-1 config.json, but
+        # the shallow merge in this function only fills missing top-level keys,
+        # so we re-apply here to backfill anything the user-provided continue
+        # payload supplied a partial stage dict for. Matches training.py.
+        config.setdefault('normalize_method', 'zscore')
+        for _stage in ('stage1', 'stage2'):
+            config.setdefault(_stage, {})
+            config[_stage].setdefault('overlap_tile_pad', 4)
+            config[_stage].setdefault('remove_top_skip', True)
+            config[_stage].setdefault('use_blurpool', True)
+
         # Validate config to ensure all defaults are set (including masking_strategy)
         config = validate_config(config)
         verbose = config.get('verbose', False)
@@ -452,7 +465,9 @@ def run_stage2_only(config: dict):
             stage2_optimizer, mode='min', factor=0.5, patience=5
         )
 
-        # Create trainer with progress callback
+        # Create trainer with progress callback. norm_stats was computed during
+        # Stage 1 and persisted via the experiment's config.json; we read it
+        # back so the aux-PSNR path uses identical (mean, std) to training.
         stage2_trainer = WebAutoStructN2VTrainer(
             model=stage2_model,
             optimizer=stage2_optimizer,
@@ -461,6 +476,7 @@ def run_stage2_only(config: dict):
             hparams=config,
             stage='stage2',
             experiment_name=os.path.join(dirs['stage2']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+            norm_stats=config.get('_norm_stats'),
             progress_callback=create_progress_callback('stage2', training_id)
         )
 
@@ -507,7 +523,9 @@ def run_stage2_only(config: dict):
         predictor = AutoStructN2VPredictor(
             model=stage2_trained_model,
             patch_size=config['stage2']['patch_size'],
-            mode=mode
+            mode=mode,
+            norm_stats=config.get('_norm_stats'),
+            overlap_tile_pad=config['stage2'].get('overlap_tile_pad', 0),
         )
 
         stage2_denoised_dir = os.path.join(dirs['data'], 'stage2_denoised')
