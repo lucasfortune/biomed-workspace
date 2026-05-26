@@ -44,29 +44,34 @@ def image_to_patches(image, patch_size, stride):
             
     return torch.stack(patches)
 
-def patches_to_image(patches, image_size, patch_size, stride):
+def patches_to_image(patches, image_size, patch_size, stride, valid_size=None):
     """
     Reconstruct an image from overlapping patches using weighted averaging.
-    
+
     This function places each patch back in its original position and combines
     overlapping regions using a weighted average. The weights give more importance
     to the center of each patch to reduce edge artifacts.
-    
+
     Args:
         patches (torch.Tensor): Tensor of patches of shape (N, C, patch_size, patch_size)
         image_size (tuple): Original image size as (C, H, W)
         patch_size (int): Size of each square patch
         stride (int): Stride used when extracting patches
-        
+        valid_size (int, optional): If set, only the central
+            ``valid_size x valid_size`` of each patch contributes to the
+            reconstruction (overlap-tile / option-d semantics). Outside that
+            central region the weight is exactly zero so the model's
+            edge-band output is excluded.
+
     Returns:
         torch.Tensor: Reconstructed image of shape (C, H, W)
-        
+
     Raises:
         ValueError: If input dimensions don't match or parameters are invalid
     """
     device = patches.device
     channels = patches.shape[1]
-    
+
     # Validate inputs
     if len(image_size) != 3:
         raise ValueError("image_size should be (C, H, W)")
@@ -74,13 +79,13 @@ def patches_to_image(patches, image_size, patch_size, stride):
         raise ValueError("Number of channels in patches and image_size don't match")
     if patch_size > min(image_size[1:]):
         raise ValueError("patch_size cannot be larger than image dimensions")
-    
+
     # Initialize output tensors
     output = torch.zeros((channels, *image_size[1:]), device=device)
     weight_sum = torch.zeros((channels, *image_size[1:]), device=device)
-    
+
     # Create and expand weight mask for all channels
-    weight_mask = create_weight_mask(patch_size).to(device)
+    weight_mask = create_weight_mask(patch_size, valid_size=valid_size).to(device)
     weight_mask = weight_mask.unsqueeze(0).repeat(channels, 1, 1)
     
     # Reconstruct image
@@ -101,43 +106,58 @@ def patches_to_image(patches, image_size, patch_size, stride):
     
     return reconstructed
 
-def create_weight_mask(patch_size, alpha=1):
+def create_weight_mask(patch_size, alpha=1, valid_size=None):
     """
     Create a weight mask for blending overlapping patches to avoid edge artifacts.
-    
+
     This function creates a 2D weight mask where pixels near the center of the patch
     have higher weights than those near the edges. When patches are combined, this
     weighting reduces visible seams between patches.
-    
+
     Args:
-        patch_size (int): Size of the square patch
+        patch_size (int): Size of the square patch (model input size).
         alpha (float, optional): Controls how quickly weights fall off from center.
             Higher values create sharper falloff. Defaults to 1.
-            
+        valid_size (int, optional): If set, restricts the non-zero region of the
+            weight mask to the central ``valid_size x valid_size`` block, with
+            triangular falloff inside that region. Used by overlap-tile inference
+            (option-d) where the model receives a ``patch_size`` input but only
+            the central ``valid_size`` output is trusted. Outside the central
+            block, weight is exactly zero so margin pixels contribute nothing.
+
     Returns:
         torch.Tensor: 2D weight mask of shape (patch_size, patch_size)
-        
+
     Raises:
-        ValueError: If patch_size is not positive or alpha is negative
+        ValueError: If patch_size is not positive or alpha is negative.
     """
     if patch_size <= 0:
         raise ValueError("patch_size must be positive")
     if alpha < 0:
         raise ValueError("alpha must be non-negative")
-        
-    center = patch_size // 2
-    x = torch.arange(patch_size, dtype=torch.float32)
-    
-    # Create linear falloff from center
-    weight_1d = 1 - torch.abs(x - center) / center
-    
-    # Apply power function for non-linear falloff
-    weight_1d = torch.pow(weight_1d.clamp(min=0), alpha)
-    
-    # Create 2D mask through outer product
-    weight_2d = weight_1d.unsqueeze(0) * weight_1d.unsqueeze(1)
-    
-    return weight_2d
+
+    if valid_size is None or valid_size == patch_size:
+        # Full-patch mode (legacy): triangular falloff over the whole patch.
+        center = patch_size // 2
+        x = torch.arange(patch_size, dtype=torch.float32)
+        weight_1d = 1 - torch.abs(x - center) / max(center, 1)
+        weight_1d = torch.pow(weight_1d.clamp(min=0), alpha)
+        return weight_1d.unsqueeze(0) * weight_1d.unsqueeze(1)
+
+    if valid_size <= 0 or valid_size > patch_size or (patch_size - valid_size) % 2 != 0:
+        raise ValueError(
+            f"valid_size must be a positive even-offset value <= patch_size "
+            f"(got valid_size={valid_size}, patch_size={patch_size})")
+
+    # Overlap-tile mode (option d): constant weight 1 inside the central valid
+    # region, exactly zero outside. Triangular falloff at the valid-region edge
+    # would push slice-corner pixels to weight 0 (those pixels are covered by
+    # only one patch's valid-region edge), producing undefined output. Constant
+    # weight + 50%-overlap averaging gives well-defined blending everywhere.
+    pad = (patch_size - valid_size) // 2
+    full = torch.zeros(patch_size, patch_size, dtype=torch.float32)
+    full[pad:pad + valid_size, pad:pad + valid_size] = 1.0
+    return full
 
 def find_roi_patches(img, patch_size, threshold=0.2, above_threshold=False, 
                      max_patches=10000, scale_factor=1.0, overlap=0.5):

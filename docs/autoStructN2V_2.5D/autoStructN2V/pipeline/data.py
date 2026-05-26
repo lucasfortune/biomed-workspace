@@ -218,50 +218,23 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
             val_paths = get_denoised_paths(val_paths, 'val')
             test_paths = get_denoised_paths(test_paths, 'test')
 
-    # Create stage-specific mask based on configuration and mode
+    # Determine the *single structural kernel* for this stage. The dataset will
+    # build its own per-patch random full masks from this kernel via the new
+    # mask-pool mechanism (A1 fix).
     if stage == "stage1":
         if mode == '2.5d':
-            # Create 3D single-pixel mask for 2.5D Stage 1
-            single_mask = create_stage1_mask_kernel_3d(stage_config.get('mask_center_size', 1))
-            mask, prediction_kernel = create_full_mask_3d(
-                single_mask,
-                stage_config['patch_size'],
-                stage_config['mask_percentage'],
-                verbose
-            )
+            single_kernel = create_stage1_mask_kernel_3d(stage_config.get('mask_center_size', 1))
         else:
-            # Create 2D single-pixel mask for 2D Stage 1
-            single_mask = create_stage1_mask_kernel(stage_config.get('mask_center_size', 1))
-            mask, prediction_kernel = create_full_mask(
-                single_mask,
-                stage_config['patch_size'],
-                stage_config['mask_percentage'],
-                verbose
-            )
+            single_kernel = create_stage1_mask_kernel(stage_config.get('mask_center_size', 1))
     else:  # stage2
-        # For stage 2, use provided structured mask if available
-        if structured_mask is not None and prediction_kernel is not None:
-            mask = structured_mask
-            # prediction_kernel is already provided
+        if structured_mask is not None:
+            single_kernel = structured_mask
         else:
-            # Fall back to defaults if mask not provided
             print("Warning: No structured mask provided for stage2, using defaults")
             if mode == '2.5d':
-                single_mask = create_stage1_mask_kernel_3d(stage_config.get('mask_center_size', 3))
-                mask, prediction_kernel = create_full_mask_3d(
-                    single_mask,
-                    stage_config['patch_size'],
-                    stage_config['mask_percentage'],
-                    verbose
-                )
+                single_kernel = create_stage1_mask_kernel_3d(stage_config.get('mask_center_size', 3))
             else:
-                single_mask = create_stage1_mask_kernel(stage_config.get('mask_center_size', 3))
-                mask, prediction_kernel = create_full_mask(
-                    single_mask,
-                    stage_config['patch_size'],
-                    stage_config['mask_percentage'],
-                    verbose
-                )
+                single_kernel = create_stage1_mask_kernel(stage_config.get('mask_center_size', 3))
 
     if verbose:
         print(f"\n=== {stage.upper()} DataLoader Configuration ===")
@@ -279,9 +252,38 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
         print(f"Patch size: {stage_config['patch_size']}")
         print(f"Batch size: {stage_config['batch_size']}")
         print(f"Patches per image: {stage_config['patches_per_image']}")
-        print(f"Mask shape: {mask.shape}")
-        print(f"Prediction kernel shape: {prediction_kernel.shape}")
-        print(f"Masking strategy: {'local mean' if stage_config['masking_strategy'] == 0 else 'zeros' if stage_config['masking_strategy'] == 1 else 'random'}")
+        print(f"Single kernel shape: {single_kernel.shape}, true pixels: {int(single_kernel.sum())}")
+        print(f"Mask percentage (publication semantics — % of prediction centers): {stage_config['mask_percentage']}")
+        _strat_names = {0: 'local mean', 1: 'zeros', 2: 'random (legacy, F2)', 3: 'UPS 5x5 (publication)'}
+        print(f"Masking strategy: {_strat_names.get(stage_config['masking_strategy'], stage_config['masking_strategy'])}")
+
+    # Mask pool size used by TrainingDataset / ValidationDataset (A1 + A4 fix).
+    # See diagnostic note A1 design: 32 distinct masks pre-generated at init,
+    # randomly sampled per __getitem__. Exposed via stage_config so it can be
+    # tuned per experiment if needed; defaults to 32.
+    mask_pool_size = stage_config.get('mask_pool_size', 32)
+
+    # Local-mean window size for ``mask_strat=0`` (A6 fix). Default 5 — was
+    # hardcoded 3 prior to A6. Only kicks in when the experiment selects the
+    # local-mean strategy (mask_strat=0). For UPS (mask_strat=3) and other
+    # strategies, this parameter is ignored.
+    local_mean_window = stage_config.get('local_mean_window', 5)
+
+    # UPS neighborhood size for ``mask_strat=3``. Default 5 (matches N2V's UPS
+    # convention as we read it); CAREamics' canonical default is 11 via the
+    # `roi_size` config knob.
+    ups_window_size = stage_config.get('ups_window_size', 5)
+
+    # Train-derived z-score stats (CAREamics-style); None means no normalization
+    # beyond the [0,1] rescale done at load_tiff_stack time.
+    norm_stats = config.get('_norm_stats')
+
+    # Overlap-tile pad: when > 0, the dataset extracts (patch_size + 2*pad)
+    # patches from the slice but the mask + loss is only on the central
+    # patch_size region. Eliminates the reflection-padding × UNet bottleneck
+    # regime mismatch that produces a 1–3 px edge artifact under pad=0
+    # training. See session_log_2026-05-13_01.md "option (d)".
+    overlap_tile_pad = stage_config.get('overlap_tile_pad', 0)
 
     # Create datasets based on input mode
     if use_stack:
@@ -291,14 +293,17 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
             slice_indices=train_indices,
             mode=mode,
             patch_size=stage_config['patch_size'],
-            kernel_size=3,
-            mask=mask,
+            single_kernel=single_kernel,
             mask_percentage=stage_config['mask_percentage'],
             mask_strat=stage_config['masking_strategy'],
-            prediction_kernel=prediction_kernel,
+            mask_pool_size=mask_pool_size,
+            local_mean_window=local_mean_window,
+            ups_window_size=ups_window_size,
             patches_per_image=stage_config['patches_per_image'],
             use_roi=False,  # ROI not supported in stack mode
-            use_augmentation=stage_config['use_augmentation']
+            use_augmentation=stage_config['use_augmentation'],
+            norm_stats=norm_stats,
+            overlap_tile_pad=overlap_tile_pad,
         )
 
         val_dataset = ValidationDataset(
@@ -306,8 +311,16 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
             slice_indices=val_indices,
             mode=mode,
             patch_size=stage_config['patch_size'],
+            single_kernel=single_kernel,
+            mask_percentage=stage_config['mask_percentage'],
+            mask_strat=stage_config['masking_strategy'],
+            mask_pool_size=mask_pool_size,
+            local_mean_window=local_mean_window,
+            ups_window_size=ups_window_size,
             patches_per_image=stage_config['patches_per_image'] // 2,
-            use_roi=False
+            use_roi=False,
+            norm_stats=norm_stats,
+            overlap_tile_pad=overlap_tile_pad,
         )
 
         test_dataset = TestDataset(
@@ -320,32 +333,56 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
         train_dataset = TrainingDataset(
             image_paths=train_paths,
             patch_size=stage_config['patch_size'],
-            kernel_size=3,
-            mask=mask,
+            single_kernel=single_kernel,
             mask_percentage=stage_config['mask_percentage'],
             mask_strat=stage_config['masking_strategy'],
-            prediction_kernel=prediction_kernel,
+            mask_pool_size=mask_pool_size,
+            local_mean_window=local_mean_window,
+            ups_window_size=ups_window_size,
             patches_per_image=stage_config['patches_per_image'],
             use_roi=stage_config['use_roi'],
             scale_factor=stage_config['scale_factor'],
             roi_threshold=stage_config['roi_threshold'],
             select_background=stage_config['select_background'],
-            use_augmentation=stage_config['use_augmentation']
+            use_augmentation=stage_config['use_augmentation'],
+            norm_stats=norm_stats,
+            overlap_tile_pad=overlap_tile_pad,
         )
 
         val_dataset = ValidationDataset(
             image_paths=val_paths,
             patch_size=stage_config['patch_size'],
+            single_kernel=single_kernel,
+            mask_percentage=stage_config['mask_percentage'],
+            mask_strat=stage_config['masking_strategy'],
+            mask_pool_size=mask_pool_size,
+            local_mean_window=local_mean_window,
+            ups_window_size=ups_window_size,
             patches_per_image=stage_config['patches_per_image'] // 2,
             use_roi=stage_config['use_roi'],
             scale_factor=stage_config['scale_factor'],
             roi_threshold=stage_config['roi_threshold'],
-            select_background=stage_config['select_background']
+            select_background=stage_config['select_background'],
+            norm_stats=norm_stats,
+            overlap_tile_pad=overlap_tile_pad,
         )
 
         test_dataset = TestDataset(
             image_paths=test_paths
         )
+
+    # ------------------------------------------------------------------
+    # Worker init function — ensures each DataLoader worker has an
+    # independent NumPy / Python random state. Critical for the A1 fix:
+    # without this, all 4 workers would produce identical mask-pool
+    # samples within an epoch (same seed at fork time), defeating the
+    # per-patch random-mask diversity. Standard PyTorch pattern.
+    # ------------------------------------------------------------------
+    def _worker_init_fn(worker_id):
+        # Mix the worker's Torch base seed with worker_id for independence.
+        seed = torch.initial_seed() % (2 ** 32) + worker_id
+        np.random.seed(seed)
+        random.seed(seed)
 
     # Create data loaders
     train_loader = DataLoader(
@@ -353,7 +390,8 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
         batch_size=stage_config['batch_size'],
         shuffle=True,
         num_workers=4,
-        pin_memory=True if torch.cuda.is_available() else False
+        pin_memory=True if torch.cuda.is_available() else False,
+        worker_init_fn=_worker_init_fn,
     )
 
     val_loader = DataLoader(
@@ -361,7 +399,8 @@ def create_dataloaders(image_paths=None, config=None, stage="stage1", stage1_den
         batch_size=stage_config['batch_size'],
         shuffle=False,
         num_workers=4,
-        pin_memory=True if torch.cuda.is_available() else False
+        pin_memory=True if torch.cuda.is_available() else False,
+        worker_init_fn=_worker_init_fn,
     )
 
     test_loader = DataLoader(

@@ -138,11 +138,19 @@ def create_mask_from_original_images(image_paths, config, verbose=False):
 
 def create_stage2_mask(config, image_paths=None, denoised_patches=None, verbose=False):
     """
-    Create a structured mask for stage 2 based on the configured mask source.
+    Resolve the Stage-2 structural mask kernel from the configured source.
+
+    Returns the SMALL structural kernel (e.g. 21x21 stripe), not a pre-
+    expanded patch-sized full mask. The dataset's mask-pool mechanism
+    (A1 refactor, 2026-05-06; see ``datasets.TrainingDataset``) builds the
+    full per-patch mask itself by random kernel placement, which requires
+    the small kernel as input — passing a patch-sized full mask would
+    collapse the pool to a single placement with 1 prediction center per
+    patch.
 
     Supports both 2D and 2.5D modes:
-    - 2D mode: Creates 2D mask (H, W)
-    - 2.5D mode: Creates 3D mask (3, H, W) using 3D autocorrelation
+    - 2D mode: returns 2D kernel (H, W)
+    - 2.5D mode: returns 3D kernel (3, H, W)
 
     Args:
         config (dict): Configuration dictionary
@@ -153,9 +161,7 @@ def create_stage2_mask(config, image_paths=None, denoised_patches=None, verbose=
         verbose (bool): Whether to print verbose output
 
     Returns:
-        tuple: (full_mask, prediction_kernel)
-            - 2D: shapes (H, W)
-            - 2.5D: shapes (3, H, W)
+        numpy.ndarray: structural kernel. 2D shape (H, W) or 3D (3, H, W).
     """
     mask_source = config['stage2']['mask_source']
     mode = config.get('mode', '2d')
@@ -213,23 +219,7 @@ def create_stage2_mask(config, image_paths=None, denoised_patches=None, verbose=
     else:
         raise ValueError(f"Unknown mask_source: {mask_source}")
 
-    # Create full mask and prediction kernel based on mode
-    if mode == '2.5d':
-        full_mask, prediction_kernel = create_full_mask_3d(
-            struct_mask,
-            config['stage2']['patch_size'],
-            config['stage2']['mask_percentage'],
-            verbose
-        )
-    else:
-        full_mask, prediction_kernel = create_full_mask(
-            struct_mask,
-            config['stage2']['patch_size'],
-            config['stage2']['mask_percentage'],
-            verbose
-        )
-
-    return full_mask, prediction_kernel
+    return struct_mask
 
 def denoise_directory(model, input_dir, output_dir, config, stage):
     """
@@ -319,11 +309,29 @@ def run_pipeline(config):
     # Determine input mode: stack-based or path-based
     use_stack_input = config.get('input_data') is not None
 
+    # A4 (auxiliary PSNR-against-clean) — load the clean reference stack
+    # if `config['clean_data']` is set. This is optional; only used in the
+    # synthetic regime where ground truth exists. Trainer falls back to
+    # masked val_loss when clean_stack is None.
+    clean_stack_for_aux = None
+    clean_data_path = config.get('clean_data')
+    if clean_data_path:
+        print(f"Loading clean reference stack for aux PSNR: {clean_data_path}")
+        clean_stack_for_aux = load_tiff_stack(clean_data_path)
+        print(f"  Clean stack shape: {clean_stack_for_aux.shape}")
+
     if use_stack_input:
         # Stack mode: Load TIFF stack and split z-indices
         print(f"\nLoading TIFF stack from: {config['input_data']}")
         stack = load_tiff_stack(config['input_data'])
         print(f"Stack shape: {stack.shape} (slices, height, width)")
+
+        # Validate that clean_stack (if provided) matches the noisy stack shape.
+        if clean_stack_for_aux is not None:
+            if clean_stack_for_aux.shape != stack.shape:
+                print(f"Warning: clean_stack shape {clean_stack_for_aux.shape} does not match "
+                      f"noisy stack shape {stack.shape}. Disabling auxiliary PSNR metric.")
+                clean_stack_for_aux = None
 
         # Split z-indices into train/val/test
         print("Splitting stack indices...")
@@ -334,6 +342,15 @@ def run_pipeline(config):
             verbose=verbose
         )
         image_paths = None  # Not used in stack mode
+
+        # Compute train-derived normalization stats for zscore mode (CAREamics-style).
+        # See publication/publication_docs/notes/n2v_reimpl_debug_2026-05-12.md (Task 1).
+        if config.get('normalize_method') == 'zscore':
+            train_slices = stack[slice_indices['train']]
+            mean = float(train_slices.mean())
+            std = float(train_slices.std())
+            config['_norm_stats'] = {'mean': mean, 'std': std, 'eps': 1e-6}
+            print(f"Normalization (zscore): train mean={mean:.6f}, std={std:.6f}")
     else:
         # Path mode (legacy): Split files into directories
         print("\nSplitting dataset...")
@@ -347,13 +364,26 @@ def run_pipeline(config):
         )
         stack = None
         slice_indices = None
+
+        if config.get('normalize_method') == 'zscore':
+            raise NotImplementedError(
+                "normalize_method='zscore' is implemented only for stack mode "
+                "(input_data); path-mode (input_dir) is not yet supported."
+            )
     
     # Save a copy of the configuration
     import json
     with open(os.path.join(dirs['experiment'], 'config.json'), 'w') as f:
-        # Convert any non-serializable objects to strings
-        config_serializable = {k: (str(v) if not isinstance(v, (dict, list, str, int, float, bool, type(None))) else v) 
-                             for k, v in config.items()}
+        # Preserve tuples as lists so split_ratio etc. round-trip as sequences
+        # (json has no tuple type; the previous str-fallback stringified them,
+        # breaking downstream consumers that load the cfg back).
+        def _json_safe(v):
+            if isinstance(v, tuple):
+                return list(v)
+            if isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                return v
+            return str(v)
+        config_serializable = {k: _json_safe(v) for k, v in config.items()}
         json.dump(config_serializable, f, indent=4)
     
     # Initialize result summary
@@ -410,7 +440,7 @@ def run_pipeline(config):
             optimizer, mode='min', factor=0.5, patience=5, verbose=True
         )
         
-        # Create trainer
+        # Create trainer (clean_stack passed for the auxiliary PSNR metric — A4)
         stage1_trainer = AutoStructN2VTrainer(
             model=stage1_model,
             optimizer=optimizer,
@@ -418,9 +448,22 @@ def run_pipeline(config):
             device=device,
             hparams=config,
             stage='stage1',
-            experiment_name=os.path.join(dirs['stage1']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S"))
+            experiment_name=os.path.join(dirs['stage1']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+            clean_stack=clean_stack_for_aux,
+            val_indices=slice_indices['val'] if use_stack_input else None,
+            # S4b extension (2026-05-14 session 03): aux PSNR uses train+val
+            # indices (not just val) — model never trains on clean labels so
+            # this is leakage-free. 14+3 = 17 slices vs prior 3 → 5.7× lower
+            # variance on the scheduler/early-stopping signal. See diagnostic
+            # note finding S4 (Tier B2 part 2 fixed per-slice→per-stack rescale;
+            # this S4b extension expands the slice count too).
+            aux_psnr_indices=(
+                list(slice_indices['train']) + list(slice_indices['val'])
+                if use_stack_input else None
+            ),
+            norm_stats=config.get('_norm_stats'),
         )
-        
+
         # Train stage 1 model
         print("Training stage 1 model...")
         denoised_patches = stage1_trainer.train(train_loader, val_loader, test_loader)
@@ -450,7 +493,9 @@ def run_pipeline(config):
             stage1_predictor = AutoStructN2VPredictor(
                 model=stage1_trained_model,
                 patch_size=config['stage1']['patch_size'],
-                mode=mode
+                mode=mode,
+                norm_stats=config.get('_norm_stats'),
+                overlap_tile_pad=config['stage1'].get('overlap_tile_pad', 0),
             )
 
             # Denoise the full stack
@@ -536,18 +581,20 @@ def run_pipeline(config):
         print("Stage 2: Structured Noise2Void Training")
         print("="*40)
 
-        # Create structured mask based on configuration
+        # Resolve the Stage-2 structural kernel (small — e.g. 21x21 stripe).
+        # The dataset's mask_pool builds the full per-patch mask itself; see
+        # create_stage2_mask docstring for the why.
         print(f"Creating structured mask using source: {config['stage2']['mask_source']}")
-        stage2_mask, stage2_prediction_kernel = create_stage2_mask(
+        stage2_struct_kernel = create_stage2_mask(
             config,
             image_paths=image_paths,
             denoised_patches=denoised_patches,
             verbose=verbose
         )
 
-        # Save the mask for future reference
+        # Save the kernel for future reference / mask-IoU validation
         mask_save_path = os.path.join(dirs['stage2']['model'], 'stage2_mask.npy')
-        save_mask_to_file(stage2_mask, mask_save_path, verbose)
+        save_mask_to_file(stage2_struct_kernel, mask_save_path, verbose)
 
         # Create dataloaders for stage 2 with structured mask
         print("Creating dataloaders for stage 2...")
@@ -559,8 +606,7 @@ def run_pipeline(config):
                 stage="stage2",
                 stack=stack,
                 slice_indices=slice_indices,
-                structured_mask=stage2_mask,
-                prediction_kernel=stage2_prediction_kernel,
+                structured_mask=stage2_struct_kernel,
                 verbose=verbose
             )
         else:
@@ -568,8 +614,7 @@ def run_pipeline(config):
                 image_paths=image_paths,  # Use original images
                 config=config,
                 stage="stage2",
-                structured_mask=stage2_mask,
-                prediction_kernel=stage2_prediction_kernel,
+                structured_mask=stage2_struct_kernel,
                 verbose=verbose
             )
 
@@ -584,13 +629,20 @@ def run_pipeline(config):
             print(f"\nTotal parameters: {total_params:,}")
             print("-" * 40)
         
-        # Create optimizer and scheduler
+        # Create optimizer and scheduler.
+        # Tier A2 (2026-05-14 session 03): widened scheduler from
+        # factor=0.5 patience=5 to factor=0.1 patience=20 min_lr=1e-6.
+        # The pre-A2 settings drove a death-spiral 1e-5 → 1.95e-8 by ep 104
+        # on FMD_fish_stripe_mostly_structural because the 3-slice val signal
+        # is noisy, patience=5 is too short, and there was no LR floor.
+        # See `notes/structn2v_stage2_diagnostic_2026-05-14.md` finding S1.
+        # Stage 1's scheduler is unchanged — the audit only flags Stage 2.
         stage2_optimizer = torch.optim.Adam(stage2_model.parameters(), lr=config['stage2']['learning_rate'])
         stage2_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            stage2_optimizer, mode='min', factor=0.5, patience=5, verbose=True
+            stage2_optimizer, mode='min', factor=0.1, patience=20, min_lr=1e-6, verbose=True
         )
         
-        # Create trainer
+        # Create trainer (clean_stack passed for the auxiliary PSNR metric — A4)
         stage2_trainer = AutoStructN2VTrainer(
             model=stage2_model,
             optimizer=stage2_optimizer,
@@ -598,7 +650,20 @@ def run_pipeline(config):
             device=device,
             hparams=config,
             stage='stage2',
-            experiment_name=os.path.join(dirs['stage2']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S"))
+            experiment_name=os.path.join(dirs['stage2']['logs'], datetime.now().strftime("%Y%m%d-%H%M%S")),
+            clean_stack=clean_stack_for_aux,
+            val_indices=slice_indices['val'] if use_stack_input else None,
+            # S4b extension (2026-05-14 session 03): aux PSNR uses train+val
+            # indices (not just val) — model never trains on clean labels so
+            # this is leakage-free. 14+3 = 17 slices vs prior 3 → 5.7× lower
+            # variance on the scheduler/early-stopping signal. See diagnostic
+            # note finding S4 (Tier B2 part 2 fixed per-slice→per-stack rescale;
+            # this S4b extension expands the slice count too).
+            aux_psnr_indices=(
+                list(slice_indices['train']) + list(slice_indices['val'])
+                if use_stack_input else None
+            ),
+            norm_stats=config.get('_norm_stats'),
         )
         
         # Train stage 2 model
@@ -629,7 +694,9 @@ def run_pipeline(config):
             stage2_predictor = AutoStructN2VPredictor(
                 model=stage2_trained_model,
                 patch_size=config['stage2']['patch_size'],
-                mode=mode
+                mode=mode,
+                norm_stats=config.get('_norm_stats'),
+                overlap_tile_pad=config['stage2'].get('overlap_tile_pad', 0),
             )
 
             # Denoise the full stack

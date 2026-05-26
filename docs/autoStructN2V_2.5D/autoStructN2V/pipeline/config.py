@@ -31,6 +31,10 @@ def validate_config(config):
         'early_stopping': True,
         'early_stopping_patience': 10,
         'mode': '2d',  # '2d' or '2.5d' - processing mode
+        # Input normalization. 'unit' = raw [0,1] (load_tiff_stack output, current default).
+        # 'zscore' = CAREamics-style: train-derived mean/std subtracted at __getitem__,
+        # denormalize at inference. See notes/n2v_reimpl_debug_2026-05-12.md (Task 1).
+        'normalize_method': 'unit',
         
         # First stage parameters
         'stage1': {
@@ -42,7 +46,7 @@ def validate_config(config):
             'patches_per_image': 100,
             'mask_percentage': 15.0,
             'mask_center_size': 1,
-            'masking_strategy': 0, # 0: local mean, 1: zeros, 2: random values
+            'masking_strategy': 3, # 0: local mean, 1: zeros, 2: random (legacy/F2), 3: UPS NxN (publication, Stage-1 default), 4: UPS centers + uniform-random struct neighbors (CAREamics-style, Stage-2 default)
             'use_roi': True,
             'roi_threshold': 0.5,
             'scale_factor': 0.25,
@@ -51,9 +55,14 @@ def validate_config(config):
             
             # New parameters for controlling checkerboard artifacts
             'use_resize_conv': True,      # Use resize convolution (reduces artifacts)
-            'upsampling_mode': 'bilinear' # Upsampling interpolation mode: bilinear, nearest or bicubic
+            'upsampling_mode': 'bilinear', # Upsampling interpolation mode: bilinear, nearest or bicubic
+
+            # Tier C / N2V2 architectural fixes (opt-in)
+            'remove_top_skip': False,     # Drop topmost U-Net skip-connection (N2V2)
+            'use_blurpool': False,        # Replace MaxPool with MaxBlurPool (N2V2)
+            'activation': 'elu',          # 'elu' (legacy) or 'relu' (N2V/N2V2). Determines init nonlinearity.
         },
-        
+
         # Second stage parameters
         'stage2': {
             'features': 64,
@@ -63,7 +72,7 @@ def validate_config(config):
             'learning_rate': 1e-5,
             'patches_per_image': 200,
             'mask_percentage': 10.0,
-            'masking_strategy': 0, # 0: local mean, 1: zeros, 2: random values
+            'masking_strategy': 3, # 0: local mean, 1: zeros, 2: random (legacy/F2), 3: UPS NxN (publication, Stage-1 default), 4: UPS centers + uniform-random struct neighbors (CAREamics-style, Stage-2 default)
             'use_roi': False,
             'roi_threshold': 0.5,
             'scale_factor': 0.25,
@@ -73,7 +82,12 @@ def validate_config(config):
             # New parameters for controlling checkerboard artifacts
             'use_resize_conv': True,      # Use resize convolution (reduces artifacts)
             'upsampling_mode': 'bilinear', # Upsampling interpolation mode
-            
+
+            # Tier C / N2V2 architectural fixes (opt-in)
+            'remove_top_skip': False,     # Drop topmost U-Net skip-connection (N2V2)
+            'use_blurpool': False,        # Replace MaxPool with MaxBlurPool (N2V2)
+            'activation': 'elu',          # 'elu' (legacy) or 'relu' (N2V/N2V2)
+
             # Mask source configuration
             'mask_source': 'stage1',
             'mask_file_path': None,
@@ -111,6 +125,13 @@ def validate_config(config):
 
     # Validate mode parameter
     _validate_mode_configuration(cfg)
+
+    # Validate normalize_method
+    valid_norm = ('unit', 'zscore')
+    if cfg.get('normalize_method', 'unit') not in valid_norm:
+        raise ValueError(
+            f"normalize_method must be one of {valid_norm}, got {cfg['normalize_method']!r}"
+        )
 
     # Existing validation
     _validate_stage_configuration(cfg)
@@ -307,11 +328,23 @@ def _validate_upsampling_configuration(cfg):
                     raise ValueError(
                         f"use_resize_conv for {stage} must be boolean, got {type(use_resize)}"
                     )
-                
+
                 # Warn if using transposed convolution
                 if not use_resize:
                     print(f"Warning: {stage} is using transposed convolution which may "
                           f"cause checkerboard artifacts. Consider setting use_resize_conv=True.")
+
+            # Validate Tier C / N2V2 architectural flags
+            for flag in ('remove_top_skip', 'use_blurpool'):
+                if flag in stage_cfg and not isinstance(stage_cfg[flag], bool):
+                    raise ValueError(
+                        f"{flag} for {stage} must be boolean, got {type(stage_cfg[flag])}"
+                    )
+            if 'activation' in stage_cfg and stage_cfg['activation'] not in ('elu', 'relu'):
+                raise ValueError(
+                    f"activation for {stage} must be 'elu' or 'relu', "
+                    f"got {stage_cfg['activation']!r}"
+                )
 
 
 def _validate_stage_configuration(cfg):

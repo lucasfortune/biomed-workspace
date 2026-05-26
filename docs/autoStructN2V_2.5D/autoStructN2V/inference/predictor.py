@@ -28,14 +28,30 @@ class AutoStructN2VPredictor:
         stride (int, optional): Stride for patch extraction. Defaults to patch_size//2.
         mode (str, optional): Processing mode, either '2d' or '2.5d'. Defaults to '2d'.
     """
-    def __init__(self, model, device=None, patch_size=64, stride=None, mode='2d'):
+    def __init__(self, model, device=None, patch_size=64, stride=None, mode='2d',
+                 norm_stats=None, overlap_tile_pad=0):
         self.model = model
+        # ``patch_size`` is the loss-region / valid-output size. Under
+        # overlap_tile_pad > 0 the actual extracted/processed patches are
+        # (patch_size + 2*pad), but only the central patch_size of the output
+        # contributes to the reconstruction (option (d) — eliminates the
+        # reflection-padding × UNet bottleneck regime mismatch at patch edges).
         self.patch_size = patch_size
+        self.overlap_tile_pad = max(0, int(overlap_tile_pad))
+        self.extract_size = patch_size + 2 * self.overlap_tile_pad
+        # Stride is between extraction starts. Default = patch_size // 2 so
+        # central tiles overlap 50% (matches training-time semantics).
         self.stride = stride if stride is not None else patch_size // 2
         self.mode = mode
 
         if mode not in ['2d', '2.5d']:
             raise ValueError(f"Invalid mode '{mode}'. Must be '2d' or '2.5d'")
+
+        # CAREamics-style z-score stats. When set, denoise_stack normalizes the
+        # input slice before patch extraction and denormalizes the reconstructed
+        # slice. Inference must use the SAME (mean, std) the model was trained
+        # under — these are train-derived stats stashed by pipeline/runner.py.
+        self.norm_stats = norm_stats
 
         # Set device
         if device is None:
@@ -67,23 +83,44 @@ class AutoStructN2VPredictor:
         # Load and normalize the image
         img_array = load_and_normalize_image(image_path)
 
-        # Calculate padding needed
+        # Padding must mirror _predict_2d: an inner dimension-fit pad so the
+        # patches tile the slice cleanly, plus an outer overlap_tile_pad band
+        # so the central-region weighting in patches_to_image has full coverage
+        # of the original pixels. Without the outer band, the outermost
+        # `overlap_tile_pad` pixels are zeroed by the valid-region mask
+        # (patches_to_image divides by ~eps where no patch contributes), which
+        # showed up as a black border on every per-image output.
         h, w = img_array.shape
-        pad_h = (self.patch_size - h % self.stride) % self.stride
-        pad_w = (self.patch_size - w % self.stride) % self.stride
-        
-        # Pad image (using reflection padding to avoid border artifacts)
-        padded_img = np.pad(img_array, ((0, pad_h), (0, pad_w)), mode='reflect')
-        
+        pad_h_fit = (self.stride - (h - self.patch_size) % self.stride) % self.stride
+        pad_w_fit = (self.stride - (w - self.patch_size) % self.stride) % self.stride
+        outer = self.overlap_tile_pad
+        padded_img = np.pad(
+            img_array,
+            ((outer, outer + pad_h_fit), (outer, outer + pad_w_fit)),
+            mode='reflect',
+        )
+
+        # Slice-level z-score (CAREamics-style): apply before patching so all
+        # patches see the same train-derived distribution. Mirrors _predict_2d.
+        if self.norm_stats is not None:
+            m_, s_, eps_ = self.norm_stats['mean'], self.norm_stats['std'], self.norm_stats['eps']
+            padded_img = ((padded_img - m_) / (s_ + eps_)).astype(np.float32)
+
         # Convert to tensor (add batch and channel dimensions)
         img_tensor = torch.from_numpy(padded_img).float().unsqueeze(0).unsqueeze(0)
-        
+
         # Denoise using patch-based approach
         denoised_tensor = self.denoise_tensor(img_tensor)
-        
-        # Convert back to numpy array
-        denoised_array = denoised_tensor.squeeze().cpu().numpy()[:h, :w]
-        
+
+        # Convert back to numpy array, denormalize, strip overlap-tile band,
+        # then crop to original dimensions.
+        denoised_array = denoised_tensor.squeeze().cpu().numpy()
+        if self.norm_stats is not None:
+            denoised_array = denoised_array * (s_ + eps_) + m_
+        if outer:
+            denoised_array = denoised_array[outer:-outer or None, outer:-outer or None]
+        denoised_array = denoised_array[:h, :w]
+
         # Save the result
         self._save_image(denoised_array, output_path)
         
@@ -112,27 +149,31 @@ class AutoStructN2VPredictor:
             # Process each image in the batch
             denoised_batch = []
             for b in range(batch_size):
-                # Extract patches
-                patches = image_to_patches(img_tensor[b], self.patch_size, self.stride)
-                
+                # Extract patches at extract_size (= patch_size + 2*pad).
+                patches = image_to_patches(img_tensor[b], self.extract_size, self.stride)
+
                 # Process patches in batches to avoid OOM
                 batch_size = 16
                 output_patches = []
-                
+
                 for i in range(0, len(patches), batch_size):
                     batch = patches[i:i+batch_size].to(self.device)
                     outputs = self.model(batch)
                     output_patches.append(outputs.cpu())
-                
+
                 # Concatenate batch results
                 output_patches = torch.cat(output_patches, dim=0)
-                
-                # Reconstruct image from patches
-                denoised = patches_to_image(output_patches, img_tensor[b].shape, 
-                                           self.patch_size, self.stride)
-                
+
+                # Reconstruct image from patches. When overlap_tile_pad > 0,
+                # only the central patch_size of each output contributes (the
+                # rest is the trained model's edge-band region).
+                denoised = patches_to_image(
+                    output_patches, img_tensor[b].shape,
+                    self.extract_size, self.stride,
+                    valid_size=self.patch_size if self.overlap_tile_pad > 0 else None)
+
                 denoised_batch.append(denoised)
-            
+
             # Stack the denoised images back into a batch
             return torch.stack(denoised_batch)
 
@@ -178,6 +219,13 @@ class AutoStructN2VPredictor:
         """
         Process each slice of the stack independently using patch-based denoising.
 
+        Under overlap_tile_pad > 0 (option d): the slice is reflect-padded by
+        ``pad`` on each side and patches of ``extract_size = patch_size + 2*pad``
+        are extracted with stride ``patch_size // 2``. Only the central
+        ``patch_size`` of each output contributes to the reconstruction (via the
+        weight mask in patches_to_image), eliminating the trained model's
+        edge-band artifact from the final output.
+
         Args:
             stack (numpy.ndarray): Input stack of shape (num_slices, H, W)
 
@@ -187,16 +235,30 @@ class AutoStructN2VPredictor:
         num_slices, h, w = stack.shape
         output = np.zeros_like(stack)
 
-        # Calculate padding needed
-        pad_h = (self.patch_size - h % self.stride) % self.stride
-        pad_w = (self.patch_size - w % self.stride) % self.stride
+        # Dimension-fit padding: pad slice so (padded_dim - extract_size) is a
+        # multiple of stride, ensuring all original pixels are covered.
+        pad_h_fit = (self.stride - (h - self.patch_size) % self.stride) % self.stride
+        pad_w_fit = (self.stride - (w - self.patch_size) % self.stride) % self.stride
+        # Outer pad of `overlap_tile_pad` extends each side so the central
+        # tiles of border patches still receive in-distribution context.
+        outer = self.overlap_tile_pad
 
         for z in tqdm(range(num_slices), desc="Denoising slices (2D)"):
             # Get the slice
             slice_data = stack[z]
 
-            # Pad slice
-            padded_slice = np.pad(slice_data, ((0, pad_h), (0, pad_w)), mode='reflect')
+            # Pad slice: dimension-fit + outer (overlap-tile context).
+            padded_slice = np.pad(
+                slice_data,
+                ((outer, outer + pad_h_fit), (outer, outer + pad_w_fit)),
+                mode='reflect')
+
+            # Normalize at the slice level (before patching) so all patches
+            # share the same train-derived stats — matching CAREamics' Normalize
+            # transform being applied before any patch-time transforms.
+            if self.norm_stats is not None:
+                m_, s_, eps_ = self.norm_stats['mean'], self.norm_stats['std'], self.norm_stats['eps']
+                padded_slice = ((padded_slice - m_) / (s_ + eps_)).astype(np.float32)
 
             # Convert to tensor (add batch and channel dimensions)
             slice_tensor = torch.from_numpy(padded_slice).float().unsqueeze(0).unsqueeze(0)
@@ -204,8 +266,15 @@ class AutoStructN2VPredictor:
             # Denoise using patch-based approach
             denoised_tensor = self.denoise_tensor(slice_tensor)
 
-            # Convert back to numpy and remove padding
-            output[z] = denoised_tensor.squeeze().cpu().numpy()[:h, :w]
+            # Denormalize the reconstructed slice before crop.
+            denoised_slice = denoised_tensor.squeeze().cpu().numpy()
+            if self.norm_stats is not None:
+                denoised_slice = denoised_slice * (s_ + eps_) + m_
+
+            # Strip outer overlap-tile pad first, then the dimension-fit pad.
+            if outer:
+                denoised_slice = denoised_slice[outer:-outer or None, outer:-outer or None]
+            output[z] = denoised_slice[:h, :w]
 
         return output
 
@@ -228,25 +297,39 @@ class AutoStructN2VPredictor:
         output[0] = stack[0]
         output[-1] = stack[-1]
 
-        # Calculate padding needed
-        pad_h = (self.patch_size - h % self.stride) % self.stride
-        pad_w = (self.patch_size - w % self.stride) % self.stride
+        # Dimension-fit + overlap-tile outer padding (see _predict_2d).
+        pad_h_fit = (self.stride - (h - self.patch_size) % self.stride) % self.stride
+        pad_w_fit = (self.stride - (w - self.patch_size) % self.stride) % self.stride
+        outer = self.overlap_tile_pad
 
         # Middle slices: predict with triplet input
         for z in tqdm(range(1, num_slices - 1), desc="Denoising slices (2.5D)"):
             # Get triplet (3 consecutive slices)
             triplet = stack[z-1:z+2]  # Shape: (3, H, W)
 
-            # Pad each slice in the triplet
+            # Pad each slice in the triplet (dim-fit + outer overlap-tile).
             padded_triplet = np.stack([
-                np.pad(triplet[i], ((0, pad_h), (0, pad_w)), mode='reflect')
+                np.pad(triplet[i],
+                       ((outer, outer + pad_h_fit), (outer, outer + pad_w_fit)),
+                       mode='reflect')
                 for i in range(3)
-            ], axis=0)  # Shape: (3, H+pad_h, W+pad_w)
+            ], axis=0)
+
+            # z-score normalize the triplet (per train stats) before patching.
+            if self.norm_stats is not None:
+                m_, s_, eps_ = self.norm_stats['mean'], self.norm_stats['std'], self.norm_stats['eps']
+                padded_triplet = ((padded_triplet - m_) / (s_ + eps_)).astype(np.float32)
 
             # Predict center slice from triplet
-            prediction = self._predict_triplet(padded_triplet)  # Shape: (H+pad_h, W+pad_w)
+            prediction = self._predict_triplet(padded_triplet)
 
-            # Remove padding and store
+            # Denormalize the reconstructed center slice.
+            if self.norm_stats is not None:
+                prediction = prediction * (s_ + eps_) + m_
+
+            # Strip outer overlap-tile pad, then dim-fit pad.
+            if outer:
+                prediction = prediction[outer:-outer or None, outer:-outer or None]
             output[z] = prediction[:h, :w]
 
         return output
@@ -270,10 +353,9 @@ class AutoStructN2VPredictor:
         triplet_tensor = torch.from_numpy(triplet).float().unsqueeze(0)
 
         with torch.no_grad():
-            # Extract patches from the 3-channel input
-            # image_to_patches expects (C, H, W) input
-            patches = image_to_patches(triplet_tensor[0], self.patch_size, self.stride)
-            # patches shape: (num_patches, 3, patch_size, patch_size)
+            # Extract patches at extract_size from the 3-channel input.
+            patches = image_to_patches(triplet_tensor[0], self.extract_size, self.stride)
+            # patches shape: (num_patches, 3, extract_size, extract_size)
 
             # Process patches in batches to avoid OOM
             batch_size = 16
@@ -281,20 +363,18 @@ class AutoStructN2VPredictor:
 
             for i in range(0, len(patches), batch_size):
                 batch = patches[i:i+batch_size].to(self.device)
-                outputs = self.model(batch)  # (batch, 1, patch_size, patch_size)
+                outputs = self.model(batch)  # (batch, 1, extract_size, extract_size)
                 output_patches.append(outputs.cpu())
 
             # Concatenate batch results
             output_patches = torch.cat(output_patches, dim=0)
-            # output_patches shape: (num_patches, 1, patch_size, patch_size)
 
-            # Reconstruct image from patches
-            # patches_to_image expects matching channel dimensions
-            # Create target shape for 1-channel output
+            # Reconstruct via central-region weight when overlap_tile_pad > 0.
             target_shape = (1, height, width)
-            denoised = patches_to_image(output_patches, target_shape,
-                                        self.patch_size, self.stride)
-            # denoised shape: (1, H, W)
+            denoised = patches_to_image(
+                output_patches, target_shape,
+                self.extract_size, self.stride,
+                valid_size=self.patch_size if self.overlap_tile_pad > 0 else None)
 
         return denoised.squeeze(0).numpy()  # Shape: (H, W)
 
