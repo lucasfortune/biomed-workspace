@@ -87,19 +87,28 @@ def _dtype_normalize(stack):
     """
     original_dtype = stack.dtype
     stack_f = stack.astype(np.float32)
+    # Clip before integer cast so unbounded predictions (z-score denorm can
+    # return values slightly outside [0, 1]) don't wrap to the opposite end
+    # of the dtype's range — e.g. 1.02 * 65535 = 66846 → casts to 1311 in
+    # uint16, which renders as a black pixel where a bright one belongs.
     if original_dtype == np.uint8:
         norm = stack_f / 255.0
-        def denorm(arr): return (arr * 255.0).astype(original_dtype)
+        def denorm(arr): return (np.clip(arr, 0.0, 1.0) * 255.0).astype(original_dtype)
     elif original_dtype == np.uint16:
         norm = stack_f / 65535.0
-        def denorm(arr): return (arr * 65535.0).astype(original_dtype)
-    elif np.issubdtype(original_dtype, np.floating) and (stack_f.max() > 1.0 or stack_f.min() < 0.0):
+        def denorm(arr): return (np.clip(arr, 0.0, 1.0) * 65535.0).astype(original_dtype)
+    elif np.issubdtype(original_dtype, np.floating):
+        # Always rescale floats to [0, 1] via min-max — partial-range inputs
+        # like [0, 0.4] would otherwise skip rescaling and feed values to the
+        # predictor that fall in the far-negative regime after zscore.
         smin, smax = float(stack_f.min()), float(stack_f.max())
         norm = (stack_f - smin) / (smax - smin + 1e-8)
-        def denorm(arr): return (arr * (smax - smin) + smin).astype(original_dtype)
+        def denorm(arr): return (np.clip(arr, 0.0, 1.0) * (smax - smin) + smin).astype(original_dtype)
     else:
-        norm = stack_f
-        def denorm(arr): return arr.astype(original_dtype)
+        # Other integer types — match train-time min-max behaviour.
+        smin, smax = float(stack_f.min()), float(stack_f.max())
+        norm = (stack_f - smin) / (smax - smin + 1e-8)
+        def denorm(arr): return (np.clip(arr, 0.0, 1.0) * (smax - smin) + smin).astype(original_dtype)
     return norm, denorm
 
 
@@ -178,11 +187,22 @@ def run_inference(config: dict):
         if norm_stats is not None:
             print(f"[zscore] Inference using train stats mean={norm_stats['mean']:.6f}, std={norm_stats['std']:.6f}, overlap_tile_pad={overlap_tile_pad}")
 
-        # Create predictor with mode
-        patch_size = model_config.get('patch_size', 64)
+        # Create predictor with mode. patch_size from stage_params (checkpoint)
+        # so the predictor's tiling geometry matches what the model was trained
+        # on. Routing from the frontend's model_config silently offsets the
+        # valid-region / edge-band split when the frontend payload disagrees
+        # with the checkpoint's train-time patch_size.
+        patch_size = stage_params['patch_size']
+        # stride=patch_size//4: smaller stride → each pixel averaged over ~4
+        # patches → smoother blending across stride boundaries (the constant-
+        # weight overlap-tile mask hard-averages contributing patches; with the
+        # default //2 stride the rotating pair of patches at each boundary can
+        # produce visible seams when the model isn't fully patch-position-
+        # invariant). Cost: ~4x slower inference.
         predictor = AutoStructN2VPredictor(
             model=inference_model,
             patch_size=patch_size,
+            stride=max(1, patch_size // 4),
             mode=mode,
             norm_stats=norm_stats,
             overlap_tile_pad=overlap_tile_pad,
@@ -201,44 +221,78 @@ def run_inference(config: dict):
 
         total_slices = len(input_stack)
 
+        # snake_case keys — match what the frontend InferenceHandler reads
+        # (data.progress_percent, data.current_slice, data.total_slices).
         emit_progress('inference', {
             "inference_id": inference_id,
             "status": "processing",
             "mode": mode,
-            "totalSlices": total_slices
+            "total_slices": total_slices
         })
 
-        # Defer to the predictor's slice-level routines (_predict_2d /
-        # _predict_2_5d) for both modes — those internals handle overlap-tile
-        # padding, central-region patch weighting, and slice-level z-score
-        # together. Looping `denoise_tensor` per slice here bypasses the
-        # overlap-tile padding and produces a black border the width of
-        # `overlap_tile_pad` around every output slice. Per-slice progress is
-        # downgraded to start/end events; the predictor's tqdm still streams
-        # progress to stdout for the operator log.
+        # Two normalization regimes:
+        #   • zscore: per-stack dtype rescale to [0,1], then predictor applies
+        #     train-time mean/std internally. Stable across slices.
+        #   • legacy (norm_stats=None): per-slice min-max — required for
+        #     pre-migration models that were trained on per-slice-normalized
+        #     data. Using a single per-stack min-max would compress dim slices
+        #     into a tiny fraction of [0,1] on stacks with strong inter-slice
+        #     brightness variation (deep z-stacks).
         if norm_stats is not None:
             input_norm, denorm = _dtype_normalize(input_stack)
+            if mode == '2.5d':
+                output_stack = predictor._predict_2_5d(input_norm)
+            else:
+                output_stack = predictor._predict_2d(input_norm)
+            output_stack = denorm(output_stack)
+            # Per-slice progress isn't available without a predictor callback;
+            # emit start (above) and end markers only.
+            emit_progress('inference', {
+                "inference_id": inference_id,
+                "current_slice": total_slices,
+                "total_slices": total_slices,
+                "progress_percent": 100.0,
+                "mode": mode,
+            })
         else:
-            input_min, input_max = input_stack.min(), input_stack.max()
-            input_norm = (input_stack - input_min) / (input_max - input_min + 1e-8)
-            input_norm = input_norm.astype(np.float32)
-            def denorm(arr):
-                return (arr * (input_max - input_min) + input_min).astype(input_stack.dtype)
+            input_dtype = input_stack.dtype
+            output_stack = np.zeros_like(input_stack, dtype=input_dtype)
 
-        if mode == '2.5d':
-            output_stack = predictor._predict_2_5d(input_norm)
-        else:
-            output_stack = predictor._predict_2d(input_norm)
-
-        output_stack = denorm(output_stack)
-
-        emit_progress('inference', {
-            "inference_id": inference_id,
-            "currentSlice": total_slices,
-            "totalSlices": total_slices,
-            "progressPercent": 100.0,
-            "mode": mode
-        })
+            if mode == '2.5d':
+                # 2.5D legacy: triplets need consistent scale across the
+                # window, so per-slice norm would distort the relative
+                # intensities the model was trained on. Fall back to per-stack
+                # min-max here.
+                input_min, input_max = input_stack.min(), input_stack.max()
+                input_norm = (input_stack.astype(np.float32) - input_min) / (input_max - input_min + 1e-8)
+                output_norm = predictor._predict_2_5d(input_norm)
+                output_stack = (np.clip(output_norm, 0.0, 1.0) * (input_max - input_min) + input_min).astype(input_dtype)
+                emit_progress('inference', {
+                    "inference_id": inference_id,
+                    "current_slice": total_slices,
+                    "total_slices": total_slices,
+                    "progress_percent": 100.0,
+                    "mode": mode,
+                })
+            else:
+                # 2D legacy: per-slice loop preserves the deleted per-slice
+                # min-max behaviour AND gives the UI per-slice progress for
+                # free. The predictor's _predict_2d handles overlap-tile
+                # padding when given a single-slice stack.
+                for z in range(total_slices):
+                    slice_data = input_stack[z]
+                    slice_min, slice_max = float(slice_data.min()), float(slice_data.max())
+                    slice_norm = (slice_data.astype(np.float32) - slice_min) / (slice_max - slice_min + 1e-8)
+                    out_norm = predictor._predict_2d(slice_norm[np.newaxis, ...])[0]
+                    out_dn = np.clip(out_norm, 0.0, 1.0) * (slice_max - slice_min) + slice_min
+                    output_stack[z] = out_dn.astype(input_dtype)
+                    emit_progress('inference', {
+                        "inference_id": inference_id,
+                        "current_slice": z + 1,
+                        "total_slices": total_slices,
+                        "progress_percent": ((z + 1) / total_slices) * 100.0,
+                        "mode": mode,
+                    })
 
         # Save output with proper naming convention
         os.makedirs(output_dir, exist_ok=True)
@@ -368,10 +422,14 @@ def run_sequential_inference(config: dict):
 
         stage1_norm_stats, stage1_overlap_pad = _extract_training_hparams(checkpoint, 'stage1')
 
-        patch_size = stage1_config.get('patch_size', 64)
+        # patch_size from checkpoint stage_params, not frontend config — see
+        # corresponding change in run_inference for rationale.
+        # stride=patch_size//4 to soften stride-boundary seams (see run_inference).
+        patch_size = inference_config['stage1']['patch_size']
         stage1_predictor = AutoStructN2VPredictor(
             model=stage1_inference_model,
             patch_size=patch_size,
+            stride=max(1, patch_size // 4),
             mode=mode,
             norm_stats=stage1_norm_stats,
             overlap_tile_pad=stage1_overlap_pad,
@@ -381,11 +439,14 @@ def run_sequential_inference(config: dict):
         # active so the predictor's internal stats apply to the same scale they
         # were computed on. Otherwise keep the legacy per-stack min-max path.
         if stage1_norm_stats is not None:
-            input_normalized, _ = _dtype_normalize(input_stack)
+            input_normalized, denorm = _dtype_normalize(input_stack)
         else:
             input_min, input_max = input_stack.min(), input_stack.max()
             input_normalized = (input_stack - input_min) / (input_max - input_min + 1e-8)
             input_normalized = input_normalized.astype(np.float32)
+            input_dtype = input_stack.dtype
+            def denorm(arr):
+                return (arr * (input_max - input_min) + input_min).astype(input_dtype)
 
         # Defer to the predictor's slice-level routines for both modes so
         # overlap-tile padding + central-region weighting are handled
@@ -404,10 +465,18 @@ def run_sequential_inference(config: dict):
             "progress_percent": 50
         })
 
-        # Save Stage 1 intermediate output
+        # Save Stage 1 intermediate output in the input's native dtype so it
+        # renders correctly in viewers calibrated for the input range.
         mode_suffix = '_2.5d' if mode == '2.5d' else ''
         stage1_output_path = os.path.join(output_dir, f'stage1{mode_suffix}_denoised_{inference_id}.tif')
-        tifffile.imwrite(stage1_output_path, stage1_output.astype(np.float32))
+        tifffile.imwrite(stage1_output_path, denorm(stage1_output))
+
+        # Release Stage 1 GPU resources before allocating Stage 2's model.
+        # Without this, stage1_ckpt + stage1_model + stage1_predictor live
+        # alongside stage2_ckpt + stage2_model and OOM small-VRAM GPUs.
+        del stage1_checkpoint, stage1_model, stage1_inference_model, stage1_predictor
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         # =========== Stage 2: Struct-N2V ===========
         emit_progress('inference', {
@@ -429,10 +498,13 @@ def run_sequential_inference(config: dict):
 
         stage2_norm_stats, stage2_overlap_pad = _extract_training_hparams(checkpoint, 'stage2')
 
-        patch_size = stage2_config.get('patch_size', 64)
+        # patch_size from checkpoint stage_params (see Stage 1 above).
+        # stride=patch_size//4 to soften stride-boundary seams (see run_inference).
+        patch_size = inference_config['stage2']['patch_size']
         stage2_predictor = AutoStructN2VPredictor(
             model=stage2_model,
             patch_size=patch_size,
+            stride=max(1, patch_size // 4),
             mode=mode,
             norm_stats=stage2_norm_stats,
             overlap_tile_pad=stage2_overlap_pad,
@@ -454,10 +526,12 @@ def run_sequential_inference(config: dict):
             "progress_percent": 100
         })
 
-        # Save final output with proper naming convention
+        # Save final output in the input's native dtype, matching single-stage
+        # run_inference. Without denorm, viewers calibrated for uint16 render
+        # the [0,1] float32 as near-black.
         output_filename = f'asn2v{mode_suffix}_denoised_{inference_id}.tif'
         output_path = os.path.join(output_dir, output_filename)
-        tifffile.imwrite(output_path, stage2_output.astype(np.float32))
+        tifffile.imwrite(output_path, denorm(stage2_output))
 
         # Save metadata
         metadata = {

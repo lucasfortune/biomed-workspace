@@ -211,6 +211,8 @@ class MaskHandler {
         this.updateMaskVisualization({
           mask: maskData,
           kernelSize: maskResult.kernelSize,
+          kernelHeight: maskResult.kernelHeight,
+          kernelWidth: maskResult.kernelWidth,
           activePixels: maskResult.activePixels,
           pattern: maskResult.pattern,
           isEmpty: maskResult.activePixels < 2

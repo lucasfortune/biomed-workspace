@@ -2,7 +2,7 @@
 
 **Branch:** `migration/autostructn2v-v2.0`
 **Code review date:** 2026-05-22
-**Status:** 15 findings (13 CONFIRMED, 2 PLAUSIBLE). 1 currently blocks the autoStructN2V end-to-end test (user-observed crash).
+**Status:** ✅ All 15 findings resolved in [2026-05-26 fix pass session](../sessions/2026-05-26_autostructn2v_v2.0_fix_pass.md). End-to-end canary passing.
 
 This plan tracks defects identified by a multi-angle code review of the
 migration branch. Severity ranks reflect blast radius × likelihood:

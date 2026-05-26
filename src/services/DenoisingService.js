@@ -69,6 +69,8 @@ class DenoisingService {
       mask: {
         status: 'pending',
         kernelSize: null,
+        kernelHeight: null,
+        kernelWidth: null,
         activePixels: null,
         pattern: null,
         isEmpty: false,
@@ -595,6 +597,8 @@ class DenoisingService {
       } else if (stage === 'mask') {
         session.mask.status = 'completed';
         session.mask.kernelSize = data.kernelSize;
+        session.mask.kernelHeight = data.kernelHeight;
+        session.mask.kernelWidth = data.kernelWidth;
         session.mask.activePixels = data.activePixels;
         session.mask.pattern = data.pattern;
         session.mask.isEmpty = data.isEmpty;
@@ -609,6 +613,8 @@ class DenoisingService {
         session.stage1DenoisedDir = data.stage1DenoisedDir;
         session.maskPath = data.maskPath;
         session.mask.kernelSize = data.kernelSize;
+        session.mask.kernelHeight = data.kernelHeight;
+        session.mask.kernelWidth = data.kernelWidth;
         session.mask.activePixels = data.activePixels;
         session.mask.pattern = data.pattern;
         session.mask.maskArray = data.maskArray;
@@ -826,6 +832,8 @@ class DenoisingService {
           reason: 'awaiting_mask_approval',
           maskPath: session.maskPath,
           kernelSize: session.mask.kernelSize,
+          kernelHeight: session.mask.kernelHeight,
+          kernelWidth: session.mask.kernelWidth,
           activePixels: session.mask.activePixels,
           pattern: session.mask.pattern,
           maskArray: session.mask.maskArray
@@ -1714,6 +1722,8 @@ class DenoisingService {
               // Update session
               if (session) {
                 session.mask.kernelSize = resultData.kernelSize;
+                session.mask.kernelHeight = resultData.kernelHeight;
+                session.mask.kernelWidth = resultData.kernelWidth;
                 session.mask.activePixels = resultData.activePixels;
                 session.mask.pattern = resultData.pattern;
                 session.mask.maskPath = resultData.maskPath;

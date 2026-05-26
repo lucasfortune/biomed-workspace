@@ -19,7 +19,11 @@ class MaskVisualization {
     // Mask data
     this.maskData = null;      // Current 2D mask to display
     this.maskData3D = null;    // Full 3D mask data (for 2.5D mode)
-    this.kernelSize = 0;
+    // Rectangular kernels are possible for directional noise (the structure
+    // extractor produces a tight bounding-rect crop, so height and width can
+    // differ — e.g. (7, 3) for vertical stripes). Track both.
+    this.kernelHeight = 0;
+    this.kernelWidth = 0;
     this.activePixels = 0;
     this.pattern = '';
     this.isEmpty = false;
@@ -79,22 +83,33 @@ class MaskVisualization {
   }
 
   /**
-   * Render the mask as a pixel grid
+   * Render the mask as a pixel grid. Reads dimensions from the maskData
+   * itself (rows × cols), so rectangular kernels render correctly and the
+   * center marker lands on the actual data center (not size/2 × size/2,
+   * which misaligned the center for non-square masks).
    */
   _renderGrid() {
     if (!this.maskData || !Array.isArray(this.maskData)) {
       return '<div class="mask-grid-placeholder">No mask data</div>';
     }
 
-    const size = this.kernelSize || this.maskData.length;
-    const cellSize = Math.min(24, Math.floor(200 / size));
+    const rows = this.maskData.length;
+    const cols = Array.isArray(this.maskData[0]) ? this.maskData[0].length : 0;
+    if (rows === 0 || cols === 0) {
+      return '<div class="mask-grid-placeholder">No mask data</div>';
+    }
 
-    let gridHtml = `<div class="mask-grid" style="grid-template-columns: repeat(${size}, ${cellSize}px);">`;
+    const maxDim = Math.max(rows, cols);
+    const cellSize = Math.min(24, Math.floor(200 / maxDim));
+    const centerRow = Math.floor(rows / 2);
+    const centerCol = Math.floor(cols / 2);
 
-    for (let i = 0; i < size; i++) {
-      for (let j = 0; j < size; j++) {
+    let gridHtml = `<div class="mask-grid" style="grid-template-columns: repeat(${cols}, ${cellSize}px);">`;
+
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
         const isActive = this.maskData[i] && this.maskData[i][j];
-        const isCenter = i === Math.floor(size / 2) && j === Math.floor(size / 2);
+        const isCenter = i === centerRow && j === centerCol;
 
         let cellClass = 'mask-cell';
         if (isActive) cellClass += ' active';
@@ -116,7 +131,7 @@ class MaskVisualization {
       <div class="mask-stats">
         <div class="stat-item">
           <span class="stat-label">Kernel Size</span>
-          <span class="stat-value">${this.kernelSize} × ${this.kernelSize}</span>
+          <span class="stat-value">${this.kernelHeight} × ${this.kernelWidth}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">Active Pixels</span>
@@ -177,8 +192,8 @@ class MaskVisualization {
    * Calculate coverage percentage
    */
   _calculateCoverage() {
-    if (!this.kernelSize) return 0;
-    const totalPixels = this.kernelSize * this.kernelSize;
+    const totalPixels = this.kernelHeight * this.kernelWidth;
+    if (!totalPixels) return 0;
     return ((this.activePixels / totalPixels) * 100).toFixed(1);
   }
 
@@ -246,14 +261,19 @@ class MaskVisualization {
       this.maskData3D = mask;
       this.activeSlice = 1;  // Default to center slice
       this.maskData = mask[1];  // Show center slice by default
-      this.kernelSize = data.kernelSize || this.maskData.length;
     } else {
       // 2D mask
       this.is3D = false;
       this.maskData3D = null;
       this.maskData = mask;
-      this.kernelSize = data.kernelSize || (this.maskData ? this.maskData.length : 0);
     }
+    // Prefer rectangular dims from the backend; fall back to inspecting the
+    // mask payload, then to the legacy square kernelSize. This keeps older
+    // pause/restore payloads working but renders rectangular masks correctly.
+    const rows = this.maskData && Array.isArray(this.maskData) ? this.maskData.length : 0;
+    const cols = rows > 0 && Array.isArray(this.maskData[0]) ? this.maskData[0].length : 0;
+    this.kernelHeight = data.kernelHeight || rows || data.kernelSize || 0;
+    this.kernelWidth = data.kernelWidth || cols || data.kernelSize || 0;
 
     this.activePixels = data.activePixels || 0;
     this.pattern = data.pattern || '';

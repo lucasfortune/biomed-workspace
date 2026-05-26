@@ -52,8 +52,13 @@ def create_full_mask(single_masking_kernel, patch_size, mask_percentage, verbose
     full_masking_kernel = np.zeros((patch_size, patch_size), dtype=bool)
     prediction_kernel = np.zeros((patch_size, patch_size), dtype=bool)
 
-    # Get dimensions and properties of the input pattern
-    pattern_size = single_masking_kernel.shape[0]
+    # Get dimensions and properties of the input pattern. Webapp-local patch
+    # (migration session 2026-05-26): support rectangular kernels. extract_mask
+    # can return non-square structural kernels (e.g. (7, 9)) for anisotropic
+    # noise patterns; the original square-only code crashed with a broadcast
+    # error inside the np.any(kernel & forbidden_local) check.
+    ph_h, ph_w = single_masking_kernel.shape
+    pattern_size = ph_h  # legacy field retained for the verbose summary
     true_count_per_pattern = int(np.sum(single_masking_kernel))
 
     # Total pixels and target prediction-center count.
@@ -68,22 +73,24 @@ def create_full_mask(single_masking_kernel, patch_size, mask_percentage, verbose
     # implementation. ~2.5x speedup on 256x256 patches with multi-pixel kernels.
     forbidden = np.zeros((patch_size, patch_size), dtype=bool)
 
-    # Create a grid of all possible top-left positions
-    y_grid, x_grid = np.meshgrid(
-        np.arange(patch_size - pattern_size + 1),
-        np.arange(patch_size - pattern_size + 1)
+    # Create a grid of all possible top-left positions. Indexed ('ij') so the
+    # first axis is the row range (matches ph_h) and the second axis is the
+    # column range (matches ph_w) — important when ph_h != ph_w.
+    row_grid, col_grid = np.meshgrid(
+        np.arange(patch_size - ph_h + 1),
+        np.arange(patch_size - ph_w + 1),
+        indexing='ij'
     )
-    positions = np.column_stack((x_grid.ravel(), y_grid.ravel()))
+    positions = np.column_stack((row_grid.ravel(), col_grid.ravel()))
 
     # Shuffle positions for randomness
     np.random.shuffle(positions)
 
     # Center offset within the pattern (used for marking prediction centers)
-    center_y = pattern_size // 2
-    center_x = pattern_size // 2
+    center_y = ph_h // 2
+    center_x = ph_w // 2
 
     patterns_placed = 0
-    ph = pattern_size
 
     for (i, j) in positions:
         if patterns_placed >= target_centers:
@@ -91,30 +98,30 @@ def create_full_mask(single_masking_kernel, patch_size, mask_percentage, verbose
 
         # Validity check: does the proposed pattern's True footprint overlap
         # the forbidden zone? If yes, skip; otherwise place.
-        forbidden_local = forbidden[i:i + ph, j:j + ph]
+        forbidden_local = forbidden[i:i + ph_h, j:j + ph_w]
         if np.any(single_masking_kernel & forbidden_local):
             continue
 
         # Place the pattern
-        full_masking_kernel[i:i + ph, j:j + ph] |= single_masking_kernel
+        full_masking_kernel[i:i + ph_h, j:j + ph_w] |= single_masking_kernel
         cy = i + center_y
         cx = j + center_x
         prediction_kernel[cy, cx] = True
         patterns_placed += 1
 
         # Incrementally update the forbidden zone with the just-placed pattern
-        # dilated by 1 pixel (8-connectivity). Done within a (ph+2)x(ph+2)
-        # local frame to keep the work O(pattern_pixels) per placement.
+        # dilated by 1 pixel (8-connectivity). Done within a local frame to
+        # keep the work O(pattern_pixels) per placement.
         y0 = max(0, i - 1)
-        y1 = min(patch_size, i + ph + 1)
+        y1 = min(patch_size, i + ph_h + 1)
         x0 = max(0, j - 1)
-        x1 = min(patch_size, j + ph + 1)
+        x1 = min(patch_size, j + ph_w + 1)
         h_loc = y1 - y0
         w_loc = x1 - x0
         newly_placed = np.zeros((h_loc, w_loc), dtype=bool)
         ny = i - y0
         nx = j - x0
-        newly_placed[ny:ny + ph, nx:nx + ph] = single_masking_kernel
+        newly_placed[ny:ny + ph_h, nx:nx + ph_w] = single_masking_kernel
         # 8-connectivity dilation via 8 shifted ORs in the local frame
         dilated = newly_placed.copy()
         dilated[:-1, :]    |= newly_placed[1:, :]     # up

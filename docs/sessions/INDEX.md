@@ -15,6 +15,18 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-05-26 (autoStructN2V v2.0 Fix Pass)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-05-26 | [autoStructN2V v2.0 Migration Fix Pass](2026-05-26_autostructn2v_v2.0_fix_pass.md) | 🐛 Bug Fix / Investigation | ~4 hrs | ✅ Complete |
+
+### 2026-05-22 (autoStructN2V v2.0 Library Migration)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-05-22 | [autoStructN2V v2.0 Library Migration + Wiring](2026-05-22_autostructn2v_v2.0_migration.md) | 🏗️ Migration / Bug Fix | ~6 hrs | ✅ Complete |
+
 ### 2026-01-28 (Metadata System Rework)
 
 | Date | Session | Type | Duration | Status |

@@ -22,11 +22,7 @@ from tiff_validation_utils import safe_imread
 from autoStructN2V.pipeline.config import validate_config, create_output_directories
 from autoStructN2V.pipeline.data import split_dataset, create_dataloaders, split_stack_indices
 from autoStructN2V.models import create_model_from_config
-from autoStructN2V.masking import (
-    StructuralNoiseExtractor,
-    create_full_mask,
-    create_full_mask_3d
-)
+from autoStructN2V.masking import StructuralNoiseExtractor
 from autoStructN2V.inference import AutoStructN2VPredictor
 from autoStructN2V.utils.image import load_and_normalize_image
 from autoStructN2V.utils.training import set_seed
@@ -146,6 +142,25 @@ def run_training(config: dict):
         config = validate_config(config)
         verbose = config.get('verbose', False)
 
+        # Pre-flight: extract_size = patch_size + 2*overlap_tile_pad must be
+        # divisible by 2^num_layers so the U-Net skip-concat shapes match.
+        # Pre-migration users with patch_size=64, num_layers=4 had 64 % 16 == 0
+        # (fine). With overlap_tile_pad=4 the extract size becomes 72, and
+        # 72 % 16 == 8 — the failure surfaces deep in the decoder as a cryptic
+        # tensor-size mismatch on the first forward pass.
+        for _s in ('stage1', 'stage2'):
+            _ps = config[_s]['patch_size']
+            _pad = config[_s].get('overlap_tile_pad', 0)
+            _nl = config[_s]['num_layers']
+            _es = _ps + 2 * _pad
+            _div = 2 ** _nl
+            if _es % _div != 0:
+                raise ValueError(
+                    f"{_s} extract_size={_es} (patch_size={_ps} + 2*overlap_tile_pad={_pad}) "
+                    f"is not divisible by 2^num_layers={_div}. Adjust patch_size, "
+                    f"overlap_tile_pad, or num_layers so the U-Net skip connections align."
+                )
+
         # Create output directories
         dirs = create_output_directories(config)
 
@@ -229,6 +244,12 @@ def run_training(config: dict):
         if config.get('normalize_method') == 'zscore':
             if mode == '2.5d':
                 train_slices = loaded_stack[slice_indices['train']]
+                if np.isnan(train_slices).any():
+                    raise ValueError(
+                        "Training stack contains NaN values; cannot compute "
+                        "zscore statistics. Clean the input or switch "
+                        "normalize_method to 'unit'."
+                    )
                 mean = float(train_slices.mean())
                 std = float(train_slices.std())
             else:
@@ -241,6 +262,13 @@ def run_training(config: dict):
                 running_n = 0
                 for p in train_paths:
                     img = load_and_normalize_image(p)
+                    # Refuse silently dropping NaN — a poisoned mean/std would
+                    # propagate to every output pixel of the trained model.
+                    if np.isnan(img).any():
+                        raise ValueError(
+                            f"Training image contains NaN values: {p}. "
+                            "Clean the input or switch normalize_method to 'unit'."
+                        )
                     running_sum += float(img.sum())
                     running_sq += float((img.astype(np.float64) ** 2).sum())
                     running_n += int(img.size)
@@ -249,6 +277,15 @@ def run_training(config: dict):
                 mean = running_sum / running_n
                 var = max(running_sq / running_n - mean * mean, 0.0)
                 std = float(np.sqrt(var))
+            # Near-zero std (e.g. constant-intensity stack) makes the
+            # (x - mean) / (std + eps) transform blow up by ~1e6 and the
+            # model converges to a near-constant output.
+            if std < 1e-8:
+                raise ValueError(
+                    "Training data has near-zero standard deviation; cannot "
+                    "zscore normalize. Use normalize_method='unit' or check "
+                    "that the input is not a constant-intensity stack."
+                )
             config['_norm_stats'] = {'mean': mean, 'std': std, 'eps': 1e-6}
             print(f"[zscore] Train stats computed: mean={mean:.6f}, std={std:.6f} (mode={mode})")
 
@@ -370,10 +407,21 @@ def run_training(config: dict):
                 print(f"[DEBUG] Wrapping Stage 1 model with CenterChannelWrapper for 2.5D inference")
                 inference_model = CenterChannelWrapper(stage1_trained_model)
 
-            # Create predictor with mode (2.5D uses triplet sliding window)
+            # Create predictor with mode (2.5D uses triplet sliding window).
+            # stride=patch_size//4 (instead of the library default //2) so each
+            # pixel is covered by ~4 patches rather than 2. The constant-weight
+            # overlap-tile mask hard-averages contributing patches, and at every
+            # stride boundary the contributing pair rotates — visible as patch
+            # edges when the model isn't fully patch-position-invariant
+            # (especially with deeper U-Nets / larger patches / undertrained
+            # weights). 4-way averaging makes each transition 25% rather than
+            # 50% of the blended value, dramatically reducing visible seams.
+            # Cost: 4x more patches → ~4x slower inference.
+            _stage1_ps = config['stage1']['patch_size']
             predictor = AutoStructN2VPredictor(
                 model=inference_model,
-                patch_size=config['stage1']['patch_size'],
+                patch_size=_stage1_ps,
+                stride=max(1, _stage1_ps // 4),
                 mode=mode,
                 norm_stats=config.get('_norm_stats'),
                 overlap_tile_pad=config['stage1'].get('overlap_tile_pad', 0),
@@ -462,7 +510,12 @@ def run_training(config: dict):
                 max_true_pixels=extractor_config.get('max_true_pixels', 25)
             )
 
-            # Extract mask (different method for 2D vs 2.5D)
+            # Extract mask (different method for 2D vs 2.5D). The small kernel
+            # returned by extract_mask / extract_mask_3d is what the migrated
+            # library expects downstream — the dataset's _build_mask_pool calls
+            # create_full_mask internally per pool entry so that each training
+            # patch sees a different random placement. Pre-expanding here would
+            # collapse all 32 pool entries to the same mask.
             if mode == '2.5d':
                 # 2.5D mode: Use 3D mask extraction from triplet patches
                 # Extract triplet patches from the denoised stack for 3D autocorrelation
@@ -478,14 +531,6 @@ def run_training(config: dict):
                 os.makedirs(os.path.dirname(denoised_patches_path), exist_ok=True)
                 np.save(denoised_patches_path, triplet_patches)
                 print(f"Saved {len(triplet_patches)} triplet patches for 2.5D mask regeneration to {denoised_patches_path}")
-
-                # Create full 3D mask
-                full_mask, prediction_kernel = create_full_mask_3d(
-                    struct_mask,
-                    config['stage2']['patch_size'],
-                    config['stage2']['mask_percentage'],
-                    verbose
-                )
             else:
                 # 2D mode: Standard 2D mask extraction
                 struct_mask, autocorr_data = extractor.extract_mask(denoised_patches, verbose)
@@ -496,39 +541,39 @@ def run_training(config: dict):
                 np.save(denoised_patches_path, denoised_patches)
                 print(f"Saved {len(denoised_patches)} denoised patches for mask regeneration to {denoised_patches_path}")
 
-                # Create full 2D mask
-                full_mask, prediction_kernel = create_full_mask(
-                    struct_mask,
-                    config['stage2']['patch_size'],
-                    config['stage2']['mask_percentage'],
-                    verbose
-                )
-
             # Save mask (structure depends on mode)
             mask_save_path = os.path.join(dirs['stage2']['model'], 'stage2_mask.npy')
             os.makedirs(os.path.dirname(mask_save_path), exist_ok=True)
             np.save(mask_save_path, struct_mask)
 
-            # Check for empty mask (only center pixel or < 2 active pixels)
+            # Check for empty mask (only center pixel or < 2 active pixels).
+            # Non-square kernels (e.g. (7, 9) for anisotropic noise) need
+            # per-axis center indexing — using shape[0]//2 for both axes
+            # would address the wrong pixel when ph_h != ph_w.
             if mode == '2.5d':
                 # For 3D mask, check center slice
                 active_pixels = int(np.sum(struct_mask[1]))  # Center slice
-                kernel_size = int(struct_mask.shape[1])  # Spatial dimension
-                center_only = bool(active_pixels == 1 and struct_mask[1, kernel_size//2, kernel_size//2])
+                kh, kw = struct_mask.shape[1], struct_mask.shape[2]
+                center_only = bool(active_pixels == 1 and struct_mask[1, kh // 2, kw // 2])
                 is_empty = bool(active_pixels < 2 or center_only)
                 # For 2.5D, maskArray is a list of 3 2D arrays
                 mask_array_for_viz = [s.astype(int).tolist() for s in struct_mask]
             else:
                 active_pixels = int(np.sum(struct_mask))
-                kernel_size = int(struct_mask.shape[0])
-                center_only = bool(active_pixels == 1 and struct_mask[kernel_size//2, kernel_size//2])
+                kh, kw = struct_mask.shape
+                center_only = bool(active_pixels == 1 and struct_mask[kh // 2, kw // 2])
                 is_empty = bool(active_pixels < 2 or center_only)
                 mask_array_for_viz = struct_mask.astype(int).tolist()
+            # kernelSize kept for back-compat; new kernelHeight/kernelWidth
+            # carry the true rectangular dimensions for the frontend grid.
+            kernel_size = int(max(kh, kw))
 
             emit_result('mask', {
                 "training_id": training_id,
                 "mode": mode,
                 "kernelSize": kernel_size,
+                "kernelHeight": int(kh),
+                "kernelWidth": int(kw),
                 "activePixels": active_pixels,
                 "centerOnly": center_only,
                 "isEmpty": is_empty,
@@ -541,6 +586,8 @@ def run_training(config: dict):
             results['mask_info'] = {
                 'active_pixels': active_pixels,
                 'kernel_size': kernel_size,
+                'kernel_height': int(kh),
+                'kernel_width': int(kw),
                 'is_empty': is_empty
             }
 
@@ -555,6 +602,8 @@ def run_training(config: dict):
                     "stage1DenoisedDir": results.get('stage1_denoised_dir'),
                     "maskPath": mask_save_path,
                     "kernelSize": kernel_size,
+                    "kernelHeight": int(kh),
+                    "kernelWidth": int(kw),
                     "activePixels": active_pixels,
                     "pattern": detect_pattern(struct_mask[1] if mode == '2.5d' else struct_mask),
                     "maskArray": mask_array_for_viz
@@ -579,7 +628,11 @@ def run_training(config: dict):
                     "totalEpochs": config['stage2'].get('num_epochs', config.get('num_epochs', 100))
                 })
 
-                # Create dataloaders with structured mask (different for 2D vs 2.5D)
+                # Create dataloaders with the small structural kernel returned by
+                # extract_mask. The dataset's _build_mask_pool calls
+                # create_full_mask internally per pool entry, producing 32
+                # distinct full masks at init that are randomly sampled per
+                # __getitem__ (A1 mask-diversity fix from the migration).
                 if mode == '2.5d':
                     # 2.5D mode: stack-based dataloaders
                     stage2_train_loader, stage2_val_loader, stage2_test_loader = create_dataloaders(
@@ -587,8 +640,7 @@ def run_training(config: dict):
                         stage="stage2",
                         stack=loaded_stack,
                         slice_indices=slice_indices,
-                        structured_mask=full_mask,
-                        prediction_kernel=prediction_kernel,
+                        structured_mask=struct_mask,
                         verbose=verbose
                     )
                 else:
@@ -597,8 +649,7 @@ def run_training(config: dict):
                         image_paths,
                         config,
                         "stage2",
-                        structured_mask=full_mask,
-                        prediction_kernel=prediction_kernel,
+                        structured_mask=struct_mask,
                         verbose=verbose
                     )
 
@@ -671,10 +722,13 @@ def run_training(config: dict):
             stage2_trained_model.load_state_dict(checkpoint['model_state_dict'])
             stage2_trained_model.eval()
 
-            # Create predictor with mode (2.5D uses triplet sliding window)
+            # Create predictor with mode (2.5D uses triplet sliding window).
+            # stride=patch_size//4 — see Stage 1 above for rationale.
+            _stage2_ps = config['stage2']['patch_size']
             predictor = AutoStructN2VPredictor(
                 model=stage2_trained_model,
-                patch_size=config['stage2']['patch_size'],
+                patch_size=_stage2_ps,
+                stride=max(1, _stage2_ps // 4),
                 mode=mode,
                 norm_stats=config.get('_norm_stats'),
                 overlap_tile_pad=config['stage2'].get('overlap_tile_pad', 0),

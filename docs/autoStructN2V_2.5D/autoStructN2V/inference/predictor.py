@@ -83,6 +83,13 @@ class AutoStructN2VPredictor:
         # Load and normalize the image
         img_array = load_and_normalize_image(image_path)
 
+        # Legacy path: load_and_normalize_image no longer clips float TIFFs to
+        # [0, 1] (it now defers that policy to callers). Without norm_stats,
+        # the model expects [0, 1]-scale input, so clip here. With norm_stats,
+        # the zscore transform handles arbitrary input scales.
+        if self.norm_stats is None and np.issubdtype(img_array.dtype, np.floating):
+            img_array = np.clip(img_array, 0.0, 1.0)
+
         # Padding must mirror _predict_2d: an inner dimension-fit pad so the
         # patches tile the slice cleanly, plus an outer overlap_tile_pad band
         # so the central-region weighting in patches_to_image has full coverage
@@ -94,6 +101,12 @@ class AutoStructN2VPredictor:
         pad_h_fit = (self.stride - (h - self.patch_size) % self.stride) % self.stride
         pad_w_fit = (self.stride - (w - self.patch_size) % self.stride) % self.stride
         outer = self.overlap_tile_pad
+        # Small-image clamp: when h or w <= patch_size, the floor-modulo above
+        # yields pad_*_fit=0 but extract_size = patch_size + 2*outer can exceed
+        # the padded dim, and image_to_patches rejects. Ensure the padded image
+        # is at least extract_size on each axis.
+        pad_h_fit = max(pad_h_fit, self.extract_size - (h + 2 * outer))
+        pad_w_fit = max(pad_w_fit, self.extract_size - (w + 2 * outer))
         padded_img = np.pad(
             img_array,
             ((outer, outer + pad_h_fit), (outer, outer + pad_w_fit)),
@@ -204,6 +217,12 @@ class AutoStructN2VPredictor:
         # Load the TIFF stack
         stack = load_tiff_stack(input_path)
 
+        # Legacy path: see denoise_image. load_tiff_stack no longer clips
+        # float stacks to [0, 1]; clip here when there's no zscore transform
+        # to absorb out-of-range values.
+        if self.norm_stats is None and np.issubdtype(stack.dtype, np.floating):
+            stack = np.clip(stack, 0.0, 1.0)
+
         # Denoise based on mode
         if self.mode == '2.5d':
             denoised = self._predict_2_5d(stack)
@@ -242,6 +261,11 @@ class AutoStructN2VPredictor:
         # Outer pad of `overlap_tile_pad` extends each side so the central
         # tiles of border patches still receive in-distribution context.
         outer = self.overlap_tile_pad
+        # Small-image clamp: ensure padded dim >= extract_size for all axes.
+        # Without this, h or w <= patch_size yields pad_*_fit=0 and
+        # image_to_patches rejects the slice.
+        pad_h_fit = max(pad_h_fit, self.extract_size - (h + 2 * outer))
+        pad_w_fit = max(pad_w_fit, self.extract_size - (w + 2 * outer))
 
         for z in tqdm(range(num_slices), desc="Denoising slices (2D)"):
             # Get the slice
@@ -301,6 +325,9 @@ class AutoStructN2VPredictor:
         pad_h_fit = (self.stride - (h - self.patch_size) % self.stride) % self.stride
         pad_w_fit = (self.stride - (w - self.patch_size) % self.stride) % self.stride
         outer = self.overlap_tile_pad
+        # Small-image clamp (see _predict_2d for rationale).
+        pad_h_fit = max(pad_h_fit, self.extract_size - (h + 2 * outer))
+        pad_w_fit = max(pad_w_fit, self.extract_size - (w + 2 * outer))
 
         # Middle slices: predict with triplet input
         for z in tqdm(range(1, num_slices - 1), desc="Denoising slices (2.5D)"):
