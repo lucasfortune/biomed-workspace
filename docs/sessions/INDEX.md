@@ -15,10 +15,11 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
-### 2026-05-27 (N2V + autoStructN2V Parameter Defaults Update)
+### 2026-05-27 (Welcome Docs Link + Admin Session Fixes)
 
 | Date | Session | Type | Duration | Status |
 |------|---------|------|----------|--------|
+| 2026-05-27 | [Welcome Docs Link + Admin Session Fixes](2026-05-27_welcome_docs_link_admin_session_fixes.md) | 🐛 Bug Fix | ~0.5 hrs | ✅ Complete |
 | 2026-05-27 | [N2V + autoStructN2V Parameter Defaults Update](2026-05-27_n2v_parameter_defaults_update.md) | 🐛 Bug Fix | ~2 hrs | ✅ Complete |
 
 ### 2026-05-26 (autoStructN2V v2.0 Fix Pass)
