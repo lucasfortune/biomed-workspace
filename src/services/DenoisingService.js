@@ -51,6 +51,9 @@ class DenoisingService {
     const session = {
       id: trainingId,
       sessionId: sessionData.sessionId,
+      username: sessionData.username || null,
+      fullName: sessionData.fullName || null,
+      moduleType: sessionData.moduleType || 'DL Denoising',
       method: sessionData.method, // 'n2v' or 'autostructn2v'
       inputFileId: sessionData.inputFileId || null, // For lineage tracking
       status: 'pending',

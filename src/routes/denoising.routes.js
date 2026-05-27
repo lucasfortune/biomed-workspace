@@ -621,7 +621,9 @@ function createDenoisingRoutes(dependencies) {
         method,
         mode,
         config: fullConfig,
-        inputFileId: inputFileId || null  // Store for lineage tracking
+        inputFileId: inputFileId || null,
+        username: req.session.user?.username || 'unknown',
+        fullName: req.session.user?.fullName || null
       });
 
       // Register in centralized SessionTracker for cleanup protection

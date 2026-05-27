@@ -768,6 +768,10 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
                             ${session.fullName || session.username || 'Unknown'}
                         </div>
                         <div class="session-detail">
+                            <strong>Module</strong>
+                            ${session.moduleType || 'Segmentation'}
+                        </div>
+                        <div class="session-detail">
                             <strong>Started</strong>
                             ${formatDateTime(session.startTime)}
                         </div>
@@ -797,6 +801,10 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
                         <div class="session-detail">
                             <strong>User</strong>
                             ${session.fullName || session.username || 'Unknown'}
+                        </div>
+                        <div class="session-detail">
+                            <strong>Module</strong>
+                            ${session.moduleType || 'Segmentation'}
                         </div>
                         <div class="session-detail">
                             <strong>Started</strong>
@@ -832,6 +840,10 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
                             ${session.fullName || session.username || 'Unknown'}
                         </div>
                         <div class="session-detail">
+                            <strong>Module</strong>
+                            ${session.moduleType || 'Mesh Generation'}
+                        </div>
+                        <div class="session-detail">
                             <strong>Started</strong>
                             ${formatDateTime(session.startTime)}
                         </div>
@@ -862,7 +874,11 @@ function displayActiveSessions(training, inference, mesh = [], denoising = []) {
                     <div class="session-details">
                         <div class="session-detail">
                             <strong>User</strong>
-                            ${session.username || 'Unknown'}
+                            ${session.fullName || session.username || 'Unknown'}
+                        </div>
+                        <div class="session-detail">
+                            <strong>Module</strong>
+                            ${session.moduleType || 'DL Denoising'}
                         </div>
                         <div class="session-detail">
                             <strong>Method</strong>

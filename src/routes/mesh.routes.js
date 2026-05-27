@@ -432,6 +432,7 @@ function createMeshRoutes(dependencies) {
       sessionTracker.meshSessions.set(meshId, {
         sessionId: sessionId,
         username: req.session.user?.username,
+        moduleType: 'Mesh Generation',
         status: 'starting',
         startTime: new Date(),
         progress: 0,

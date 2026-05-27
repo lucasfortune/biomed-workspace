@@ -348,6 +348,7 @@ function createAdminRoutes(dependencies) {
           training.push({
             trainingId,
             status: session.status,
+            moduleType: session.moduleType || 'Segmentation',
             fullName: session.fullName,
             username: session.username,
             startTime: session.startTime,
@@ -364,6 +365,7 @@ function createAdminRoutes(dependencies) {
           inference.push({
             inferenceId,
             status: session.status,
+            moduleType: session.moduleType || 'Segmentation',
             fullName: session.fullName,
             username: session.username,
             startTime: session.startTime,
@@ -381,6 +383,7 @@ function createAdminRoutes(dependencies) {
           mesh.push({
             meshId,
             status: session.status,
+            moduleType: session.moduleType || 'Mesh Generation',
             fullName: session.fullName || null,
             username: session.username,
             startTime: session.startTime,
@@ -399,6 +402,8 @@ function createAdminRoutes(dependencies) {
             denoisingId: session.id,
             status: session.status,
             method: session.method,
+            moduleType: session.moduleType || 'DL Denoising',
+            fullName: session.fullName || null,
             username: session.username || 'Unknown',
             startTime: session.startTime,
             stage: session.stage,
