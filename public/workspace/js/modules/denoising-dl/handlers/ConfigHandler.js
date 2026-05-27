@@ -35,52 +35,107 @@ class ConfigHandler {
   }
 
   /**
-   * Get fallback default presets (matches spec section 5.2)
+   * Get fallback default presets — mirrors config/denoising_presets.json.
+   * Used only when the backend fetch fails.
    */
   getDefaultPresets() {
+    const n2vStage1 = (epochs) => ({
+      patch_size: 64,
+      patches_per_image: 100,
+      batch_size: 128,
+      mask_percentage: 1.5,
+      mask_center_size: 1,
+      masking_strategy: 3,
+      use_augmentation: true,
+      features: 32,
+      num_layers: 2,
+      activation: 'relu',
+      remove_top_skip: true,
+      use_blurpool: true,
+      learning_rate: 0.0004,
+      epochs,
+      early_stopping: true,
+      early_stopping_patience: 10,
+      normalize_method: 'zscore',
+      overlap_tile_pad: 16,
+      use_resize_conv: true,
+      upsampling_mode: 'bilinear',
+      use_roi: false
+    });
+
+    const stage2 = (epochs) => ({
+      patch_size: 128,
+      patches_per_image: 200,
+      batch_size: 24,
+      mask_percentage: 15.0,
+      masking_strategy: 4,
+      mask_source: 'stage1',
+      use_augmentation: false,
+      features: 32,
+      num_layers: 2,
+      activation: 'relu',
+      remove_top_skip: true,
+      use_blurpool: true,
+      learning_rate: 0.000075,
+      epochs,
+      early_stopping: true,
+      early_stopping_patience: 10,
+      normalize_method: 'zscore',
+      overlap_tile_pad: 16,
+      use_resize_conv: true,
+      upsampling_mode: 'bilinear',
+      use_roi: false
+    });
+
+    const sharedMaskExtractor = () => ({
+      adaptive_thresholding: true,
+      adapt_CB: 50.0,
+      adapt_DF: 0.65,
+      center_size: 15,
+      base_percentile: 50,
+      percentile_decay: 1.035,
+      center_ratio_threshold: 0.2,
+      use_center_proximity: true,
+      center_proximity_threshold: 0.95,
+      keep_center_component_only: true,
+      max_masked_pixels: 25,
+      norm_autocorr: true,
+      log_autocorr: true,
+      crop_autocorr: true,
+      window: 'tukey',
+      window_alpha: 0.25
+    });
+
+    const autostructOverrides = (epochs) => ({
+      use_augmentation: false,
+      use_roi: true,
+      roi_threshold: 0.5,
+      scale_factor: 0.25,
+      select_background: true,
+      epochs
+    });
+
     return {
+      fast: {
+        name: 'Fast',
+        description: 'Quick training for testing and previewing results. Lower quality but faster iteration.',
+        stage1: { ...n2vStage1(100), stage1_autostruct_overrides: autostructOverrides(50) },
+        stage2: stage2(50),
+        maskExtractor: sharedMaskExtractor()
+      },
       balanced: {
         name: 'Balanced',
-        description: 'Good balance between training time and quality.',
-        stage1: {
-          patch_size: 32,
-          patches_per_image: 100,
-          batch_size: 4,
-          mask_percentage: 15,
-          use_augmentation: false,
-          features: 64,
-          num_layers: 2,
-          learning_rate: 0.0001,
-          epochs: 100,
-          early_stopping: true,
-          early_stopping_patience: 10,
-          use_roi: true,
-          roi_threshold: 0.5,
-          use_resize_conv: true,
-          upsampling_mode: 'bilinear',
-          masking_strategy: 0
-        },
-        stage2: {
-          patch_size: 64,
-          patches_per_image: 200,
-          batch_size: 2,
-          mask_percentage: 10,
-          use_augmentation: true,
-          features: 64,
-          num_layers: 3,
-          learning_rate: 0.00001,
-          epochs: 100,
-          early_stopping: true,
-          early_stopping_patience: 10,
-          use_resize_conv: true,
-          upsampling_mode: 'bilinear'
-        },
-        maskExtractor: {
-          adaptive_thresholding: true,
-          base_percentile: 50,
-          percentile_decay: 1.15,
-          max_masked_pixels: 25
-        }
+        description: 'Good balance between training time and denoising quality. Recommended for most use cases.',
+        stage1: { ...n2vStage1(200), stage1_autostruct_overrides: autostructOverrides(100) },
+        stage2: stage2(100),
+        maskExtractor: sharedMaskExtractor()
+      },
+      high_quality: {
+        name: 'High Quality',
+        description: 'Maximum denoising quality. Longer training time but best results.',
+        stage1: { ...n2vStage1(400), stage1_autostruct_overrides: autostructOverrides(150) },
+        stage2: stage2(200),
+        maskExtractor: sharedMaskExtractor()
       }
     };
   }
@@ -195,15 +250,17 @@ class ConfigHandler {
               <option value="1" ${config.batch_size === 1 ? 'selected' : ''}>1</option>
               <option value="2" ${config.batch_size === 2 ? 'selected' : ''}>2</option>
               <option value="4" ${config.batch_size === 4 ? 'selected' : ''}>4</option>
-              <option value="8" ${config.batch_size === 8 || !config.batch_size ? 'selected' : ''}>8</option>
+              <option value="8" ${config.batch_size === 8 ? 'selected' : ''}>8</option>
               <option value="16" ${config.batch_size === 16 ? 'selected' : ''}>16</option>
               <option value="32" ${config.batch_size === 32 ? 'selected' : ''}>32</option>
+              <option value="64" ${config.batch_size === 64 ? 'selected' : ''}>64</option>
+              <option value="128" ${config.batch_size === 128 || !config.batch_size ? 'selected' : ''}>128</option>
             </select>
           </div>
           <div class="form-field">
             <label for="stage1_mask_percentage">Mask Percentage (%)${Templates.renderHelpIcon('denoising-dl.step2.mask-percentage')}</label>
             <input type="number" id="stage1_mask_percentage" data-param="mask_percentage"
-                   value="${config.mask_percentage || 15}" min="5" max="30" step="1">
+                   value="${config.mask_percentage != null ? config.mask_percentage : 1.5}" min="0.5" max="30" step="0.5">
           </div>
           <div class="form-field checkbox-field">
             <input type="checkbox" id="stage1_use_augmentation" data-param="use_augmentation"
@@ -217,9 +274,9 @@ class ConfigHandler {
           <div class="form-field">
             <label for="stage1_features">Number of Features${Templates.renderHelpIcon('denoising-dl.step2.features')}</label>
             <select id="stage1_features" data-param="features">
-              <option value="32" ${config.features === 32 ? 'selected' : ''}>32</option>
+              <option value="32" ${config.features === 32 || !config.features ? 'selected' : ''}>32</option>
               <option value="48" ${config.features === 48 ? 'selected' : ''}>48</option>
-              <option value="64" ${config.features === 64 || !config.features ? 'selected' : ''}>64</option>
+              <option value="64" ${config.features === 64 ? 'selected' : ''}>64</option>
               <option value="96" ${config.features === 96 ? 'selected' : ''}>96</option>
               <option value="128" ${config.features === 128 ? 'selected' : ''}>128</option>
             </select>
@@ -227,9 +284,9 @@ class ConfigHandler {
           <div class="form-field">
             <label for="stage1_num_layers">Number of Layers${Templates.renderHelpIcon('denoising-dl.step2.num-layers')}</label>
             <select id="stage1_num_layers" data-param="num_layers">
-              <option value="2" ${config.num_layers === 2 ? 'selected' : ''}>2</option>
+              <option value="2" ${config.num_layers === 2 || !config.num_layers ? 'selected' : ''}>2</option>
               <option value="3" ${config.num_layers === 3 ? 'selected' : ''}>3</option>
-              <option value="4" ${config.num_layers === 4 || !config.num_layers ? 'selected' : ''}>4</option>
+              <option value="4" ${config.num_layers === 4 ? 'selected' : ''}>4</option>
             </select>
           </div>
         </div>
@@ -241,14 +298,15 @@ class ConfigHandler {
             <select id="stage1_learning_rate" data-param="learning_rate">
               <option value="0.00001" ${config.learning_rate === 0.00001 ? 'selected' : ''}>1e-5</option>
               <option value="0.00005" ${config.learning_rate === 0.00005 ? 'selected' : ''}>5e-5</option>
-              <option value="0.0001" ${config.learning_rate === 0.0001 || !config.learning_rate ? 'selected' : ''}>1e-4</option>
+              <option value="0.0001" ${config.learning_rate === 0.0001 ? 'selected' : ''}>1e-4</option>
               <option value="0.0002" ${config.learning_rate === 0.0002 ? 'selected' : ''}>2e-4</option>
+              <option value="0.0004" ${config.learning_rate === 0.0004 || !config.learning_rate ? 'selected' : ''}>4e-4</option>
             </select>
           </div>
           <div class="form-field">
             <label for="stage1_epochs">Number of Epochs${Templates.renderHelpIcon('denoising-dl.step2.epochs')}</label>
             <input type="number" id="stage1_epochs" data-param="epochs"
-                   value="${config.epochs || 100}" min="10" max="500" step="10">
+                   value="${config.epochs || 200}" min="10" max="500" step="10">
           </div>
           <div class="form-field checkbox-field">
             <input type="checkbox" id="stage1_early_stopping" data-param="early_stopping"
@@ -287,9 +345,11 @@ class ConfigHandler {
             <div class="form-field">
               <label for="stage1_masking_strategy">Masking Strategy${Templates.renderHelpIcon('denoising-dl.step2.masking-strategy')}</label>
               <select id="stage1_masking_strategy" data-param="masking_strategy">
-                <option value="0" ${config.masking_strategy === 0 || config.masking_strategy === undefined ? 'selected' : ''}>Local Mean</option>
+                <option value="0" ${config.masking_strategy === 0 ? 'selected' : ''}>Local Mean</option>
                 <option value="1" ${config.masking_strategy === 1 ? 'selected' : ''}>Zeros</option>
                 <option value="2" ${config.masking_strategy === 2 ? 'selected' : ''}>Random</option>
+                <option value="3" ${config.masking_strategy === 3 || config.masking_strategy === undefined ? 'selected' : ''}>UPS 5×5</option>
+                <option value="4" ${config.masking_strategy === 4 ? 'selected' : ''}>UPS center + struct neighbors</option>
               </select>
             </div>
           </div>
@@ -306,6 +366,55 @@ class ConfigHandler {
     const config = this.module.trainingConfig[stage] || {};
     const isStage1 = stage === 'stage1';
 
+    // Patch size: Stage 1 keeps 32–128 with default 64; Stage 2 adds 256 with default 256
+    const patchSizeOptions = isStage1
+      ? [
+          { v: 32, sel: config.patch_size === 32 },
+          { v: 48, sel: config.patch_size === 48 },
+          { v: 64, sel: config.patch_size === 64 || !config.patch_size },
+          { v: 96, sel: config.patch_size === 96 },
+          { v: 128, sel: config.patch_size === 128 }
+        ]
+      : [
+          { v: 32, sel: config.patch_size === 32 },
+          { v: 48, sel: config.patch_size === 48 },
+          { v: 64, sel: config.patch_size === 64 },
+          { v: 96, sel: config.patch_size === 96 },
+          { v: 128, sel: config.patch_size === 128 || !config.patch_size },
+          { v: 256, sel: config.patch_size === 256 }
+        ];
+
+    // Batch size: Stage 1 dropdown (default 128); Stage 2 numeric input (default 24)
+    const batchSizeField = isStage1 ? `
+            <select id="${stage}_batch_size" data-param="batch_size">
+              <option value="1" ${config.batch_size === 1 ? 'selected' : ''}>1</option>
+              <option value="2" ${config.batch_size === 2 ? 'selected' : ''}>2</option>
+              <option value="4" ${config.batch_size === 4 ? 'selected' : ''}>4</option>
+              <option value="8" ${config.batch_size === 8 ? 'selected' : ''}>8</option>
+              <option value="16" ${config.batch_size === 16 ? 'selected' : ''}>16</option>
+              <option value="32" ${config.batch_size === 32 ? 'selected' : ''}>32</option>
+              <option value="64" ${config.batch_size === 64 ? 'selected' : ''}>64</option>
+              <option value="128" ${config.batch_size === 128 || !config.batch_size ? 'selected' : ''}>128</option>
+            </select>
+    ` : `
+            <input type="number" id="${stage}_batch_size" data-param="batch_size"
+                   value="${config.batch_size || 24}" min="1" max="256" step="1">
+    `;
+
+    // Learning rate: Stage 1 dropdown (default 4e-4); Stage 2 numeric input (default 7.5e-5)
+    const learningRateField = isStage1 ? `
+            <select id="${stage}_learning_rate" data-param="learning_rate">
+              <option value="0.00001" ${config.learning_rate === 0.00001 ? 'selected' : ''}>1e-5</option>
+              <option value="0.00005" ${config.learning_rate === 0.00005 ? 'selected' : ''}>5e-5</option>
+              <option value="0.0001" ${config.learning_rate === 0.0001 ? 'selected' : ''}>1e-4</option>
+              <option value="0.0002" ${config.learning_rate === 0.0002 ? 'selected' : ''}>2e-4</option>
+              <option value="0.0004" ${config.learning_rate === 0.0004 || !config.learning_rate ? 'selected' : ''}>4e-4</option>
+            </select>
+    ` : `
+            <input type="number" id="${stage}_learning_rate" data-param="learning_rate"
+                   value="${config.learning_rate || 0.000075}" min="0.000001" max="0.01" step="0.000001">
+    `;
+
     return `
       <div class="config-form" data-stage="${stage}">
         <div class="config-group">
@@ -313,11 +422,7 @@ class ConfigHandler {
           <div class="form-field">
             <label for="${stage}_patch_size">Patch Size${Templates.renderHelpIcon('denoising-dl.step2.patch-size')}</label>
             <select id="${stage}_patch_size" data-param="patch_size">
-              <option value="32" ${config.patch_size === 32 ? 'selected' : ''}>32</option>
-              <option value="48" ${config.patch_size === 48 ? 'selected' : ''}>48</option>
-              <option value="64" ${config.patch_size === 64 || !config.patch_size ? 'selected' : ''}>64</option>
-              <option value="96" ${config.patch_size === 96 ? 'selected' : ''}>96</option>
-              <option value="128" ${config.patch_size === 128 ? 'selected' : ''}>128</option>
+              ${patchSizeOptions.map(o => `<option value="${o.v}" ${o.sel ? 'selected' : ''}>${o.v}</option>`).join('')}
             </select>
           </div>
           <div class="form-field">
@@ -327,19 +432,13 @@ class ConfigHandler {
           </div>
           <div class="form-field">
             <label for="${stage}_batch_size">Batch Size${Templates.renderHelpIcon('denoising-dl.step2.batch-size')}</label>
-            <select id="${stage}_batch_size" data-param="batch_size">
-              <option value="1" ${config.batch_size === 1 ? 'selected' : ''}>1</option>
-              <option value="2" ${config.batch_size === 2 ? 'selected' : ''}>2</option>
-              <option value="4" ${config.batch_size === 4 ? 'selected' : ''}>4</option>
-              <option value="8" ${config.batch_size === 8 || !config.batch_size ? 'selected' : ''}>8</option>
-              <option value="16" ${config.batch_size === 16 ? 'selected' : ''}>16</option>
-              <option value="32" ${config.batch_size === 32 ? 'selected' : ''}>32</option>
-            </select>
+            ${batchSizeField}
           </div>
           <div class="form-field">
             <label for="${stage}_mask_percentage">Mask Percentage (%)${Templates.renderHelpIcon('denoising-dl.step2.mask-percentage')}</label>
             <input type="number" id="${stage}_mask_percentage" data-param="mask_percentage"
-                   value="${config.mask_percentage || (isStage1 ? 15 : 10)}" min="5" max="30" step="1">
+                   value="${config.mask_percentage != null ? config.mask_percentage : (isStage1 ? 1.5 : 15)}"
+                   min="${isStage1 ? 0.5 : 5}" max="30" step="${isStage1 ? 0.5 : 1}">
           </div>
         </div>
 
@@ -348,9 +447,9 @@ class ConfigHandler {
           <div class="form-field">
             <label for="${stage}_features">Number of Features${Templates.renderHelpIcon('denoising-dl.step2.features')}</label>
             <select id="${stage}_features" data-param="features">
-              <option value="32" ${config.features === 32 ? 'selected' : ''}>32</option>
+              <option value="32" ${config.features === 32 || !config.features ? 'selected' : ''}>32</option>
               <option value="48" ${config.features === 48 ? 'selected' : ''}>48</option>
-              <option value="64" ${config.features === 64 || !config.features ? 'selected' : ''}>64</option>
+              <option value="64" ${config.features === 64 ? 'selected' : ''}>64</option>
               <option value="96" ${config.features === 96 ? 'selected' : ''}>96</option>
               <option value="128" ${config.features === 128 ? 'selected' : ''}>128</option>
             </select>
@@ -358,9 +457,9 @@ class ConfigHandler {
           <div class="form-field">
             <label for="${stage}_num_layers">Number of Layers${Templates.renderHelpIcon('denoising-dl.step2.num-layers')}</label>
             <select id="${stage}_num_layers" data-param="num_layers">
-              <option value="2" ${config.num_layers === 2 ? 'selected' : ''}>2</option>
+              <option value="2" ${config.num_layers === 2 || !config.num_layers ? 'selected' : ''}>2</option>
               <option value="3" ${config.num_layers === 3 ? 'selected' : ''}>3</option>
-              <option value="4" ${config.num_layers === 4 || !config.num_layers ? 'selected' : ''}>4</option>
+              <option value="4" ${config.num_layers === 4 ? 'selected' : ''}>4</option>
               <option value="5" ${config.num_layers === 5 ? 'selected' : ''}>5</option>
             </select>
           </div>
@@ -370,17 +469,12 @@ class ConfigHandler {
           <h3>Training Parameters</h3>
           <div class="form-field">
             <label for="${stage}_learning_rate">Learning Rate${Templates.renderHelpIcon('denoising-dl.step2.learning-rate')}</label>
-            <select id="${stage}_learning_rate" data-param="learning_rate">
-              <option value="0.00001" ${config.learning_rate === 0.00001 ? 'selected' : ''}>1e-5</option>
-              <option value="0.00005" ${config.learning_rate === 0.00005 ? 'selected' : ''}>5e-5</option>
-              <option value="0.0001" ${config.learning_rate === 0.0001 || !config.learning_rate ? 'selected' : ''}>1e-4</option>
-              <option value="0.0002" ${config.learning_rate === 0.0002 ? 'selected' : ''}>2e-4</option>
-            </select>
+            ${learningRateField}
           </div>
           <div class="form-field">
             <label for="${stage}_epochs">Number of Epochs${Templates.renderHelpIcon('denoising-dl.step2.epochs')}</label>
             <input type="number" id="${stage}_epochs" data-param="epochs"
-                   value="${config.epochs || 100}" min="10" max="500" step="10">
+                   value="${config.epochs || (isStage1 ? 100 : 100)}" min="10" max="500" step="10">
           </div>
           <div class="form-field checkbox-field">
             <input type="checkbox" id="${stage}_early_stopping" data-param="early_stopping"
@@ -596,7 +690,9 @@ class ConfigHandler {
   }
 
   /**
-   * Apply a preset configuration
+   * Apply a preset configuration. When autoStructN2V is the selected method,
+   * Stage 1 receives the autoStructN2V-specific overrides (augmentation off,
+   * ROI on, lower epoch count) on top of the N2V base values.
    * @param {string} presetName - Name of the preset to apply
    */
   applyPreset(presetName) {
@@ -606,11 +702,19 @@ class ConfigHandler {
       return;
     }
 
-    this.module.trainingConfig.stage1 = { ...preset.stage1 };
+    // Strip the override sub-object before copying — it must not leak into
+    // the config that gets sent to the backend.
+    const { stage1_autostruct_overrides, ...stage1Base } = preset.stage1 || {};
+    this.module.trainingConfig.stage1 = { ...stage1Base };
+
+    if (this.module.selectedMethod === 'autostructn2v' && stage1_autostruct_overrides) {
+      Object.assign(this.module.trainingConfig.stage1, stage1_autostruct_overrides);
+    }
+
     this.module.trainingConfig.stage2 = { ...preset.stage2 };
     this.module.trainingConfig.maskExtractor = { ...preset.maskExtractor };
 
-    console.log('[ConfigHandler] Applied preset:', presetName);
+    console.log('[ConfigHandler] Applied preset:', presetName, 'method:', this.module.selectedMethod);
   }
 
   /**

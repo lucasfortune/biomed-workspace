@@ -563,13 +563,13 @@ function createDenoisingRoutes(dependencies) {
           // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
           adapt_autocorr: extractorConfig.adaptive_thresholding !== false,
           adapt_CB: extractorConfig.adapt_CB || 50.0,
-          adapt_DF: extractorConfig.adapt_DF || 0.95,
-          center_size: extractorConfig.center_size || 10,
+          adapt_DF: extractorConfig.adapt_DF || 0.65,
+          center_size: extractorConfig.center_size || 15,
           // User-adjustable parameters
           base_percentile: extractorConfig.base_percentile || 50,
-          percentile_decay: extractorConfig.percentile_decay || 1.15,
+          percentile_decay: extractorConfig.percentile_decay || 1.035,
           // Center proximity parameters
-          center_ratio_threshold: extractorConfig.center_ratio_threshold || 0.3,
+          center_ratio_threshold: extractorConfig.center_ratio_threshold || 0.2,
           use_center_proximity: extractorConfig.use_center_proximity !== false,
           center_proximity_threshold: extractorConfig.center_proximity_threshold || 0.95,
           keep_center_component_only: extractorConfig.keep_center_component_only !== false,

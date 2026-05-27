@@ -16,7 +16,7 @@ seeAlsoTags:
   - autostructn2v
   - advanced
 parameterImpact: |
-  Improves training efficiency by focusing on meaningful content. Keep enabled unless your images have uniform content.
+  Improves training efficiency by focusing on meaningful content. Auto-enabled for autoStructN2V Stage 1 (required for mask-extractor quality); off for plain N2V.
 ---
 
 # ROI Selection
@@ -24,6 +24,12 @@ parameterImpact: |
 Filter training patches to focus on regions with meaningful content.
 
 ROI (Region of Interest) Selection filters out patches that contain mostly background or empty space, focusing training on informative regions.
+
+## Auto-enabled for autoStructN2V Stage 1
+
+When you select **autoStructN2V** as the denoising method, ROI is automatically enabled for Stage 1 regardless of the preset. This is required because Stage 1's residual autocorrelation feeds the mask extractor — concentrating patches on foreground regions produces a cleaner autocorrelation signal and a more reliable structural-noise kernel.
+
+For **plain N2V** (single-stage), ROI is off by default. The validated N2V recipe expects uniformly sampled patches.
 
 ## How it works
 

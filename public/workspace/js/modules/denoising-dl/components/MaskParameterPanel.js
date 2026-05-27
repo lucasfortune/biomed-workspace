@@ -22,7 +22,7 @@ class MaskParameterPanel {
     this.parameters = {
       adaptive_thresholding: true,
       base_percentile: 50,
-      percentile_decay: 1.15,
+      percentile_decay: 1.035,
       max_masked_pixels: 25,
       ...options.parameters
     };
@@ -71,10 +71,10 @@ class MaskParameterPanel {
               <label for="slider_percentile_decay">Percentile Decay</label>
               <div class="slider-container">
                 <input type="range" id="slider_percentile_decay"
-                       min="1.0" max="1.3" step="0.01"
+                       min="1.0" max="1.5" step="0.005"
                        value="${this.parameters.percentile_decay}"
                        oninput="window.dlDenoisingModule?.updateMaskParameter('percentile_decay', parseFloat(this.value))">
-                <span class="slider-value">${this.parameters.percentile_decay.toFixed(2)}</span>
+                <span class="slider-value">${this.parameters.percentile_decay.toFixed(3)}</span>
               </div>
               <span class="param-hint">Controls how threshold changes across the kernel</span>
             </div>
@@ -141,7 +141,7 @@ class MaskParameterPanel {
 
     if (valueDisplay && valueDisplay.classList.contains('slider-value')) {
       if (name === 'percentile_decay') {
-        valueDisplay.textContent = value.toFixed(2);
+        valueDisplay.textContent = value.toFixed(3);
       } else if (name === 'base_percentile') {
         valueDisplay.textContent = `${value}%`;
       } else {
@@ -165,7 +165,7 @@ class MaskParameterPanel {
     this.parameters = {
       adaptive_thresholding: true,
       base_percentile: 50,
-      percentile_decay: 1.15,
+      percentile_decay: 1.035,
       max_masked_pixels: 25
     };
     this.refresh();
