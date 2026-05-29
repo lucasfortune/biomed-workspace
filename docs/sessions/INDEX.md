@@ -15,10 +15,11 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
-### 2026-05-29 (ML Module Parameter Validation)
+### 2026-05-29 (U-Net Shape Mismatch Pre-Flight Validation)
 
 | Date | Session | Type | Duration | Status |
 |------|---------|------|----------|--------|
+| 2026-05-29 | [U-Net Shape Mismatch Pre-Flight Validation](2026-05-29_unet_shape_mismatch_validation.md) | 🐛 Bug Fix | ~1 hr | ✅ Complete |
 | 2026-05-29 | [ML Module Parameter Validation](2026-05-29_ml_parameter_validation.md) | ✨ Feature / Bug Fix | ~2 hrs | ✅ Complete |
 
 ### 2026-05-27 (Welcome Docs Link + Admin Session Fixes)
