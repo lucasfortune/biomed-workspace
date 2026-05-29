@@ -493,7 +493,12 @@ def main():
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}", flush=True)
-    
+
+    # Emit resolved device to the UI (parity with DL denoising module).
+    # Lets the frontend surface "initialized on CUDA/CPU" so a silent CPU
+    # fallback (e.g. a broken GPU driver) never goes unnoticed.
+    print(f"PROGRESS:{json.dumps({'type': 'init', 'device': str(device), 'gpuAvailable': torch.cuda.is_available(), 'training_id': args.training_id})}", flush=True)
+
     try:
         # Prepare data from TIFF stacks
         print("Preparing data from TIFF stacks...", flush=True)

@@ -350,7 +350,11 @@ def main():
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}", flush=True)
-    
+
+    # Emit resolved device to the UI (parity with DL denoising module).
+    # Surfaces a silent CPU fallback (e.g. a broken GPU driver) to the user.
+    print(f"INFERENCE_PROGRESS:{json.dumps({'type': 'init', 'device': str(device), 'gpuAvailable': torch.cuda.is_available()})}", flush=True)
+
     try:
         # Load model
         print("Loading trained model...", flush=True)

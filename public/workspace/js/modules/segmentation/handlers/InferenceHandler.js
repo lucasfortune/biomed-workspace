@@ -152,10 +152,39 @@ class InferenceHandler {
   }
 
   /**
+   * Handle the device init message emitted at the start of inference.
+   * Notifies the user which device inference actually resolved to, so a
+   * silent CPU fallback (e.g. a broken GPU driver) is never hidden.
+   * @param {Object} data - { device, gpuAvailable }
+   */
+  handleInitProgress(data) {
+    const device = String(data.device || 'cpu').toUpperCase();
+    console.log('[InferenceHandler] Inference device:', device, '| GPU available:', data.gpuAvailable);
+
+    if (!this.module.state) return;
+
+    if (data.gpuAvailable === false || device === 'CPU') {
+      this.module.state.notify(
+        'warning',
+        `Inference running on CPU — no GPU detected, this will be slow.`,
+        8000
+      );
+    } else {
+      this.module.state.notify('info', `Inference initialized on ${device}`);
+    }
+  }
+
+  /**
    * Update inference progress display
    * @param {Object} data - Progress data from socket
    */
   updateInferenceProgress(data) {
+    // Device init message (parity with DL denoising) — surface resolved device
+    if (data.type === 'init') {
+      this.handleInitProgress(data);
+      return;
+    }
+
     const { current_slice, total_slices, progress_percent } = data;
 
     // Validate data

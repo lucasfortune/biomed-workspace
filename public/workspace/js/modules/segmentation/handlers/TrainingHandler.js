@@ -136,10 +136,40 @@ class TrainingHandler {
   }
 
   /**
+   * Handle the device init message emitted at the start of a run.
+   * Notifies the user which device the run actually resolved to, so a
+   * silent CPU fallback (e.g. a broken GPU driver) is never hidden.
+   * @param {Object} data - { device, gpuAvailable }
+   * @param {string} label - 'Training' or 'Inference'
+   */
+  handleInitProgress(data, label = 'Training') {
+    const device = String(data.device || 'cpu').toUpperCase();
+    console.log(`[TrainingHandler] ${label} device:`, device, '| GPU available:', data.gpuAvailable);
+
+    if (!this.module.state) return;
+
+    if (data.gpuAvailable === false || device === 'CPU') {
+      this.module.state.notify(
+        'warning',
+        `${label} running on CPU — no GPU detected, this will be slow.`,
+        8000
+      );
+    } else {
+      this.module.state.notify('info', `${label} initialized on ${device}`);
+    }
+  }
+
+  /**
    * Update training progress display
    * @param {Object} data - Progress data from socket
    */
   updateTrainingProgress(data) {
+    // Device init message (parity with DL denoising) — surface resolved device
+    if (data.type === 'init') {
+      this.handleInitProgress(data, 'Training');
+      return;
+    }
+
     const { epoch, total_epochs, metrics } = data;
 
     // Validate data

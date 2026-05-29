@@ -197,6 +197,12 @@ class TrainingService {
         this.logger.debug('Parsed progress:', progress);
       }
 
+      // Device init message: forward to clients without touching epoch state
+      if (progress.type === 'init') {
+        io.to(`training-${trainingId}`).emit('training-progress', progress);
+        return;
+      }
+
       // Update training session
       const training = this.sessionTracker.getTrainingSession(trainingId);
       if (training) {

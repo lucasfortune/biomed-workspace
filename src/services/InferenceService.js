@@ -278,6 +278,12 @@ class InferenceService {
         this.logger.debug('Parsed inference progress:', progress);
       }
 
+      // Device init message: forward to clients without touching slice state
+      if (progress.type === 'init') {
+        io.to(`inference-${inferenceId}`).emit('inference-progress', progress);
+        return;
+      }
+
       // Update inference session
       const inference = this.sessionTracker.getInferenceSession(inferenceId);
       if (inference) {
