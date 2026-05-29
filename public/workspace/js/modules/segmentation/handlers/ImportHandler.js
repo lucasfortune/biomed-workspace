@@ -164,6 +164,8 @@ class ImportHandler {
           this.module.importValidation.model = { valid: true, result };
           this.module.importValidation.config = { valid: true, result };
           this.module.importedModelConfig = result.configData;
+          // Re-check inference compatibility now that we know the model's depth
+          this.module._validateInferenceCompatibility?.();
         } else {
           this.module.importValidation.model = { valid: false, result };
           this.module.importValidation.config = { valid: false, result };

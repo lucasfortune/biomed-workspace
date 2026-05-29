@@ -1138,6 +1138,8 @@ class SegmentationModule extends BaseModule {
           completionSection.style.display = 'block';
         }
       }
+      // Re-run compatibility check on entry (in case model/file changed)
+      this._validateInferenceCompatibility();
     }
 
     // Scroll main-content container to top when changing steps
@@ -1181,9 +1183,15 @@ class SegmentationModule extends BaseModule {
       this.formValidationController.attachTo(configForm);
     }
 
-    // Patch size: must be <= min(image width, height)
+    // Patch size: must be <= min(image width, height) AND divisible by 2^num_layers
+    // (otherwise an odd intermediate dim breaks the U-Net's decoder skip connections)
     this.formValidationController.addFieldRule('patchSize', (value) => {
-      return this.paramValidator.validatePatchSize(parseInt(value));
+      const layersEl = document.getElementById('numLayers');
+      const layers = layersEl ? parseInt(layersEl.value) : null;
+      return this.paramValidator.validatePatchSize(parseInt(value), {
+        overlapTilePad: 0,
+        numLayers: layers
+      });
     });
 
     // Numeric range rules
@@ -1205,6 +1213,64 @@ class SegmentationModule extends BaseModule {
 
     // Run initial validation
     this.formValidationController.validateAll();
+  }
+
+  /**
+   * Verify the inference TIFF's slice dimensions are compatible with the
+   * active model's U-Net depth. An odd intermediate spatial dim collapses
+   * to a mismatch like "upsampled=30x30 vs skip=31x31" at run time, so we
+   * pre-check min(w,h) % 2^num_layers === 0 and block inference if not.
+   *
+   * Bails out (does not block) when we don't know num_layers or dimensions —
+   * we don't want to gate users when the metadata is simply unavailable.
+   */
+  _validateInferenceCompatibility() {
+    const runInferenceBtn = document.getElementById('runInferenceBtn');
+    const dims = this.inferenceDimensions;
+    const numLayers = this.importedModelConfig?.num_layers
+      ?? this.trainingConfig?.num_layers
+      ?? null;
+
+    // Clear any prior warning
+    const warningId = 'inferenceCompatibilityWarning';
+    const existing = document.getElementById(warningId);
+    if (existing) existing.remove();
+
+    if (!dims || numLayers == null) return;
+
+    const minDim = Math.min(dims.width, dims.height);
+    const divisor = Math.pow(2, numLayers);
+    const remainder = minDim % divisor;
+
+    if (remainder === 0) {
+      // Compatible — make sure the button is enabled (file is present).
+      if (runInferenceBtn && this.uploadedFiles.inference_data) {
+        runInferenceBtn.disabled = false;
+      }
+      return;
+    }
+
+    const message =
+      `Inference image (${dims.width}x${dims.height}) is incompatible with the ` +
+      `model's depth: smallest dimension ${minDim} is not divisible by ${divisor} ` +
+      `(2^${numLayers} layers). The U-Net decoder will fail with a shape mismatch.`;
+
+    if (runInferenceBtn) runInferenceBtn.disabled = true;
+
+    // Inline warning above the run button so the user sees it in context.
+    if (runInferenceBtn) {
+      const warning = document.createElement('div');
+      warning.id = warningId;
+      warning.className = 'inference-compatibility-warning';
+      warning.style.cssText =
+        'margin: 12px 0; padding: 10px 12px; border-radius: 6px; ' +
+        'background: rgba(220,53,69,0.08); color: var(--text-primary, #333); ' +
+        'border-left: 3px solid #dc3545; font-size: 13px; line-height: 1.4;';
+      warning.textContent = message;
+      runInferenceBtn.parentNode?.insertBefore(warning, runInferenceBtn);
+    }
+
+    this.state.notify('error', message, 8000);
   }
 
   /**
@@ -1241,6 +1307,8 @@ class SegmentationModule extends BaseModule {
       if (result.success) {
         // Mark config as saved for step navigation
         this.configSaved = true;
+        // Persist config so inference-step validation can read num_layers
+        this.trainingConfig = config;
 
         this.state.notify('success', 'Configuration saved successfully');
         this.goToStep(3);
@@ -1522,6 +1590,12 @@ class SegmentationModule extends BaseModule {
       // Reset IDs
       this.currentTrainingId = null;
       this.currentInferenceId = null;
+
+      // Clear cached dimensions / model config used by inference-side validation
+      this.inferenceDimensions = null;
+      this.imageDimensions = null;
+      this.trainingConfig = null;
+      this.importedModelConfig = null;
 
       // Reset workflow mode and collapse workflow sections (Step 1)
       this.workflowMode = null;

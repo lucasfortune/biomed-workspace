@@ -305,6 +305,11 @@ class FileHandler {
           id: result.file_id || null
         };
 
+        if (result.validation?.info?.slice_dimensions) {
+          const [h, w] = result.validation.info.slice_dimensions;
+          this.module.inferenceDimensions = { width: w, height: h };
+        }
+
         const runInferenceBtn = document.getElementById('runInferenceBtn');
         if (runInferenceBtn) {
           runInferenceBtn.disabled = false;
@@ -312,6 +317,7 @@ class FileHandler {
 
         this.module.stateHandler.saveState();
         this.module.state.notify('success', 'Test inference data loaded successfully');
+        this.module._validateInferenceCompatibility();
       } else {
         throw new Error(result.error || 'Failed to load test inference data');
       }
@@ -351,6 +357,11 @@ class FileHandler {
           id: result.file_id || null
         };
 
+        if (result.validation?.info?.slice_dimensions) {
+          const [h, w] = result.validation.info.slice_dimensions;
+          this.module.inferenceDimensions = { width: w, height: h };
+        }
+
         const runInferenceBtn = document.getElementById('runInferenceBtn');
         if (runInferenceBtn) {
           runInferenceBtn.disabled = false;
@@ -362,6 +373,7 @@ class FileHandler {
 
         this.module.stateHandler.saveState();
         this.module.state.notify('success', 'Inference file validated successfully');
+        this.module._validateInferenceCompatibility();
       } else {
         throw new Error(result.error || 'Validation failed');
       }
