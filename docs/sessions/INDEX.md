@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-05-29 (ML Module Parameter Validation)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-05-29 | [ML Module Parameter Validation](2026-05-29_ml_parameter_validation.md) | ✨ Feature / Bug Fix | ~2 hrs | ✅ Complete |
+
 ### 2026-05-27 (Welcome Docs Link + Admin Session Fixes)
 
 | Date | Session | Type | Duration | Status |
