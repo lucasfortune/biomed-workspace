@@ -383,8 +383,17 @@ class FileHandler {
     }
 
     if (validation && validation.success !== false) {
+      // Store image dimensions for parameter validation
+      if (validation.info?.slice_dimensions) {
+        const [h, w] = validation.info.slice_dimensions;
+        this.module.imageDimensions = { width: w, height: h };
+      }
+
       const details = [];
-      if (validation.raw_dims) {
+      if (validation.info?.slice_dimensions) {
+        const [h, w] = validation.info.slice_dimensions;
+        details.push({ label: 'Raw Images', value: `${w}x${h} (${validation.info.num_slices} slices)` });
+      } else if (validation.raw_dims) {
         details.push({ label: 'Raw Images', value: `${validation.raw_dims} (${validation.raw_slices} slices)` });
       }
       if (validation.ann_dims) {

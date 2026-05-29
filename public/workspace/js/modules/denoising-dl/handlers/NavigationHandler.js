@@ -240,6 +240,10 @@ class NavigationHandler {
 
     // Save config when leaving Step 2
     if (this.module.currentStep === 2) {
+      if (this.module.configValid === false) {
+        this.module.state.notify('error', 'Please fix invalid parameters before continuing');
+        return;
+      }
       this.module.saveConfig();
       this.module.configSaved = true;
     }

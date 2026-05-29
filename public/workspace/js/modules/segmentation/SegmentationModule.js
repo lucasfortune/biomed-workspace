@@ -6,6 +6,8 @@
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
 import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
+import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
+import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 import SegmentationAPI from './SegmentationAPI.js';
 import Templates from './templates/Templates.js';
 import TrainingHandler from './handlers/TrainingHandler.js';
@@ -110,6 +112,11 @@ class SegmentationModule extends BaseModule {
     // Components
     this.stepNavigator = null;
     this.validationDisplay = null;
+
+    // Parameter validation
+    this.imageDimensions = null;
+    this.paramValidator = null;
+    this.formValidationController = null;
 
     // Bind methods (additional ones not in BaseModule)
     this.loadDependencies = this.loadDependencies.bind(this);
@@ -1104,11 +1111,8 @@ class SegmentationModule extends BaseModule {
       // Restore step 1 button state based on uploaded files
       this.checkStep1Validation();
     } else if (stepNumber === 2) {
-      // Step 2: Configuration is always accessible if we reached it
-      const step2Next = document.getElementById('step2Next');
-      if (step2Next && this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
-        step2Next.disabled = false;
-      }
+      // Initialize parameter validation for config form
+      this._initConfigValidation();
     } else if (stepNumber === 3) {
       // Step 3: Initialize charts now that canvas is visible
       // Use setTimeout to ensure DOM is fully rendered after step visibility change
@@ -1156,9 +1160,63 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
+   * Initialize parameter validation on the config form (step 2)
+   */
+  _initConfigValidation() {
+    if (this.formValidationController) {
+      this.formValidationController.destroy();
+    }
+
+    this.paramValidator = new ParameterValidator(this.imageDimensions);
+    const step2Next = document.getElementById('step2Next');
+
+    this.formValidationController = new FormValidationController(this.paramValidator, {
+      onValidationChange: (allValid) => {
+        if (step2Next) step2Next.disabled = !allValid;
+      }
+    });
+
+    const configForm = document.querySelector('.segmentation-module .config-form');
+    if (configForm) {
+      this.formValidationController.attachTo(configForm);
+    }
+
+    // Patch size: must be <= min(image width, height)
+    this.formValidationController.addFieldRule('patchSize', (value) => {
+      return this.paramValidator.validatePatchSize(parseInt(value));
+    });
+
+    // Numeric range rules
+    this.formValidationController.addFieldRule('patchesPerImage', (value) => {
+      return this.paramValidator.validateRange(parseInt(value), 1, 100, 'Patches per image');
+    });
+    this.formValidationController.addFieldRule('numLayers', (value) => {
+      return this.paramValidator.validateRange(parseInt(value), 2, 6, 'Number of layers');
+    });
+    this.formValidationController.addFieldRule('numEpochs', (value) => {
+      return this.paramValidator.validateRange(parseInt(value), 10, 500, 'Number of epochs');
+    });
+
+    // Disable patch size options exceeding image dimensions
+    const maxPatch = this.paramValidator.getMaxPatchSize();
+    if (maxPatch != null) {
+      this.formValidationController.updateSelectOptions('patchSize', maxPatch);
+    }
+
+    // Run initial validation
+    this.formValidationController.validateAll();
+  }
+
+  /**
    * Configure training and proceed to step 3
    */
   async configureAndProceed() {
+    // Check parameter validation before proceeding
+    if (this.formValidationController && !this.formValidationController.isValid()) {
+      this.state.notify('error', 'Please fix invalid parameters before continuing');
+      return;
+    }
+
     // Get configuration values
     const config = {
       patch_size: parseInt(document.getElementById('patchSize').value),
@@ -1481,6 +1539,13 @@ class SegmentationModule extends BaseModule {
       // Reset inference UI state
       this.resetInferenceUIState();
 
+      // Clear parameter validation
+      if (this.formValidationController) {
+        this.formValidationController.destroy();
+        this.formValidationController = null;
+      }
+      this.imageDimensions = null;
+
       // Clear validation display on Step 1
       if (this.validationDisplay) {
         this.validationDisplay.hide();
@@ -1683,6 +1748,12 @@ class SegmentationModule extends BaseModule {
     // Cleanup handlers
     if (this.trainingHandler) {
       this.trainingHandler.cleanup();
+    }
+
+    // Cleanup parameter validation
+    if (this.formValidationController) {
+      this.formValidationController.destroy();
+      this.formValidationController = null;
     }
 
     // Reset step to 1 so next activate starts fresh

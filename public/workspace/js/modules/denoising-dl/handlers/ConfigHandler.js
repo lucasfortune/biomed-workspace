@@ -6,6 +6,8 @@
  */
 
 import Templates from '../templates/Templates.js';
+import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
+import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 
 class ConfigHandler {
   /**
@@ -13,6 +15,8 @@ class ConfigHandler {
    */
   constructor(module) {
     this.module = module;
+    this.validationControllers = [];
+    this.paramValidator = null;
   }
 
   /**
@@ -217,6 +221,9 @@ class ConfigHandler {
 
     // Set up input change listeners
     this.setupConfigInputListeners();
+
+    // Initialize parameter validation
+    this.initValidation();
   }
 
   /**
@@ -611,6 +618,100 @@ class ConfigHandler {
         }
       });
     });
+  }
+
+  /**
+   * Initialize parameter validation for all rendered config forms
+   */
+  initValidation() {
+    this.destroyValidation();
+
+    const dims = this.module.validationResult?.info?.dimensions;
+    this.paramValidator = new ParameterValidator(dims || null);
+
+    const stages = ['stage1'];
+    if (this.module.selectedMethod === 'autostructn2v') {
+      stages.push('stage2');
+    }
+
+    for (const stage of stages) {
+      const container = document.getElementById(`${stage}ConfigContent`);
+      if (!container) continue;
+
+      const controller = new FormValidationController(this.paramValidator, {
+        onValidationChange: () => this._updateConfigValidity()
+      });
+      controller.attachTo(container);
+
+      const patchId = `${stage}_patch_size`;
+      const numLayersId = `${stage}_num_layers`;
+      const patchesId = `${stage}_patches_per_image`;
+      const epochsId = `${stage}_epochs`;
+      const maskPctId = `${stage}_mask_percentage`;
+      const patienceId = `${stage}_early_stopping_patience`;
+
+      // Patch size: check image dims + extract-size divisibility
+      controller.addFieldRule(patchId, (value) => {
+        const config = this.module.trainingConfig[stage] || {};
+        const pad = config.overlap_tile_pad ?? 16;
+        const layersEl = document.getElementById(numLayersId);
+        const layers = layersEl ? parseInt(layersEl.value) : 2;
+        return this.paramValidator.validatePatchSize(parseInt(value), {
+          overlapTilePad: pad,
+          numLayers: layers
+        });
+      });
+
+      // num_layers changes affect extract-size constraint on patch_size
+      controller.addFieldRule(numLayersId, (value) => {
+        return this.paramValidator.validateRange(parseInt(value), 2, 4, 'Number of layers');
+      });
+
+      controller.addFieldRule(patchesId, (value) => {
+        return this.paramValidator.validateRange(parseInt(value), 50, 500, 'Patches per image');
+      });
+
+      controller.addFieldRule(epochsId, (value) => {
+        return this.paramValidator.validateRange(parseInt(value), 10, 500, 'Number of epochs');
+      });
+
+      const maskMin = stage === 'stage2' ? 5 : 0.5;
+      controller.addFieldRule(maskPctId, (value) => {
+        return this.paramValidator.validateRange(parseFloat(value), maskMin, 30, 'Mask percentage');
+      });
+
+      controller.addFieldRule(patienceId, (value) => {
+        const el = document.getElementById(patienceId);
+        if (el && el.disabled) return { valid: true, error: null };
+        return this.paramValidator.validateRange(parseInt(value), 5, 50, 'Early stopping patience');
+      });
+
+      // Disable patch size options exceeding image dimensions
+      const maxPatch = this.paramValidator.getMaxPatchSize();
+      if (maxPatch != null) {
+        controller.updateSelectOptions(patchId, maxPatch);
+      }
+
+      controller.validateAll();
+      this.validationControllers.push(controller);
+    }
+  }
+
+  /**
+   * Destroy all validation controllers
+   */
+  destroyValidation() {
+    for (const ctrl of this.validationControllers) {
+      ctrl.destroy();
+    }
+    this.validationControllers = [];
+  }
+
+  /**
+   * Update module's configValid flag based on all controllers
+   */
+  _updateConfigValidity() {
+    this.module.configValid = this.validationControllers.every(c => c.isValid());
   }
 
   /**

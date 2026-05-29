@@ -632,6 +632,38 @@
 }
 
 /* ============================================
+   FIELD-LEVEL VALIDATION
+   ============================================ */
+
+.form-field.has-error input,
+.form-field.has-error select {
+  background-color: rgba(220, 53, 69, 0.08);
+  border-color: rgba(220, 53, 69, 0.35);
+}
+
+[data-theme="dark"] .form-field.has-error input,
+[data-theme="dark"] .form-field.has-error select {
+  background-color: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.form-field .field-error {
+  display: none;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-error-text);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+.form-field.has-error .field-error {
+  display: block;
+}
+
+.form-field select option:disabled {
+  color: var(--module-text-muted, #999);
+}
+
+/* ============================================
    VALIDATION DISPLAYS
    ============================================ */
 

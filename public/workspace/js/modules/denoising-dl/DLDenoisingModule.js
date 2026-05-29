@@ -105,6 +105,9 @@ class DLDenoisingModule extends BaseModule {
       maskExtractor: {}
     };
 
+    // Parameter validation state
+    this.configValid = true;
+
     // Collapsible sections for config
     this.configSections = {};
 
@@ -1135,6 +1138,12 @@ class DLDenoisingModule extends BaseModule {
       maskExtractor: {}
     };
     this.currentPreset = 'balanced';
+    this.configValid = true;
+
+    // Clean up parameter validation
+    if (this.configHandler) {
+      this.configHandler.destroyValidation();
+    }
 
     // Reset UI
     const step1Next = document.getElementById('step1Next');
@@ -1222,6 +1231,11 @@ class DLDenoisingModule extends BaseModule {
 
     // Clean up global references
     try { delete window.dlDenoisingModule; } catch (e) { window.dlDenoisingModule = undefined; }
+
+    // Clean up parameter validation
+    if (this.configHandler) {
+      this.configHandler.destroyValidation();
+    }
 
     await super.deactivate();
 
