@@ -80,6 +80,7 @@ class AnnotationModule extends BaseModule {
     // Slice navigation
     this.currentSlice = 0;
     this.totalSlices = 1;
+    this.sliceNavToken = 0;  // serializes concurrent slice navigations (latest-wins)
 
     // Dirty state tracking
     this.isDirty = false;
@@ -788,10 +789,18 @@ class AnnotationModule extends BaseModule {
       return;
     }
 
+    // Serialize concurrent navigations (rapid arrow-key auto-repeat, double-clicks).
+    // Only the most recent navigation runs post-load processing and owns the loading
+    // overlay; superseded awaits bail out so a stale load can't overwrite currentSlice
+    // or re-render annotations for the wrong slice.
+    const navToken = ++this.sliceNavToken;
     this.showCanvasLoading(true);
 
     try {
       await this.canvas.loadSlice(fileId, index);
+      if (navToken !== this.sliceNavToken) {
+        return;
+      }
       this.currentSlice = index;
       this.updateSliceIndicator();
       this.updateSliceButtons();
@@ -804,12 +813,17 @@ class AnnotationModule extends BaseModule {
       // Update history buttons for the new slice
       this.updateHistoryButtons();
     } catch (error) {
+      if (navToken !== this.sliceNavToken) {
+        return;
+      }
       console.error('[AnnotationModule] Error loading slice:', error);
       if (this.state?.notify) {
         this.state.notify('error', `Failed to load slice ${index + 1}`);
       }
     } finally {
-      this.showCanvasLoading(false);
+      if (navToken === this.sliceNavToken) {
+        this.showCanvasLoading(false);
+      }
     }
   }
 
