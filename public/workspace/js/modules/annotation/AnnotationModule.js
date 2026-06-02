@@ -81,6 +81,7 @@ class AnnotationModule extends BaseModule {
     this.currentSlice = 0;
     this.totalSlices = 1;
     this.sliceNavToken = 0;  // serializes concurrent slice navigations (latest-wins)
+    this.sliderScrubbing = false;  // true while user is actively dragging the slice slider
 
     // Dirty state tracking
     this.isDirty = false;
@@ -217,6 +218,17 @@ class AnnotationModule extends BaseModule {
                       <div class="spinner"></div>
                       <span>Loading slice...</span>
                     </div>
+                  </div>
+
+                  <!-- Slice Slider -->
+                  <div class="slice-slider-container">
+                    <input type="range"
+                           id="sliceSlider"
+                           class="slice-slider"
+                           min="0"
+                           max="0"
+                           value="0"
+                           title="Drag to change slice" />
                   </div>
 
                   <!-- Status Bar -->
@@ -484,6 +496,15 @@ class AnnotationModule extends BaseModule {
     }
     if (nextSlice) {
       nextSlice.addEventListener('click', () => this.goToSlice(this.currentSlice + 1));
+    }
+
+    const sliceSlider = this.container.querySelector('#sliceSlider');
+    if (sliceSlider) {
+      sliceSlider.addEventListener('input', (e) => this.goToSlice(parseInt(e.target.value, 10)));
+      // While the user is dragging, don't let a completing load snap the thumb
+      // back to the just-loaded slice — only re-sync the value once released.
+      sliceSlider.addEventListener('pointerdown', () => { this.sliderScrubbing = true; });
+      sliceSlider.addEventListener('change', () => { this.sliderScrubbing = false; });
     }
 
     // Zoom controls
@@ -838,7 +859,7 @@ class AnnotationModule extends BaseModule {
   }
 
   /**
-   * Update slice navigation button states
+   * Update slice navigation control states (prev/next buttons + slider)
    */
   updateSliceButtons() {
     const prevBtn = this.container.querySelector('#prevSlice');
@@ -849,6 +870,17 @@ class AnnotationModule extends BaseModule {
     }
     if (nextBtn) {
       nextBtn.disabled = this.currentSlice >= this.totalSlices - 1;
+    }
+
+    // Keep the slice slider in sync with the current slice and stack size.
+    // Single-slice stacks have nothing to scrub, so the slider is disabled.
+    const slider = this.container.querySelector('#sliceSlider');
+    if (slider) {
+      slider.max = Math.max(0, this.totalSlices - 1);
+      if (!this.sliderScrubbing) {
+        slider.value = this.currentSlice;
+      }
+      slider.disabled = this.totalSlices <= 1;
     }
   }
 
@@ -1893,6 +1925,7 @@ class AnnotationModule extends BaseModule {
     this.currentAnnotationId = null;
     this.currentSlice = 0;
     this.totalSlices = 1;
+    this.sliderScrubbing = false;
     this.isDirty = false;
 
     await super.deactivate();
