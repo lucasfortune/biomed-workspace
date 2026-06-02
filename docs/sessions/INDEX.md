@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-06-02 (Mesh Generation — Configurable Z Voxel Aspect Ratio)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-06-02 | [Mesh Generation — Configurable Z Voxel Aspect Ratio](2026-06-02_mesh_z_aspect_ratio.md) | ✨ Feature | ~1 hr | ✅ Complete |
+
 ### 2026-06-02 (Annotation Module Slice Slider Control)
 
 | Date | Session | Type | Duration | Status |

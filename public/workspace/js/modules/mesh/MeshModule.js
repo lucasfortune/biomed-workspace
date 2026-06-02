@@ -77,7 +77,8 @@ class MeshModule extends BaseModule {
     // Generation options
     this.generationOptions = {
       outputFormats: ['json', 'obj'],
-      targetClasses: 'all'
+      targetClasses: 'all',
+      zAspect: 1
     };
 
     // =========================================================================
@@ -189,6 +190,18 @@ class MeshModule extends BaseModule {
                   <select id="classSelection">
                     <option value="all" selected>All Classes</option>
                   </select>
+                </div>
+
+                <div class="form-field">
+                  <label for="zAspectInput">
+                    Z Voxel Scale
+                    ${this.renderHelpIcon('mesh.step2.output-options')}
+                  </label>
+                  <input type="number" id="zAspectInput" min="0.05" max="20" step="0.1" value="1">
+                  <small class="field-hint">
+                    Z voxel size relative to X/Y. Use 1 for cubic voxels, or e.g. 2 if your
+                    z-step is twice the in-plane pixel size (aspect 1:1:2).
+                  </small>
                 </div>
 
                 <button id="startGenerationBtn" class="btn btn-primary" onclick="startGeneration()">
@@ -583,6 +596,17 @@ class MeshModule extends BaseModule {
 
     const classSelect = document.getElementById('classSelection');
     this.generationOptions.targetClasses = classSelect?.value || 'all';
+
+    // Z voxel scale (relative to x/y). Fall back to 1 for empty/invalid input.
+    const zAspectInput = document.getElementById('zAspectInput');
+    let zAspect = parseFloat(zAspectInput?.value);
+    if (!Number.isFinite(zAspect) || zAspect <= 0) {
+      zAspect = 1;
+    }
+    zAspect = Math.min(Math.max(zAspect, 0.05), 20);
+    this.generationOptions.zAspect = zAspect;
+    // Reflect the normalized value back into the field
+    if (zAspectInput) zAspectInput.value = zAspect;
   }
 
   updateDataSummary() {
@@ -661,7 +685,8 @@ class MeshModule extends BaseModule {
       // Build options including sourceFileId for lineage tracking
       const generateOptions = {
         outputFormats: this.generationOptions.outputFormats,
-        targetClasses: this.generationOptions.targetClasses
+        targetClasses: this.generationOptions.targetClasses,
+        zAspect: this.generationOptions.zAspect
       };
 
       // Include sourceFileId for lineage tracking if available
@@ -836,6 +861,12 @@ class MeshModule extends BaseModule {
           <span>Output Formats:</span>
           <span>${data.formats?.map(f => f.toUpperCase()).join(', ') || 'N/A'}</span>
         </div>
+        ${this.generationOptions.zAspect && this.generationOptions.zAspect !== 1 ? `
+        <div class="detail-row">
+          <span>Z Voxel Scale:</span>
+          <span>1 : 1 : ${this.generationOptions.zAspect}</span>
+        </div>
+        ` : ''}
         ${elapsedTime ? `
         <div class="detail-row">
           <span>Generation Time:</span>
@@ -912,8 +943,12 @@ class MeshModule extends BaseModule {
     this.currentMeshId = null;
     this.meshResult = null;
     this.generationStartTime = null;
+    this.generationOptions.zAspect = 1;
 
     // Reset UI
+    const zAspectInput = document.getElementById('zAspectInput');
+    if (zAspectInput) zAspectInput.value = 1;
+
     document.getElementById('generationOptions').style.display = 'block';
     document.getElementById('generationProgress').style.display = 'none';
     document.getElementById('generationResults').style.display = 'none';

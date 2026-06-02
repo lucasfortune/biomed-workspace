@@ -68,6 +68,7 @@ class MeshAPI {
    * @param {object} options - Generation options
    * @param {string[]} options.outputFormats - Output formats ['json', 'obj', 'stl']
    * @param {string|number[]} options.targetClasses - 'all' or array of class IDs
+   * @param {number} options.zAspect - Z voxel scale relative to x/y (1.0 = symmetric)
    * @param {string} options.sourceFileId - Source file ID for lineage tracking
    * @returns {Promise<{success: boolean, meshId: string}>}
    */
@@ -78,6 +79,11 @@ class MeshAPI {
         outputFormats: options.outputFormats || ['json', 'obj'],
         targetClasses: options.targetClasses || 'all'
       };
+
+      // Z voxel aspect ratio relative to x/y (default 1.0 = symmetric)
+      if (options.zAspect != null) {
+        requestBody.zAspect = options.zAspect;
+      }
 
       // Include sourceFileId for lineage tracking if provided
       if (options.sourceFileId) {
