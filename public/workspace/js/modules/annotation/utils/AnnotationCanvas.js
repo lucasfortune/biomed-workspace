@@ -42,6 +42,7 @@ class AnnotationCanvas {
     this.isLoaded = false;
     this.currentFileId = null;
     this.currentSliceIndex = 0;
+    this.loadToken = 0;  // monotonic token for latest-wins slice loading
 
     // Pan state
     this.isPanning = false;
@@ -239,13 +240,35 @@ class AnnotationCanvas {
    * @returns {Promise<void>}
    */
   async loadSlice(fileId, sliceIndex) {
-    return new Promise((resolve, reject) => {
-      const url = `/api/annotation/raw-slice/${encodeURIComponent(fileId)}/${sliceIndex}`;
+    const url = `/api/annotation/raw-slice/${encodeURIComponent(fileId)}/${sliceIndex}`;
 
-      this.sourceImage.onload = () => {
+    // Each load gets a monotonic token. If a newer load starts before this one
+    // resolves, this request becomes "stale" and must not touch the displayed
+    // image or canvas state — otherwise overlapping loads (rapid arrow-key
+    // auto-repeat, double-clicking the nav buttons, or slow network) corrupt
+    // currentSliceIndex, which is the source of truth BrushEngine uses to key
+    // annotations. Using a fresh Image() per request avoids handler clobbering
+    // on a shared <img>, and reassigning a cached src that never refires onload.
+    const token = ++this.loadToken;
+
+    return new Promise((resolve, reject) => {
+      const loader = new Image();
+
+      loader.onload = () => {
+        // A newer load superseded this one — discard silently without mutating
+        // displayed image or state. The caller checks the same condition via
+        // its own navigation token.
+        if (token !== this.loadToken) {
+          resolve();
+          return;
+        }
+
+        // Promote the freshly loaded (now-cached) image to the displayed element.
+        this.sourceImage.src = loader.src;
+
         // Update state
-        this.imageSize.width = this.sourceImage.naturalWidth;
-        this.imageSize.height = this.sourceImage.naturalHeight;
+        this.imageSize.width = loader.naturalWidth;
+        this.imageSize.height = loader.naturalHeight;
         this.currentFileId = fileId;
         this.currentSliceIndex = sliceIndex;
         this.isLoaded = true;
@@ -270,12 +293,17 @@ class AnnotationCanvas {
         resolve();
       };
 
-      this.sourceImage.onerror = () => {
+      loader.onerror = () => {
+        // Superseded loads resolve quietly; only the latest surfaces an error.
+        if (token !== this.loadToken) {
+          resolve();
+          return;
+        }
         console.error(`[AnnotationCanvas] Failed to load slice ${sliceIndex}`);
         reject(new Error(`Failed to load slice ${sliceIndex}`));
       };
 
-      this.sourceImage.src = url;
+      loader.src = url;
     });
   }
 

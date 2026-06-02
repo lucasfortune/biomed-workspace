@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-06-02 (Annotation Module Slice Loading Race Fix)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-06-02 | [Annotation Module Slice Loading Race Fix](2026-06-02_annotation_slice_race.md) | 🐛 Bug Fix | ~1 hr | ✅ Complete |
+
 ### 2026-05-29 (U-Net Shape Mismatch Pre-Flight Validation)
 
 | Date | Session | Type | Duration | Status |
