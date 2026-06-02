@@ -1338,7 +1338,10 @@
         "mesh",
         "formats",
         "output",
-        "export"
+        "export",
+        "z-aspect",
+        "voxel",
+        "anisotropic"
       ],
       "path": "modules/mesh/step2-output-options.md",
       "seeAlsoManual": [

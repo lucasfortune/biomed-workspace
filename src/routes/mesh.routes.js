@@ -388,6 +388,14 @@ function createMeshRoutes(dependencies) {
 
     try {
       const { sourceFile, sourceFileId, outputFormats = ['json', 'obj'], targetClasses = 'all' } = req.body;
+
+      // Z voxel aspect ratio relative to x/y (1.0 = symmetric). Clamp to a sane range.
+      let zAspect = parseFloat(req.body.zAspect);
+      if (!Number.isFinite(zAspect) || zAspect <= 0) {
+        zAspect = 1.0;
+      }
+      zAspect = Math.min(Math.max(zAspect, 0.05), 20);
+
       const sessionId = req.session.id;
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
@@ -441,6 +449,7 @@ function createMeshRoutes(dependencies) {
         sourcePath: sourcePath,
         outputDir: outputDir,
         outputFormats: outputFormats,
+        zAspect: zAspect,
         result: null,
         error: null,
         // Lineage tracking: store source file ID for provenance
@@ -464,7 +473,7 @@ function createMeshRoutes(dependencies) {
 
       // Start mesh generation process after delay (allow client to join room)
       setTimeout(() => {
-        startMeshGeneration(meshId, sourcePath, outputDir, outputFormats, targetClasses);
+        startMeshGeneration(meshId, sourcePath, outputDir, outputFormats, targetClasses, zAspect);
       }, 1000);
 
     } catch (error) {
@@ -479,7 +488,7 @@ function createMeshRoutes(dependencies) {
   /**
    * Start mesh generation Python process
    */
-  function startMeshGeneration(meshId, sourcePath, outputDir, outputFormats, targetClasses) {
+  function startMeshGeneration(meshId, sourcePath, outputDir, outputFormats, targetClasses, zAspect = 1.0) {
     const { spawn } = require('child_process');
 
     const meshSession = sessionTracker.meshSessions.get(meshId);
@@ -492,7 +501,9 @@ function createMeshRoutes(dependencies) {
       '--input', sourcePath,
       '--output_dir', outputDir,
       '--mesh_id', meshId,
-      '--formats', outputFormats.join(',')
+      '--formats', outputFormats.join(','),
+      // Voxel spacing z,y,x: x/y fixed at 1, z carries the chosen aspect ratio
+      '--spacing', `${zAspect},1,1`
     ];
 
     if (targetClasses !== 'all') {

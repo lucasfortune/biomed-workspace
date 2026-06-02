@@ -213,12 +213,16 @@ def export_threejs_json(meshes, output_path, mesh_id):
     return output_path
 
 
-def export_voxel_json(data, classes, output_path, mesh_id, slice_count=20, slice_direction='z'):
+def export_voxel_json(data, classes, output_path, mesh_id, slice_count=20, slice_direction='z', z_aspect=1.0):
     """
     Export segmentation data as sparse voxel JSON for slice-based visualization.
 
     This format is designed for the frontend to create slice-based meshes with
     dynamic endcap generation. Each voxel is stored as {x, y, z, value}.
+
+    Voxel coordinates are kept as integers; the z voxel aspect ratio (relative to
+    x/y) is recorded in metadata so the viewer can scale the z axis at render time
+    without inflating the coordinate data.
 
     Args:
         data: 3D numpy array of segmentation data
@@ -227,6 +231,7 @@ def export_voxel_json(data, classes, output_path, mesh_id, slice_count=20, slice
         mesh_id: Mesh ID for metadata
         slice_count: Number of slices to divide volume into (default 20)
         slice_direction: Direction to slice ('x', 'y', or 'z')
+        z_aspect: Z voxel size relative to x/y (1.0 = symmetric)
     """
     depth, height, width = data.shape
 
@@ -271,6 +276,7 @@ def export_voxel_json(data, classes, output_path, mesh_id, slice_count=20, slice
         },
         "shape": [int(depth), int(height), int(width)],
         "classes": [int(c) for c in classes],
+        "zAspect": float(z_aspect),
         "sliceCount": slice_count,
         "sliceDirection": slice_direction,
         "sliceBoundaries": slice_boundaries,
@@ -541,11 +547,12 @@ def main():
 
             if args.json_format == 'voxel_slices':
                 # Use voxel-based export for slice visualization
-                print(f"Exporting voxel JSON (slice_count={args.slice_count}, direction={args.slice_direction})...", flush=True)
+                print(f"Exporting voxel JSON (slice_count={args.slice_count}, direction={args.slice_direction}, z_aspect={spacing[0]})...", flush=True)
                 export_voxel_json(
                     data, target_classes, json_path, args.mesh_id,
                     slice_count=args.slice_count,
-                    slice_direction=args.slice_direction
+                    slice_direction=args.slice_direction,
+                    z_aspect=spacing[0]
                 )
                 # Count total voxels for statistics
                 total_voxels = int(sum(np.sum(data == c) for c in target_classes))

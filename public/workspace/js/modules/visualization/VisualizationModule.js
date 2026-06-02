@@ -737,6 +737,19 @@ class VisualizationModule extends BaseModule {
             this.volume = null;
           }
 
+          // Apply z voxel aspect ratio (relative to x/y). The VoxelSlices format keeps
+          // integer coordinates, so the z scale lives in metadata and is applied here as
+          // a single group transform — slice meshes, capping meshes, and the original-data
+          // overlay are all children of meshGroup, so they scale together. BufferGeometry
+          // is skipped: its vertices already carry the spacing baked in by marching cubes.
+          if (loadResult.format === 'VoxelSlices') {
+            const zAspect = parseFloat(meshResult.data?.zAspect);
+            if (Number.isFinite(zAspect) && zAspect > 0 && zAspect !== 1) {
+              this.meshGroup.scale.z = zAspect;
+              console.log(`[VisualizationModule] Applied z voxel aspect ratio: ${zAspect}`);
+            }
+          }
+
           // Center the mesh (only for BufferGeometry - VoxelSlices is pre-centered)
           if (loadResult.format === 'BufferGeometry') {
             vizModule.centerMeshGroup(this.meshGroup);
