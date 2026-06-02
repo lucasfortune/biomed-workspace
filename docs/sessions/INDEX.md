@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-06-02 (Annotation Module Slice Slider Control)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-06-02 | [Annotation Module Slice Slider Control](2026-06-02_annotation_slice_slider.md) | ✨ Feature | ~0.5 hrs | ✅ Complete |
+
 ### 2026-06-02 (Annotation Module Slice Loading Race Fix)
 
 | Date | Session | Type | Duration | Status |
