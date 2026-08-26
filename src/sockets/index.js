@@ -8,6 +8,7 @@ const { registerTrainingHandlers, emitTrainingProgress, emitTrainingComplete } =
 const { registerInferenceHandlers, emitInferenceProgress, emitInferenceComplete } = require('./inference.socket');
 const { registerMeshHandlers, emitMeshProgress, emitMeshComplete, emitMeshError } = require('./mesh.socket');
 const { registerRestoreHandlers, emitRestoreProgress, emitRestoreComplete } = require('./restore.socket');
+const { registerStitchingHandlers } = require('./stitching.socket');
 const {
   registerDenoisingHandlers,
   emitDenoisingStage1Progress,
@@ -45,6 +46,9 @@ function initializeSocketHandlers(io, logger) {
 
     // Register restore event handlers
     registerRestoreHandlers(socket, logger);
+
+    // Register stitching event handlers
+    registerStitchingHandlers(socket, logger);
 
     // Handle disconnection
     socket.on('disconnect', () => {

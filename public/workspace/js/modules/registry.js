@@ -12,7 +12,8 @@ const MODULE_IDS = {
   SEGMENTATION: 'segmentation',
   IMAGEVIEWER: 'imageviewer',
   MESH: 'mesh',
-  VISUALIZATION: 'visualization'
+  VISUALIZATION: 'visualization',
+  STITCHING: 'stitching'
 };
 
 // SVG Icon definitions (filled/solid style)
@@ -27,7 +28,9 @@ const moduleIcons = {
 
   mesh: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5L18.5 7 12 9.5 5.5 7 12 4.5zM4 8.5l7 3.5v7l-7-3.5v-7zm9 10.5v-7l7-3.5v7l-7 3.5z"/></svg>`,
 
-  visualization: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`
+  visualization: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`,
+
+  stitching: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h7v7H4V3zm9 0h7v7h-7V3zm-9 11h7v7H4v-7zm12.5 0c.83 0 1.5.67 1.5 1.5V17h1.5c.83 0 1.5.67 1.5 1.5S20.33 20 19.5 20H18v1.5c0 .83-.67 1.5-1.5 1.5S15 22.33 15 21.5V20h-1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5H15v-1.5c0-.83.67-1.5 1.5-1.5z"/></svg>`
 };
 
 const moduleRegistry = [
@@ -107,6 +110,17 @@ const moduleRegistry = [
     color: '#9B59B6',
     status: 'available',
     helpArticleId: 'mesh'
+  },
+  {
+    id: 'stitching',
+    name: 'Stack Stitching',
+    description: 'Join multiple stacks into one volume: z-concatenation and mosaics with overlay alignment and reusable stitch recipes',
+    icon: moduleIcons.stitching,
+    path: '/workspace/js/modules/stitching/StitchingModule.js',
+    inputs: ['image_stack', 'segmented_stack'],
+    outputs: ['image_stack', 'segmented_stack'],
+    color: '#0FA3B1',
+    status: 'available'
   },
   {
     id: 'visualization',
