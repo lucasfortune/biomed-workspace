@@ -2,9 +2,11 @@
 Inference functions for the denoising package.
 
 Handles:
-- Single model inference (run_inference)
-- Sequential two-stage inference (run_sequential_inference)
-- Both 2D and 2.5D modes
+- Single model inference (run_inference): routed v1.0 checkpoints AND
+  legacy two-stage checkpoints (2D and 2.5D) through the same endpoint;
+  the checkpoint's hparams decide which path runs.
+- Sequential two-stage inference (run_sequential_inference): LEGACY
+  imported stage1+stage2 model pairs only.
 """
 
 import os
@@ -20,9 +22,134 @@ from tiff_validation_utils import safe_imread
 
 from autoStructN2V.models import create_model_from_config
 from autoStructN2V.inference import AutoStructN2VPredictor
+from autoStructN2V.pipeline.runner import _create_branch_model
 
 from .utils import emit_progress, emit_result, emit_error, safe_load_checkpoint
 from .models import CenterChannelWrapper
+
+
+def _routed_branch(checkpoint):
+    """Return the routed branch name for a v1.0 checkpoint, else None.
+
+    Routed checkpoints persist the branch recipe under hparams['n2v'] or
+    hparams['structn2v'] (plus the full 'recipes' dict); legacy two-stage
+    checkpoints carry hparams['stage1'] / hparams['stage2'] instead.
+    """
+    if not isinstance(checkpoint, dict):
+        return None
+    hparams = checkpoint.get('hparams') or {}
+    for branch in ('structn2v', 'n2v'):
+        if isinstance(hparams.get(branch), dict):
+            return branch
+    return None
+
+
+def _run_routed_inference(config, checkpoint, branch, inference_id, device):
+    """Inference with a routed v1.0 checkpoint.
+
+    The checkpoint's hparams are authoritative: branch recipe (architecture,
+    patch_size, overlap_tile_pad, norm_type) and _norm_stats. Input slices
+    are round-tripped through the same per-slice [0,1] normalization the
+    model was trained on (load_tiff_stack convention) and the output keeps
+    the input's native dtype.
+    """
+    hparams = checkpoint.get('hparams') or {}
+    recipe = hparams[branch]
+    norm_stats = hparams.get('_norm_stats')
+    method = hparams.get('method') or ('n2v' if branch == 'n2v' else 'autostructn2v')
+
+    emit_progress('inference', {
+        "inference_id": inference_id,
+        "status": "loading_model",
+        "mode": "routed",
+        "branch": branch,
+        "device": str(device)
+    })
+
+    model = _create_branch_model(recipe, branch).to(device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+
+    patch_size = recipe['patch_size']
+    # stride=patch_size//4 to soften stride-boundary seams (see training.py).
+    predictor = AutoStructN2VPredictor(
+        model=model,
+        patch_size=patch_size,
+        stride=max(1, patch_size // 4),
+        mode='2d',
+        norm_stats=norm_stats,
+        overlap_tile_pad=recipe.get('overlap_tile_pad', 0),
+    )
+
+    emit_progress('inference', {
+        "inference_id": inference_id,
+        "status": "loading_data",
+        "mode": "routed"
+    })
+
+    input_path = config['input_path']
+    output_dir = config['output_dir']
+    input_stack = safe_imread(input_path)
+    if input_stack.ndim == 2:
+        input_stack = input_stack[np.newaxis, ...]
+
+    original_dtype = input_stack.dtype
+    total_slices = len(input_stack)
+    is_float = np.issubdtype(original_dtype, np.floating)
+
+    emit_progress('inference', {
+        "inference_id": inference_id,
+        "status": "processing",
+        "mode": "routed",
+        "total_slices": total_slices
+    })
+
+    output_stack = np.zeros_like(input_stack)
+    for z in range(total_slices):
+        slice_data = input_stack[z].astype(np.float32)
+        smin, smax = float(slice_data.min()), float(slice_data.max())
+        slice_norm = (slice_data - smin) / (smax - smin + 1e-8)
+        out_norm = predictor._predict_2d(slice_norm[np.newaxis, ...])[0]
+        out_dn = np.clip(out_norm, 0.0, 1.0) * (smax - smin) + smin
+        output_stack[z] = (out_dn if is_float else np.round(out_dn)).astype(original_dtype)
+        emit_progress('inference', {
+            "inference_id": inference_id,
+            "current_slice": z + 1,
+            "total_slices": total_slices,
+            "progress_percent": ((z + 1) / total_slices) * 100.0,
+            "mode": "routed",
+        })
+
+    os.makedirs(output_dir, exist_ok=True)
+    method_prefix = 'n2v' if method == 'n2v' else 'asn2v'
+    output_filename = f'{method_prefix}_denoised_{inference_id}.tif'
+    output_path = os.path.join(output_dir, output_filename)
+    tifffile.imwrite(output_path, output_stack)
+
+    metadata = {
+        "inference_id": inference_id,
+        "method": method,
+        "mode": "routed",
+        "branch": branch,
+        "input_path": input_path,
+        "output_path": output_path,
+        "model_path": config['model_path'],
+        "slices_processed": total_slices,
+        "completed_at": datetime.now().isoformat()
+    }
+    metadata_path = os.path.join(output_dir, 'inference_metadata.json')
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=4)
+
+    emit_result('inference', {
+        "inference_id": inference_id,
+        "outputPath": output_path,
+        "metadataPath": metadata_path,
+        "totalSlices": total_slices,
+        "method": method,
+        "mode": "routed",
+        "branch": branch
+    })
 
 
 def _extract_training_hparams(checkpoint, stage):
@@ -158,6 +285,14 @@ def run_inference(config: dict):
         # — would default to library values that don't match the saved
         # weights, breaking load_state_dict.
         checkpoint = safe_load_checkpoint(model_path, device)
+
+        # Routed v1.0 checkpoints take the new path; legacy two-stage
+        # checkpoints (2D and 2.5D) continue below unchanged.
+        branch = _routed_branch(checkpoint)
+        if branch is not None:
+            return _run_routed_inference(config, checkpoint, branch,
+                                         inference_id, device)
+
         stage_params = _stage_params_from_checkpoint(checkpoint, stage, model_config)
         inference_config = {
             'mode': mode,

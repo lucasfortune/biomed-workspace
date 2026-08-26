@@ -66,16 +66,21 @@ class Templates {
               <div class="section-header">
                 <h4>1. Select Denoising Method</h4>
                 ${this.renderHelpIcon('denoising-dl.step1.method')}
-                <div class="mode-toggle-container">
-                  <span class="mode-label mode-label-left active">2D</span>
-                  <label class="mode-toggle-switch">
-                    <input type="checkbox" id="mode-toggle">
-                    <span class="mode-toggle-slider"></span>
-                  </label>
-                  <span class="mode-label mode-label-right">2.5D</span>
-                  ${this.renderHelpIcon('denoising-dl.step1.mode')}
-                </div>
               </div>
+              <label class="method-option">
+                <input type="radio" name="dl-method" value="autostructn2v">
+                <span class="method-content">
+                  <span class="method-name">
+                    autoStructN2V (recommended)
+                  </span>
+                  <span class="method-desc">
+                    Measures the noise on your raw stack, discovers a structural
+                    mask automatically, and routes to structured or plain
+                    blind-spot training - whichever the noise calls for. You
+                    review the discovered mask before any training starts.
+                  </span>
+                </span>
+              </label>
               <label class="method-option">
                 <input type="radio" name="dl-method" value="n2v">
                 <span class="method-content">
@@ -83,20 +88,9 @@ class Templates {
                     Noise2Void (N2V)
                   </span>
                   <span class="method-desc">
-                    Fast single-stage training. Best for random, uncorrelated noise (Gaussian, Poisson).
-                    Ideal for most microscopy images.
-                  </span>
-                </span>
-              </label>
-              <label class="method-option">
-                <input type="radio" name="dl-method" value="autostructn2v">
-                <span class="method-content">
-                  <span class="method-name">
-                    autoStructN2V
-                  </span>
-                  <span class="method-desc">
-                    Two-stage training with automatic structured noise analysis.
-                    Best for periodic tomography artifacts, scan lines, or camera-specific patterns.
+                    Plain blind-spot training without noise analysis. Suitable
+                    when you know the noise is random and uncorrelated
+                    (Gaussian, Poisson).
                   </span>
                 </span>
               </label>
@@ -227,8 +221,8 @@ class Templates {
             </button>
           </div>
 
-          ${this.renderN2VTrainingSection()}
-          ${this.renderAutoStructTrainingSection()}
+          ${this.renderMaskApprovalSection()}
+          ${this.renderTrainSection()}
 
           <div class="navigation-buttons">
             <button id="step3Back" class="btn secondary">Back</button>
@@ -240,27 +234,71 @@ class Templates {
   }
 
   /**
-   * Render N2V Training Section (single stage)
+   * Render Noise Analysis & Mask Approval Section (autoStructN2V only)
+   *
+   * Shown seconds after Start: the router measured the noise on the raw
+   * stack and proposes a branch + mask BEFORE any training happens.
    */
-  static renderN2VTrainingSection() {
+  static renderMaskApprovalSection() {
     return `
-      <!-- N2V Training Section (single stage) -->
-      <div id="n2vTrainingSection" class="training-stage-section" style="display: none;">
-        <div class="collapsible-section expanded">
-          <div class="collapsible-header" data-section="n2vTraining">
+      <!-- Noise Analysis & Mask Approval Section (autoStructN2V only) -->
+      <div id="maskApprovalSection" class="training-stage-section" style="display: none;">
+        <div class="collapsible-section expanded" id="maskSection">
+          <div class="collapsible-header" data-section="maskExtraction">
             <span class="collapsible-icon">&#9660;</span>
-            <h4>Training Progress</h4>
-            <span class="stage-status" id="n2vStageStatus">Initializing...</span>
+            <h4>Noise Analysis & Mask</h4>
+            <div class="auto-approve-toggle-container" id="autoApproveContainer">
+              <label class="auto-approve-toggle" title="Automatically approve the discovered mask and start training">
+                <input type="checkbox" id="autoApproveToggle" />
+                <span class="auto-approve-slider"></span>
+              </label>
+              <span class="auto-approve-label">Auto-approve</span>
+            </div>
+            <span class="stage-status" id="maskStageStatus">Pending</span>
           </div>
-          <div class="collapsible-body" id="n2vTrainingBody">
+          <div class="collapsible-body" id="maskExtractionBody">
+            <div id="routeDecisionCard" class="route-decision-card" style="display: none;"></div>
+            <div class="mask-section-content">
+              <div id="maskVisualizationContainer"></div>
+              <div id="maskParameterContainer"></div>
+            </div>
+            <div class="mask-actions" id="maskActions" style="display: none;">
+              <button class="btn primary" id="approveMaskBtn" onclick="window.dlDenoisingModule?.approveMask()">
+                Approve & Train
+              </button>
+              <button class="btn secondary" id="forceN2VBtn" onclick="window.dlDenoisingModule?.skipStage2()">
+                Use Plain N2V Instead
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render the single Training Section (both methods; routed pipeline
+   * trains exactly one model)
+   */
+  static renderTrainSection() {
+    return `
+      <!-- Training Section (single routed model) -->
+      <div id="trainSection" class="training-stage-section" style="display: none;">
+        <div class="collapsible-section expanded">
+          <div class="collapsible-header" data-section="trainTraining">
+            <span class="collapsible-icon">&#9660;</span>
+            <h4 id="trainSectionTitle">Model Training</h4>
+            <span class="stage-status" id="trainStageStatus">Pending</span>
+          </div>
+          <div class="collapsible-body" id="trainTrainingBody">
             <!-- Progress Bar with Download Buttons -->
-            <div class="training-status" id="n2vProgressStatus">
-              <div class="status-text" id="n2vStatusText">Preparing training data...</div>
+            <div class="training-status" id="trainProgressStatus">
+              <div class="status-text" id="trainStatusText">Waiting to start...</div>
               <div class="training-progress">
                 <div class="progress-header-row">
-                  <span class="epoch-info">Epoch <span id="n2vCurrentEpoch">0</span> of <span id="n2vTotalEpochs">0</span></span>
-                  <div class="download-buttons" id="n2vDownloadButtons" style="display: none;">
-                    <button class="btn primary small" onclick="window.dlDenoisingModule?.openInImageViewer('stage1')">
+                  <span class="epoch-info">Epoch <span id="trainCurrentEpoch">0</span> of <span id="trainTotalEpochs">0</span></span>
+                  <div class="download-buttons" id="trainDownloadButtons" style="display: none;">
+                    <button class="btn primary small" onclick="window.dlDenoisingModule?.openInImageViewer('result')">
                       Open in Viewer
                     </button>
                     <button class="btn secondary small" onclick="window.dlDenoisingModule?.startNewAnalysis()">
@@ -269,7 +307,7 @@ class Templates {
                   </div>
                 </div>
                 <div class="training-progress-bar">
-                  <div class="training-progress-fill" id="n2vProgressFill"></div>
+                  <div class="training-progress-fill" id="trainProgressFill"></div>
                 </div>
               </div>
             </div>
@@ -282,210 +320,24 @@ class Templates {
                   ${this.renderHelpIcon('denoising-dl.step3.loss')}
                 </div>
                 <div class="chart-wrapper">
-                  <canvas id="n2vLossChart"></canvas>
+                  <canvas id="trainLossChart"></canvas>
                 </div>
               </div>
               <div class="metrics-stack">
                 <div class="metric-card">
-                  <div class="metric-value" id="n2vTrainLoss">--</div>
+                  <div class="metric-value" id="trainTrainLoss">--</div>
                   <div class="metric-label">Training Loss</div>
                 </div>
                 <div class="metric-card">
-                  <div class="metric-value" id="n2vValLoss">--</div>
+                  <div class="metric-value" id="trainValLoss">--</div>
                   <div class="metric-label">Validation Loss</div>
                 </div>
                 <div class="metric-card best-metric">
-                  <div class="metric-value" id="n2vBestValLoss">--</div>
+                  <div class="metric-value" id="trainBestValLoss">--</div>
                   <div class="metric-label-row">
                     <span class="metric-label">Best Val Loss</span>
                     ${this.renderHelpIcon('denoising-dl.step3.best-val-loss')}
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Render autoStructN2V Training Sections (multi-stage)
-   */
-  static renderAutoStructTrainingSection() {
-    return `
-      <!-- autoStructN2V Training Sections (multi-stage) -->
-      <div id="autoStructTrainingSection" style="display: none;">
-
-        ${this.renderStage1Section()}
-        ${this.renderMaskSection()}
-        ${this.renderStage2Section()}
-
-      </div>
-    `;
-  }
-
-  /**
-   * Render Stage 1 Section
-   */
-  static renderStage1Section() {
-    return `
-      <!-- Stage 1 Section -->
-      <div class="collapsible-section expanded" id="stage1Section">
-        <div class="collapsible-header" data-section="stage1Training">
-          <span class="collapsible-icon">&#9660;</span>
-          <h4>Stage 1: N2V Training</h4>
-          <span class="stage-status" id="stage1StageStatus">Pending</span>
-        </div>
-        <div class="collapsible-body" id="stage1TrainingBody">
-          <!-- Progress Bar -->
-          <div class="training-status" id="stage1ProgressStatus">
-            <div class="status-text" id="stage1StatusText">Waiting to start...</div>
-            <div class="training-progress">
-              <div class="progress-header-row">
-                <span class="epoch-info">Epoch <span id="stage1CurrentEpoch">0</span> of <span id="stage1TotalEpochs">0</span></span>
-                <div class="download-buttons" id="stage1DownloadButtons" style="display: none;">
-                  <button class="btn secondary small" onclick="window.dlDenoisingModule?.openInImageViewer('stage1')">
-                    Open Stage 1 in Viewer
-                  </button>
-                </div>
-              </div>
-              <div class="training-progress-bar">
-                <div class="training-progress-fill" id="stage1ProgressFill"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Chart + Metrics Grid -->
-          <div class="training-display-grid">
-            <div class="chart-container">
-              <div class="section-header chart-header">
-                <h5>Loss Curves</h5>
-                ${this.renderHelpIcon('denoising-dl.step3.loss')}
-              </div>
-              <div class="chart-wrapper">
-                <canvas id="stage1LossChart"></canvas>
-              </div>
-            </div>
-            <div class="metrics-stack">
-              <div class="metric-card">
-                <div class="metric-value" id="stage1TrainLoss">--</div>
-                <div class="metric-label">Training Loss</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value" id="stage1ValLoss">--</div>
-                <div class="metric-label">Validation Loss</div>
-              </div>
-              <div class="metric-card best-metric">
-                <div class="metric-value" id="stage1BestValLoss">--</div>
-                <div class="metric-label-row">
-                  <span class="metric-label">Best Val Loss</span>
-                  ${this.renderHelpIcon('denoising-dl.step3.best-val-loss')}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Render Mask Extraction Section
-   */
-  static renderMaskSection() {
-    return `
-      <!-- Mask Extraction Section -->
-      <div class="collapsible-section expanded" id="maskSection">
-        <div class="collapsible-header" data-section="maskExtraction">
-          <span class="collapsible-icon">&#9660;</span>
-          <h4>Mask Extraction</h4>
-          <div class="auto-approve-toggle-container" id="autoApproveContainer">
-            <label class="auto-approve-toggle" title="Automatically approve mask and start Stage 2">
-              <input type="checkbox" id="autoApproveToggle" />
-              <span class="auto-approve-slider"></span>
-            </label>
-            <span class="auto-approve-label">Auto-approve</span>
-          </div>
-          <span class="stage-status" id="maskStageStatus">Pending</span>
-        </div>
-        <div class="collapsible-body" id="maskExtractionBody">
-          <div class="mask-section-content">
-            <div id="maskVisualizationContainer"></div>
-            <div id="maskParameterContainer"></div>
-          </div>
-          <div class="mask-actions" id="maskActions" style="display: none;">
-            <button class="btn primary" id="approveMaskBtn" onclick="window.dlDenoisingModule?.approveMask()">
-              Approve & Continue to Stage 2
-            </button>
-            <button class="btn secondary" onclick="window.dlDenoisingModule?.skipStage2()">
-              Skip Stage 2
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Render Stage 2 Section
-   */
-  static renderStage2Section() {
-    return `
-      <!-- Stage 2 Section -->
-      <div class="collapsible-section expanded" id="stage2Section">
-        <div class="collapsible-header" data-section="stage2Training">
-          <span class="collapsible-icon">&#9660;</span>
-          <h4>Stage 2: Struct-N2V Training</h4>
-          <span class="stage-status" id="stage2StageStatus">Pending</span>
-        </div>
-        <div class="collapsible-body" id="stage2TrainingBody">
-          <!-- Progress Bar -->
-          <div class="training-status" id="stage2ProgressStatus">
-            <div class="status-text" id="stage2StatusText">Waiting for Stage 1 and mask approval...</div>
-            <div class="training-progress">
-              <div class="progress-header-row">
-                <span class="epoch-info">Epoch <span id="stage2CurrentEpoch">0</span> of <span id="stage2TotalEpochs">0</span></span>
-                <div class="download-buttons" id="stage2DownloadButtons" style="display: none;">
-                  <button class="btn primary small" onclick="window.dlDenoisingModule?.openInImageViewer('stage2')">
-                    Open in Viewer
-                  </button>
-                  <button class="btn secondary small" onclick="window.dlDenoisingModule?.startNewAnalysis()">
-                    Start new Analysis
-                  </button>
-                </div>
-              </div>
-              <div class="training-progress-bar">
-                <div class="training-progress-fill" id="stage2ProgressFill"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Chart + Metrics Grid -->
-          <div class="training-display-grid">
-            <div class="chart-container">
-              <div class="section-header chart-header">
-                <h5>Loss Curves</h5>
-                ${this.renderHelpIcon('denoising-dl.step3.loss')}
-              </div>
-              <div class="chart-wrapper">
-                <canvas id="stage2LossChart"></canvas>
-              </div>
-            </div>
-            <div class="metrics-stack">
-              <div class="metric-card">
-                <div class="metric-value" id="stage2TrainLoss">--</div>
-                <div class="metric-label">Training Loss</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value" id="stage2ValLoss">--</div>
-                <div class="metric-label">Validation Loss</div>
-              </div>
-              <div class="metric-card best-metric">
-                <div class="metric-value" id="stage2BestValLoss">--</div>
-                <div class="metric-label-row">
-                  <span class="metric-label">Best Val Loss</span>
-                  ${this.renderHelpIcon('denoising-dl.step3.best-val-loss')}
                 </div>
               </div>
             </div>

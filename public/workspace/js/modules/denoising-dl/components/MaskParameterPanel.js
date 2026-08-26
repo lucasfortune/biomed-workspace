@@ -1,8 +1,8 @@
 /**
  * MaskParameterPanel Component
  *
- * Controls for adjusting mask extraction parameters and regenerating the mask.
- * Used for fine-tuning structural noise detection in autoStructN2V.
+ * Controls for adjusting the routed extractor's parameters and regenerating
+ * the mask + routing decision (runs in seconds on the raw stack).
  */
 
 class MaskParameterPanel {
@@ -18,14 +18,15 @@ class MaskParameterPanel {
     this.onRegenerateMask = options.onRegenerateMask;
     this.onParameterChange = options.onParameterChange;
 
-    // Default parameters
+    // Default parameters (published defaults; bg_side comes from the run config)
     this.parameters = {
-      adaptive_thresholding: true,
-      base_percentile: 50,
-      percentile_decay: 1.035,
-      max_masked_pixels: 25,
+      bg_side: 'light',
+      rho_floor: 0.05,
+      spine_thresh: 8.0,
+      max_pixels: null,
       ...options.parameters
     };
+    if (!this.parameters.bg_side) this.parameters.bg_side = 'light';
 
     // State
     this.isRegenerating = false;
@@ -35,60 +36,69 @@ class MaskParameterPanel {
    * Render the component
    */
   render() {
+    const maxPixelsValue = this.parameters.max_pixels != null ? this.parameters.max_pixels : 50;
+    const maxPixelsLabel = this.parameters.max_pixels != null ? String(this.parameters.max_pixels) : 'no cap';
     return `
       <div class="mask-parameter-panel" id="${this.containerId}">
         <div class="panel-header">
-          <span class="panel-title">Mask Parameters</span>
+          <span class="panel-title">Extractor Parameters</span>
         </div>
 
         <div class="panel-body">
           <p class="panel-description">
-            Adjust these parameters if the detected pattern doesn't match the structured noise in your images.
+            Adjust these if the discovered mask doesn't match the structured
+            noise you see, then regenerate (takes seconds; the routing
+            decision is re-evaluated too).
           </p>
 
           <div class="parameter-group">
-            <div class="parameter-row checkbox-row">
-              <input type="checkbox" id="slider_adaptive_thresholding"
-                     ${this.parameters.adaptive_thresholding ? 'checked' : ''}
-                     onchange="window.dlDenoisingModule?.updateMaskParameter('adaptive_thresholding', this.checked)">
-              <label for="slider_adaptive_thresholding">Adaptive Thresholding</label>
-              <span class="param-hint">Automatically adjust threshold based on noise characteristics</span>
-            </div>
-
             <div class="parameter-row">
-              <label for="slider_base_percentile">Base Percentile</label>
+              <label for="slider_bg_side">Background Side</label>
               <div class="slider-container">
-                <input type="range" id="slider_base_percentile"
-                       min="30" max="70" step="1"
-                       value="${this.parameters.base_percentile}"
-                       oninput="window.dlDenoisingModule?.updateMaskParameter('base_percentile', parseInt(this.value))">
-                <span class="slider-value">${this.parameters.base_percentile}%</span>
+                <select id="slider_bg_side"
+                        onchange="window.dlDenoisingModule?.updateMaskParameter('bg_side', this.value)">
+                  <option value="light" ${this.parameters.bg_side === 'light' ? 'selected' : ''}>Light (dense EM)</option>
+                  <option value="dark" ${this.parameters.bg_side === 'dark' ? 'selected' : ''}>Dark (fluorescence-like)</option>
+                  <option value="off" ${this.parameters.bg_side === 'off' ? 'selected' : ''}>Off (flatness-only)</option>
+                </select>
               </div>
-              <span class="param-hint">Higher = more selective (fewer active pixels)</span>
+              <span class="param-hint">Which intensity side of the images is background</span>
             </div>
 
             <div class="parameter-row">
-              <label for="slider_percentile_decay">Percentile Decay</label>
+              <label for="slider_rho_floor">Correlation Floor</label>
               <div class="slider-container">
-                <input type="range" id="slider_percentile_decay"
-                       min="1.0" max="1.5" step="0.005"
-                       value="${this.parameters.percentile_decay}"
-                       oninput="window.dlDenoisingModule?.updateMaskParameter('percentile_decay', parseFloat(this.value))">
-                <span class="slider-value">${this.parameters.percentile_decay.toFixed(3)}</span>
+                <input type="range" id="slider_rho_floor"
+                       min="0" max="0.15" step="0.005"
+                       value="${this.parameters.rho_floor != null ? this.parameters.rho_floor : 0.05}"
+                       oninput="window.dlDenoisingModule?.updateMaskParameter('rho_floor', parseFloat(this.value))">
+                <span class="slider-value">${(this.parameters.rho_floor != null ? this.parameters.rho_floor : 0.05).toFixed(3)}</span>
               </div>
-              <span class="param-hint">Controls how threshold changes across the kernel</span>
+              <span class="param-hint">Drop mask pixels whose noise correlation is below this (0 disables)</span>
             </div>
 
             <div class="parameter-row">
-              <label for="slider_max_masked_pixels">Max Masked Pixels</label>
+              <label for="slider_spine_thresh">Significance |z|</label>
               <div class="slider-container">
-                <input type="range" id="slider_max_masked_pixels"
+                <input type="range" id="slider_spine_thresh"
+                       min="4" max="12" step="0.5"
+                       value="${this.parameters.spine_thresh != null ? this.parameters.spine_thresh : 8}"
+                       oninput="window.dlDenoisingModule?.updateMaskParameter('spine_thresh', parseFloat(this.value))">
+                <span class="slider-value">${(this.parameters.spine_thresh != null ? this.parameters.spine_thresh : 8).toFixed(1)}</span>
+              </div>
+              <span class="param-hint">Certainty required for a correlation feature to enter the mask</span>
+            </div>
+
+            <div class="parameter-row">
+              <label for="slider_max_pixels">Max Masked Pixels</label>
+              <div class="slider-container">
+                <input type="range" id="slider_max_pixels"
                        min="5" max="50" step="1"
-                       value="${this.parameters.max_masked_pixels}"
-                       oninput="window.dlDenoisingModule?.updateMaskParameter('max_masked_pixels', parseInt(this.value))">
-                <span class="slider-value">${this.parameters.max_masked_pixels}</span>
+                       value="${maxPixelsValue}"
+                       oninput="window.dlDenoisingModule?.updateMaskParameter('max_pixels', parseInt(this.value))">
+                <span class="slider-value">${maxPixelsLabel}</span>
               </div>
-              <span class="param-hint">Maximum number of active pixels in the mask</span>
+              <span class="param-hint">Cap on active mask pixels (Reset restores: no cap)</span>
             </div>
           </div>
 
@@ -126,8 +136,6 @@ class MaskParameterPanel {
     this.parameters[name] = value;
 
     // Update slider value display
-    // The span.slider-value is the next sibling of the input element
-    // Use 'slider_' prefix to avoid conflict with ConfigHandler's 'mask_' IDs
     const inputId = `slider_${name}`;
     const input = document.getElementById(inputId);
 
@@ -140,12 +148,11 @@ class MaskParameterPanel {
     const valueDisplay = input.nextElementSibling;
 
     if (valueDisplay && valueDisplay.classList.contains('slider-value')) {
-      if (name === 'percentile_decay') {
+      if (name === 'rho_floor') {
         valueDisplay.textContent = value.toFixed(3);
-      } else if (name === 'base_percentile') {
-        valueDisplay.textContent = `${value}%`;
+      } else if (name === 'spine_thresh') {
+        valueDisplay.textContent = value.toFixed(1);
       } else {
-        // max_masked_pixels and others: just show the number
         valueDisplay.textContent = String(value);
       }
     }
@@ -159,14 +166,14 @@ class MaskParameterPanel {
   }
 
   /**
-   * Reset parameters to defaults
+   * Reset parameters to the published defaults (keeps bg_side)
    */
   resetToDefaults() {
     this.parameters = {
-      adaptive_thresholding: true,
-      base_percentile: 50,
-      percentile_decay: 1.035,
-      max_masked_pixels: 25
+      bg_side: this.parameters.bg_side,
+      rho_floor: 0.05,
+      spine_thresh: 8.0,
+      max_pixels: null
     };
     this.refresh();
   }
@@ -182,15 +189,15 @@ class MaskParameterPanel {
 
   /**
    * Set disabled state for all interactive controls
-   * Used when mask is approved and Stage 2 training starts
+   * Used when the mask is approved and training starts
    * @param {boolean} disabled
    */
   setDisabled(disabled) {
     const controlIds = [
-      'slider_adaptive_thresholding',
-      'slider_base_percentile',
-      'slider_percentile_decay',
-      'slider_max_masked_pixels'
+      'slider_bg_side',
+      'slider_rho_floor',
+      'slider_spine_thresh',
+      'slider_max_pixels'
     ];
 
     // Disable all input controls

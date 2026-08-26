@@ -23,12 +23,6 @@ class MaskHandler {
   initializeMaskUI() {
     console.log('[MaskHandler] Initializing mask UI...');
 
-    // Show interim mask section
-    const maskSection = document.getElementById('interimMaskSection');
-    if (maskSection) {
-      maskSection.style.display = 'block';
-    }
-
     // Initialize mask visualization
     const vizContainer = document.getElementById('maskVisualizationContainer');
     if (vizContainer) {
@@ -65,10 +59,18 @@ class MaskHandler {
       this.module.maskVisualization.refresh();
     }
 
-    // Show/hide approve button based on mask state
+    // Approving always works: an empty/1x1 mask or an N2V route simply
+    // continues as plain N2V (the same mechanism with a center-pixel mask).
+    // When the route already IS N2V, the force-N2V override is redundant,
+    // so hide it and let the approve button carry the N2V label.
+    const routedToN2V = data.isEmpty || data.branch === 'n2v';
     const approveBtn = document.getElementById('approveMaskBtn');
     if (approveBtn) {
-      approveBtn.style.display = data.isEmpty ? 'none' : 'inline-block';
+      approveBtn.textContent = routedToN2V ? 'Continue with N2V' : 'Approve & Train';
+    }
+    const forceBtn = document.getElementById('forceN2VBtn');
+    if (forceBtn) {
+      forceBtn.style.display = routedToN2V ? 'none' : 'inline-block';
     }
   }
 
@@ -135,6 +137,42 @@ class MaskHandler {
   }
 
   /**
+   * Render the routing decision card (branch, reason, gate metrics)
+   * @param {Object} data - Payload with branch/routeReason/routeMessage/
+   *   dmax/dmaxThreshold/maskRho2
+   */
+  renderRouteDecision(data) {
+    const card = document.getElementById('routeDecisionCard');
+    if (!card || !data || !data.branch) return;
+
+    const isStruct = data.branch === 'structn2v';
+    const branchLabel = isStruct ? 'StructN2V (discovered mask)' : 'Plain N2V (no structured mask)';
+    const fmt = (v, digits = 4) => (v == null ? 'n/a' : Number(v).toFixed(digits));
+
+    const metrics = [];
+    if (data.dmax != null) {
+      metrics.push(`<span class="route-metric" title="Directional correlation statistic measured on the background ACF">
+        Directionality D<sub>max</sub>: <strong>${fmt(data.dmax)}</strong>
+        (gate ${fmt(data.dmaxThreshold, 3)})</span>`);
+    }
+    if (isStruct && data.maskRho2 != null) {
+      metrics.push(`<span class="route-metric" title="Fraction of the center pixel's noise variance the mask covers">
+        Mask leak coverage &Sigma;&rho;&sup2;: <strong>${fmt(data.maskRho2, 3)}</strong></span>`);
+    }
+
+    card.innerHTML = `
+      <div class="route-decision-header">
+        <span class="route-badge ${isStruct ? 'route-struct' : 'route-n2v'}">${branchLabel}</span>
+      </div>
+      <p class="route-message">${data.routeMessage || ''}</p>
+      ${metrics.length ? `<div class="route-metrics">${metrics.join('')}</div>` : ''}
+      ${!isStruct ? `<p class="route-note">The noise carries no usable directional structure, so plain
+        blind-spot training is the right model here. Approving continues with N2V.</p>` : ''}
+    `;
+    card.style.display = 'block';
+  }
+
+  /**
    * Update a mask parameter
    * @param {string} name - Parameter name
    * @param {*} value - Parameter value
@@ -153,11 +191,14 @@ class MaskHandler {
    * Reset mask parameters to defaults
    */
   resetMaskParameters() {
+    // Keep the run's bg_side (the one required input); reset the tunables
+    // to the published defaults.
+    const bgSide = this.module.trainingConfig.maskExtractor?.bg_side;
     this.module.trainingConfig.maskExtractor = {
-      adaptive_thresholding: true,
-      base_percentile: 50,
-      percentile_decay: 1.15,
-      max_masked_pixels: 25
+      bg_side: bgSide,
+      rho_floor: 0.05,
+      spine_thresh: 8.0,
+      max_pixels: null
     };
 
     if (this.module.maskParameterPanel) {
@@ -191,22 +232,14 @@ class MaskHandler {
         const maskResult = result.mask;
         let maskData;
         if (maskResult.maskArray && Array.isArray(maskResult.maskArray)) {
-          // Check if it's a 3D mask (for 2.5D mode): array of 3 2D arrays
-          if (maskResult.maskArray.length === 3 &&
-              Array.isArray(maskResult.maskArray[0]) &&
-              Array.isArray(maskResult.maskArray[0][0])) {
-            // 3D mask: convert each slice to boolean
-            maskData = maskResult.maskArray.map(slice =>
-              slice.map(row => row.map(val => Boolean(val)))
-            );
-          } else {
-            // 2D mask: convert to boolean
-            maskData = maskResult.maskArray.map(row => row.map(val => Boolean(val)));
-          }
+          maskData = maskResult.maskArray.map(row => row.map(val => Boolean(val)));
         } else {
           // Fallback to mock grid
           maskData = this.createMaskGrid(maskResult.kernelSize, maskResult.activePixels, maskResult.pattern);
         }
+
+        // Regeneration re-runs the router too - refresh the decision card
+        this.renderRouteDecision(maskResult);
 
         this.updateMaskVisualization({
           mask: maskData,
@@ -215,7 +248,8 @@ class MaskHandler {
           kernelWidth: maskResult.kernelWidth,
           activePixels: maskResult.activePixels,
           pattern: maskResult.pattern,
-          isEmpty: maskResult.activePixels < 2
+          isEmpty: maskResult.isEmpty != null ? maskResult.isEmpty : maskResult.activePixels < 2,
+          branch: maskResult.branch
         });
 
         // Refresh workspace file browser to show regenerated mask file
@@ -241,7 +275,7 @@ class MaskHandler {
    * Approve current mask and continue to Stage 2
    */
   async approveMask() {
-    console.log('[MaskHandler] Mask approved, triggering Stage 2 training...');
+    console.log('[MaskHandler] Mask approved, starting training...');
 
     // Update mask status badge to "Approved"
     this.module.updateStageStatus('mask', 'completed', 'Approved');
@@ -257,41 +291,37 @@ class MaskHandler {
       maskActions.style.display = 'none';
     }
 
-    // Update stage 2 status
-    this.module.updateStageStatus('stage2', 'training', 'Starting...');
-
-    // Update status text
-    const statusText = document.getElementById('stage2StatusText');
+    // Update training status
+    this.module.updateStageStatus('train', 'training', 'Starting...');
+    const statusText = document.getElementById('trainStatusText');
     if (statusText) {
-      statusText.textContent = 'Starting Stage 2 training...';
+      statusText.textContent = 'Starting training...';
     }
-
-    // Update training progress status
     if (this.module.trainingProgress) {
-      this.module.trainingProgress.updateStatus('Starting Stage 2 training...');
+      this.module.trainingProgress.updateStatus('Starting training...');
     }
 
-    // Disable mask parameter controls since Stage 2 is starting
+    // Disable mask parameter controls since training is starting
     if (this.module.maskParameterPanel) {
       this.module.maskParameterPanel.setDisabled(true);
     }
 
     try {
-      // Call backend to continue training with Stage 2
+      // Run the single routed training with the approved mask
       const result = await this.module.api.continueTraining(this.module.trainingId);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to continue training');
       }
 
-      this.module.state.notify('info', 'Mask approved. Stage 2 training started.');
-      // Socket.IO handlers will update the UI with Stage 2 progress
+      this.module.state.notify('info', 'Mask approved. Training started.');
+      // Socket.IO handlers will update the UI with training progress
     } catch (error) {
       console.error('[MaskHandler] Error continuing training:', error);
-      this.module.state.notify('error', `Failed to start Stage 2: ${error.message}`);
+      this.module.state.notify('error', `Failed to start training: ${error.message}`);
 
       // Reset UI state on error
-      this.module.updateStageStatus('stage2', 'pending', 'Pending');
+      this.module.updateStageStatus('train', 'pending', 'Pending');
       if (maskActions) {
         maskActions.style.display = 'block';
       }
@@ -299,11 +329,11 @@ class MaskHandler {
   }
 
   /**
-   * Skip Stage 2 and use N2V results
-   * Calls backend to finalize training with Stage 1 results only
+   * Override the routing decision and train plain N2V instead of the
+   * discovered structural mask (the old "Skip Stage 2" action)
    */
   async skipStage2() {
-    console.log('[MaskHandler] Skipping Stage 2, using N2V results');
+    console.log('[MaskHandler] Overriding route: training plain N2V');
 
     if (!this.module.trainingId) {
       this.module.state.notify('error', 'No active training session');
@@ -316,12 +346,13 @@ class MaskHandler {
       maskActions.style.display = 'none';
     }
 
-    // Update stage 2 status to skipped
-    this.module.updateStageStatus('stage2', 'skipped', 'Skipped');
+    // Reflect the override in the UI
+    this.module.updateStageStatus('mask', 'completed', 'Overridden to N2V');
+    this.module.updateStageStatus('train', 'training', 'Starting...');
+    this.module.setTrainSectionBranch('n2v');
 
-    // Update progress status
     if (this.module.trainingProgress) {
-      this.module.trainingProgress.updateStatus('Completing with N2V results...');
+      this.module.trainingProgress.updateStatus('Starting plain N2V training...');
     }
 
     // Disable mask parameter controls
@@ -330,23 +361,24 @@ class MaskHandler {
     }
 
     try {
-      // Call backend to skip Stage 2 and finalize
+      // Backend endpoint keeps its historic name; it now trains the N2V
+      // branch (1x1 center kernel) via continue_training with an override.
       const result = await this.module.api.skipStage2(this.module.trainingId);
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to skip Stage 2');
+        throw new Error(result.error || 'Failed to start N2V training');
       }
 
-      console.log('[MaskHandler] Skip Stage 2 successful:', result);
-      this.module.state.notify('success', 'Training completed with N2V (Stage 1) results.');
+      console.log('[MaskHandler] Force N2V started:', result);
+      this.module.state.notify('info', 'Training started with plain N2V.');
 
-      // Socket.IO completion event will handle the rest of the UI updates
+      // Socket.IO events will handle the rest of the UI updates
     } catch (error) {
-      console.error('[MaskHandler] Error skipping Stage 2:', error);
-      this.module.state.notify('error', `Failed to skip Stage 2: ${error.message}`);
+      console.error('[MaskHandler] Error forcing N2V:', error);
+      this.module.state.notify('error', `Failed to start N2V training: ${error.message}`);
 
       // Reset UI state on error
-      this.module.updateStageStatus('stage2', 'pending', 'Pending');
+      this.module.updateStageStatus('train', 'pending', 'Pending');
       if (maskActions) {
         maskActions.style.display = 'block';
       }

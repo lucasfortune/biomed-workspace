@@ -11,8 +11,8 @@ tags:
   - self-supervised
 seeAlsoManual:
   - denoising-dl.step1.method
-  - denoising-dl.step1.mode
   - denoising-dl.autostructn2v-detail
+  - denoising-dl.routing-decision
 seeAlsoTags:
   - denoising
   - training
@@ -22,17 +22,17 @@ seeAlsoTags:
 
 Remove noise from TIFF image stacks using self-supervised deep learning methods that require no clean reference images.
 
-Deep learning denoising uses neural networks trained directly on your noisy images — no clean training data required. This is possible through self-supervised learning techniques.
+Deep learning denoising uses neural networks trained directly on your noisy images, with no clean training data required. This is possible through self-supervised learning techniques.
 
 ## Available Methods
 
+autoStructN2V (auto-routed)
+
+The recommended method. Before any training, the noise is measured on background regions of your raw stack (this takes seconds). If the noise has usable directional structure (scan lines, streaks, detector patterns), training uses StructN2V with an automatically discovered mask. If not, training falls back to plain N2V. You review the discovered mask and the routing decision before training starts.
+
 Noise2Void (N2V)
 
-A fast single-stage method ideal for random, uncorrelated noise like Gaussian or Poisson noise commonly found in microscopy images. N2V works by training a network to predict masked pixels from their surroundings.
-
-autoStructN2V
-
-A two-stage approach for structured noise patterns like scan lines, periodic artifacts from tomography, or camera-specific patterns. Stage 1 trains standard N2V, then analyzes residuals to detect noise patterns. Stage 2 uses these patterns to better preserve real structures while removing noise.
+Plain blind-spot training with a single-pixel mask. Choose this to skip noise measurement entirely, for example when you know your noise is random and uncorrelated (Gaussian, Poisson).
 
 ## Workflow
 
@@ -40,6 +40,6 @@ A two-stage approach for structured noise patterns like scan lines, periodic art
 
 2. Configure: Adjust training parameters or use presets
 
-3. Training: Train the model (images are denoised during training)
+3. Training: Review the discovered mask and route (autoStructN2V), then one model trains (images are denoised during training)
 
 4. Inference (Optional): Apply the model to additional images

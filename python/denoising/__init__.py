@@ -1,17 +1,23 @@
 """
-Denoising package for autoStructN2V web wrapper.
+Denoising package for the autoStructN2V web wrapper (routed v1.0).
 
-This package provides modular components for deep learning-based denoising
-using the autoStructN2V library with web integration via Socket.IO progress emission.
+Thin web adapter over the vendored autoStructN2V v1.0 library
+(python/vendor/autoStructN2V, see python/vendor/VENDORED_VERSION):
+progress emission for Socket.IO, dtype round-tripping, and the
+pre-training mask-approval pause. The routed pipeline itself
+(measure noise ACF on the raw stack -> RouteDecision -> train ONE
+model -> predict) lives in the library; this package only orchestrates
+it for the web workflow. See docs/decisions/006_asn2v_routed_v1_migration.md.
 """
 
 import sys
 from pathlib import Path
 
-# Add the autoStructN2V 2.5D library to path before importing any modules that depend on it
-_AUTOSTRUCTN2V_PATH = Path(__file__).parent.parent.parent / 'docs' / 'autoStructN2V_2.5D' / 'autoStructN2V'
-if str(_AUTOSTRUCTN2V_PATH.parent) not in sys.path:
-    sys.path.insert(0, str(_AUTOSTRUCTN2V_PATH.parent))
+# Add the vendored autoStructN2V v1.0 library to path before importing any
+# modules that depend on it.
+_VENDOR_PATH = Path(__file__).parent.parent / 'vendor'
+if str(_VENDOR_PATH) not in sys.path:
+    sys.path.insert(0, str(_VENDOR_PATH))
 
 from .utils import (
     safe_load_checkpoint,
@@ -23,29 +29,19 @@ from .utils import (
     detect_pattern
 )
 
-from .models import CenterChannelWrapper, extract_triplet_patches
+from .models import CenterChannelWrapper
 
-from .trainer import WebAutoStructN2VTrainer
-
-from .data_prep import (
-    extract_tiff_stack_to_directory,
-    prepare_input_directory
-)
+from .trainer import WebRoutedTrainer
 
 from .training import run_training, create_progress_callback
 
-from .output import (
-    collect_denoised_slices,
-    create_tiff_stack,
-    finalize_training_output
-)
+from .output import finalize_routed_output
 
 from .inference import run_inference, run_sequential_inference
 
 from .operations import (
     extract_mask,
-    run_stage2_only,
-    finalize_stage1_only
+    continue_training
 )
 
 __all__ = [
@@ -57,26 +53,19 @@ __all__ = [
     'emit_result',
     'emit_error',
     'detect_pattern',
-    # Models
+    # Models (legacy-checkpoint inference only)
     'CenterChannelWrapper',
-    'extract_triplet_patches',
     # Trainer
-    'WebAutoStructN2VTrainer',
-    # Data prep
-    'extract_tiff_stack_to_directory',
-    'prepare_input_directory',
+    'WebRoutedTrainer',
     # Training
     'run_training',
     'create_progress_callback',
     # Output
-    'collect_denoised_slices',
-    'create_tiff_stack',
-    'finalize_training_output',
+    'finalize_routed_output',
     # Inference
     'run_inference',
     'run_sequential_inference',
     # Operations
     'extract_mask',
-    'run_stage2_only',
-    'finalize_stage1_only',
+    'continue_training',
 ]

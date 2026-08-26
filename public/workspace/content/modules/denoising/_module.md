@@ -27,9 +27,9 @@ Deep Learning (N2V / autoStructN2V)
 
 Self-supervised neural networks that learn noise patterns directly from your images — no clean reference data required.
 
-- Noise2Void (N2V): Fast single-stage training for random, uncorrelated noise like Gaussian or Poisson noise
+- Noise2Void (N2V): Fast blind-spot training for random, uncorrelated noise like Gaussian or Poisson noise
 
-- autoStructN2V: Two-stage approach for structured noise patterns like scan lines or periodic artifacts
+- autoStructN2V: Measures your noise first and routes automatically, using a structural mask for patterns like scan lines or periodic artifacts and falling back to plain N2V otherwise
 
 - Best for: Complex noise patterns, when you need optimal quality
 

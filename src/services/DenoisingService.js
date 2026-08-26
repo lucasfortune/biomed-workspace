@@ -59,16 +59,8 @@ class DenoisingService {
       status: 'pending',
       startTime: new Date(),
       endTime: null,
-      stage: null, // 'stage1', 'mask', 'stage2'
+      stage: null, // 'mask', 'train', 'predict', 'cleanup' (routed pipeline)
       config: sessionData.config,
-      stage1: {
-        status: 'pending',
-        epoch: 0,
-        totalEpochs: 0,
-        trainLoss: null,
-        valLoss: null,
-        modelPath: null
-      },
       mask: {
         status: 'pending',
         kernelSize: null,
@@ -77,19 +69,28 @@ class DenoisingService {
         activePixels: null,
         pattern: null,
         isEmpty: false,
-        maskPath: null
+        maskPath: null,
+        maskArray: null,
+        // Routing decision (routed v1.0)
+        branch: null,        // 'structn2v' or 'n2v'
+        routeReason: null,
+        routeMessage: null,
+        dmax: null,
+        dmaxThreshold: null,
+        maskRho2: null
       },
-      stage2: {
+      // The ONE routed training run (replaces the old stage1/stage2 pair)
+      train: {
         status: 'pending',
         epoch: 0,
         totalEpochs: 0,
         trainLoss: null,
         valLoss: null,
-        modelPath: null
+        modelPath: null,
+        branch: null
       },
-      // History arrays for chart restoration on resume
-      stage1History: [], // Array of {epoch, trainLoss, valLoss}
-      stage2History: [], // Array of {epoch, trainLoss, valLoss}
+      // History array for chart restoration on resume
+      trainHistory: [], // Array of {epoch, trainLoss, valLoss}
       experimentDir: null,
       error: null
     };
@@ -194,7 +195,7 @@ class DenoisingService {
     const session = this.getSession(trainingId);
     if (session) {
       session.status = 'running';
-      session.stage = 'stage1';
+      session.stage = 'mask'; // routed pipeline: mask/route comes first
       session.outputDir = outputDir; // Store for cleanup on cancel
     }
 
@@ -252,77 +253,72 @@ class DenoisingService {
   }
 
   /**
-   * Continue training after mask approval (Stage 2 only)
+   * Continue training after mask approval (the single routed training run)
    * @param {object} params - Continue parameters
    * @param {string} params.trainingId - Training ID
    * @param {object} params.session - Existing session object
+   * @param {string} [params.overrideBranch] - 'n2v' to force plain N2V
+   *   regardless of the discovered mask (the old "skip" action)
    * @param {object} io - Socket.IO instance
    * @returns {Promise<void>}
    */
   async continueTraining(params, io) {
-    const { trainingId, session, mode: explicitMode } = params;
+    const { trainingId, session, overrideBranch } = params;
 
     if (!this.pythonPath) {
-      this._emitError(io, trainingId, 'stage2', 'Python path not configured');
+      this._emitError(io, trainingId, 'train', 'Python path not configured');
       return;
     }
 
     // Update session status
     session.status = 'running';
-    session.stage = 'stage2';
-    session.stage2.status = 'starting';
+    session.stage = 'train';
+    session.train.status = 'starting';
 
-    // Get mode from explicit param, session, or config
-    const mode = explicitMode || session.mode || session.config?.mode || '2d';
+    // Train with the most recent mask: a regenerated mask (session.mask.maskPath)
+    // wins over the one from the original paused payload (session.maskPath).
+    const maskPath = session.mask?.maskPath || session.maskPath;
 
-    // Build config for Stage 2 only
-    const stage2Config = {
+    const continueConfig = {
       training_id: trainingId,
-      method: 'autostructn2v',
-      mode,  // '2d' or '2.5d'
       experiment_dir: session.experimentDir,
-      mask_path: session.maskPath,
-      stage1_model_path: session.stage1ModelPath,
-      stage1_denoised_dir: session.stage1DenoisedDir,
-      // Include original config for stage2 parameters
-      stage1: session.config?.stage1 || {},  // Needed for model creation
-      stage2: session.config?.stage2 || {},
-      run_stage2: true,  // Needed for channel config
-      input_dir: session.config?.input_dir,
-      output_dir: session.config?.output_dir,
-      workspace_dir: session.config?.workspace_dir,
-      device: session.config?.device || 'cuda',
-      verbose: session.config?.verbose || false
+      mask_path: maskPath
     };
+    if (overrideBranch) {
+      continueConfig.override_branch = overrideBranch;
+      session.mask.branch = overrideBranch;
+      session.mask.routeReason = 'user_override';
+    }
 
     // Write config to temp file
-    const configPath = path.join(session.experimentDir, `config_stage2_${trainingId}.json`);
+    const configPath = path.join(session.experimentDir, `config_continue_${trainingId}.json`);
 
     try {
-      await fsp.writeFile(configPath, JSON.stringify(stage2Config, null, 2));
+      await fsp.writeFile(configPath, JSON.stringify(continueConfig, null, 2));
     } catch (err) {
-      this._emitError(io, trainingId, 'stage2', `Failed to write config: ${err.message}`);
+      this._emitError(io, trainingId, 'train', `Failed to write config: ${err.message}`);
       return;
     }
 
     if (this.logger) {
-      this.logger.info(`Continuing training ${trainingId} with Stage 2`);
+      this.logger.info(`Continuing training ${trainingId}` +
+        (overrideBranch ? ` (forced branch: ${overrideBranch})` : ''));
     }
 
-    // Emit stage2 starting event
+    // Emit training starting event
     const roomName = `denoising-${trainingId}`;
-    io.to(roomName).emit('denoising-stage2-progress', {
-      stage: 'stage2',
+    io.to(roomName).emit('denoising-train-progress', {
+      stage: 'train',
       status: 'starting',
-      epoch: 0,
-      totalEpochs: stage2Config.stage2?.num_epochs || 100
+      branch: overrideBranch || session.mask?.branch || null,
+      epoch: 0
     });
 
     // Spawn Python process
     const pythonScript = spawn(this.pythonPath, [
       'python/autostructn2v_wrapper.py',
       '--config', configPath,
-      '--mode', 'train_stage2_only'
+      '--mode', 'continue_training'
     ]);
 
     // Track process for cancellation
@@ -336,7 +332,7 @@ class DenoisingService {
       const output = data.toString();
 
       if (this.logger) {
-        this.logger.debug('Denoising Stage 2 output:', output);
+        this.logger.debug('Denoising training output:', output);
       }
 
       outputBuffer += output;
@@ -354,7 +350,7 @@ class DenoisingService {
     pythonScript.stderr.on('data', (data) => {
       stderrBuffer += data.toString();
       if (this.logger) {
-        this.logger.debug('Denoising Stage 2 stderr:', data.toString());
+        this.logger.debug('Denoising training stderr:', data.toString());
       }
     });
 
@@ -367,138 +363,20 @@ class DenoisingService {
     });
 
     pythonScript.on('error', (err) => {
-      this._emitError(io, trainingId, 'stage2', `Failed to spawn process: ${err.message}`);
+      this._emitError(io, trainingId, 'train', `Failed to spawn process: ${err.message}`);
     });
   }
 
   /**
-   * Skip Stage 2 training and finalize with Stage 1 results only
-   * Called when user chooses to skip autoStructN2V Stage 2 after mask approval
-   * Spawns Python process to properly finalize outputs and cleanup intermediate files
-   * @param {Object} params - Skip parameters
+   * Force plain N2V after mask approval (replaces the old "Skip Stage 2":
+   * trains the N2V branch with the 1x1 center kernel via continue_training)
+   * @param {Object} params - Parameters
    * @param {string} params.trainingId - Training session ID
    * @param {Object} params.session - Training session object
    * @param {Object} io - Socket.IO instance
    */
-  async skipStage2Training(params, io) {
-    const { trainingId, session } = params;
-    const roomName = `denoising-${trainingId}`;
-
-    if (!this.pythonPath) {
-      this._emitError(io, trainingId, 'finalize', 'Python path not configured');
-      return;
-    }
-
-    if (this.logger) {
-      this.logger.info(`[Denoising] Skipping Stage 2 for training ${trainingId}, starting finalization`);
-    }
-
-    // Update session status
-    session.status = 'finalizing';
-    session.stage = 'cleanup';
-    session.stage2.status = 'skipped';
-
-    // Get mode and workspace info
-    const mode = session.mode || session.config?.mode || '2d';
-    const workspacePath = this.workspaceManager.getWorkspacePath(session.sessionId);
-
-    // Build config for finalization
-    const finalizeConfig = {
-      training_id: trainingId,
-      method: 'autostructn2v',
-      mode,
-      experiment_dir: session.experimentDir,
-      stage1_model_path: session.stage1ModelPath,
-      stage1_denoised_dir: session.stage1DenoisedDir,
-      workspace_dir: workspacePath,
-      // Include original config for reference
-      stage1: session.config?.stage1 || {},
-      stage2: session.config?.stage2 || {}
-    };
-
-    // For 2.5D mode, also pass the stack path
-    if (mode === '2.5d') {
-      const stackPath = path.join(session.experimentDir, 'data', 'stage1_denoised', 'stage1_denoised_stack.tif');
-      if (fs.existsSync(stackPath)) {
-        finalizeConfig.stage1_denoised_stack_path = stackPath;
-      }
-    }
-
-    // Write config to temp file
-    const configPath = path.join(session.experimentDir, `config_finalize_${trainingId}.json`);
-
-    try {
-      await fsp.writeFile(configPath, JSON.stringify(finalizeConfig, null, 2));
-    } catch (err) {
-      this._emitError(io, trainingId, 'finalize', `Failed to write config: ${err.message}`);
-      return;
-    }
-
-    if (this.logger) {
-      this.logger.info(`[Denoising] Starting finalization for ${trainingId}`);
-    }
-
-    // Emit finalization starting event
-    io.to(roomName).emit('denoising-cleanup-progress', {
-      stage: 'finalize',
-      status: 'starting',
-      message: 'Finalizing Stage 1 results (Stage 2 skipped)'
-    });
-
-    // Spawn Python process for finalization
-    const pythonScript = spawn(this.pythonPath, [
-      'python/autostructn2v_wrapper.py',
-      '--config', configPath,
-      '--mode', 'finalize_stage1_only'
-    ]);
-
-    // Track process for cancellation
-    this.activeProcesses.set(trainingId, pythonScript);
-
-    let outputBuffer = '';
-    let stderrBuffer = '';
-
-    // Handle stdout for progress updates
-    pythonScript.stdout.on('data', (data) => {
-      const output = data.toString();
-
-      if (this.logger) {
-        this.logger.debug('Denoising finalization output:', output);
-      }
-
-      outputBuffer += output;
-
-      // Process complete lines
-      const lines = outputBuffer.split('\n');
-      outputBuffer = lines.pop(); // Keep incomplete line
-
-      for (const line of lines) {
-        this._handleOutputLine(line, trainingId, io);
-      }
-    });
-
-    // Handle stderr
-    pythonScript.stderr.on('data', (data) => {
-      stderrBuffer += data.toString();
-      if (this.logger) {
-        this.logger.debug('Denoising finalization stderr:', data.toString());
-      }
-    });
-
-    // Handle process completion
-    pythonScript.on('close', (code) => {
-      // Mark stage2 as skipped (in case it was reset)
-      session.stage2.status = 'skipped';
-
-      this._handleProcessComplete(code, trainingId, stderrBuffer, io);
-
-      // Clean up temp config file
-      fsp.unlink(configPath).catch(() => {});
-    });
-
-    pythonScript.on('error', (err) => {
-      this._emitError(io, trainingId, 'finalize', `Failed to spawn process: ${err.message}`);
-    });
+  async forceN2VTraining(params, io) {
+    return this.continueTraining({ ...params, overrideBranch: 'n2v' }, io);
   }
 
   /**
@@ -549,19 +427,19 @@ class DenoisingService {
     if (session) {
       session.stage = stage;
 
-      if (stage === 'stage1' || stage === 'stage2') {
-        session[stage].status = 'training';
-        session[stage].epoch = data.epoch || 0;
-        session[stage].totalEpochs = data.totalEpochs || 0;
-        session[stage].trainLoss = data.trainLoss;
-        session[stage].valLoss = data.valLoss;
+      if (stage === 'train') {
+        session.train.status = 'training';
+        session.train.epoch = data.epoch || 0;
+        session.train.totalEpochs = data.totalEpochs || 0;
+        session.train.trainLoss = data.trainLoss;
+        session.train.valLoss = data.valLoss;
+        if (data.branch) session.train.branch = data.branch;
 
         // Store in history for chart restoration on resume
         // Only store if we have valid epoch and loss data (skip initial/empty progress events)
         if (data.epoch != null && data.epoch > 0 && data.trainLoss != null && data.valLoss != null) {
-          const historyKey = `${stage}History`;
-          if (!session[historyKey]) session[historyKey] = [];
-          session[historyKey].push({
+          if (!session.trainHistory) session.trainHistory = [];
+          session.trainHistory.push({
             epoch: data.epoch,
             trainLoss: data.trainLoss,
             valLoss: data.valLoss
@@ -593,53 +471,31 @@ class DenoisingService {
     const { stage } = data;
 
     if (session) {
-      if (stage === 'stage1') {
-        session.stage1.status = 'completed';
-        session.stage1.modelPath = data.modelPath;
-        session.experimentDir = data.experimentDir;
-      } else if (stage === 'mask') {
+      if (stage === 'mask') {
+        this._applyMaskResult(session, data);
         session.mask.status = 'completed';
-        session.mask.kernelSize = data.kernelSize;
-        session.mask.kernelHeight = data.kernelHeight;
-        session.mask.kernelWidth = data.kernelWidth;
-        session.mask.activePixels = data.activePixels;
-        session.mask.pattern = data.pattern;
-        session.mask.isEmpty = data.isEmpty;
-        session.mask.maskPath = data.maskPath;
-      } else if (stage === 'stage2') {
-        session.stage2.status = 'completed';
-        session.stage2.modelPath = data.modelPath;
+        if (data.experimentDir) session.experimentDir = data.experimentDir;
+      } else if (stage === 'train') {
+        session.train.status = 'completed';
+        session.train.modelPath = data.modelPath;
+        if (data.branch) session.train.branch = data.branch;
       } else if (stage === 'paused') {
-        // Training paused at mask approval - store state for resume
+        // Run paused at mask approval (BEFORE any training) - store state
         session.status = 'paused_at_mask';
-        session.stage1ModelPath = data.stage1ModelPath;
-        session.stage1DenoisedDir = data.stage1DenoisedDir;
         session.maskPath = data.maskPath;
-        session.mask.kernelSize = data.kernelSize;
-        session.mask.kernelHeight = data.kernelHeight;
-        session.mask.kernelWidth = data.kernelWidth;
-        session.mask.activePixels = data.activePixels;
-        session.mask.pattern = data.pattern;
-        session.mask.maskArray = data.maskArray;
+        if (data.experimentDir) session.experimentDir = data.experimentDir;
+        this._applyMaskResult(session, data);
+        session.mask.status = 'completed';
       } else if (stage === 'complete') {
         session.status = 'completed';
-        session.experimentDir = data.experimentDir;
+        if (data.experimentDir) session.experimentDir = data.experimentDir;
         session.outputFiles = data.outputFiles;
 
-        // Update model paths with final locations from outputFiles
-        if (data.outputFiles) {
-          if (data.outputFiles.stage1_model) {
-            session.stage1.modelPath = data.outputFiles.stage1_model;
-          }
-          if (data.outputFiles.stage2_model) {
-            session.stage2.modelPath = data.outputFiles.stage2_model;
-          }
+        // Update model path with final location from outputFiles
+        if (data.outputFiles?.model) {
+          session.train.modelPath = data.outputFiles.model;
         }
-
-        // Preserve stage2 skipped status if this was a skip finalization
-        if (data.stage2Skipped) {
-          session.stage2.status = 'skipped';
-        }
+        if (data.branch) session.train.branch = data.branch;
 
         // Track output files in workspace metadata
         if (data.outputFiles && session.sessionId && this.workspaceManager) {
@@ -654,6 +510,27 @@ class DenoisingService {
     if (this.logger) {
       this.logger.debug(`Emitted ${stage} complete to ${roomName}`);
     }
+  }
+
+  /**
+   * Copy mask + route-decision fields from a Python payload onto the session
+   * @private
+   */
+  _applyMaskResult(session, data) {
+    session.mask.kernelSize = data.kernelSize;
+    session.mask.kernelHeight = data.kernelHeight;
+    session.mask.kernelWidth = data.kernelWidth;
+    session.mask.activePixels = data.activePixels;
+    session.mask.pattern = data.pattern;
+    session.mask.isEmpty = data.isEmpty;
+    session.mask.maskPath = data.maskPath;
+    session.mask.maskArray = data.maskArray;
+    session.mask.branch = data.branch;
+    session.mask.routeReason = data.routeReason;
+    session.mask.routeMessage = data.routeMessage;
+    session.mask.dmax = data.dmax;
+    session.mask.dmaxThreshold = data.dmaxThreshold;
+    session.mask.maskRho2 = data.maskRho2;
   }
 
   /**
@@ -682,101 +559,35 @@ class DenoisingService {
         return lineage;
       };
 
-      // Track denoised TIFF stacks
-      // New metadata system: results category with denoising/data tags
-      if (outputFiles.stage1_stack && fs.existsSync(outputFiles.stage1_stack)) {
-        const relativePath = path.relative(workspacePath, outputFiles.stage1_stack);
-        const stats = fs.statSync(outputFiles.stage1_stack);
-        this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(outputFiles.stage1_stack),
+      // Helper: register one output file when present on disk
+      const track = (filePath, category, tags, lineage = null) => {
+        if (!filePath || typeof filePath !== 'string' || !fs.existsSync(filePath)) return;
+        const relativePath = path.relative(workspacePath, filePath);
+        const stats = fs.statSync(filePath);
+        const entry = {
+          name: path.basename(filePath),
           path: relativePath,
-          category: 'results',
-          tags: ['denoising', 'data'],
-          size: stats.size,
-          folderId: null,
-          lineage: createLineageObj('denoising')
-        });
-        if (this.logger) {
-          this.logger.debug(`Tracked stage1 output: ${relativePath}`);
-        }
-      }
-
-      if (outputFiles.stage2_stack && fs.existsSync(outputFiles.stage2_stack)) {
-        const relativePath = path.relative(workspacePath, outputFiles.stage2_stack);
-        const stats = fs.statSync(outputFiles.stage2_stack);
-        this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(outputFiles.stage2_stack),
-          path: relativePath,
-          category: 'results',
-          tags: ['denoising', 'data'],
-          size: stats.size,
-          folderId: null,
-          lineage: createLineageObj('denoising')
-        });
-        if (this.logger) {
-          this.logger.debug(`Tracked stage2 output: ${relativePath}`);
-        }
-      }
-
-      // Track model files (models are outputs of training, linked to input data)
-      if (outputFiles.stage1_model && fs.existsSync(outputFiles.stage1_model)) {
-        const relativePath = path.relative(workspacePath, outputFiles.stage1_model);
-        const stats = fs.statSync(outputFiles.stage1_model);
-        this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(outputFiles.stage1_model),
-          path: relativePath,
-          category: 'models',
-          tags: ['weights', 'denoising'],
-          size: stats.size,
-          folderId: null,
-          lineage: createLineageObj('denoising-training')
-        });
-      }
-
-      if (outputFiles.stage2_model && fs.existsSync(outputFiles.stage2_model)) {
-        const relativePath = path.relative(workspacePath, outputFiles.stage2_model);
-        const stats = fs.statSync(outputFiles.stage2_model);
-        this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(outputFiles.stage2_model),
-          path: relativePath,
-          category: 'models',
-          tags: ['weights', 'denoising'],
-          size: stats.size,
-          folderId: null,
-          lineage: createLineageObj('denoising-training')
-        });
-      }
-
-      // Track config file
-      if (outputFiles.config && fs.existsSync(outputFiles.config)) {
-        const relativePath = path.relative(workspacePath, outputFiles.config);
-        const stats = fs.statSync(outputFiles.config);
-        this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(outputFiles.config),
-          path: relativePath,
-          category: 'models',
-          tags: ['config', 'denoising'],
+          category,
+          tags,
           size: stats.size,
           folderId: null
-        });
-      }
-
-      // Track results.json file (training metrics)
-      if (outputFiles.results && fs.existsSync(outputFiles.results)) {
-        const relativePath = path.relative(workspacePath, outputFiles.results);
-        const stats = fs.statSync(outputFiles.results);
-        this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(outputFiles.results),
-          path: relativePath,
-          category: 'models',
-          tags: ['info', 'denoising'],
-          size: stats.size,
-          folderId: null
-        });
+        };
+        if (lineage) entry.lineage = lineage;
+        this.workspaceManager.addFileToMetadata(sessionId, entry);
         if (this.logger) {
-          this.logger.debug(`Tracked results.json: ${relativePath}`);
+          this.logger.debug(`Tracked denoising output: ${relativePath}`);
         }
-      }
+      };
+
+      // Routed v1.0 output keys (see finalize_routed_output in python/denoising/output.py)
+      track(outputFiles.denoised_stack, 'results', ['denoising', 'data'],
+            createLineageObj('denoising'));
+      track(outputFiles.model, 'models', ['weights', 'denoising'],
+            createLineageObj('denoising-training'));
+      track(outputFiles.routed_mask, 'models', ['info', 'denoising']);
+      track(outputFiles.route_decision, 'models', ['info', 'denoising']);
+      track(outputFiles.config, 'models', ['config', 'denoising']);
+      track(outputFiles.results, 'models', ['info', 'denoising']);
 
     } catch (error) {
       if (this.logger) {
@@ -794,8 +605,11 @@ class DenoisingService {
       session.status = 'failed';
       session.error = data.message;
 
-      if (data.stage && session[data.stage]) {
-        session[data.stage].status = 'failed';
+      // Python emits errors under stage 'training' (run/continue) and 'mask';
+      // both map onto the session sub-objects.
+      const stageKey = data.stage === 'training' ? 'train' : data.stage;
+      if (stageKey && session[stageKey]) {
+        session[stageKey].status = 'failed';
       }
     }
 
@@ -839,7 +653,15 @@ class DenoisingService {
           kernelWidth: session.mask.kernelWidth,
           activePixels: session.mask.activePixels,
           pattern: session.mask.pattern,
-          maskArray: session.mask.maskArray
+          maskArray: session.mask.maskArray,
+          isEmpty: session.mask.isEmpty,
+          // Routing decision (routed v1.0)
+          branch: session.mask.branch,
+          routeReason: session.mask.routeReason,
+          routeMessage: session.mask.routeMessage,
+          dmax: session.mask.dmax,
+          dmaxThreshold: session.mask.dmaxThreshold,
+          maskRho2: session.mask.maskRho2
         });
         return;
       }
@@ -1375,32 +1197,24 @@ class DenoisingService {
     for (const [trainingId, session] of this.denoisingSessions) {
       // Only return completed sessions for this user
       if (session.sessionId === sessionId && session.status === 'completed') {
-        // Shared config path at the training level
-        const configPath = session.experimentDir ? path.join(session.experimentDir, 'config.json') : null;
+        // The experiment dir is deleted at finalize; the persisted config
+        // lives in the models output dir (outputFiles.config).
+        const configPath = session.outputFiles?.config || null;
+        const inputData = session.config?.input_data || session.config?.input_dir;
 
         const result = {
           trainingId: session.id,
           method: session.method,
+          branch: session.train?.branch || null,
           completedAt: session.endTime,
-          inputFile: session.config?.input_dir ? path.basename(session.config.input_dir) : null,
-          experimentDir: session.experimentDir,
-          configPath: configPath,  // Shared config file for both stages
-          stage1: null,
-          stage2: null
+          inputFile: inputData ? path.basename(inputData) : null,
+          configPath: configPath,
+          model: null
         };
 
-        // Add Stage 1 model info if available
-        if (session.stage1?.modelPath && fs.existsSync(session.stage1.modelPath)) {
-          result.stage1 = {
-            modelPath: session.stage1.modelPath
-          };
-        }
-
-        // Add Stage 2 model info if available (autoStructN2V)
-        if (session.method === 'autostructn2v' && session.stage2?.modelPath && fs.existsSync(session.stage2.modelPath)) {
-          result.stage2 = {
-            modelPath: session.stage2.modelPath
-          };
+        // Single routed model
+        if (session.train?.modelPath && fs.existsSync(session.train.modelPath)) {
+          result.model = { modelPath: session.train.modelPath };
         }
 
         results.push(result);
@@ -1475,13 +1289,20 @@ class DenoisingService {
         const config = JSON.parse(configContent);
 
         result.configInfo.valid = true;
-        result.configInfo.method = config.method || (config.stage2 ? 'autostructn2v' : 'n2v');
-        result.configInfo.features = config.stage1?.features || config.features || 64;
-        result.configInfo.numLayers = config.stage1?.num_layers || config.num_layers || 2;
-        result.configInfo.patchSize = config.stage1?.patch_size || config.patch_size || 64;
+        result.configInfo.method = config.method || (config.stage2 || config.recipes ? 'autostructn2v' : 'n2v');
+        // Routed v1.0 configs carry recipes; the architecture that matters for
+        // display comes from the structn2v recipe (falls back to n2v). Note the
+        // checkpoint's own hparams are authoritative at inference time.
+        const archSource = config.recipes
+          ? (config.recipes.structn2v || config.recipes.n2v || {})
+          : (config.stage1 || {});
+        result.configInfo.routed = !!config.recipes;
+        result.configInfo.features = archSource.features || config.features || 64;
+        result.configInfo.numLayers = archSource.num_layers || config.num_layers || 2;
+        result.configInfo.patchSize = archSource.patch_size || config.patch_size || 64;
 
-        // For autoStructN2V, check if this is a stage1 or stage2 config
-        if (stage === 'stage2' && config.stage2) {
+        // For legacy autoStructN2V, check if this is a stage1 or stage2 config
+        if (!config.recipes && stage === 'stage2' && config.stage2) {
           result.configInfo.features = config.stage2.features || result.configInfo.features;
           result.configInfo.numLayers = config.stage2.num_layers || result.configInfo.numLayers;
           result.configInfo.patchSize = config.stage2.patch_size || result.configInfo.patchSize;
@@ -1529,9 +1350,22 @@ class DenoisingService {
       const configContent = fs.readFileSync(configPath, 'utf8');
       const config = JSON.parse(configContent);
 
-      // Validate config structure
+      // Routed v1.0 config (single model, recipes block)
+      if (config.recipes) {
+        result.configData = {
+          method: config.method || 'autostructn2v',
+          routed: true,
+          recipes: config.recipes,
+          mask: config.mask || null,
+          trainingId: config.training_id
+        };
+        result.valid = true;
+        return result;
+      }
+
+      // Legacy two-stage config
       if (!config.method && !config.stage1) {
-        result.errors.push('Invalid config: missing method or stage1 configuration');
+        result.errors.push('Invalid config: missing method, stage1, or recipes configuration');
         return result;
       }
 
@@ -1547,6 +1381,7 @@ class DenoisingService {
       // Store parsed config data
       result.configData = {
         method,
+        routed: false,
         stage1: config.stage1 || {},
         stage2: config.stage2 || null,
         // Store paths from config if available
@@ -1590,98 +1425,43 @@ class DenoisingService {
    * @returns {Promise<object>} Mask result data
    */
   async regenerateMask(params, io) {
-    const { trainingId, stage1Dir, parameters, mode } = params;
+    const { trainingId, experimentDir, parameters } = params;
 
     if (!this.pythonPath) {
       throw new Error('Python path not configured');
     }
 
-    // Find denoised images from Stage 1
-    // They should be in stage1Dir/extracted_images/ or in the denoised output
     const session = this.getSession(trainingId);
-    let inputPath;
 
-    // Check for Stage 1 denoised stack in results directory
-    const resultsDir = path.join(stage1Dir, '..', '..', 'results', 'denoising');
-    const possiblePaths = [
-      path.join(resultsDir, `DL_${trainingId}`, `asn2v_stage1_denoised_${trainingId}.tif`),
-      path.join(resultsDir, `DL_${trainingId}`, `n2v_denoised_${trainingId}.tif`),
-      session?.config?.input_dir  // Original input as fallback
-    ];
-
-    for (const p of possiblePaths) {
-      if (p && fs.existsSync(p)) {
-        inputPath = p;
-        break;
-      }
+    // The routed extractor always works on the RAW input stack (the method;
+    // E8 in the paper validated raw over denoised extraction).
+    const inputPath = session?.config?.input_data || session?.config?.input_dir;
+    if (!inputPath || !fs.existsSync(inputPath)) {
+      throw new Error('Original input stack not found for mask extraction');
     }
 
-    if (!inputPath) {
-      throw new Error('Could not find Stage 1 denoised images for mask extraction');
-    }
-
-    // Look for saved denoised patches from initial training
-    // This ensures regeneration uses exact same patches as initial mask
-    let denoisedPatchesPath = null;
-    const possiblePatchPaths = [
-      path.join(stage1Dir, 'stage2', 'model', 'denoised_patches_for_mask.npy'),
-      path.join(stage1Dir, 'stage2_model', 'denoised_patches_for_mask.npy')
-    ];
-
-    for (const p of possiblePatchPaths) {
-      if (fs.existsSync(p)) {
-        denoisedPatchesPath = p;
-        if (this.logger) {
-          this.logger.info(`Found saved denoised patches at: ${p}`);
-        }
-        break;
-      }
-    }
-
-    if (!denoisedPatchesPath && this.logger) {
-      this.logger.warn('No saved denoised patches found - will sample from denoised output');
-    }
-
-    const outputDir = stage1Dir;
+    const outputDir = experimentDir;
 
     // Write config to temp file
     const configPath = path.join(outputDir, `mask_config_${Date.now()}.json`);
 
-    // Map frontend parameter names to Python StructuralNoiseExtractor param names
-    // Include ALL parameters to match training mode exactly
-    const extractorParams = {
-      // Core extraction parameters
-      norm_autocorr: true,
-      log_autocorr: true,
-      crop_autocorr: true,
-      // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
-      adapt_autocorr: parameters.adaptive_thresholding !== false,
-      adapt_CB: 50.0,
-      adapt_DF: 0.65,
-      center_size: 15,
-      base_percentile: parameters.base_percentile || 50,
-      percentile_decay: parameters.percentile_decay || 1.035,
-      center_ratio_threshold: 0.2,
-      use_center_proximity: true,
-      center_proximity_threshold: 0.95,
-      keep_center_component_only: true,
-      // Map frontend 'max_masked_pixels' to Python 'max_true_pixels'
-      max_true_pixels: parameters.max_masked_pixels || 25
-    };
+    // Extractor parameters: start from what the run was configured with
+    // (bg_side in particular), then apply the user's adjustments.
+    const baseExtractor = session?.config?.mask?.extractor || {};
+    const extractorParams = { ...baseExtractor };
+    if (parameters.bg_side !== undefined) extractorParams.bg_side = parameters.bg_side;
+    if (parameters.rho_floor !== undefined) extractorParams.rho_floor = parameters.rho_floor;
+    if (parameters.spine_thresh !== undefined) extractorParams.spine_thresh = parameters.spine_thresh;
+    if (parameters.max_pixels !== undefined) extractorParams.max_pixels = parameters.max_pixels;
 
     try {
       await fsp.mkdir(outputDir, { recursive: true });
       const maskConfig = {
+        training_id: trainingId,
         input_path: inputPath,
         output_dir: outputDir,
-        extractor: extractorParams,
-        patch_size: 64,
-        mode: mode || '2d'  // '2d' or '2.5d'
+        extractor: extractorParams
       };
-      // Include saved patches path if available for exact match with training
-      if (denoisedPatchesPath) {
-        maskConfig.denoised_patches_path = denoisedPatchesPath;
-      }
       await fsp.writeFile(configPath, JSON.stringify(maskConfig, null, 2));
     } catch (err) {
       throw new Error(`Failed to write config: ${err.message}`);
@@ -1722,15 +1502,11 @@ class DenoisingService {
               const resultData = JSON.parse(line.substring(17));
               result = resultData;
 
-              // Update session
+              // Update session with the regenerated mask + route decision.
+              // continueTraining reads session.mask.maskPath, so the
+              // regenerated kernel is what actually trains.
               if (session) {
-                session.mask.kernelSize = resultData.kernelSize;
-                session.mask.kernelHeight = resultData.kernelHeight;
-                session.mask.kernelWidth = resultData.kernelWidth;
-                session.mask.activePixels = resultData.activePixels;
-                session.mask.pattern = resultData.pattern;
-                session.mask.maskPath = resultData.maskPath;
-                session.mask.isEmpty = resultData.activePixels < 2;
+                this._applyMaskResult(session, resultData);
               }
 
               io.to(roomName).emit('denoising-mask-complete', resultData);

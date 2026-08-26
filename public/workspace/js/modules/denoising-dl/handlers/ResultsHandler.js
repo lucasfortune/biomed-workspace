@@ -14,19 +14,17 @@ class ResultsHandler {
 
   /**
    * Download denoised images
-   * @param {string} stage - 'stage1', 'stage2', or 'n2v'
    */
-  async downloadDenoised(stage) {
+  async downloadDenoised() {
     if (!this.module.trainingResult || !this.module.trainingResult.outputFiles) {
       this.module.state.notify('error', 'No results available for download');
       return;
     }
 
-    const stackKey = `${stage}_stack`;
-    const filePath = this.module.trainingResult.outputFiles[stackKey];
+    const filePath = this.module.trainingResult.outputFiles.denoised_stack;
 
     if (!filePath) {
-      this.module.state.notify('error', `No ${stage} output file found`);
+      this.module.state.notify('error', 'No denoised output file found');
       return;
     }
 
@@ -52,19 +50,17 @@ class ResultsHandler {
 
   /**
    * Download trained model
-   * @param {string} stage - 'stage1', 'stage2', or 'n2v'
    */
-  async downloadModel(stage) {
+  async downloadModel() {
     if (!this.module.trainingResult || !this.module.trainingResult.outputFiles) {
       this.module.state.notify('error', 'No model available for download');
       return;
     }
 
-    const modelKey = `${stage}_model`;
-    const filePath = this.module.trainingResult.outputFiles[modelKey];
+    const filePath = this.module.trainingResult.outputFiles.model;
 
     if (!filePath) {
-      this.module.state.notify('error', `No ${stage} model file found`);
+      this.module.state.notify('error', 'No model file found');
       return;
     }
 
@@ -88,20 +84,18 @@ class ResultsHandler {
   }
 
   /**
-   * Download result for a specific stage
-   * @param {string} stage - 'stage1', 'stage2', or 'n2v'
+   * Download the denoised result stack
    */
-  async downloadResult(stage) {
+  async downloadResult() {
     if (!this.module.trainingResult || !this.module.trainingResult.outputFiles) {
       this.module.state.notify('error', 'No results available for download');
       return;
     }
 
-    const stackKey = `${stage}_stack`;
-    const filePath = this.module.trainingResult.outputFiles[stackKey];
+    const filePath = this.module.trainingResult.outputFiles.denoised_stack;
 
     if (!filePath) {
-      this.module.state.notify('error', `No ${stage} output file found`);
+      this.module.state.notify('error', 'No denoised output file found');
       return;
     }
 
@@ -125,23 +119,12 @@ class ResultsHandler {
     const files = this.module.trainingResult.outputFiles;
     const downloadPromises = [];
 
-    // Download TIFF stacks
-    if (files.stage1_stack) {
-      downloadPromises.push(this.module.api.downloadFile(files.stage1_stack));
-    }
-    if (files.stage2_stack) {
-      downloadPromises.push(this.module.api.downloadFile(files.stage2_stack));
-    }
-
-    // Download model files
-    if (files.stage1_model) {
-      downloadPromises.push(this.module.api.downloadFile(files.stage1_model));
-    }
-    if (files.stage2_model) {
-      downloadPromises.push(this.module.api.downloadFile(files.stage2_model));
-    }
-    if (files.config) {
-      downloadPromises.push(this.module.api.downloadFile(files.config));
+    // Routed v1.0 output keys
+    for (const key of ['denoised_stack', 'model', 'config', 'routed_mask',
+                       'route_decision', 'results']) {
+      if (files[key]) {
+        downloadPromises.push(this.module.api.downloadFile(files[key]));
+      }
     }
 
     try {
@@ -154,20 +137,18 @@ class ResultsHandler {
   }
 
   /**
-   * Open denoised images in Image Viewer module
-   * @param {string} stage - 'stage1' or 'stage2'
+   * Open the denoised result in the Image Viewer module
    */
-  openInImageViewer(stage) {
+  openInImageViewer() {
     if (!this.module.trainingResult || !this.module.trainingResult.outputFiles) {
       this.module.state.notify('error', 'No results available');
       return;
     }
 
-    const stackKey = `${stage}_stack`;
-    const filePath = this.module.trainingResult.outputFiles[stackKey];
+    const filePath = this.module.trainingResult.outputFiles.denoised_stack;
 
     if (!filePath) {
-      this.module.state.notify('error', `No ${stage} output file found`);
+      this.module.state.notify('error', 'No denoised output file found');
       return;
     }
 
@@ -176,8 +157,8 @@ class ResultsHandler {
       type: 'denoising_dl_result',
       trainingId: this.module.trainingId,
       outputPath: filePath,
-      stage: stage,
       method: this.module.selectedMethod,
+      branch: this.module.trainingResult.branch || null,
       timestamp: Date.now()
     };
 
@@ -186,7 +167,7 @@ class ResultsHandler {
     // Reset module state before navigating away (user is done with this analysis)
     // This ensures fresh state when returning to the module
     this.module.chartHandler.resetCharts();
-    this.module.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+    this.module.bestValLoss = { train: Infinity };
     this.module.disconnectSocket();
     this.module.state.update('modules.denoising-dl.trainingId', null);
     this.module.reset();
@@ -197,19 +178,16 @@ class ResultsHandler {
 
   /**
    * View result in image viewer (legacy alias)
-   * @param {string} stage - 'stage1' or 'stage2'
    */
-  viewInViewer(stage) {
-    this.openInImageViewer(stage);
+  viewInViewer() {
+    this.openInImageViewer();
   }
 
   /**
-   * View results - opens the primary result in viewer
+   * View results - opens the denoised result in viewer
    */
   viewResults() {
-    // Open the primary result in viewer
-    const stage = this.module.selectedMethod === 'autostructn2v' ? 'stage2' : 'stage1';
-    this.openInImageViewer(stage);
+    this.openInImageViewer();
   }
 
   /**
@@ -222,7 +200,7 @@ class ResultsHandler {
     this.module.chartHandler.resetCharts();
 
     // Reset best val loss tracking
-    this.module.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+    this.module.bestValLoss = { train: Infinity };
 
     // Disconnect any active socket connections
     this.module.disconnectSocket();
@@ -231,30 +209,13 @@ class ResultsHandler {
     this.module.state.update('modules.denoising-dl.trainingId', null);
     this.module.state.update('modules.denoising-dl.viewerFile', null);
 
-    // Reset step 3 UI - training sections
-    const startSection = document.getElementById('startTrainingSection');
-    const n2vSection = document.getElementById('n2vTrainingSection');
-    const autoStructSection = document.getElementById('autoStructTrainingSection');
-
-    if (startSection) startSection.style.display = 'block';
-    if (n2vSection) n2vSection.style.display = 'none';
-    if (autoStructSection) autoStructSection.style.display = 'none';
-
-    // Reset training button visibility to ready state (show start button, hide cancel button)
+    // Reset step 3 UI (showTrainingReady hides the mask/train sections and
+    // resets progress bars + badges)
     this.module.showTrainingReady();
-
-    // Reset training progress UI for all stages
-    ['n2v', 'stage1', 'stage2'].forEach(prefix => {
-      this.module.resetTrainingStageUI(prefix);
-    });
 
     // Reset step 3 next button
     const step3Next = document.getElementById('step3Next');
     if (step3Next) step3Next.disabled = true;
-
-    // Hide mask section if visible
-    const maskSection = document.getElementById('interimMaskSection');
-    if (maskSection) maskSection.style.display = 'none';
 
     // Use the existing reset() method which properly handles file selector and validation
     this.module.reset();

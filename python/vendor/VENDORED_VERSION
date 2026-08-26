@@ -1,0 +1,3 @@
+autoStructN2V vendored from https://github.com/lucasfortune/asn2v tag v1.0 (package version 1.0.0)
+vendored: 2026-08-26
+upgrade procedure: replace python/vendor/autoStructN2V/ with a fresh copy of the tag, rerun the headless wrapper tests, and update this file.

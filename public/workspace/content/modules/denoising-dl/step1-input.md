@@ -11,7 +11,7 @@ tags:
   - upload
 seeAlsoManual:
   - denoising-dl.step1.workflow
-  - denoising-dl.step1.mode
+  - denoising-dl.step2.mask-extractor.bg-side
   - denoising-dl
 seeAlsoTags:
   - input
@@ -32,13 +32,9 @@ Your input images are used both for training the denoising model and as the data
 
 - Content: Images with noise to be removed
 
-2.5D Mode Requirements:
+For autoStructN2V:
 
-- Minimum 20 slices required for triplet processing
-
-- Slices should be spatially contiguous (not random samples)
-
-- The toggle will show a warning if your stack is too shallow
+The noise measurement runs on background regions selected automatically from the raw stack, so your images should contain some background (resin, embedding medium, or empty areas). You tell the extractor which intensity side the background is on (see Background Side).
 
 ## Data Sources
 
@@ -48,7 +44,7 @@ Your input images are used both for training the denoising model and as the data
 
 ## Tips for Best Results
 
-- Include multiple slices if available — more data generally improves the model
+- Include multiple slices if available, as more data generally improves the model
 
 - Images should be representative of all the data you want to denoise
 

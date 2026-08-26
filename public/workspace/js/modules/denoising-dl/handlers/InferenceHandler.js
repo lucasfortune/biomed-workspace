@@ -116,25 +116,39 @@ class InferenceHandler {
       if (importConfig && importConfig.configData) {
         // Use shared config data
         const configData = importConfig.configData;
-        const stage1 = configData.stage1 || {};
         modelDetails = `
           <div class="model-detail">
             <span class="detail-label">Method:</span>
             <span class="detail-value">${methodLabel}</span>
           </div>
-          <div class="model-detail">
-            <span class="detail-label">Stage 1:</span>
-            <span class="detail-value">Features: ${stage1.features || 64}, Layers: ${stage1.num_layers || 2}</span>
-          </div>
         `;
-        if (method === 'autostructn2v' && configData.stage2) {
-          const stage2 = configData.stage2;
+        if (configData.routed && configData.recipes) {
+          // Routed v1.0 config: single model, branch recipes
+          const recipe = configData.recipes.structn2v || configData.recipes.n2v || {};
           modelDetails += `
             <div class="model-detail">
-              <span class="detail-label">Stage 2:</span>
-              <span class="detail-value">Features: ${stage2.features || 64}, Layers: ${stage2.num_layers || 2}</span>
+              <span class="detail-label">Model:</span>
+              <span class="detail-value">Routed (single model) - Features: ${recipe.features || 64}, Layers: ${recipe.num_layers || 2}</span>
             </div>
           `;
+        } else {
+          // Legacy two-stage config
+          const stage1 = configData.stage1 || {};
+          modelDetails += `
+            <div class="model-detail">
+              <span class="detail-label">Stage 1:</span>
+              <span class="detail-value">Features: ${stage1.features || 64}, Layers: ${stage1.num_layers || 2}</span>
+            </div>
+          `;
+          if (method === 'autostructn2v' && configData.stage2) {
+            const stage2 = configData.stage2;
+            modelDetails += `
+              <div class="model-detail">
+                <span class="detail-label">Stage 2:</span>
+                <span class="detail-value">Features: ${stage2.features || 64}, Layers: ${stage2.num_layers || 2}</span>
+              </div>
+            `;
+          }
         }
       }
     } else {
@@ -384,11 +398,12 @@ class InferenceHandler {
       ? `Slice ${data.current_slice} of ${data.total_slices}`
       : '';
 
-    let statusText = 'Processing...';
+    let statusText = sliceInfo ? `Denoising: ${sliceInfo}` : 'Processing...';
+    // Legacy sequential (imported two-stage pairs) reports per-stage progress
     if (stage === 'stage1') {
-      statusText = this.module.selectedMethod === 'autostructn2v'
+      statusText = this.module.workflowMode === 'import' && this.module.selectedMethod === 'autostructn2v'
         ? `Stage 1 (N2V): ${sliceInfo}`
-        : `Denoising: ${sliceInfo}`;
+        : (sliceInfo ? `Denoising: ${sliceInfo}` : 'Processing...');
     } else if (stage === 'stage2') {
       statusText = `Stage 2 (Struct-N2V): ${sliceInfo}`;
     }

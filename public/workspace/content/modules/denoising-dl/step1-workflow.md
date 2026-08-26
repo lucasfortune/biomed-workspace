@@ -23,7 +23,7 @@ Choose between training a new model from scratch or using a previously trained m
 
 Train from Scratch
 
-Upload your noisy images and train a new denoising model. The model learns the noise characteristics specific to your data. Training also denoises your input images — you get results as soon as training completes.
+Upload your noisy images and train a new denoising model. The model learns the noise characteristics specific to your data. Training also denoises your input images, so you get results as soon as training completes. With autoStructN2V, the noise is measured and the discovered mask is shown for approval seconds after you start, before any training time is spent.
 
 ## Best when
 
@@ -35,7 +35,7 @@ Upload your noisy images and train a new denoising model. The model learns the n
 
 Import Previously Trained Model
 
-Use an existing model to denoise new images without retraining. This is much faster since you skip the training step entirely.
+Use an existing model to denoise new images without retraining. This is much faster since you skip the training step entirely. Models trained with the previous two-stage version of this module (including 2.5D models) are still supported.
 
 ## Best when
 

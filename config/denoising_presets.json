@@ -2,13 +2,12 @@
   "presets": {
     "fast": {
       "name": "Fast",
-      "description": "Quick training for testing and previewing results. Lower quality but faster iteration.",
+      "description": "Quick preview: fewer epochs and fewer sampled patches. Same validated recipe, lower compute.",
       "stage1": {
         "patch_size": 64,
-        "patches_per_image": 100,
+        "patches_per_image": 50,
         "batch_size": 128,
         "mask_percentage": 1.5,
-        "mask_center_size": 1,
         "masking_strategy": 3,
         "use_augmentation": true,
         "features": 32,
@@ -16,38 +15,28 @@
         "activation": "relu",
         "remove_top_skip": true,
         "use_blurpool": true,
-        "learning_rate": 0.0004,
-        "epochs": 100,
+        "learning_rate": 0.001,
+        "epochs": 50,
         "early_stopping": true,
         "early_stopping_patience": 10,
         "normalize_method": "zscore",
         "overlap_tile_pad": 16,
         "use_resize_conv": true,
-        "upsampling_mode": "bilinear",
-        "use_roi": false,
-        "stage1_autostruct_overrides": {
-          "use_augmentation": false,
-          "use_roi": true,
-          "roi_threshold": 0.5,
-          "scale_factor": 0.25,
-          "select_background": true,
-          "epochs": 50
-        }
+        "upsampling_mode": "bilinear"
       },
       "stage2": {
         "patch_size": 128,
-        "patches_per_image": 200,
+        "patches_per_image": 100,
         "batch_size": 24,
         "mask_percentage": 15.0,
-        "masking_strategy": 4,
-        "mask_source": "stage1",
+        "masking_strategy": 3,
         "use_augmentation": false,
         "features": 32,
         "num_layers": 2,
         "activation": "relu",
         "remove_top_skip": true,
         "use_blurpool": true,
-        "learning_rate": 0.000075,
+        "learning_rate": 0.001,
         "epochs": 50,
         "early_stopping": true,
         "early_stopping_patience": 10,
@@ -55,36 +44,24 @@
         "overlap_tile_pad": 16,
         "use_resize_conv": true,
         "upsampling_mode": "bilinear",
-        "use_roi": false
+        "norm_type": "group",
+        "num_groups": 8
       },
       "maskExtractor": {
-        "adaptive_thresholding": true,
-        "adapt_CB": 50.0,
-        "adapt_DF": 0.65,
-        "center_size": 15,
-        "base_percentile": 50,
-        "percentile_decay": 1.035,
-        "center_ratio_threshold": 0.2,
-        "use_center_proximity": true,
-        "center_proximity_threshold": 0.95,
-        "keep_center_component_only": true,
-        "max_masked_pixels": 25,
-        "norm_autocorr": true,
-        "log_autocorr": true,
-        "crop_autocorr": true,
-        "window": "tukey",
-        "window_alpha": 0.25
+        "bg_side": "light",
+        "rho_floor": 0.05,
+        "spine_thresh": 8.0,
+        "max_pixels": null
       }
     },
     "balanced": {
       "name": "Balanced",
-      "description": "Good balance between training time and denoising quality. Recommended for most use cases.",
+      "description": "The publication training budget. Recommended for most use cases.",
       "stage1": {
         "patch_size": 64,
         "patches_per_image": 100,
         "batch_size": 128,
         "mask_percentage": 1.5,
-        "mask_center_size": 1,
         "masking_strategy": 3,
         "use_augmentation": true,
         "features": 32,
@@ -92,38 +69,28 @@
         "activation": "relu",
         "remove_top_skip": true,
         "use_blurpool": true,
-        "learning_rate": 0.0004,
+        "learning_rate": 0.001,
         "epochs": 200,
         "early_stopping": true,
         "early_stopping_patience": 10,
         "normalize_method": "zscore",
         "overlap_tile_pad": 16,
         "use_resize_conv": true,
-        "upsampling_mode": "bilinear",
-        "use_roi": false,
-        "stage1_autostruct_overrides": {
-          "use_augmentation": false,
-          "use_roi": true,
-          "roi_threshold": 0.5,
-          "scale_factor": 0.25,
-          "select_background": true,
-          "epochs": 100
-        }
+        "upsampling_mode": "bilinear"
       },
       "stage2": {
         "patch_size": 128,
         "patches_per_image": 200,
         "batch_size": 24,
         "mask_percentage": 15.0,
-        "masking_strategy": 4,
-        "mask_source": "stage1",
+        "masking_strategy": 3,
         "use_augmentation": false,
         "features": 32,
         "num_layers": 2,
         "activation": "relu",
         "remove_top_skip": true,
         "use_blurpool": true,
-        "learning_rate": 0.000075,
+        "learning_rate": 0.001,
         "epochs": 100,
         "early_stopping": true,
         "early_stopping_patience": 10,
@@ -131,36 +98,24 @@
         "overlap_tile_pad": 16,
         "use_resize_conv": true,
         "upsampling_mode": "bilinear",
-        "use_roi": false
+        "norm_type": "group",
+        "num_groups": 8
       },
       "maskExtractor": {
-        "adaptive_thresholding": true,
-        "adapt_CB": 50.0,
-        "adapt_DF": 0.65,
-        "center_size": 15,
-        "base_percentile": 50,
-        "percentile_decay": 1.035,
-        "center_ratio_threshold": 0.2,
-        "use_center_proximity": true,
-        "center_proximity_threshold": 0.95,
-        "keep_center_component_only": true,
-        "max_masked_pixels": 25,
-        "norm_autocorr": true,
-        "log_autocorr": true,
-        "crop_autocorr": true,
-        "window": "tukey",
-        "window_alpha": 0.25
+        "bg_side": "light",
+        "rho_floor": 0.05,
+        "spine_thresh": 8.0,
+        "max_pixels": null
       }
     },
     "high_quality": {
       "name": "High Quality",
-      "description": "Maximum denoising quality. Longer training time but best results.",
+      "description": "Extended training budget: more epochs and denser patch sampling. Longest runtime.",
       "stage1": {
         "patch_size": 64,
-        "patches_per_image": 100,
+        "patches_per_image": 200,
         "batch_size": 128,
         "mask_percentage": 1.5,
-        "mask_center_size": 1,
         "masking_strategy": 3,
         "use_augmentation": true,
         "features": 32,
@@ -168,38 +123,28 @@
         "activation": "relu",
         "remove_top_skip": true,
         "use_blurpool": true,
-        "learning_rate": 0.0004,
+        "learning_rate": 0.001,
         "epochs": 400,
         "early_stopping": true,
         "early_stopping_patience": 10,
         "normalize_method": "zscore",
         "overlap_tile_pad": 16,
         "use_resize_conv": true,
-        "upsampling_mode": "bilinear",
-        "use_roi": false,
-        "stage1_autostruct_overrides": {
-          "use_augmentation": false,
-          "use_roi": true,
-          "roi_threshold": 0.5,
-          "scale_factor": 0.25,
-          "select_background": true,
-          "epochs": 150
-        }
+        "upsampling_mode": "bilinear"
       },
       "stage2": {
         "patch_size": 128,
-        "patches_per_image": 200,
+        "patches_per_image": 400,
         "batch_size": 24,
         "mask_percentage": 15.0,
-        "masking_strategy": 4,
-        "mask_source": "stage1",
+        "masking_strategy": 3,
         "use_augmentation": false,
         "features": 32,
         "num_layers": 2,
         "activation": "relu",
         "remove_top_skip": true,
         "use_blurpool": true,
-        "learning_rate": 0.000075,
+        "learning_rate": 0.001,
         "epochs": 200,
         "early_stopping": true,
         "early_stopping_patience": 10,
@@ -207,25 +152,14 @@
         "overlap_tile_pad": 16,
         "use_resize_conv": true,
         "upsampling_mode": "bilinear",
-        "use_roi": false
+        "norm_type": "group",
+        "num_groups": 8
       },
       "maskExtractor": {
-        "adaptive_thresholding": true,
-        "adapt_CB": 50.0,
-        "adapt_DF": 0.65,
-        "center_size": 15,
-        "base_percentile": 50,
-        "percentile_decay": 1.035,
-        "center_ratio_threshold": 0.2,
-        "use_center_proximity": true,
-        "center_proximity_threshold": 0.95,
-        "keep_center_component_only": true,
-        "max_masked_pixels": 25,
-        "norm_autocorr": true,
-        "log_autocorr": true,
-        "crop_autocorr": true,
-        "window": "tukey",
-        "window_alpha": 0.25
+        "bg_side": "light",
+        "rho_floor": 0.05,
+        "spine_thresh": 8.0,
+        "max_pixels": null
       }
     }
   },
@@ -235,7 +169,14 @@
   },
   "parameterRanges": {
     "patch_size": {
-      "options": [32, 48, 64, 96, 128, 256],
+      "options": [
+        32,
+        48,
+        64,
+        96,
+        128,
+        256
+      ],
       "default": 64
     },
     "patches_per_image": {
@@ -245,7 +186,17 @@
       "default": 100
     },
     "batch_size": {
-      "options": [1, 2, 4, 8, 16, 24, 32, 64, 128],
+      "options": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        24,
+        32,
+        64,
+        128
+      ],
       "default": 128
     },
     "mask_percentage": {
@@ -258,16 +209,38 @@
       "default": true
     },
     "features": {
-      "options": [32, 48, 64, 96, 128],
+      "options": [
+        32,
+        48,
+        64,
+        96,
+        128
+      ],
       "default": 32
     },
     "num_layers": {
-      "options": [2, 3, 4],
+      "options": [
+        2,
+        3,
+        4
+      ],
       "default": 2
     },
     "learning_rate": {
-      "options": [0.00001, 0.00005, 0.0001, 0.0002, 0.0004],
-      "labels": ["1e-5", "5e-5", "1e-4", "2e-4", "4e-4"],
+      "options": [
+        1e-05,
+        5e-05,
+        0.0001,
+        0.0002,
+        0.0004
+      ],
+      "labels": [
+        "1e-5",
+        "5e-5",
+        "1e-4",
+        "2e-4",
+        "4e-4"
+      ],
       "default": 0.0004
     },
     "epochs": {
@@ -282,49 +255,71 @@
       "step": 5,
       "default": 10
     },
-    "use_roi": {
-      "default": false
-    },
-    "roi_threshold": {
-      "min": 0.3,
-      "max": 0.7,
-      "step": 0.1,
-      "default": 0.5
-    },
     "use_resize_conv": {
       "default": true
     },
     "upsampling_mode": {
-      "options": ["bilinear", "nearest", "bicubic"],
+      "options": [
+        "bilinear",
+        "nearest",
+        "bicubic"
+      ],
       "default": "bilinear"
     },
     "masking_strategy": {
       "options": [
-        {"value": 0, "label": "Local Mean"},
-        {"value": 1, "label": "Zeros"},
-        {"value": 2, "label": "Random"},
-        {"value": 3, "label": "UPS 5×5"},
-        {"value": 4, "label": "UPS center + struct neighbors"}
+        {
+          "value": 0,
+          "label": "Local Mean"
+        },
+        {
+          "value": 1,
+          "label": "Zeros"
+        },
+        {
+          "value": 2,
+          "label": "Random"
+        },
+        {
+          "value": 3,
+          "label": "UPS 5\u00d75"
+        },
+        {
+          "value": 4,
+          "label": "UPS center + struct neighbors"
+        }
       ],
       "default": 3
     },
-    "base_percentile": {
-      "min": 30,
-      "max": 70,
-      "step": 5,
-      "default": 50
+    "bg_side": {
+      "options": [
+        "light",
+        "dark",
+        "off"
+      ],
+      "default": "light",
+      "description": "Which intensity side of the images is background: light (dense EM), dark (fluorescence-like), off (flatness-only selection)"
     },
-    "percentile_decay": {
-      "min": 1.0,
-      "max": 1.5,
+    "rho_floor": {
+      "min": 0.0,
+      "max": 0.15,
       "step": 0.005,
-      "default": 1.035
+      "default": 0.05,
+      "description": "Effect-size floor: drop mask lags with |correlation| below this (0 disables)"
     },
-    "max_masked_pixels": {
-      "min": 10,
-      "max": 200,
-      "step": 5,
-      "default": 25
+    "spine_thresh": {
+      "min": 4.0,
+      "max": 12.0,
+      "step": 0.5,
+      "default": 8.0,
+      "description": "Certainty threshold |z| for significant ACF features"
+    },
+    "max_pixels": {
+      "min": 5,
+      "max": 50,
+      "step": 1,
+      "default": null,
+      "description": "Optional cap on the number of masked pixels (empty = no cap)"
     }
   }
 }

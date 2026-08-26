@@ -25,8 +25,8 @@ scipy>=1.9.0,<2.0.0
 matplotlib>=3.5.0  # For plotting training curves (optional)
 tqdm>=4.64.0       # For progress bars (optional)
 
-# Deep Learning Denoising (autoStructN2V)
-# The autoStructN2V library is bundled in docs/autoStructN2V_2.5D/ and is
-# automatically added to sys.path at runtime by python/denoising/__init__.py.
-# No separate installation is required.
+# Deep Learning Denoising (autoStructN2V, routed v1.0)
+# The autoStructN2V v1.0 library is vendored in python/vendor/ (see
+# python/vendor/VENDORED_VERSION) and automatically added to sys.path at
+# runtime by python/denoising/__init__.py. No separate installation required.
 tensorboard>=2.10.0  # Required for autoStructN2V training logging

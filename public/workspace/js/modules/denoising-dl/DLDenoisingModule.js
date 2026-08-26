@@ -114,12 +114,11 @@ class DLDenoisingModule extends BaseModule {
     // Training components
     this.trainingProgress = null;
     this.lossChart = null;
-    this.stage2LossChart = null;
     this.resultsDisplay = null;
 
-    // Chart instances and best loss tracking
-    this.charts = { n2v: null, stage1: null, stage2: null };
-    this.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+    // Chart instance and best loss tracking (one routed training run)
+    this.charts = { train: null };
+    this.bestValLoss = { train: Infinity };
 
     // Mask components (autoStructN2V)
     this.maskVisualization = null;
@@ -337,33 +336,29 @@ class DLDenoisingModule extends BaseModule {
     // Initialize charts if not already done
     await this.chartHandler.initializeCharts();
 
-    // Restore stage1/n2v history
-    const stage1History = status.stage1History || [];
-    if (stage1History.length > 0) {
-      const chartKey = method === 'n2v' ? 'n2v' : 'stage1';
-      this.chartHandler.restoreChartsFromHistory(chartKey, stage1History);
+    // Restore the single routed training history
+    const trainHistory = status.trainHistory || [];
+    if (trainHistory.length > 0) {
+      this.chartHandler.restoreChartsFromHistory('train', trainHistory);
 
-      // Update epoch display
-      const lastPoint = stage1History[stage1History.length - 1];
-      const prefix = method === 'n2v' ? 'n2v' : 'stage1';
-      // Access stage1 from session object (endpoint returns status.session.stage1)
-      const totalEpochs = status.session?.stage1?.totalEpochs || lastPoint.epoch;
+      const lastPoint = trainHistory[trainHistory.length - 1];
+      const totalEpochs = status.session?.train?.totalEpochs || lastPoint.epoch;
 
-      const currentEpochEl = document.getElementById(`${prefix}CurrentEpoch`);
-      const totalEpochsEl = document.getElementById(`${prefix}TotalEpochs`);
+      const currentEpochEl = document.getElementById('trainCurrentEpoch');
+      const totalEpochsEl = document.getElementById('trainTotalEpochs');
       if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
       if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
 
       // Update progress bar
-      const progressFill = document.getElementById(`${prefix}ProgressFill`);
+      const progressFill = document.getElementById('trainProgressFill');
       if (progressFill) {
         const percent = totalEpochs > 0 ? (lastPoint.epoch / totalEpochs) * 100 : 0;
         progressFill.style.width = `${percent}%`;
       }
 
       // Update loss values
-      const trainLossEl = document.getElementById(`${prefix}TrainLoss`);
-      const valLossEl = document.getElementById(`${prefix}ValLoss`);
+      const trainLossEl = document.getElementById('trainTrainLoss');
+      const valLossEl = document.getElementById('trainValLoss');
       if (trainLossEl && lastPoint.trainLoss != null) {
         trainLossEl.textContent = lastPoint.trainLoss.toFixed(6);
       }
@@ -372,40 +367,45 @@ class DLDenoisingModule extends BaseModule {
       }
     }
 
-    // Restore stage2 history (for autostructn2v)
-    const stage2History = status.stage2History || [];
-    if (method === 'autostructn2v' && stage2History.length > 0) {
-      this.chartHandler.restoreChartsFromHistory('stage2', stage2History);
-
-      // Update epoch display
-      const lastPoint = stage2History[stage2History.length - 1];
-      // Access stage2 from session object (endpoint returns status.session.stage2)
-      const totalEpochs = status.session?.stage2?.totalEpochs || lastPoint.epoch;
-
-      const currentEpochEl = document.getElementById('stage2CurrentEpoch');
-      const totalEpochsEl = document.getElementById('stage2TotalEpochs');
-      if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
-      if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
-
-      // Update progress bar
-      const progressFill = document.getElementById('stage2ProgressFill');
-      if (progressFill) {
-        const percent = totalEpochs > 0 ? (lastPoint.epoch / totalEpochs) * 100 : 0;
-        progressFill.style.width = `${percent}%`;
-      }
-
-      // Update loss values
-      const trainLossEl = document.getElementById('stage2TrainLoss');
-      const valLossEl = document.getElementById('stage2ValLoss');
-      if (trainLossEl && lastPoint.trainLoss != null) {
-        trainLossEl.textContent = lastPoint.trainLoss.toFixed(6);
-      }
-      if (valLossEl && lastPoint.valLoss != null) {
-        valLossEl.textContent = lastPoint.valLoss.toFixed(6);
+    // Restore the mask/route panel for autoStructN2V sessions
+    const mask = status.session?.mask;
+    if (method === 'autostructn2v' && mask?.maskArray) {
+      this.initializeMaskUI();
+      this.maskHandler.renderRouteDecision(mask);
+      this.updateMaskVisualization({
+        mask: mask.maskArray.map(row => row.map(val => Boolean(val))),
+        kernelSize: mask.kernelSize,
+        kernelHeight: mask.kernelHeight,
+        kernelWidth: mask.kernelWidth,
+        activePixels: mask.activePixels,
+        pattern: mask.pattern,
+        isEmpty: mask.isEmpty,
+        branch: mask.branch
+      });
+      if (status.status === 'paused_at_mask') {
+        const maskActions = document.getElementById('maskActions');
+        if (maskActions) maskActions.style.display = 'block';
+        this.uiStateHandler.updateStageStatus('mask', 'completed', 'Awaiting Approval');
       }
     }
+    if (status.session?.train?.branch) {
+      this.setTrainSectionBranch(status.session.train.branch);
+    }
 
-    console.log('[DLDenoisingModule] Restored history - stage1:', stage1History.length, 'points, stage2:', stage2History.length, 'points');
+    console.log('[DLDenoisingModule] Restored history:', trainHistory.length, 'points');
+  }
+
+  /**
+   * Update the training section title to name the branch that trains
+   * @param {string} branch - 'n2v' or 'structn2v'
+   */
+  setTrainSectionBranch(branch) {
+    const title = document.getElementById('trainSectionTitle');
+    if (title && branch) {
+      title.textContent = branch === 'structn2v'
+        ? 'Model Training - StructN2V (discovered mask)'
+        : 'Model Training - Plain N2V';
+    }
   }
 
   /**
@@ -414,9 +414,8 @@ class DLDenoisingModule extends BaseModule {
    * @param {Object} status - Training status from backend (optional)
    */
   showTrainingCompleteResumed(status = {}) {
-    // Update UI to show completion state
-    const n2vSection = document.getElementById('n2vTrainingSection');
-    const autoStructSection = document.getElementById('autoStructTrainingSection');
+    const maskApprovalSection = document.getElementById('maskApprovalSection');
+    const trainSection = document.getElementById('trainSection');
     const startSection = document.getElementById('startTrainingSection');
 
     // Hide start button
@@ -426,69 +425,31 @@ class DLDenoisingModule extends BaseModule {
     const method = status.method || this.selectedMethod || 'n2v';
     this.selectedMethod = method;
 
-    // Show the appropriate training section based on method
-    if (method === 'n2v') {
-      if (n2vSection) n2vSection.style.display = 'block';
-      if (autoStructSection) autoStructSection.style.display = 'none';
-
-      // Update epoch display from history if available
-      const stage1History = status.stage1History || [];
-      if (stage1History.length > 0) {
-        const lastPoint = stage1History[stage1History.length - 1];
-        const totalEpochs = status.session?.stage1?.totalEpochs || lastPoint.epoch;
-
-        const currentEpochEl = document.getElementById('n2vCurrentEpoch');
-        const totalEpochsEl = document.getElementById('n2vTotalEpochs');
-        if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
-        if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
-
-        // Update progress bar to 100%
-        const progressFill = document.getElementById('n2vProgressFill');
-        if (progressFill) progressFill.style.width = '100%';
-      }
-
-      this.uiStateHandler.updateStageStatus('n2v', 'completed', 'Complete');
-    } else {
-      // autostructn2v
-      if (n2vSection) n2vSection.style.display = 'none';
-      if (autoStructSection) autoStructSection.style.display = 'block';
-
-      // Update Stage 1 epoch display from history
-      const stage1History = status.stage1History || [];
-      if (stage1History.length > 0) {
-        const lastPoint = stage1History[stage1History.length - 1];
-        const totalEpochs = status.session?.stage1?.totalEpochs || lastPoint.epoch;
-
-        const currentEpochEl = document.getElementById('stage1CurrentEpoch');
-        const totalEpochsEl = document.getElementById('stage1TotalEpochs');
-        if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
-        if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
-
-        // Update progress bar to 100%
-        const progressFill = document.getElementById('stage1ProgressFill');
-        if (progressFill) progressFill.style.width = '100%';
-      }
-
-      // Update Stage 2 epoch display from history
-      const stage2History = status.stage2History || [];
-      if (stage2History.length > 0) {
-        const lastPoint = stage2History[stage2History.length - 1];
-        const totalEpochs = status.session?.stage2?.totalEpochs || lastPoint.epoch;
-
-        const currentEpochEl = document.getElementById('stage2CurrentEpoch');
-        const totalEpochsEl = document.getElementById('stage2TotalEpochs');
-        if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
-        if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
-
-        // Update progress bar to 100%
-        const progressFill = document.getElementById('stage2ProgressFill');
-        if (progressFill) progressFill.style.width = '100%';
-      }
-
-      this.uiStateHandler.updateStageStatus('stage1', 'completed', 'Complete');
-      this.uiStateHandler.updateStageStatus('mask', 'completed', 'Complete');
-      this.uiStateHandler.updateStageStatus('stage2', 'completed', 'Complete');
+    if (trainSection) trainSection.style.display = 'block';
+    if (maskApprovalSection) {
+      maskApprovalSection.style.display = method === 'autostructn2v' ? 'block' : 'none';
     }
+
+    // Update epoch display from history if available
+    const trainHistory = status.trainHistory || [];
+    if (trainHistory.length > 0) {
+      const lastPoint = trainHistory[trainHistory.length - 1];
+      const totalEpochs = status.session?.train?.totalEpochs || lastPoint.epoch;
+
+      const currentEpochEl = document.getElementById('trainCurrentEpoch');
+      const totalEpochsEl = document.getElementById('trainTotalEpochs');
+      if (currentEpochEl) currentEpochEl.textContent = lastPoint.epoch;
+      if (totalEpochsEl) totalEpochsEl.textContent = totalEpochs;
+
+      // Update progress bar to 100%
+      const progressFill = document.getElementById('trainProgressFill');
+      if (progressFill) progressFill.style.width = '100%';
+    }
+
+    if (method === 'autostructn2v') {
+      this.uiStateHandler.updateStageStatus('mask', 'completed', 'Complete');
+    }
+    this.uiStateHandler.updateStageStatus('train', 'completed', 'Complete');
 
     // Enable next button
     const step3Next = document.getElementById('step3Next');
@@ -559,12 +520,6 @@ class DLDenoisingModule extends BaseModule {
       radio.addEventListener('change', (e) => this.onMethodChange(e.target.value));
     });
 
-    // Mode toggle (2D / 2.5D)
-    const modeToggle = document.getElementById('mode-toggle');
-    if (modeToggle) {
-      modeToggle.addEventListener('change', (e) => this.onModeChange(e.target.checked ? '2.5d' : '2d'));
-    }
-
     // Preset selector
     document.getElementById('presetSelector')?.addEventListener('change', (e) => {
       this.onPresetChange(e.target.value);
@@ -633,28 +588,6 @@ class DLDenoisingModule extends BaseModule {
    */
   onMethodChange(method) {
     return this.fileHandler.onMethodChange(method);
-  }
-
-  /**
-   * Handle mode change (2D / 2.5D)
-   * @param {string} mode - '2d' or '2.5d'
-   */
-  onModeChange(mode) {
-    console.log('[DLDenoisingModule] Mode changed to:', mode);
-    this.selectedMode = mode;
-
-    // Update mode label styling
-    const leftLabel = document.querySelector('.mode-label-left');
-    const rightLabel = document.querySelector('.mode-label-right');
-    if (leftLabel && rightLabel) {
-      leftLabel.classList.toggle('active', mode === '2d');
-      rightLabel.classList.toggle('active', mode === '2.5d');
-    }
-
-    // Re-validate file if one is already selected (check stack depth for 2.5D)
-    if (this.fileHandler) {
-      this.fileHandler.onModeChange(mode);
-    }
   }
 
   /**
@@ -971,23 +904,7 @@ class DLDenoisingModule extends BaseModule {
   }
 
   /**
-   * Show training complete state for N2V
-   * Delegated to UIStateHandler
-   */
-  showN2VComplete(data) {
-    return this.uiStateHandler.showN2VComplete(data);
-  }
-
-  /**
-   * Show training complete state for autoStructN2V
-   * Delegated to UIStateHandler
-   */
-  showAutoStructComplete(data) {
-    return this.uiStateHandler.showAutoStructComplete(data);
-  }
-
-  /**
-   * Show training complete state (generic handler)
+   * Show training complete state
    * Delegated to UIStateHandler
    */
   showTrainingComplete(data) {
@@ -1153,14 +1070,6 @@ class DLDenoisingModule extends BaseModule {
     document.querySelectorAll('input[name="dl-method"]').forEach(radio => {
       radio.checked = false;
     });
-
-    // Reset mode toggle to 2D
-    const modeToggle = document.getElementById('mode-toggle');
-    if (modeToggle) modeToggle.checked = false;
-    const leftLabel = document.querySelector('.mode-label-left');
-    const rightLabel = document.querySelector('.mode-label-right');
-    if (leftLabel) leftLabel.classList.add('active');
-    if (rightLabel) rightLabel.classList.remove('active');
 
     // Reset auto-approve toggle
     this.autoApproveEnabled = false;

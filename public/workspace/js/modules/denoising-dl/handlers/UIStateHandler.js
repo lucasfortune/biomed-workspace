@@ -2,7 +2,7 @@
  * UIStateHandler.js - UI State Management for DL Denoising Module
  *
  * Handles UI state transitions, display updates, and visual feedback
- * for the training progress sections.
+ * for the routed training flow: [noise analysis & mask approval] -> train.
  */
 
 class UIStateHandler {
@@ -18,8 +18,8 @@ class UIStateHandler {
    */
   showTrainingReady() {
     const startSection = document.getElementById('startTrainingSection');
-    const n2vSection = document.getElementById('n2vTrainingSection');
-    const autoStructSection = document.getElementById('autoStructTrainingSection');
+    const maskApprovalSection = document.getElementById('maskApprovalSection');
+    const trainSection = document.getElementById('trainSection');
     const startBtn = document.getElementById('startTrainingBtn');
     const cancelBtn = document.getElementById('cancelTrainingBtn');
 
@@ -27,53 +27,30 @@ class UIStateHandler {
     if (startSection) startSection.style.display = 'block';
     if (startBtn) startBtn.style.display = 'inline-flex';
     if (cancelBtn) cancelBtn.style.display = 'none';
-    if (n2vSection) n2vSection.style.display = 'none';
-    if (autoStructSection) autoStructSection.style.display = 'none';
+    if (maskApprovalSection) maskApprovalSection.style.display = 'none';
+    if (trainSection) trainSection.style.display = 'none';
 
     // Reset best val loss tracking
-    this.module.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+    this.module.bestValLoss = { train: Infinity };
 
     // Destroy and reset charts
     this.module.chartHandler.destroyCharts();
 
-    // Reset completion sections
-    const n2vComplete = document.getElementById('n2vCompleteSection');
-    const autoStructResults = document.getElementById('autoStructResultsSection');
+    // Reset mask approval bits
     const maskActions = document.getElementById('maskActions');
-    if (n2vComplete) n2vComplete.style.display = 'none';
-    if (autoStructResults) autoStructResults.style.display = 'none';
     if (maskActions) maskActions.style.display = 'none';
+    const routeCard = document.getElementById('routeDecisionCard');
+    if (routeCard) {
+      routeCard.style.display = 'none';
+      routeCard.innerHTML = '';
+    }
 
     // Reset status badges
-    this.updateStageStatus('n2v', 'pending', 'Initializing...');
-    this.updateStageStatus('stage1', 'pending', 'Pending');
     this.updateStageStatus('mask', 'pending', 'Pending');
-    this.updateStageStatus('stage2', 'pending', 'Pending');
+    this.updateStageStatus('train', 'pending', 'Pending');
 
-    // Reset progress bars and download buttons
-    ['n2v', 'stage1', 'stage2'].forEach(prefix => {
-      const fill = document.getElementById(`${prefix}ProgressFill`);
-      if (fill) fill.style.width = '0%';
-      const current = document.getElementById(`${prefix}CurrentEpoch`);
-      if (current) current.textContent = '0';
-      const total = document.getElementById(`${prefix}TotalEpochs`);
-      if (total) total.textContent = '0';
-      const trainLoss = document.getElementById(`${prefix}TrainLoss`);
-      if (trainLoss) trainLoss.textContent = '--';
-      const valLoss = document.getElementById(`${prefix}ValLoss`);
-      if (valLoss) valLoss.textContent = '--';
-      const bestValLoss = document.getElementById(`${prefix}BestValLoss`);
-      if (bestValLoss) bestValLoss.textContent = '--';
-      // Hide download buttons
-      const downloadButtons = document.getElementById(`${prefix}DownloadButtons`);
-      if (downloadButtons) downloadButtons.style.display = 'none';
-      // Reset status text style
-      const statusText = document.getElementById(`${prefix}StatusText`);
-      if (statusText) {
-        statusText.style.color = '';
-        statusText.style.fontWeight = '';
-      }
-    });
+    // Reset progress bar and download buttons
+    this.resetTrainingStageUI('train');
   }
 
   /**
@@ -81,8 +58,8 @@ class UIStateHandler {
    */
   async showTrainingInProgress() {
     const startSection = document.getElementById('startTrainingSection');
-    const n2vSection = document.getElementById('n2vTrainingSection');
-    const autoStructSection = document.getElementById('autoStructTrainingSection');
+    const maskApprovalSection = document.getElementById('maskApprovalSection');
+    const trainSection = document.getElementById('trainSection');
     const startBtn = document.getElementById('startTrainingBtn');
     const cancelBtn = document.getElementById('cancelTrainingBtn');
 
@@ -90,20 +67,17 @@ class UIStateHandler {
     if (startBtn) startBtn.style.display = 'none';
     if (cancelBtn) cancelBtn.style.display = 'inline-block';
 
-    // Show the correct training section based on method
-    if (this.module.selectedMethod === 'n2v') {
-      if (n2vSection) n2vSection.style.display = 'block';
-      if (autoStructSection) autoStructSection.style.display = 'none';
-      // Update status
-      this.updateStageStatus('n2v', 'training', 'Training...');
+    // The mask/route section only exists for autoStructN2V; the training
+    // section is shared by both methods.
+    if (this.module.selectedMethod === 'autostructn2v') {
+      if (maskApprovalSection) maskApprovalSection.style.display = 'block';
+      this.updateStageStatus('mask', 'training', 'Analyzing noise...');
+      this.updateStageStatus('train', 'pending', 'Awaiting mask approval');
     } else {
-      if (n2vSection) n2vSection.style.display = 'none';
-      if (autoStructSection) autoStructSection.style.display = 'block';
-      // Update status for autoStructN2V
-      this.updateStageStatus('stage1', 'training', 'Training...');
-      this.updateStageStatus('mask', 'pending', 'Pending');
-      this.updateStageStatus('stage2', 'pending', 'Pending');
+      if (maskApprovalSection) maskApprovalSection.style.display = 'none';
+      this.updateStageStatus('train', 'training', 'Training...');
     }
+    if (trainSection) trainSection.style.display = 'block';
 
     // Initialize charts
     await this.module.initializeCharts();
@@ -111,7 +85,7 @@ class UIStateHandler {
 
   /**
    * Update stage status badge
-   * @param {string} stage - Stage identifier ('n2v', 'stage1', 'mask', 'stage2')
+   * @param {string} stage - Stage identifier ('mask', 'train')
    * @param {string} status - Status class ('pending', 'training', 'completed', 'skipped')
    * @param {string} text - Display text for the status
    */
@@ -124,15 +98,15 @@ class UIStateHandler {
   }
 
   /**
-   * Show training complete state for N2V
+   * Show training complete state
    * @param {Object} data - Training result data
    */
-  showN2VComplete(data) {
+  showTrainingComplete(data) {
     // Update status badge
-    this.updateStageStatus('n2v', 'completed', 'Complete');
+    this.updateStageStatus('train', 'completed', 'Complete');
 
     // Update status text
-    const statusText = document.getElementById('n2vStatusText');
+    const statusText = document.getElementById('trainStatusText');
     if (statusText) {
       statusText.textContent = 'Training completed successfully!';
       statusText.style.color = '#50C878';
@@ -140,7 +114,7 @@ class UIStateHandler {
     }
 
     // Show download buttons in progress section
-    const downloadButtons = document.getElementById('n2vDownloadButtons');
+    const downloadButtons = document.getElementById('trainDownloadButtons');
     if (downloadButtons) {
       downloadButtons.style.display = 'flex';
     }
@@ -154,64 +128,8 @@ class UIStateHandler {
   }
 
   /**
-   * Show training complete state for autoStructN2V
-   * @param {Object} data - Training result data
-   */
-  showAutoStructComplete(data) {
-    // Check if Stage 2 was skipped
-    const stage2Skipped = data.stage2Skipped === true;
-
-    // Update final status
-    if (stage2Skipped) {
-      this.updateStageStatus('stage2', 'skipped', 'Skipped');
-    } else {
-      this.updateStageStatus('stage2', 'completed', 'Complete');
-    }
-
-    // Update status text
-    const statusText = document.getElementById('stage2StatusText');
-    if (statusText) {
-      if (stage2Skipped) {
-        statusText.textContent = 'Stage 2 skipped. Using N2V (Stage 1) results.';
-        statusText.style.color = 'var(--text-secondary)';
-        statusText.style.fontWeight = '500';
-      } else {
-        statusText.textContent = 'Training completed successfully!';
-        statusText.style.color = '#50C878';
-        statusText.style.fontWeight = '600';
-      }
-    }
-
-    // Show download buttons in progress section (Stage 1 results available)
-    const downloadButtons = document.getElementById('stage2DownloadButtons');
-    if (downloadButtons) {
-      downloadButtons.style.display = 'flex';
-    }
-
-    // Store results for download
-    this.module.trainingResult = data;
-
-    // Enable next button
-    const nextBtn = document.getElementById('step3Next');
-    if (nextBtn) nextBtn.disabled = false;
-  }
-
-  /**
-   * Show training complete state (generic handler)
-   * Routes to appropriate method based on selected method
-   * @param {Object} data - Training result data
-   */
-  showTrainingComplete(data) {
-    if (this.module.selectedMethod === 'n2v') {
-      this.showN2VComplete(data);
-    } else {
-      this.showAutoStructComplete(data);
-    }
-  }
-
-  /**
-   * Reset training stage UI elements for a given prefix
-   * @param {string} prefix - Stage prefix ('n2v', 'stage1', 'stage2')
+   * Reset training stage UI elements
+   * @param {string} prefix - Stage prefix ('train')
    */
   resetTrainingStageUI(prefix) {
     // Reset progress bar
@@ -228,9 +146,7 @@ class UIStateHandler {
     // Reset status text
     const statusText = document.getElementById(`${prefix}StatusText`);
     if (statusText) {
-      statusText.textContent = prefix === 'n2v' ? 'Preparing training data...' :
-                               prefix === 'stage1' ? 'Waiting to start...' :
-                               'Waiting for Stage 1 and mask approval...';
+      statusText.textContent = 'Waiting to start...';
       statusText.style.color = '';
       statusText.style.fontWeight = '';
     }

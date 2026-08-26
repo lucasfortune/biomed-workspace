@@ -40,8 +40,11 @@ class ResultsDisplay {
       `;
     }
 
-    const isAutoStruct = this.method === 'autostructn2v';
     const outputFiles = this.results.outputFiles || {};
+    const branch = this.results.branch;
+    const branchLabel = branch === 'structn2v'
+      ? 'StructN2V (discovered mask)'
+      : (branch === 'n2v' ? 'Plain N2V' : null);
 
     return `
       <div class="results-display" id="${this.containerId}">
@@ -49,7 +52,7 @@ class ResultsDisplay {
           <div class="success-icon">&#10003;</div>
           <div class="results-title">
             <h3>Denoising Complete!</h3>
-            <p>Your images have been successfully denoised.</p>
+            <p>Your images have been successfully denoised${branchLabel ? ` (${branchLabel})` : ''}.</p>
           </div>
         </div>
 
@@ -61,27 +64,17 @@ class ResultsDisplay {
           </span>
         </div>
 
-        <!-- Stage 1 Results -->
-        ${this._renderStageResults('stage1', outputFiles, isAutoStruct)}
+        ${this._renderDenoisedResult(outputFiles)}
 
-        <!-- Stage 2 Results (autoStructN2V only) -->
-        ${isAutoStruct && outputFiles.stage2_stack ? this._renderStageResults('stage2', outputFiles, true) : ''}
-
-        <!-- Model Files -->
+        <!-- Model & Run Files -->
         <div class="results-section model-files">
-          <h4>Trained Model</h4>
+          <h4>Trained Model & Run Artifacts</h4>
           <p class="section-desc">The trained model can be used to process additional images in Step 4.</p>
           <div class="model-info">
-            ${outputFiles.stage1_model ? `
+            ${outputFiles.model ? `
               <div class="file-item">
                 <span class="file-icon">&#128190;</span>
-                <span class="file-name">${this._getFilename(outputFiles.stage1_model)}</span>
-              </div>
-            ` : ''}
-            ${outputFiles.stage2_model ? `
-              <div class="file-item">
-                <span class="file-icon">&#128190;</span>
-                <span class="file-name">${this._getFilename(outputFiles.stage2_model)}</span>
+                <span class="file-name">${this._getFilename(outputFiles.model)}</span>
               </div>
             ` : ''}
             ${outputFiles.config ? `
@@ -90,10 +83,16 @@ class ResultsDisplay {
                 <span class="file-name">${this._getFilename(outputFiles.config)}</span>
               </div>
             ` : ''}
-            ${outputFiles.structural_mask ? `
+            ${outputFiles.routed_mask ? `
               <div class="file-item">
                 <span class="file-icon">&#128200;</span>
-                <span class="file-name">${this._getFilename(outputFiles.structural_mask)}</span>
+                <span class="file-name">${this._getFilename(outputFiles.routed_mask)}</span>
+              </div>
+            ` : ''}
+            ${outputFiles.route_decision ? `
+              <div class="file-item">
+                <span class="file-icon">&#129517;</span>
+                <span class="file-name">${this._getFilename(outputFiles.route_decision)}</span>
               </div>
             ` : ''}
           </div>
@@ -115,28 +114,19 @@ class ResultsDisplay {
   }
 
   /**
-   * Render results for a stage
+   * Render the denoised result stack section
    */
-  _renderStageResults(stage, outputFiles, isAutoStruct) {
-    const stackKey = `${stage}_stack`;
-    const sliceCountKey = `${stage}_slice_count`;
+  _renderDenoisedResult(outputFiles) {
+    if (!outputFiles.denoised_stack) return '';
 
-    if (!outputFiles[stackKey]) return '';
-
-    const stackPath = outputFiles[stackKey];
-    const sliceCount = outputFiles[sliceCountKey] || 'Unknown';
+    const stackPath = outputFiles.denoised_stack;
+    const sliceCount = outputFiles.slice_count || 'Unknown';
     const filename = this._getFilename(stackPath);
 
-    const isRecommended = isAutoStruct && stage === 'stage2';
-    const stageLabel = stage === 'stage1'
-      ? (isAutoStruct ? 'Stage 1 (N2V)' : 'N2V Denoised')
-      : 'Stage 2 (Struct-N2V)';
-
     return `
-      <div class="results-section ${stage}-results ${isRecommended ? 'recommended' : ''}">
+      <div class="results-section denoised-results recommended">
         <div class="section-header">
-          <h4>${stageLabel}</h4>
-          ${isRecommended ? '<span class="recommended-badge">Recommended</span>' : ''}
+          <h4>Denoised Stack</h4>
         </div>
 
         <div class="stack-info">
@@ -163,11 +153,11 @@ class ResultsDisplay {
         </div>
 
         <div class="stack-actions">
-          <button class="btn small" onclick="window.dlDenoisingModule?.downloadResult('${stage}')">
+          <button class="btn small" onclick="window.dlDenoisingModule?.downloadResult()">
             <span class="btn-icon">&#128229;</span>
             Download
           </button>
-          <button class="btn small secondary" onclick="window.dlDenoisingModule?.viewInViewer('${stage}')">
+          <button class="btn small secondary" onclick="window.dlDenoisingModule?.viewInViewer()">
             <span class="btn-icon">&#128065;</span>
             View in Viewer
           </button>

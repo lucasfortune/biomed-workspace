@@ -84,25 +84,11 @@ class ChartHandler {
       }
     });
 
-    // Create charts for the current method (skip if already created)
-    if (this.module.selectedMethod === 'n2v') {
-      const canvas = document.getElementById('n2vLossChart');
-      if (canvas && !this.module.charts.n2v) {
-        this.module.charts.n2v = new Chart(canvas.getContext('2d'), chartConfig('n2vLossChart'));
-        console.log('[ChartHandler] Created n2v chart');
-      }
-    } else {
-      // autoStructN2V - create stage 1 and stage 2 charts
-      const stage1Canvas = document.getElementById('stage1LossChart');
-      if (stage1Canvas && !this.module.charts.stage1) {
-        this.module.charts.stage1 = new Chart(stage1Canvas.getContext('2d'), chartConfig('stage1LossChart'));
-        console.log('[ChartHandler] Created stage1 chart');
-      }
-      const stage2Canvas = document.getElementById('stage2LossChart');
-      if (stage2Canvas && !this.module.charts.stage2) {
-        this.module.charts.stage2 = new Chart(stage2Canvas.getContext('2d'), chartConfig('stage2LossChart'));
-        console.log('[ChartHandler] Created stage2 chart');
-      }
+    // The routed pipeline trains ONE model for both methods -> one chart
+    const canvas = document.getElementById('trainLossChart');
+    if (canvas && !this.module.charts.train) {
+      this.module.charts.train = new Chart(canvas.getContext('2d'), chartConfig('trainLossChart'));
+      console.log('[ChartHandler] Created training chart');
     }
   }
 
@@ -201,7 +187,7 @@ class ChartHandler {
           chart.destroy();
         }
       });
-      this.module.charts = { n2v: null, stage1: null, stage2: null };
+      this.module.charts = { train: null };
     }
   }
 }

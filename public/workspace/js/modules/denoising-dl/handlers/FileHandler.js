@@ -39,9 +39,6 @@ class FileHandler {
     this.parsedConfig = null;
   }
 
-  // Minimum stack depth for 2.5D mode (triplet processing needs sufficient context)
-  static MIN_STACK_DEPTH_2_5D = 20;
-
   /**
    * Handle denoising method change
    * @param {string} method - Selected method ('n2v' or 'autostructn2v')
@@ -61,50 +58,6 @@ class FileHandler {
     this.updateImportSectionContent(method);
 
     this.updateNextButton();
-  }
-
-  /**
-   * Handle mode change (2D / 2.5D)
-   * Re-validates file if one is already selected to check stack depth for 2.5D
-   * @param {string} mode - '2d' or '2.5d'
-   */
-  onModeChange(mode) {
-    console.log('[FileHandler] Mode changed:', mode);
-
-    // If a file was previously validated (successfully), re-check requirements for new mode
-    // Use validationResult.valid instead of fileValidated, since fileValidated may have been
-    // set to false by a previous mode switch (e.g., 2D valid -> 2.5D invalid)
-    if (this.module.validationResult && this.module.validationResult.valid) {
-      const numSlices = this.module.validationResult.info?.num_slices || 0;
-
-      if (mode === '2.5d' && numSlices < FileHandler.MIN_STACK_DEPTH_2_5D) {
-        // Show warning for insufficient stack depth
-        this.module.validationDisplay.showError(
-          'Insufficient Stack Depth for 2.5D',
-          `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices. ` +
-          `Your file has ${numSlices} slices. Please select a deeper stack or switch to 2D mode.`
-        );
-        this.module.fileValidated = false;
-        this.module.state.notify('warning',
-          `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices (current: ${numSlices})`,
-          8000
-        );
-      } else {
-        // Re-show valid state
-        const details = [
-          { label: 'Filename', value: this.module.validationResult.info?.filename || this.module.uploadedFile?.name },
-          { label: 'Dimensions', value: `${this.module.validationResult.info?.dimensions?.width} x ${this.module.validationResult.info?.dimensions?.height}` },
-          { label: 'Slices', value: this.module.validationResult.info?.num_slices?.toString() },
-          { label: 'Bit Depth', value: `${this.module.validationResult.info?.bit_depth}-bit` },
-          { label: 'File Size', value: this.module.validationResult.info?.file_size_formatted },
-          { label: 'Mode', value: mode.toUpperCase() }
-        ];
-        this.module.validationDisplay.showSuccess('File Valid', details);
-        this.module.fileValidated = true;
-      }
-
-      this.updateNextButton();
-    }
   }
 
   /**
@@ -238,8 +191,10 @@ class FileHandler {
       this.importSelectors.config.init();
     }
 
-    // Stage 1 Model Selector - title depends on method
-    const stage1Title = method === 'autostructn2v' ? 'Stage 1 Model (N2V)' : 'Model Weights';
+    // Model selector. Routed checkpoints (new trainings) are a single model
+    // for both methods; the legacy Stage 2 selector below only serves old
+    // two-stage model pairs.
+    const stage1Title = 'Model Weights';
     const stage1ModelContainer = document.getElementById('importStage1ModelSelector');
     if (stage1ModelContainer) {
       this.importSelectors.stage1Model = new FileSelector({
@@ -265,7 +220,7 @@ class FileHandler {
         this.importSelectors.stage2Model = new FileSelector({
           id: 'import_stage2_model',
           fileType: 'models',
-          title: 'Stage 2 Model (Struct-N2V)',
+          title: 'Legacy Stage 2 Model (optional; old two-stage runs only)',
           icon: '🧠',
           helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
           showTestData: false,
@@ -320,7 +275,11 @@ class FileHandler {
     const options = [];
 
     for (const result of results) {
-      const stageData = result[stage];
+      // Routed sessions expose one model under `model`; legacy shapes kept
+      // stage1/stage2 sub-objects. The Stage 2 selector only matches legacy.
+      const stageData = stage === 'stage1'
+        ? (result.model || result.stage1)
+        : result.stage2;
       if (!stageData) continue;
 
       const filePath = stageData.modelPath;
@@ -333,7 +292,7 @@ class FileHandler {
 
       options.push({
         value: filePath,
-        label: `${methodLabel} - ${stage === 'stage1' ? 'Stage 1' : 'Stage 2'} - ${dateStr}`,
+        label: `${methodLabel} - ${dateStr}`,
         path: filePath,
         trainingId: result.trainingId
       });
@@ -577,13 +536,14 @@ class FileHandler {
       return;
     }
 
-    if (method === 'n2v') {
-      // N2V needs config + Stage 1 model
-      this.module.importValidated = this.importValidation.stage1.valid;
-    } else if (method === 'autostructn2v') {
-      // autoStructN2V needs config + Stage 1 model + Stage 2 model
+    if (method === 'n2v' || method === 'autostructn2v') {
+      // Config + the model file. Routed autoStructN2V checkpoints are a
+      // SINGLE model; the legacy Stage 2 selector is optional and only used
+      // for old two-stage model pairs (when provided AND valid, inference
+      // runs the legacy sequential path).
+      const stage2Provided = !!this.importFiles.stage2Model;
       this.module.importValidated = this.importValidation.stage1.valid &&
-                                     this.importValidation.stage2.valid;
+                                     (!stage2Provided || this.importValidation.stage2.valid);
     } else {
       this.module.importValidated = false;
     }
@@ -687,33 +647,13 @@ class FileHandler {
       this.module.validationResult = result;
 
       if (result.valid) {
-        const numSlices = result.info?.num_slices || 0;
-        const mode = this.module.selectedMode;
-
-        // Check 2.5D stack depth requirement
-        if (mode === '2.5d' && numSlices < FileHandler.MIN_STACK_DEPTH_2_5D) {
-          this.module.validationDisplay.showError(
-            'Insufficient Stack Depth for 2.5D',
-            `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices. ` +
-            `Your file has ${numSlices} slices. Please select a deeper stack or switch to 2D mode.`
-          );
-          this.module.state.notify('warning',
-            `2.5D mode requires at least ${FileHandler.MIN_STACK_DEPTH_2_5D} slices (current: ${numSlices})`,
-            8000
-          );
-          this.module.fileValidated = false;
-          this.updateNextButton();
-          return;
-        }
-
         // Build details array
         const details = [
           { label: 'Filename', value: result.info?.filename || this.module.uploadedFile?.name },
           { label: 'Dimensions', value: `${result.info?.dimensions?.width} x ${result.info?.dimensions?.height}` },
           { label: 'Slices', value: result.info?.num_slices?.toString() },
           { label: 'Bit Depth', value: `${result.info?.bit_depth}-bit` },
-          { label: 'File Size', value: result.info?.file_size_formatted },
-          { label: 'Mode', value: mode.toUpperCase() }
+          { label: 'File Size', value: result.info?.file_size_formatted }
         ];
 
         // Add warnings if any

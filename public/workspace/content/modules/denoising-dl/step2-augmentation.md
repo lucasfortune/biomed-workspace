@@ -47,8 +47,6 @@ Data augmentation artificially expands the training dataset by applying random t
 
 ## When to disable
 
-- autoStructN2V Stage 1: Disabled by default because augmentation can interfere with structural noise pattern detection
-
 - If your images have a specific required orientation
 
-Note: For autoStructN2V, augmentation is only available in Stage 2 (advanced options) after the noise pattern has been detected.
+Note: Augmentation does not affect the noise measurement or mask discovery in autoStructN2V, which happen on the raw stack before training.

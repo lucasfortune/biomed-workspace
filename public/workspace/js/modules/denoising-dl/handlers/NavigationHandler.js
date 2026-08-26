@@ -133,13 +133,13 @@ class NavigationHandler {
     console.log('[NavigationHandler] Initializing Step 3...');
 
     // Initialize best val loss tracking
-    this.module.bestValLoss = { n2v: Infinity, stage1: Infinity, stage2: Infinity };
+    this.module.bestValLoss = { train: Infinity };
 
     // Initialize collapsible section handlers
     this.initCollapsibleSections();
 
-    // Charts will be initialized when training starts (after Chart.js is loaded)
-    this.module.charts = { n2v: null, stage1: null, stage2: null };
+    // Chart will be initialized when training starts (after Chart.js is loaded)
+    this.module.charts = { train: null };
 
     // Check if there's an ongoing training to resume
     this.checkTrainingStatus();
@@ -149,22 +149,32 @@ class NavigationHandler {
    * Initialize collapsible section toggle functionality
    */
   initCollapsibleSections() {
-    const headers = document.querySelectorAll('.collapsible-header');
+    // initializeStep3 runs on every visit to step 3; without the
+    // initialized-guard each visit stacked another click listener and an
+    // even number of listeners toggled the section twice per click,
+    // which looked like the sections not collapsing at all.
+    const headers = document.querySelectorAll('.collapsible-section > .collapsible-header:not([data-collapse-initialized])');
     headers.forEach(header => {
-      header.addEventListener('click', () => {
+      header.setAttribute('data-collapse-initialized', 'true');
+      header.addEventListener('click', (e) => {
+        // Clicking the auto-approve toggle inside the mask header must not
+        // collapse the section.
+        if (e.target.closest('.auto-approve-toggle-container')) return;
+
         const section = header.closest('.collapsible-section');
         const icon = header.querySelector('.collapsible-icon');
         const body = section.querySelector('.collapsible-body');
+        if (!section || !body) return;
 
         if (section.classList.contains('expanded')) {
           section.classList.remove('expanded');
           section.classList.add('collapsed');
-          icon.textContent = '\u25B6';
+          if (icon) icon.textContent = '\u25B6';
           body.style.display = 'none';
         } else {
           section.classList.remove('collapsed');
           section.classList.add('expanded');
-          icon.textContent = '\u25BC';
+          if (icon) icon.textContent = '\u25BC';
           body.style.display = 'block';
         }
       });

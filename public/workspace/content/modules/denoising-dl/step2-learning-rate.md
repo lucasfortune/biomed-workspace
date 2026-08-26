@@ -52,5 +52,3 @@ The learning rate determines the step size when updating model weights. This is 
 - Start with 1e-4 (the default)
 
 - Reduce to 1e-5 if training is unstable
-
-- Stage 2 of autoStructN2V often benefits from a lower rate

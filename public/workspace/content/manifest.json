@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "generated": "2026-01-08T12:39:52.022Z",
+  "generated": "2026-08-26T14:01:09.000Z",
   "articles": {
     "getting-started": {
       "id": "getting-started",
@@ -167,8 +167,8 @@
       "path": "modules/denoising-dl/_module.md",
       "seeAlsoManual": [
         "denoising-dl.step1.method",
-        "denoising-dl.step1.mode",
-        "denoising-dl.autostructn2v-detail"
+        "denoising-dl.autostructn2v-detail",
+        "denoising-dl.routing-decision"
       ],
       "seeAlsoTags": [
         "denoising",
@@ -177,26 +177,26 @@
     },
     "denoising-dl.step1.mode": {
       "id": "denoising-dl.step1.mode",
-      "title": "2D vs 2.5D Processing Mode",
-      "displayTitle": "2D vs 2.5D Processing Mode",
+      "title": "Legacy 2.5D Models",
+      "displayTitle": "Legacy 2.5D Models",
       "category": "configuration",
       "module": "denoising-dl",
       "tags": [
         "denoising",
         "2.5d",
-        "volumetric",
-        "mode",
-        "triplet"
+        "legacy",
+        "import",
+        "inference"
       ],
       "path": "modules/denoising-dl/step1-mode.md",
       "seeAlsoManual": [
-        "denoising-dl.step1.method",
-        "denoising-dl.step1.input",
-        "denoising-dl.autostructn2v-detail"
+        "denoising-dl.step1.import.model",
+        "denoising-dl.step1.import.config",
+        "denoising-dl.step1.workflow"
       ],
       "seeAlsoTags": [
         "2.5d",
-        "volumetric"
+        "import"
       ]
     },
     "denoising-dl.step1.method": {
@@ -215,7 +215,7 @@
       "seeAlsoManual": [
         "denoising-dl",
         "denoising-dl.autostructn2v-detail",
-        "denoising-dl.step1.mode"
+        "denoising-dl.routing-decision"
       ],
       "seeAlsoTags": [
         "method-selection"
@@ -231,17 +231,42 @@
         "denoising",
         "autostructn2v",
         "structured-noise",
-        "two-stage"
+        "routing",
+        "spine-mask"
       ],
       "path": "modules/denoising-dl/autostructn2v-detail.md",
       "seeAlsoManual": [
         "denoising-dl.step1.method",
-        "denoising-dl.step1.mode",
+        "denoising-dl.routing-decision",
         "denoising-dl.step3.autostructn2v"
       ],
       "seeAlsoTags": [
         "autostructn2v",
         "structured-noise"
+      ]
+    },
+    "denoising-dl.routing-decision": {
+      "id": "denoising-dl.routing-decision",
+      "title": "Routing Decision",
+      "displayTitle": "Routing Decision",
+      "category": "concept",
+      "module": "denoising-dl",
+      "tags": [
+        "denoising",
+        "autostructn2v",
+        "routing",
+        "dmax",
+        "mask-approval"
+      ],
+      "path": "modules/denoising-dl/routing-decision.md",
+      "seeAlsoManual": [
+        "denoising-dl.autostructn2v-detail",
+        "denoising-dl.step3.autostructn2v",
+        "denoising-dl.step2.mask-extractor.bg-side"
+      ],
+      "seeAlsoTags": [
+        "autostructn2v",
+        "routing"
       ]
     },
     "denoising-dl.step1.workflow": {
@@ -281,7 +306,7 @@
       "path": "modules/denoising-dl/step1-input.md",
       "seeAlsoManual": [
         "denoising-dl.step1.workflow",
-        "denoising-dl.step1.mode",
+        "denoising-dl.step2.mask-extractor.bg-side",
         "denoising-dl"
       ],
       "seeAlsoTags": [
@@ -326,7 +351,7 @@
       "path": "modules/denoising-dl/step1-import-model.md",
       "seeAlsoManual": [
         "denoising-dl.step1.import.config",
-        "denoising-dl.step1.workflow"
+        "denoising-dl.step1.mode"
       ],
       "seeAlsoTags": [
         "import",
@@ -348,7 +373,7 @@
       "path": "modules/denoising-dl/step2-overview.md",
       "seeAlsoManual": [
         "denoising-dl.step2.patch-size",
-        "denoising-dl.step2.epochs"
+        "denoising-dl.step2.mask-extractor.bg-side"
       ],
       "seeAlsoTags": [
         "configuration",
@@ -587,7 +612,7 @@
       "seeAlsoManual": [
         "denoising-dl.step3.loss",
         "denoising-dl.step3.best-val-loss",
-        "denoising-dl.step1.mode"
+        "denoising-dl.step2.masking-strategy"
       ],
       "seeAlsoTags": [
         "n2v",
@@ -604,13 +629,14 @@
         "denoising",
         "autostructn2v",
         "training",
-        "two-stage"
+        "routing",
+        "mask-approval"
       ],
       "path": "modules/denoising-dl/step3-autostructn2v.md",
       "seeAlsoManual": [
         "denoising-dl.autostructn2v-detail",
-        "denoising-dl.step3.loss",
-        "denoising-dl.step1.mode"
+        "denoising-dl.routing-decision",
+        "denoising-dl.step3.loss"
       ],
       "seeAlsoTags": [
         "autostructn2v",
@@ -794,33 +820,33 @@
         "advanced"
       ]
     },
-    "denoising-dl.step2.roi-selection": {
-      "id": "denoising-dl.step2.roi-selection",
-      "title": "ROI Selection",
-      "displayTitle": "ROI Selection",
+    "denoising-dl.step2.mask-extractor.bg-side": {
+      "id": "denoising-dl.step2.mask-extractor.bg-side",
+      "title": "Background Side",
+      "displayTitle": "Background Side",
       "category": "parameter",
       "module": "denoising-dl",
       "tags": [
         "denoising",
-        "roi",
         "autostructn2v",
-        "stage1",
-        "advanced"
+        "mask-extractor",
+        "background"
       ],
-      "path": "modules/denoising-dl/step2-roi-selection.md",
+      "path": "modules/denoising-dl/step2-mask-extractor-bg-side.md",
       "seeAlsoManual": [
-        "denoising-dl.step2.patches-per-image",
+        "denoising-dl.step2.mask-extractor.rho-floor",
+        "denoising-dl.step2.mask-extractor.spine-thresh",
         "denoising-dl.autostructn2v-detail"
       ],
       "seeAlsoTags": [
-        "autostructn2v",
-        "advanced"
+        "mask-extractor",
+        "autostructn2v"
       ]
     },
-    "denoising-dl.step2.mask-extractor.adaptive": {
-      "id": "denoising-dl.step2.mask-extractor.adaptive",
-      "title": "Adaptive Thresholding",
-      "displayTitle": "Adaptive Thresholding",
+    "denoising-dl.step2.mask-extractor.rho-floor": {
+      "id": "denoising-dl.step2.mask-extractor.rho-floor",
+      "title": "Correlation Floor",
+      "displayTitle": "Correlation Floor",
       "category": "parameter",
       "module": "denoising-dl",
       "tags": [
@@ -829,20 +855,21 @@
         "mask-extractor",
         "threshold"
       ],
-      "path": "modules/denoising-dl/step2-mask-extractor-adaptive.md",
+      "path": "modules/denoising-dl/step2-mask-extractor-rho-floor.md",
       "seeAlsoManual": [
-        "denoising-dl.step2.mask-extractor.base-percentile",
-        "denoising-dl.autostructn2v-detail"
+        "denoising-dl.step2.mask-extractor.spine-thresh",
+        "denoising-dl.step2.mask-extractor.max-pixels",
+        "denoising-dl.routing-decision"
       ],
       "seeAlsoTags": [
         "mask-extractor",
         "autostructn2v"
       ]
     },
-    "denoising-dl.step2.mask-extractor.base-percentile": {
-      "id": "denoising-dl.step2.mask-extractor.base-percentile",
-      "title": "Base Percentile",
-      "displayTitle": "Base Percentile",
+    "denoising-dl.step2.mask-extractor.spine-thresh": {
+      "id": "denoising-dl.step2.mask-extractor.spine-thresh",
+      "title": "Spine Threshold",
+      "displayTitle": "Spine Threshold",
       "category": "parameter",
       "module": "denoising-dl",
       "tags": [
@@ -851,32 +878,11 @@
         "mask-extractor",
         "threshold"
       ],
-      "path": "modules/denoising-dl/step2-mask-extractor-base-percentile.md",
+      "path": "modules/denoising-dl/step2-mask-extractor-spine-thresh.md",
       "seeAlsoManual": [
-        "denoising-dl.step2.mask-extractor.adaptive",
-        "denoising-dl.step2.mask-extractor.percentile-decay"
-      ],
-      "seeAlsoTags": [
-        "mask-extractor",
-        "autostructn2v"
-      ]
-    },
-    "denoising-dl.step2.mask-extractor.percentile-decay": {
-      "id": "denoising-dl.step2.mask-extractor.percentile-decay",
-      "title": "Percentile Decay",
-      "displayTitle": "Percentile Decay",
-      "category": "parameter",
-      "module": "denoising-dl",
-      "tags": [
-        "denoising",
-        "autostructn2v",
-        "mask-extractor",
-        "adaptive"
-      ],
-      "path": "modules/denoising-dl/step2-mask-extractor-percentile-decay.md",
-      "seeAlsoManual": [
-        "denoising-dl.step2.mask-extractor.adaptive",
-        "denoising-dl.step2.mask-extractor.base-percentile"
+        "denoising-dl.step2.mask-extractor.rho-floor",
+        "denoising-dl.step2.mask-extractor.bg-side",
+        "denoising-dl.routing-decision"
       ],
       "seeAlsoTags": [
         "mask-extractor",
@@ -885,8 +891,8 @@
     },
     "denoising-dl.step2.mask-extractor.max-pixels": {
       "id": "denoising-dl.step2.mask-extractor.max-pixels",
-      "title": "Max Masked Pixels",
-      "displayTitle": "Max Masked Pixels",
+      "title": "Max Mask Pixels",
+      "displayTitle": "Max Mask Pixels",
       "category": "parameter",
       "module": "denoising-dl",
       "tags": [
@@ -897,7 +903,7 @@
       ],
       "path": "modules/denoising-dl/step2-mask-extractor-max-pixels.md",
       "seeAlsoManual": [
-        "denoising-dl.step2.mask-extractor.adaptive",
+        "denoising-dl.step2.mask-extractor.rho-floor",
         "denoising-dl.autostructn2v-detail"
       ],
       "seeAlsoTags": [
@@ -1879,11 +1885,7 @@
     "2": [
       {
         "term": "2.5D Processing",
-        "definition": "A volumetric processing mode that uses triplets of consecutive slices (z-1, z, z+1) as input to predict the center slice, leveraging inter-slice context for better denoising",
-        "articleId": "denoising-dl"
-      },
-      {
-        "term": "2D vs 2.5D Processing Mode",
+        "definition": "A legacy volumetric mode of the previous two-stage module version that used triplets of consecutive slices (z-1, z, z+1) to predict the center slice; imported 2.5D models remain usable for inference",
         "articleId": "denoising-dl.step1.mode"
       }
     ],
@@ -1957,6 +1959,15 @@
         "articleId": "annotation.step1.source-image"
       },
       {
+        "term": "Spine Mask",
+        "definition": "A one-pixel-wide, 180-degree symmetric mask tracing the significant lines of the noise autocorrelation, used by the StructN2V branch of autoStructN2V",
+        "articleId": "denoising-dl.autostructn2v-detail"
+      },
+      {
+        "term": "Spine Threshold",
+        "articleId": "denoising-dl.step2.mask-extractor.spine-thresh"
+      },
+      {
         "term": "STL Format",
         "definition": "Stereolithography format - a common file format for 3D printing that stores triangle mesh geometry",
         "articleId": "mesh"
@@ -2015,14 +2026,19 @@
         "articleId": "segmentation.step3.dice-score"
       },
       {
+        "term": "Dmax",
+        "definition": "A directionality statistic computed from the noise autocorrelation; values at or above 0.012 route autoStructN2V training to the StructN2V branch",
+        "articleId": "denoising-dl.routing-decision"
+      },
+      {
         "term": "Drawing Tools",
         "articleId": "annotation.step2.tools"
       }
     ],
     "B": [
       {
-        "term": "Base Percentile",
-        "articleId": "denoising-dl.step2.mask-extractor.base-percentile"
+        "term": "Background Side",
+        "articleId": "denoising-dl.step2.mask-extractor.bg-side"
       },
       {
         "term": "Batch Operation",
@@ -2068,10 +2084,6 @@
     ],
     "A": [
       {
-        "term": "Adaptive Thresholding",
-        "articleId": "denoising-dl.step2.mask-extractor.adaptive"
-      },
-      {
         "term": "Annotation",
         "definition": "A labeled mask where each pixel is assigned to a class (background or object categories)",
         "articleId": "annotation"
@@ -2086,7 +2098,7 @@
       },
       {
         "term": "autoStructN2V",
-        "definition": "A two-stage extension of N2V that automatically detects and removes structured noise patterns through Fourier analysis",
+        "definition": "A self-supervised extension of N2V that measures the noise autocorrelation on the raw images and routes automatically between structured masking (StructN2V) and plain N2V",
         "articleId": "denoising-dl"
       },
       {
@@ -2161,9 +2173,14 @@
         "articleId": "annotation"
       },
       {
+        "term": "Mask Coverage (mask_rho2)",
+        "definition": "The sum of squared correlations over the mask's off-center positions; the fraction of the center pixel's noise variance the mask covers",
+        "articleId": "denoising-dl.routing-decision"
+      },
+      {
         "term": "Mask Extraction",
-        "definition": "The process of analyzing N2V residuals in Fourier space to detect periodic noise patterns for Stage 2 training",
-        "articleId": "denoising-dl"
+        "definition": "The automatic discovery of a structural noise mask (spine) from the noise autocorrelation measured on background regions of the raw stack",
+        "articleId": "denoising-dl.autostructn2v-detail"
       },
       {
         "term": "Mask Percentage",
@@ -2174,7 +2191,7 @@
         "articleId": "denoising-dl.step2.masking-strategy"
       },
       {
-        "term": "Max Masked Pixels",
+        "term": "Max Mask Pixels",
         "articleId": "denoising-dl.step2.mask-extractor.max-pixels"
       },
       {
@@ -2217,6 +2234,10 @@
       {
         "term": "Configuration Overview",
         "articleId": "denoising-dl.step2.overview"
+      },
+      {
+        "term": "Correlation Floor",
+        "articleId": "denoising-dl.step2.mask-extractor.rho-floor"
       }
     ],
     "P": [
@@ -2247,10 +2268,6 @@
         "articleId": "segmentation.config.patches-per-image"
       },
       {
-        "term": "Percentile Decay",
-        "articleId": "denoising-dl.step2.mask-extractor.percentile-decay"
-      },
-      {
         "term": "Process Additional Data",
         "articleId": "denoising-dl.step4.overview"
       }
@@ -2259,6 +2276,11 @@
       {
         "term": "N2V Training Process",
         "articleId": "denoising-dl.step3.n2v"
+      },
+      {
+        "term": "Noise Autocorrelation (ACF)",
+        "definition": "The correlation of the noise with itself at different pixel offsets, measured on detrended background tiles; the basis for routing and mask discovery in autoStructN2V",
+        "articleId": "denoising-dl.autostructn2v-detail"
       },
       {
         "term": "Noise2Void (N2V)",
@@ -2309,6 +2331,10 @@
         "articleId": "segmentation.config.learning-rate"
       },
       {
+        "term": "Legacy 2.5D Models",
+        "articleId": "denoising-dl.step1.mode"
+      },
+      {
         "term": "Lineage",
         "definition": "The processing history of a file, tracking which source files were used to create it",
         "articleId": "visualization"
@@ -2338,8 +2364,8 @@
         "articleId": "denoising-dl.step2.resize-conv"
       },
       {
-        "term": "ROI Selection",
-        "articleId": "denoising-dl.step2.roi-selection"
+        "term": "Routing Decision",
+        "articleId": "denoising-dl.routing-decision"
       },
       {
         "term": "Run Denoising",
@@ -2413,8 +2439,8 @@
       },
       {
         "term": "Triplet (2.5D)",
-        "definition": "Three consecutive slices from a stack used as input in 2.5D mode: the slice above (z-1), the center slice (z), and the slice below (z+1)",
-        "articleId": "denoising-dl"
+        "definition": "Three consecutive slices from a stack (z-1, z, z+1) used as input by legacy 2.5D models; current trainings are 2D only",
+        "articleId": "denoising-dl.step1.mode"
       }
     ],
     "V": [

@@ -469,11 +469,12 @@ function createDenoisingRoutes(dependencies) {
     const { method, config, inputFileId, inputPath, mode = '2d' } = req.body;
     const sessionId = req.session.id;
 
-    // Validate mode
-    if (!['2d', '2.5d'].includes(mode)) {
+    // Routed v1.0 trains 2D per-slice only (2.5D was retired with the
+    // two-stage pipeline; legacy 2.5D checkpoints remain usable for inference)
+    if (mode !== '2d') {
       return res.status(400).json({
         success: false,
-        error: 'Mode must be "2d" or "2.5d"'
+        error: 'Training supports mode "2d" only (2.5D was retired with the routed pipeline)'
       });
     }
 
@@ -490,6 +491,15 @@ function createDenoisingRoutes(dependencies) {
       return res.status(400).json({
         success: false,
         error: 'Training configuration is required'
+      });
+    }
+
+    // bg_side is the one required user input of the automatic mask extractor
+    if (method === 'autostructn2v' &&
+        !['light', 'dark', 'off'].includes(config.maskExtractor?.bg_side)) {
+      return res.status(400).json({
+        success: false,
+        error: 'maskExtractor.bg_side is required for autoStructN2V: "light", "dark", or "off"'
       });
     }
 
@@ -532,71 +542,68 @@ function createDenoisingRoutes(dependencies) {
       const outputDir = path.join(workspacePath, 'models', 'denoising', trainingId);
       fs.mkdirSync(outputDir, { recursive: true });
 
-      // Build full training config
-      // Pass the file path as input_dir - the Python wrapper will extract stacks if needed
-      // Restructure config to match Python wrapper expectations:
-      // - stage1, stage2 are direct properties
-      // - maskExtractor becomes stage2.extractor
-      // - Map frontend parameter names to Python parameter names (e.g., epochs -> num_epochs)
+      // Build the routed v1.0 training config (see ADR-006):
+      //   { input_data, mask: {source, extractor}, recipes: {n2v, structn2v} }
+      // The UI's stage1/stage2 form blocks map onto the two branch recipes.
 
-      // Helper to map frontend param names to Python param names
-      const mapStageConfig = (stageConfig) => {
+      // Helper: map a UI stage/recipe block to a routed branch recipe.
+      // 'epochs' -> 'num_epochs' (the Python adapter hoists loop-control keys);
+      // legacy-only keys the routed schema retired are stripped.
+      const mapRecipeConfig = (stageConfig) => {
         if (!stageConfig) return {};
         const mapped = { ...stageConfig };
-        // Map 'epochs' to 'num_epochs' for Python compatibility
         if (mapped.epochs !== undefined) {
           mapped.num_epochs = mapped.epochs;
           delete mapped.epochs;
         }
+        for (const legacyKey of ['use_roi', 'roi_threshold', 'scale_factor',
+                                 'select_background', 'stage1_autostruct_overrides',
+                                 'mask_center_size', 'mask_source']) {
+          delete mapped[legacyKey];
+        }
         return mapped;
       };
 
-      // Helper to map frontend mask extractor params to Python param names
-      // Include ALL parameters to match regenerate mode exactly
+      // Extractor parameters for the automatic mask discovery (routed v1.0):
+      // bg_side is the one required user input; the rest are optional
+      // adjustments over the library defaults (rho_floor 0.05, spine style).
       const mapExtractorConfig = (extractorConfig) => {
         if (!extractorConfig) return {};
-        return {
-          // Core extraction parameters
-          norm_autocorr: extractorConfig.norm_autocorr !== false,
-          log_autocorr: extractorConfig.log_autocorr !== false,
-          crop_autocorr: extractorConfig.crop_autocorr !== false,
-          // Map frontend 'adaptive_thresholding' to Python 'adapt_autocorr'
-          adapt_autocorr: extractorConfig.adaptive_thresholding !== false,
-          adapt_CB: extractorConfig.adapt_CB || 50.0,
-          adapt_DF: extractorConfig.adapt_DF || 0.65,
-          center_size: extractorConfig.center_size || 15,
-          // User-adjustable parameters
-          base_percentile: extractorConfig.base_percentile || 50,
-          percentile_decay: extractorConfig.percentile_decay || 1.035,
-          // Center proximity parameters
-          center_ratio_threshold: extractorConfig.center_ratio_threshold || 0.2,
-          use_center_proximity: extractorConfig.use_center_proximity !== false,
-          center_proximity_threshold: extractorConfig.center_proximity_threshold || 0.95,
-          keep_center_component_only: extractorConfig.keep_center_component_only !== false,
-          // Frontend uses 'max_masked_pixels', Python expects 'max_true_pixels'
-          max_true_pixels: extractorConfig.max_masked_pixels || 25
-        };
+        const mapped = { bg_side: extractorConfig.bg_side };
+        if (extractorConfig.rho_floor !== undefined) mapped.rho_floor = extractorConfig.rho_floor;
+        if (extractorConfig.spine_thresh !== undefined) mapped.spine_thresh = extractorConfig.spine_thresh;
+        if (extractorConfig.max_pixels !== undefined) mapped.max_pixels = extractorConfig.max_pixels;
+        if (extractorConfig.mask_style !== undefined) mapped.mask_style = extractorConfig.mask_style;
+        return mapped;
       };
+
+      const n2vRecipe = mapRecipeConfig(config.stage1);
+      const structRecipe = mapRecipeConfig(config.stage2);
+      // Deliberate branch asymmetry from the publication recipe: N2V branch
+      // BatchNorm (default), StructN2V branch GroupNorm (see
+      // PARAMETER_REFERENCE.md in the asn2v repo).
+      if (structRecipe.norm_type === undefined) structRecipe.norm_type = 'group';
 
       const fullConfig = {
         method,
-        mode, // '2d' or '2.5d'
         training_id: trainingId,
-        input_dir: absoluteInputPath,
+        input_data: absoluteInputPath,
         output_dir: outputDir,
         experiment_name: trainingId,
         device: 'cuda', // Will fallback to CPU in wrapper
         verbose: false,
-        // Spread stage1 config with mapped parameter names
-        stage1: mapStageConfig(config.stage1),
-        // Spread stage2 config with mapped names and add extractor from maskExtractor
-        stage2: {
-          ...mapStageConfig(config.stage2),
-          extractor: mapExtractorConfig(config.maskExtractor)
+        normalize_method: 'zscore',
+        mask: method === 'autostructn2v'
+          ? { source: 'extractor', extractor: mapExtractorConfig(config.maskExtractor) }
+          : { source: 'center', center_size: 1 },
+        recipes: {
+          n2v: n2vRecipe,
+          structn2v: structRecipe
         },
         // Add workspace directory for output file organization
         workspace_dir: workspacePath,
-        // For autoStructN2V: pause after mask extraction to allow user approval
+        // autoStructN2V pauses after the (seconds-fast, pre-training) mask/route
+        // step so the user can approve the discovered mask
         pauseAfterMask: config.pauseAfterMask || false
       };
 
@@ -633,7 +640,7 @@ function createDenoisingRoutes(dependencies) {
           username: req.session.user?.username || 'unknown',
           method,
           status: 'initializing',
-          stage: 'stage1'
+          stage: 'mask'
         });
       }
 
@@ -716,8 +723,7 @@ function createDenoisingRoutes(dependencies) {
         success: true,
         status: session.status,
         method: session.method,  // Include method at top level for easy access
-        stage1History: session.stage1History || [],  // History for chart restoration
-        stage2History: session.stage2History || [],  // History for chart restoration
+        trainHistory: session.trainHistory || [],  // History for chart restoration
         session: {
           id: session.id,
           method: session.method,
@@ -725,9 +731,8 @@ function createDenoisingRoutes(dependencies) {
           stage: session.stage,
           startTime: session.startTime,
           endTime: session.endTime,
-          stage1: session.stage1,
           mask: session.mask,
-          stage2: session.stage2,
+          train: session.train,
           experimentDir: session.experimentDir,
           error: session.error
         }
@@ -974,12 +979,14 @@ function createDenoisingRoutes(dependencies) {
           });
         }
 
-        // Determine which model to use
-        const useStage = stage || (trainSession.method === 'autostructn2v' && trainSession.stage2?.modelPath ? 'stage2' : 'stage1');
-        // Check both possible locations for stage1 model path (nested for N2V completion, root level for autoStructN2V paused state)
-        const rawModelPath = useStage === 'stage2'
-          ? trainSession.stage2?.modelPath
-          : (trainSession.stage1?.modelPath || trainSession.stage1ModelPath);
+        // Routed sessions have ONE model (session.train / outputFiles.model);
+        // the stage-based lookups remain as fallback for legacy sessions.
+        const useStage = stage || 'stage1';
+        const rawModelPath = trainSession.train?.modelPath
+          || trainSession.outputFiles?.model
+          || (useStage === 'stage2'
+            ? trainSession.stage2?.modelPath
+            : (trainSession.stage1?.modelPath || trainSession.stage1ModelPath));
 
         // Resolve model path - paths from training session may already include workspace prefix
         // or be relative to workspace, so check before joining
@@ -1000,21 +1007,26 @@ function createDenoisingRoutes(dependencies) {
         if (!modelPath || !fs.existsSync(modelPath)) {
           return res.status(400).json({
             success: false,
-            error: `${useStage} model not found. Training may not be complete.`
+            error: 'Trained model not found. Training may not be complete.'
           });
         }
 
-        // Get model config from training session
-        const stageConfig = trainSession.config?.[useStage] || {};
+        // Model config fallback for the Python side. The checkpoint's own
+        // hparams are authoritative (routed checkpoints carry the full branch
+        // recipe); this only backstops legacy checkpoints without hparams.
+        const branch = trainSession.train?.branch;
+        const recipeConfig = trainSession.config?.recipes?.[branch]
+          || trainSession.config?.[useStage] || {};
         const modelConfig = {
-          features: stageConfig.features || 64,
-          num_layers: stageConfig.num_layers || 2,
-          patch_size: stageConfig.patch_size || 64,
-          use_resize_conv: stageConfig.use_resize_conv !== false,
-          upsampling_mode: stageConfig.upsampling_mode || 'bilinear'
+          features: recipeConfig.features || 64,
+          num_layers: recipeConfig.num_layers || 2,
+          patch_size: recipeConfig.patch_size || 64,
+          use_resize_conv: recipeConfig.use_resize_conv !== false,
+          upsampling_mode: recipeConfig.upsampling_mode || 'bilinear'
         };
 
-        // Get mode from training session or request
+        // Get mode from training session or request (legacy checkpoints only;
+        // routed checkpoints are always 2D and ignore this)
         const mode = requestMode || trainSession.mode || trainSession.config?.mode || '2d';
 
         // Start inference
@@ -1076,15 +1088,17 @@ function createDenoisingRoutes(dependencies) {
    * Regenerate structural noise mask with new parameters
    * POST /api/denoising/dl/regenerate-mask
    *
-   * Body:
-   *   - trainingId: Training ID of completed Stage 1
-   *   - parameters: New mask extraction parameters
-   *     - adaptive_thresholding: boolean
-   *     - base_percentile: number (30-70)
-   *     - percentile_decay: number (1.0-1.3)
-   *     - max_masked_pixels: number (10-40)
+   * Runs the routed extractor on the RAW input stack (seconds, no training).
    *
-   * Returns new mask data for visualization.
+   * Body:
+   *   - trainingId: Training ID paused at mask approval
+   *   - parameters: Extractor adjustments (routed v1.0)
+   *     - bg_side: 'light' | 'dark' | 'off'
+   *     - rho_floor: number (0-0.15; effect-size floor, default 0.05)
+   *     - spine_thresh: number (|z| certainty threshold, default 8)
+   *     - max_pixels: number | null (cap on masked pixels)
+   *
+   * Returns new mask + route decision data for visualization.
    */
   router.post('/dl/regenerate-mask', requireAuth, async (req, res) => {
     const { trainingId, parameters } = req.body;
@@ -1115,32 +1129,28 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      // Check if Stage 1 is complete or paused at mask
-      if (session.status !== 'stage1_complete' && session.status !== 'mask_complete' && session.status !== 'paused_at_mask') {
+      // Regeneration is available while the run is paused for mask approval
+      if (session.status !== 'paused_at_mask' && session.status !== 'mask_complete') {
         return res.status(400).json({
           success: false,
-          error: 'Stage 1 must be complete before regenerating mask'
+          error: 'Mask regeneration requires a run paused at mask approval'
         });
       }
 
-      // Get Stage 1 experiment directory
-      const stage1Dir = session.experimentDir;
-      if (!stage1Dir || !fs.existsSync(stage1Dir)) {
+      // Get the experiment directory (holds the run's config + route artifacts)
+      const experimentDir = session.experimentDir;
+      if (!experimentDir || !fs.existsSync(experimentDir)) {
         return res.status(400).json({
           success: false,
-          error: 'Stage 1 output directory not found'
+          error: 'Experiment directory not found'
         });
       }
 
-      // Get mode from session
-      const mode = session.mode || session.config?.mode || '2d';
-
-      // Regenerate mask with new parameters
+      // Regenerate mask with new parameters (raw stack, seconds)
       const result = await denoisingService.regenerateMask({
         trainingId,
-        stage1Dir,
-        parameters: parameters || {},
-        mode  // '2d' or '2.5d'
+        experimentDir,
+        parameters: parameters || {}
       }, io);
 
       res.json({
@@ -1205,52 +1215,42 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      // Verify required paths exist
-      if (!session.stage1ModelPath || !fs.existsSync(session.stage1ModelPath)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Stage 1 model not found. Cannot continue.'
-        });
-      }
-
-      if (!session.maskPath || !fs.existsSync(session.maskPath)) {
+      // Verify the approved mask exists (nothing is trained before approval
+      // in the routed pipeline, so the mask is the only prerequisite).
+      // A regenerated mask (session.mask.maskPath) wins over the original.
+      const approvedMaskPath = session.mask?.maskPath || session.maskPath;
+      if (!approvedMaskPath || !fs.existsSync(approvedMaskPath)) {
         return res.status(400).json({
           success: false,
           error: 'Mask file not found. Cannot continue.'
         });
       }
 
-      // Get mode from session
-      const mode = session.mode || session.config?.mode || '2d';
-
       if (logger) {
         logger.info('[Denoising] Continuing training after mask approval:', {
           trainingId,
-          stage1ModelPath: session.stage1ModelPath,
-          maskPath: session.maskPath,
-          mode
+          maskPath: approvedMaskPath,
+          branch: session.mask?.branch
         });
       }
 
-      // Continue training with Stage 2
+      // Run the single routed training with the approved mask
       denoisingService.continueTraining({
         trainingId,
-        session,
-        mode  // Pass mode explicitly for clarity
+        session
       }, io);
 
       if (activityLogger) {
         activityLogger.logActivity(req.session.user.username, 'dl_denoising_continue', {
           trainingId,
-          stage: 'stage2',
-          mode
+          branch: session.mask?.branch
         });
       }
 
       res.json({
         success: true,
         trainingId,
-        message: 'Stage 2 training started. Continue monitoring Socket.IO room for progress.'
+        message: 'Training started with the approved mask. Continue monitoring Socket.IO room for progress.'
       });
 
     } catch (error) {
@@ -1265,13 +1265,15 @@ function createDenoisingRoutes(dependencies) {
   });
 
   /**
-   * Skip Stage 2 training and use N2V (Stage 1) results only
+   * Force plain N2V after mask approval
    * POST /api/denoising/dl/skip-stage2
    *
    * Body:
    *   - trainingId: Training ID paused at mask approval
    *
-   * Marks training as complete with Stage 1 results only, tracks output files.
+   * Overrides the routing decision and trains the plain-N2V branch (1x1
+   * center kernel) instead of the discovered structural mask. The endpoint
+   * path keeps its historic name for client compatibility.
    */
   router.post('/dl/skip-stage2', requireAuth, async (req, res) => {
     const { trainingId } = req.body;
@@ -1306,42 +1308,30 @@ function createDenoisingRoutes(dependencies) {
       if (session.status !== 'paused_at_mask') {
         return res.status(400).json({
           success: false,
-          error: `Cannot skip Stage 2: session status is '${session.status}', expected 'paused_at_mask'`
-        });
-      }
-
-      // Verify Stage 1 model exists
-      if (!session.stage1ModelPath || !fs.existsSync(session.stage1ModelPath)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Stage 1 model not found. Cannot complete training.'
+          error: `Cannot force N2V: session status is '${session.status}', expected 'paused_at_mask'`
         });
       }
 
       if (logger) {
-        logger.info('[Denoising] Skipping Stage 2 for training:', {
-          trainingId,
-          stage1ModelPath: session.stage1ModelPath
-        });
+        logger.info('[Denoising] Forcing plain N2V for training:', { trainingId });
       }
 
-      // Skip Stage 2 and finalize with Stage 1 results
-      await denoisingService.skipStage2Training({
+      // Train the N2V branch (1x1 center kernel) instead of the discovered mask
+      denoisingService.forceN2VTraining({
         trainingId,
         session
       }, io);
 
       if (activityLogger) {
-        activityLogger.logActivity(req.session.user.username, 'dl_denoising_skip_stage2', {
-          trainingId,
-          stage: 'stage2_skipped'
+        activityLogger.logActivity(req.session.user.username, 'dl_denoising_force_n2v', {
+          trainingId
         });
       }
 
       res.json({
         success: true,
         trainingId,
-        message: 'Stage 2 skipped. Training completed with N2V (Stage 1) results only.'
+        message: 'Training started with plain N2V (routing decision overridden).'
       });
 
     } catch (error) {

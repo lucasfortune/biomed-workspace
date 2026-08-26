@@ -1,11 +1,30 @@
 /**
  * ProgressHandler.js - Training Progress Management for DL Denoising Module
  *
- * Handles Socket.IO event handlers for training progress updates,
- * stage transitions, and completion events.
+ * Handles Socket.IO event handlers for the routed training flow:
+ * noise analysis/mask (seconds) -> [pause for approval] -> single training
+ * -> full-stack prediction -> finalize.
  */
 
 import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
+
+// Events emitted by the backend for a training room. Stage names map to
+// `denoising-${stage}-progress|complete`; see DenoisingService._handleProgress.
+const TRAINING_EVENTS = [
+  'denoising-init-progress',
+  'denoising-data-progress',
+  'denoising-mask-progress',
+  'denoising-mask-complete',
+  'denoising-paused',
+  'denoising-train-progress',
+  'denoising-train-complete',
+  'denoising-predict-progress',
+  'denoising-cleanup-progress',
+  'denoising-complete-complete',
+  'denoising-training-complete',
+  'denoising-cancelled',
+  'denoising-error'
+];
 
 class ProgressHandler {
   /**
@@ -26,7 +45,6 @@ class ProgressHandler {
 
     // Get or create socket connection
     if (!this.module.socket) {
-      // Use existing socket connection from workspace or create new one
       if (window.io) {
         this.module.socket = window.io();
       } else {
@@ -52,79 +70,52 @@ class ProgressHandler {
     if (!this.module.socket) return;
 
     // Remove existing listeners to prevent duplicates
-    this.module.socket.off('denoising-init-progress');
-    this.module.socket.off('denoising-data-progress');
-    this.module.socket.off('denoising-stage1-progress');
-    this.module.socket.off('denoising-stage1-complete');
-    this.module.socket.off('denoising-mask-progress');
-    this.module.socket.off('denoising-mask-complete');
-    this.module.socket.off('denoising-paused');
-    this.module.socket.off('denoising-stage2-progress');
-    this.module.socket.off('denoising-stage2-complete');
-    this.module.socket.off('denoising-cleanup-progress');
-    this.module.socket.off('denoising-complete-complete');
-    this.module.socket.off('denoising-training-complete');
-    this.module.socket.off('denoising-cancelled');
-    this.module.socket.off('denoising-error');
+    TRAINING_EVENTS.forEach(evt => this.module.socket.off(evt));
 
-    // Init progress (device setup, GPU check)
     this.module.socket.on('denoising-init-progress', (data) => {
       console.log('[ProgressHandler] Init progress:', data);
       this.handleInitProgress(data);
     });
 
-    // Data progress (extracting stack, splitting data)
     this.module.socket.on('denoising-data-progress', (data) => {
       console.log('[ProgressHandler] Data progress:', data);
       this.handleDataProgress(data);
     });
 
-    // Stage 1 progress
-    this.module.socket.on('denoising-stage1-progress', (data) => {
-      console.log('[ProgressHandler] Stage 1 progress:', data);
-      this.handleStage1Progress(data);
-    });
-
-    // Stage 1 complete
-    this.module.socket.on('denoising-stage1-complete', (data) => {
-      console.log('[ProgressHandler] Stage 1 complete:', data);
-      this.handleStage1Complete(data);
-    });
-
-    // Mask extraction progress (autoStructN2V only)
+    // Mask/route analysis (autoStructN2V; runs in seconds on the raw stack)
     this.module.socket.on('denoising-mask-progress', (data) => {
       console.log('[ProgressHandler] Mask progress:', data);
       this.handleMaskProgress(data);
     });
 
-    // Mask extraction complete
     this.module.socket.on('denoising-mask-complete', (data) => {
       console.log('[ProgressHandler] Mask complete:', data);
       this.handleMaskComplete(data);
     });
 
-    // Training paused for mask approval (autoStructN2V only)
+    // Run paused for mask approval (BEFORE any training)
     this.module.socket.on('denoising-paused', (data) => {
-      console.log('[ProgressHandler] Training paused for mask approval:', data);
+      console.log('[ProgressHandler] Paused for mask approval:', data);
       this.handleTrainingPaused(data);
     });
 
-    // Stage 2 progress (autoStructN2V only)
-    this.module.socket.on('denoising-stage2-progress', (data) => {
-      console.log('[ProgressHandler] Stage 2 progress:', data);
-      this.handleStage2Progress(data);
+    // The single routed training
+    this.module.socket.on('denoising-train-progress', (data) => {
+      this.handleTrainProgress(data);
     });
 
-    // Stage 2 complete
-    this.module.socket.on('denoising-stage2-complete', (data) => {
-      console.log('[ProgressHandler] Stage 2 complete:', data);
-      this.handleStage2Complete(data);
+    this.module.socket.on('denoising-train-complete', (data) => {
+      console.log('[ProgressHandler] Training model complete:', data);
+      this.handleTrainComplete(data);
     });
 
-    // Cleanup progress
+    // Full-stack prediction after training
+    this.module.socket.on('denoising-predict-progress', (data) => {
+      this.handlePredictProgress(data);
+    });
+
     this.module.socket.on('denoising-cleanup-progress', (data) => {
-      console.log('[ProgressHandler] Cleanup progress:', data);
-      this.handleCleanupProgress(data);
+      // Finalization status is reflected via the complete events
     });
 
     // Final result (when Python script emits complete stage result)
@@ -139,13 +130,11 @@ class ProgressHandler {
       this.handleTrainingComplete(data);
     });
 
-    // Training error
     this.module.socket.on('denoising-error', (data) => {
       console.error('[ProgressHandler] Training error:', data);
       this.handleTrainingError(data);
     });
 
-    // Training cancelled (from backend when process is killed)
     this.module.socket.on('denoising-cancelled', (data) => {
       console.log('[ProgressHandler] Training cancelled:', data);
       this.handleTrainingCancelled(data);
@@ -157,21 +146,7 @@ class ProgressHandler {
    */
   disconnectSocket() {
     if (this.module.socket) {
-      // Remove all event listeners to prevent memory leaks and duplicate handlers
-      this.module.socket.off('denoising-init-progress');
-      this.module.socket.off('denoising-data-progress');
-      this.module.socket.off('denoising-stage1-progress');
-      this.module.socket.off('denoising-stage1-complete');
-      this.module.socket.off('denoising-mask-progress');
-      this.module.socket.off('denoising-mask-complete');
-      this.module.socket.off('denoising-paused');
-      this.module.socket.off('denoising-stage2-progress');
-      this.module.socket.off('denoising-stage2-complete');
-      this.module.socket.off('denoising-cleanup-progress');
-      this.module.socket.off('denoising-complete-complete');
-      this.module.socket.off('denoising-training-complete');
-      this.module.socket.off('denoising-error');
-      this.module.socket.off('denoising-cancelled');
+      TRAINING_EVENTS.forEach(evt => this.module.socket.off(evt));
 
       // Leave the room if connected
       if (this.module.socketConnected && this.module.trainingId) {
@@ -188,27 +163,21 @@ class ProgressHandler {
     console.log('[ProgressHandler] Device:', data.device, 'GPU available:', data.gpuAvailable);
 
     if (this.module.trainingProgress) {
-      // Update status to show initialization complete
       this.module.trainingProgress.updateStatus('Preparing data...');
     }
 
-    this.module.state.notify('info', `Training initialized on ${data.device.toUpperCase()}`);
+    this.module.state.notify('info', `Run initialized on ${(data.device || 'cpu').toUpperCase()}`);
   }
 
   /**
-   * Handle data preparation progress (extracting stack, splitting)
+   * Handle data preparation progress (loading, splitting)
    */
   handleDataProgress(data) {
     if (this.module.trainingProgress) {
-      if (data.status === 'extracting_stack') {
-        const msg = data.current && data.total
-          ? `Extracting TIFF stack: ${data.current}/${data.total}`
-          : 'Extracting TIFF stack...';
-        this.module.trainingProgress.updateStatus(msg);
-      } else if (data.status === 'extraction_complete') {
-        this.module.trainingProgress.updateStatus(`Extracted ${data.numSlices} slices`);
-      } else if (data.status === 'splitting') {
-        this.module.trainingProgress.updateStatus('Splitting dataset...');
+      if (data.status === 'splitting') {
+        this.module.trainingProgress.updateStatus('Loading and splitting dataset...');
+      } else if (data.status === 'loaded') {
+        this.module.trainingProgress.updateStatus(`Loaded ${data.numSlices} slices`);
       }
     }
   }
@@ -223,7 +192,8 @@ class ProgressHandler {
     this.module.trainingResult = {
       trainingId: data.training_id,
       method: data.method,
-      stagesRun: data.stagesRun,
+      branch: data.branch,
+      routeReason: data.routeReason,
       outputFiles: data.outputFiles
     };
 
@@ -239,280 +209,157 @@ class ProgressHandler {
   }
 
   /**
-   * Handle Stage 1 progress update
+   * Convert a payload's maskArray (0/1 ints) to the boolean grid the
+   * visualization expects. Falls back to a synthetic grid only when the
+   * payload carries no array (should not happen in the routed flow).
    */
-  handleStage1Progress(data) {
-    // Update progress timestamp for stale detection
-    TrainingSessionPersistence.updateProgress();
-
-    // Determine prefix based on method
-    const prefix = this.module.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
-
-    // Update progress bar
-    const progressPercent = data.totalEpochs > 0 ? (data.epoch / data.totalEpochs) * 100 : 0;
-    const progressFill = document.getElementById(`${prefix}ProgressFill`);
-    if (progressFill) {
-      progressFill.style.width = `${progressPercent}%`;
-    }
-
-    // Update epoch counter
-    const currentEpoch = document.getElementById(`${prefix}CurrentEpoch`);
-    const totalEpochs = document.getElementById(`${prefix}TotalEpochs`);
-    if (currentEpoch) currentEpoch.textContent = data.epoch || 0;
-    if (totalEpochs) totalEpochs.textContent = data.totalEpochs || 0;
-
-    // Update status text
-    const statusText = document.getElementById(`${prefix}StatusText`);
-    if (statusText) {
-      statusText.textContent = 'Training...';
-    }
-
-    // Update metrics
-    const trainLoss = document.getElementById(`${prefix}TrainLoss`);
-    const valLoss = document.getElementById(`${prefix}ValLoss`);
-    const bestValLoss = document.getElementById(`${prefix}BestValLoss`);
-
-    if (trainLoss && data.trainLoss != null) {
-      trainLoss.textContent = data.trainLoss.toFixed(6);
-    }
-    if (valLoss && data.valLoss != null) {
-      valLoss.textContent = data.valLoss.toFixed(6);
-    }
-
-    // Track and update best validation loss
-    if (data.valLoss != null && data.valLoss > 0) {
-      const lossKey = this.module.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
-      if (data.valLoss < this.module.bestValLoss[lossKey]) {
-        this.module.bestValLoss[lossKey] = data.valLoss;
+  _maskDataFromPayload(data) {
+    if (data.maskArray && Array.isArray(data.maskArray)) {
+      // Legacy 3D triplet masks (array of 3 2D arrays) only appear when
+      // viewing old sessions; new masks are always 2D.
+      if (data.maskArray.length === 3 &&
+          Array.isArray(data.maskArray[0]) &&
+          Array.isArray(data.maskArray[0][0])) {
+        return data.maskArray.map(slice =>
+          slice.map(row => row.map(val => Boolean(val)))
+        );
       }
-      if (bestValLoss && this.module.bestValLoss[lossKey] !== Infinity) {
-        bestValLoss.textContent = this.module.bestValLoss[lossKey].toFixed(6);
-      }
+      return data.maskArray.map(row => row.map(val => Boolean(val)));
     }
-
-    // Update loss chart
-    const chartKey = this.module.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
-    if (data.epoch && data.trainLoss != null) {
-      this.module.addChartPoint(chartKey, data.epoch, data.trainLoss, data.valLoss);
-    }
+    console.warn('[ProgressHandler] No maskArray in payload, using synthetic grid');
+    return this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
   }
 
   /**
-   * Handle Stage 1 completion
-   */
-  handleStage1Complete(data) {
-    const prefix = this.module.selectedMethod === 'n2v' ? 'n2v' : 'stage1';
-
-    // Update status badge
-    this.module.updateStageStatus(prefix, 'completed', 'Complete');
-
-    // Update status text
-    const statusText = document.getElementById(`${prefix}StatusText`);
-    if (statusText) {
-      statusText.textContent = 'Stage 1 training complete!';
-    }
-
-    // Update progress bar to 100%
-    const progressFill = document.getElementById(`${prefix}ProgressFill`);
-    if (progressFill) {
-      progressFill.style.width = '100%';
-    }
-
-    // For N2V-only, we're essentially done (just cleanup remaining)
-    if (this.module.selectedMethod === 'n2v') {
-      this.module.state.notify('success', 'N2V training complete, finalizing output...');
-    } else {
-      // For autoStructN2V, update mask status to show it's starting
-      this.module.updateStageStatus('mask', 'training', 'Extracting...');
-    }
-
-    // Refresh workspace file browser to show Stage 1 output files
-    if (window.workspace?.fileBrowser) {
-      window.workspace.fileBrowser.refresh();
-    }
-  }
-
-  /**
-   * Handle mask extraction progress
+   * Handle mask/route analysis progress
    */
   handleMaskProgress(data) {
-    // Update mask status
-    this.module.updateStageStatus('mask', 'training', 'Extracting mask...');
+    this.module.updateStageStatus('mask', 'training', 'Analyzing noise...');
   }
 
   /**
-   * Handle mask extraction completion
+   * Handle mask extraction completion (mask + route decision available)
    */
   handleMaskComplete(data) {
-    // Update mask status
     this.module.updateStageStatus('mask', 'completed', 'Complete');
 
-    // Initialize mask UI for autoStructN2V
     if (this.module.selectedMethod === 'autostructn2v') {
       this.module.initializeMaskUI();
-
-      // Use real maskArray if provided, otherwise create mock grid for visualization
-      let maskData;
-      if (data.maskArray && Array.isArray(data.maskArray)) {
-        // Check if it's a 3D mask (for 2.5D mode): array of 3 2D arrays
-        if (data.maskArray.length === 3 &&
-            Array.isArray(data.maskArray[0]) &&
-            Array.isArray(data.maskArray[0][0])) {
-          // 3D mask: convert each slice to boolean
-          maskData = data.maskArray.map(slice =>
-            slice.map(row => row.map(val => Boolean(val)))
-          );
-        } else {
-          // 2D mask: convert to boolean
-          maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
-        }
-      } else {
-        // Fallback to mock grid (for backwards compatibility)
-        maskData = this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
-      }
-
+      this.module.maskHandler.renderRouteDecision(data);
       this.module.updateMaskVisualization({
-        mask: maskData,
+        mask: this._maskDataFromPayload(data),
         kernelSize: data.kernelSize,
         kernelHeight: data.kernelHeight,
         kernelWidth: data.kernelWidth,
         activePixels: data.activePixels,
         pattern: data.pattern,
-        isEmpty: data.isEmpty
+        isEmpty: data.isEmpty,
+        branch: data.branch
       });
-
-      // Note: For pause-and-resume workflow, mask actions will be shown by handleTrainingPaused
-      // For continuous workflow (legacy), show them here
-      if (!this.module.trainingConfig?.pauseAfterMask) {
-        const maskActions = document.getElementById('maskActions');
-        if (maskActions) {
-          maskActions.style.display = 'block';
-        }
-      }
     }
   }
 
   /**
-   * Handle training paused for mask approval (autoStructN2V only)
-   * This is called when the Python process exits after mask extraction,
-   * waiting for user approval before starting Stage 2.
+   * Handle run paused for mask approval (autoStructN2V only).
+   * Emitted when the Python process exits cleanly after the (seconds-fast)
+   * noise analysis, BEFORE any training. The user approves, adjusts, or
+   * overrides to plain N2V from here.
    */
   handleTrainingPaused(data) {
-    console.log('[ProgressHandler] Training paused, awaiting mask approval');
+    console.log('[ProgressHandler] Paused, awaiting mask approval');
 
     // Update localStorage stage to paused_at_mask
     TrainingSessionPersistence.updateStage('paused_at_mask');
 
-    // Update mask status to show awaiting approval
     this.module.updateStageStatus('mask', 'completed', 'Awaiting Approval');
 
     // Initialize mask UI if not already done
     this.module.initializeMaskUI();
 
-    // Use real maskArray for visualization (this should always be present for pause workflow)
-    let maskData;
-    if (data.maskArray && Array.isArray(data.maskArray)) {
-      // Check if it's a 3D mask (for 2.5D mode): array of 3 2D arrays
-      if (data.maskArray.length === 3 &&
-          Array.isArray(data.maskArray[0]) &&
-          Array.isArray(data.maskArray[0][0])) {
-        // 3D mask: convert each slice to boolean
-        maskData = data.maskArray.map(slice =>
-          slice.map(row => row.map(val => Boolean(val)))
-        );
-      } else {
-        // 2D mask: convert to boolean
-        maskData = data.maskArray.map(row => row.map(val => Boolean(val)));
-      }
-    } else {
-      // Fallback (shouldn't happen in normal pause workflow)
-      console.warn('[ProgressHandler] No maskArray in paused data, using mock');
-      maskData = this.module.maskHandler.createMaskGrid(data.kernelSize, data.activePixels, data.pattern);
-    }
+    // Show the routing decision (branch, reason, Dmax, mask_rho2)
+    this.module.maskHandler.renderRouteDecision(data);
 
     this.module.updateMaskVisualization({
-      mask: maskData,
+      mask: this._maskDataFromPayload(data),
       kernelSize: data.kernelSize,
       kernelHeight: data.kernelHeight,
       kernelWidth: data.kernelWidth,
       activePixels: data.activePixels,
       pattern: data.pattern,
-      isEmpty: data.activePixels < 2
+      isEmpty: data.isEmpty != null ? data.isEmpty : data.activePixels < 2,
+      branch: data.branch
     });
 
-    // Disable the auto-approve toggle now that mask extraction is complete
+    // Disable the auto-approve toggle now that the analysis is complete
     this.module.updateAutoApproveToggleState(false);
 
     // Check if auto-approve is enabled
     if (this.module.autoApproveEnabled) {
-      console.log('[ProgressHandler] Auto-approve enabled, automatically approving mask...');
-
-      // Update status to show auto-approval
+      console.log('[ProgressHandler] Auto-approve enabled, approving mask...');
       this.module.updateStageStatus('mask', 'completed', 'Auto-approved');
 
       if (this.module.trainingProgress) {
-        this.module.trainingProgress.updateStatus('Mask auto-approved, starting Stage 2...');
+        this.module.trainingProgress.updateStatus('Mask auto-approved, starting training...');
       }
 
-      // Automatically trigger mask approval
       this.module.approveMask();
       return; // Exit early - don't show manual approval UI
     }
 
-    // Manual approval flow continues below...
-
-    // Show mask action buttons (Approve/Skip)
+    // Manual approval flow: show action buttons
     const maskActions = document.getElementById('maskActions');
     if (maskActions) {
       maskActions.style.display = 'block';
     }
 
-    // Update training progress component
     if (this.module.trainingProgress) {
-      this.module.trainingProgress.updateStatus('Mask extracted - awaiting your approval');
+      this.module.trainingProgress.updateStatus('Noise analyzed - awaiting your approval');
     }
 
-    // Keep socket connected - we'll need it when Stage 2 starts
-    this.module.state.notify('info', 'Mask extracted. Review and approve to continue to Stage 2.');
+    // Keep socket connected - we'll need it when training starts
+    this.module.state.notify('info', 'Noise analysis complete. Review the discovered mask to start training.');
   }
 
   /**
-   * Handle Stage 2 progress update
+   * Handle training progress update (the single routed model)
    */
-  handleStage2Progress(data) {
-    // Update localStorage stage to stage2 (only on first progress update)
+  handleTrainProgress(data) {
+    // Update localStorage stage on first epoch
     if (data.epoch === 1) {
-      TrainingSessionPersistence.updateStage('stage2');
+      TrainingSessionPersistence.updateStage('train');
     }
     // Update progress timestamp for stale detection
     TrainingSessionPersistence.updateProgress();
 
+    // Show the branch that is actually training in the section title
+    if (data.branch) {
+      this.module.setTrainSectionBranch(data.branch);
+    }
+
     // Update progress bar
     const progressPercent = data.totalEpochs > 0 ? (data.epoch / data.totalEpochs) * 100 : 0;
-    const progressFill = document.getElementById('stage2ProgressFill');
+    const progressFill = document.getElementById('trainProgressFill');
     if (progressFill) {
       progressFill.style.width = `${progressPercent}%`;
     }
 
     // Update epoch counter
-    const currentEpoch = document.getElementById('stage2CurrentEpoch');
-    const totalEpochs = document.getElementById('stage2TotalEpochs');
+    const currentEpoch = document.getElementById('trainCurrentEpoch');
+    const totalEpochs = document.getElementById('trainTotalEpochs');
     if (currentEpoch) currentEpoch.textContent = data.epoch || 0;
     if (totalEpochs) totalEpochs.textContent = data.totalEpochs || 0;
 
     // Update status text
-    const statusText = document.getElementById('stage2StatusText');
+    const statusText = document.getElementById('trainStatusText');
     if (statusText) {
       statusText.textContent = 'Training...';
     }
-
-    // Update status badge to show training is active (was "Starting..." from mask approval)
-    this.module.updateStageStatus('stage2', 'training', 'Training...');
+    this.module.updateStageStatus('train', 'training', 'Training...');
 
     // Update metrics
-    const trainLoss = document.getElementById('stage2TrainLoss');
-    const valLoss = document.getElementById('stage2ValLoss');
-    const bestValLoss = document.getElementById('stage2BestValLoss');
+    const trainLoss = document.getElementById('trainTrainLoss');
+    const valLoss = document.getElementById('trainValLoss');
+    const bestValLoss = document.getElementById('trainBestValLoss');
 
     if (trainLoss && data.trainLoss != null) {
       trainLoss.textContent = data.trainLoss.toFixed(6);
@@ -523,67 +370,61 @@ class ProgressHandler {
 
     // Track and update best validation loss
     if (data.valLoss != null && data.valLoss > 0) {
-      if (data.valLoss < this.module.bestValLoss.stage2) {
-        this.module.bestValLoss.stage2 = data.valLoss;
+      if (data.valLoss < this.module.bestValLoss.train) {
+        this.module.bestValLoss.train = data.valLoss;
       }
-      if (bestValLoss && this.module.bestValLoss.stage2 !== Infinity) {
-        bestValLoss.textContent = this.module.bestValLoss.stage2.toFixed(6);
+      if (bestValLoss && this.module.bestValLoss.train !== Infinity) {
+        bestValLoss.textContent = this.module.bestValLoss.train.toFixed(6);
       }
     }
 
-    // Update stage 2 loss chart
+    // Update loss chart
     if (data.epoch && data.trainLoss != null) {
-      this.module.addChartPoint('stage2', data.epoch, data.trainLoss, data.valLoss);
+      this.module.addChartPoint('train', data.epoch, data.trainLoss, data.valLoss);
     }
   }
 
   /**
-   * Handle Stage 2 completion
+   * Handle training completion (model trained; prediction follows)
    */
-  handleStage2Complete(data) {
-    // Update status badge
-    this.module.updateStageStatus('stage2', 'completed', 'Complete');
+  handleTrainComplete(data) {
+    this.module.updateStageStatus('train', 'training', 'Denoising stack...');
 
-    // Update status text
-    const statusText = document.getElementById('stage2StatusText');
+    const statusText = document.getElementById('trainStatusText');
     if (statusText) {
-      statusText.textContent = 'Stage 2 training complete!';
+      statusText.textContent = 'Model trained. Denoising the full stack...';
     }
 
-    // Update progress bar to 100%
-    const progressFill = document.getElementById('stage2ProgressFill');
+    // Progress bar to 100% for the training phase
+    const progressFill = document.getElementById('trainProgressFill');
     if (progressFill) {
       progressFill.style.width = '100%';
     }
+  }
 
-    this.module.state.notify('success', 'Stage 2 training complete, finalizing output...');
+  /**
+   * Handle full-stack prediction progress
+   */
+  handlePredictProgress(data) {
+    TrainingSessionPersistence.updateProgress();
 
-    // Refresh workspace file browser to show Stage 2 output files
-    if (window.workspace?.fileBrowser) {
-      window.workspace.fileBrowser.refresh();
+    const statusText = document.getElementById('trainStatusText');
+    if (statusText && data.current_slice != null && data.total_slices != null) {
+      statusText.textContent =
+        `Denoising stack: slice ${data.current_slice} of ${data.total_slices}`;
     }
   }
 
   /**
-   * Handle cleanup progress
-   */
-  handleCleanupProgress(data) {
-    // Cleanup notifications removed - they were showing for every file
-    // The UI already shows cleanup status in the progress component
-  }
-
-  /**
-   * Handle training completion
+   * Handle training completion (process exit)
    */
   handleTrainingComplete(data) {
     console.log('[ProgressHandler] Training complete with data:', data);
 
     // Merge with existing trainingResult (which has outputFiles from handleCompleteResult)
-    // Don't overwrite - the denoising-training-complete event doesn't include outputFiles
     this.module.trainingResult = {
       ...this.module.trainingResult,
       ...data,
-      // Preserve outputFiles from handleCompleteResult if not in new data
       outputFiles: data.outputFiles || this.module.trainingResult?.outputFiles
     };
     this.module.trainingComplete = true;

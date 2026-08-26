@@ -7,11 +7,12 @@ tags:
   - denoising
   - autostructn2v
   - training
-  - two-stage
+  - routing
+  - mask-approval
 seeAlsoManual:
   - denoising-dl.autostructn2v-detail
+  - denoising-dl.routing-decision
   - denoising-dl.step3.loss
-  - denoising-dl.step1.mode
 seeAlsoTags:
   - autostructn2v
   - training
@@ -19,40 +20,34 @@ seeAlsoTags:
 
 # autoStructN2V Training Process
 
-Two-stage training with automatic structured noise detection and removal.
+Noise measurement and routing in seconds, your approval, then a single training run.
 
 autoStructN2V training has three phases:
 
-Stage 1: Initial N2V Training
+1. Noise Measurement and Routing (seconds)
 
-Standard N2V training removes random noise. This produces an intermediate result where structured noise may still be visible.
+Right after you press Start, background regions are selected from your raw stack and the noise autocorrelation is measured. The router then decides: StructN2V with the discovered spine mask, or plain N2V if the noise has no usable directional structure. No GPU time is spent in this phase.
 
-Mask Extraction & Review
+2. Mask and Route Review
 
-## After Stage 1
+The pipeline pauses and shows a route decision card (chosen branch, reason, Dmax versus threshold, mask coverage) alongside the mask visualization. See the Routing Decision article for what the numbers mean. Your options:
 
-- The system analyzes residual noise patterns
+- Approve: continue with the routed branch and the shown mask
 
-- A mask showing detected structure is generated
+- Adjust and regenerate: change extractor parameters and recompute the mask in seconds
 
-- You can review and adjust the mask before proceeding
+- Force plain N2V: override the router and train with the single-pixel center mask
 
-- Options: Approve mask, regenerate with different settings, or skip Stage 2
+An auto-approve toggle skips this pause if you prefer a hands-off run. When the router picks plain N2V, that is an informative outcome, not an error; approving simply continues as plain N2V.
 
-Stage 2: Structure-Aware Training
+3. Single Training and Denoising
 
-A second model is trained using the noise mask. Masking follows the detected noise structure, teaching the network to specifically remove those patterns.
-
-2.5D Mode Differences:
-
-In 2.5D mode, the mask becomes 3-dimensional, capturing noise correlations across consecutive slices. The mask visualization shows three tabs (Z-1, Z center, Z+1) so you can inspect each slice's pattern before approving.
+Exactly one model trains with the approved mask, then the full stack is denoised. There are no separate stages anymore.
 
 ## What to expect
 
-- Total training time is roughly 2x single-stage N2V
+- Total time is comparable to a plain N2V run (the old two-stage flow took roughly twice as long)
 
-- Stage 1 and Stage 2 can have different configurations
+- Loss curves behave like any blind-spot training; see Loss Curves
 
-- The mask review step requires your input before Stage 2 begins
-
-- Final results combine both stages for optimal noise removal
+- The mask, route decision, model, and denoised stack are all saved with the results

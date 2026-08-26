@@ -1,6 +1,6 @@
 ---
 id: denoising-dl.step2.mask-extractor.max-pixels
-title: Max Masked Pixels
+title: Max Mask Pixels
 category: parameter
 module: denoising-dl
 tags:
@@ -9,45 +9,39 @@ tags:
   - mask-extractor
   - limit
 seeAlsoManual:
-  - denoising-dl.step2.mask-extractor.adaptive
+  - denoising-dl.step2.mask-extractor.rho-floor
   - denoising-dl.autostructn2v-detail
 seeAlsoTags:
   - mask-extractor
   - autostructn2v
 parameterImpact: |
-  Limits mask complexity. Default (25) works for typical patterns; adjust based on mask preview.
+  Optional hard cap on the size of the discovered spine mask. Usually unnecessary; the Correlation Floor and Spine Threshold already control mask size.
 ---
 
-# Max Masked Pixels
+# Max Mask Pixels
 
-Maximum number of pixels that can be active in the structural noise mask.
+Optional upper limit on the number of active pixels in the discovered spine mask.
 
-Max Masked Pixels sets an upper limit on how many pixels can be marked as structural noise in the detection mask.
+The spine mask is normally sized by the noise itself: pixels enter only if their correlation is statistically certain (Spine Threshold) and large enough to matter (Correlation Floor). Max Mask Pixels adds a hard cap on top of that.
 
 ## How it works
 
-- The mask extractor identifies pixels contributing to structured noise
+- If the discovered spine exceeds the cap, the weakest pixels (lowest |correlation|) are dropped until the cap is met
 
-- This parameter caps the total active pixels in the mask
+- The mask stays a connected, 180-degree symmetric spine
 
-- Prevents over-detection that could remove real image features
+- With no cap set, the mask size is determined entirely by the thresholds
 
-## Values (5-50)
+## When to use
 
-- 5-15: Very conservative, for subtle patterns
+- To bound training cost when the noise has very long-range correlation and the spine grows large
 
-- 20-25 (Default): Balanced, suitable for typical scan line artifacts
+- To keep the mask compact if you find large masks remove too much context
 
-- 30-50: Allows detection of complex or widespread patterns
+## Recommendations
 
-## When to adjust
+- Leave unset (package default) for most data
 
-- Increase if your noise pattern is complex with many components
+- Prefer raising the Correlation Floor over capping: the floor removes pixels by relevance, while the cap is a blunt limit
 
-- Decrease if the mask is too aggressive and affecting image details
-
-## Visual Check
-
-Always review the mask visualization before approving. If the mask shows too many active pixels, reduce this value. If visible patterns aren't captured, increase it.
-
-Note: This is a hard limit — the mask will never exceed this many active pixels regardless of other settings.
+- Watch the mask coverage (mask_rho2) when capping; a large drop means the cap is cutting into meaningful correlations

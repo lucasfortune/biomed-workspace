@@ -1,69 +1,41 @@
 ---
 id: denoising-dl.step1.mode
-title: 2D vs 2.5D Processing Mode
+title: Legacy 2.5D Models
 category: configuration
 module: denoising-dl
 tags:
   - denoising
   - 2.5d
-  - volumetric
-  - mode
-  - triplet
+  - legacy
+  - import
+  - inference
 seeAlsoManual:
-  - denoising-dl.step1.method
-  - denoising-dl.step1.input
-  - denoising-dl.autostructn2v-detail
+  - denoising-dl.step1.import.model
+  - denoising-dl.step1.import.config
+  - denoising-dl.step1.workflow
 seeAlsoTags:
   - 2.5d
-  - volumetric
+  - import
 ---
 
-# 2D vs 2.5D Processing Mode
+# Legacy 2.5D Models
 
-Choose between 2D (slice-by-slice) or 2.5D (volumetric triplet) processing for your TIFF stacks.
+New training runs are always 2D (slice by slice). The 2.5D option only applies when importing models trained with the previous version of this module.
 
-Processing Mode determines how the network uses spatial context from your image stack.
+The previous two-stage version of this module offered a 2.5D training mode that used triplets of consecutive slices (z-1, z, z+1) to predict the center slice. The current routed autoStructN2V method trains in 2D only, so 2.5D no longer appears in the training workflow.
 
-2D Mode (Default)
+## Importing Legacy 2.5D Models
 
-Each slice is processed independently. The network sees only a single 2D image at a time.
+Models trained in 2.5D by the old version can still be imported and used for inference:
 
-## Best for
+- Select the 2.5D option in the import workflow so slices are fed to the model as triplets
 
-- Images where noise is independent between slices
+- The stack you process should have contiguous slices (at least 3)
 
-- Stacks with fewer than 20 slices
+- Boundary slices (first and last) are copied from the original since they lack full triplet context
 
-- When inter-slice correlation is not important
+## Notes
 
-- Faster processing with lower memory requirements
+- The config file saved with a legacy model records whether it was trained in 2D or 2.5D
 
-2.5D Mode
-
-Processes triplets of consecutive slices (z-1, z, z+1) to predict the center slice. The network leverages inter-slice context for better denoising.
-
-## Best for
-
-- Volumetric data with correlated structures across slices
-
-- EM tomography and confocal microscopy stacks
-
-- Noise patterns that span multiple slices
-
-- When preserving 3D structural continuity is important
-
-## Requirements for 2.5D:
-
-- Minimum 20 slices in the stack
-
-- Slices should be spatially contiguous (not random samples)
-
-- More GPU memory required (3x input channels)
-
-## How 2.5D Works:
-
-The network takes 3 consecutive slices as input and predicts only the center slice. This sliding window approach processes the entire stack while using neighboring slice information. Boundary slices (first and last) are copied from the original since they lack full triplet context.
-
-For autoStructN2V in 2.5D:
-
-The structural noise mask becomes 3-dimensional, capturing noise correlations across the triplet. The mask visualization shows three tabs (Z-1, Z center, Z+1) so you can inspect each slice's pattern.
+- Legacy two-stage imports need both stage model files; see the Model Weights File article

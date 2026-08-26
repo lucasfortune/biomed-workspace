@@ -10,7 +10,7 @@ tags:
   - presets
 seeAlsoManual:
   - denoising-dl.step2.patch-size
-  - denoising-dl.step2.epochs
+  - denoising-dl.step2.mask-extractor.bg-side
 seeAlsoTags:
   - configuration
   - parameters
@@ -42,4 +42,4 @@ The configuration step lets you control how the denoising model is trained. You 
 
 ## For autoStructN2V
 
-You'll see two columns — one for each training stage. Stage 1 and Stage 2 can have different settings to optimize each phase of the training process.
+An additional Noise Mask Extractor section configures the automatic noise measurement. Background Side is the one required choice; the advanced knobs (Correlation Floor, Spine Threshold, Max Mask Pixels) control how the structural mask is discovered. You can adjust these again while reviewing the mask, since regenerating it only takes seconds.

@@ -2701,3 +2701,76 @@
 [data-theme="dark"] .dl-denoising-module .auto-approve-toggle input:checked + .auto-approve-slider {
   background-color: var(--module-primary);
 }
+
+/* ==========================================================================
+   Route Decision Card (routed v1.0: noise analysis & mask approval)
+   ========================================================================== */
+
+.route-decision-card {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color, #d0d0d0);
+  border-left: 4px solid var(--accent-color, #1DA924);
+  border-radius: 6px;
+  background: var(--surface-secondary, rgba(0, 0, 0, 0.03));
+}
+
+.route-decision-header {
+  margin-bottom: 8px;
+}
+
+.route-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.route-badge.route-struct {
+  background: rgba(29, 169, 36, 0.15);
+  color: var(--accent-color, #1DA924);
+}
+
+.route-badge.route-n2v {
+  background: rgba(74, 144, 226, 0.15);
+  color: #4A90E2;
+}
+
+.route-message {
+  margin: 6px 0;
+  font-size: 0.9rem;
+  color: var(--text-primary, #222);
+}
+
+.route-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.route-metric {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #555);
+}
+
+.route-note {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #555);
+  font-style: italic;
+}
+
+/* bg_side radio field in the Configure step */
+.radio-field .radio-option {
+  display: block;
+  margin: 6px 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.radio-field .radio-option input[type="radio"] {
+  margin-right: 8px;
+}

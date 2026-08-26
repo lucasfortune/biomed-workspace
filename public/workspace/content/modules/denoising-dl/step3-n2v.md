@@ -11,7 +11,7 @@ tags:
 seeAlsoManual:
   - denoising-dl.step3.loss
   - denoising-dl.step3.best-val-loss
-  - denoising-dl.step1.mode
+  - denoising-dl.step2.masking-strategy
 seeAlsoTags:
   - n2v
   - training
@@ -19,9 +19,9 @@ seeAlsoTags:
 
 # N2V Training Process
 
-Single-stage training for removing random, uncorrelated noise.
+Single training run for removing random, uncorrelated noise.
 
-## N2V training is a straightforward single-stage process
+## N2V training is a straightforward process
 
 1. Dataset Preparation
 
@@ -47,10 +47,6 @@ After each epoch, performance is evaluated on held-out patches. This validation 
 
 Once trained, the model processes your full images to produce denoised results.
 
-2.5D Mode Differences:
-
-In 2.5D mode, the network takes 3 consecutive slices as input and predicts the center slice. This uses inter-slice context for better denoising of volumetric data. Boundary slices are copied from the original.
-
 ## What to expect
 
 - Training typically takes 5-30 minutes depending on data size and GPU
@@ -59,6 +55,8 @@ In 2.5D mode, the network takes 3 consecutive slices as input and predicts the c
 
 - Results are available immediately when training completes
 
+Note: When autoStructN2V routes to the N2V branch, this same process runs; the only difference from forced N2V is that the noise was measured first.
+
 ## Reference
 
-Krull, A., Buchholz, T.-O., & Jug, F. (2019). Noise2Void - Learning Denoising From Single Noisy Images. In 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2124–2132. DOI: 10.1109/cvpr.2019.00223
+Krull, A., Buchholz, T.-O., & Jug, F. (2019). Noise2Void - Learning Denoising From Single Noisy Images. In 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2124-2132. DOI: 10.1109/cvpr.2019.00223

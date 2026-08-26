@@ -31,7 +31,9 @@ The configuration file (.json) contains all the settings used during training, i
 
 - Training parameters used
 
-- Stage configurations for autoStructN2V
+- For current autoStructN2V models: the trained branch (StructN2V or N2V) and its mask
+
+- For legacy two-stage models: the stage configurations and processing mode (2D or 2.5D)
 
 ## Where to find it
 

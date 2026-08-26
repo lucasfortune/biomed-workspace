@@ -11,7 +11,7 @@ tags:
   - pth
 seeAlsoManual:
   - denoising-dl.step1.import.config
-  - denoising-dl.step1.workflow
+  - denoising-dl.step1.mode
 seeAlsoTags:
   - import
   - model
@@ -23,17 +23,19 @@ Select the trained model weights file (.pth) for denoising.
 
 The model weights file (.pth) contains the learned parameters from training. This is the actual "knowledge" the model acquired about noise patterns.
 
-## For N2V
+## For N2V and current autoStructN2V
 
-One model file is needed — the trained N2V model.
+One model file is needed. Current autoStructN2V trainings produce a single model (whichever branch the router selected), saved together with its mask and route decision.
 
-## For autoStructN2V
+## For legacy two-stage autoStructN2V
 
-## Two model files are needed
+Models trained with the previous version of this module come as a pair, and both files are needed:
 
-- Stage 1 Model: The initial N2V model
+- Stage 1 Model: The initial N2V model (e.g., stage1_model.pth)
 
-- Stage 2 Model: The structure-aware model trained with the noise mask
+- Stage 2 Model: The structure-aware model (e.g., stage2_model.pth)
+
+Legacy 2.5D pairs are also supported; see the Legacy 2.5D Models article.
 
 ## File Requirements
 
@@ -43,4 +45,4 @@ One model file is needed — the trained N2V model.
 
 ## Where to find it
 
-Model files are downloaded automatically when training completes. The files are named to indicate their purpose (e.g., stage1_model.pth, stage2_model.pth).
+Model files are downloaded automatically when training completes. The files are named to indicate their purpose.

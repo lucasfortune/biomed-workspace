@@ -38,18 +38,27 @@ class TrainingHandler {
 
     console.log('[TrainingHandler] Training config:', JSON.stringify(this.module.trainingConfig, null, 2));
 
+    // bg_side is the one required extractor input for autoStructN2V
+    if (this.module.selectedMethod === 'autostructn2v' &&
+        !['light', 'dark', 'off'].includes(this.module.trainingConfig.maskExtractor?.bg_side)) {
+      this.module.state.notify('error',
+        'Please select the background side (light/dark/off) in the Configure step.');
+      this.module.goToStep(2);
+      return;
+    }
+
     // Prepare training configuration in the format expected by backend
-    // Backend expects: { method, mode, config, inputPath }
-    // For autoStructN2V, set pauseAfterMask to allow user to approve mask before Stage 2
+    // Backend expects: { method, mode, config, inputPath }; routed training
+    // is 2D only. For autoStructN2V, pauseAfterMask shows the discovered
+    // mask + routing decision (seconds) for approval BEFORE any training.
     const trainingConfig = {
       method: this.module.selectedMethod,
-      mode: this.module.selectedMode, // '2d' or '2.5d'
+      mode: '2d',
       inputPath: this.module.uploadedFile.path,
       config: {
         stage1: this.module.trainingConfig.stage1,
         stage2: this.module.selectedMethod === 'autostructn2v' ? this.module.trainingConfig.stage2 : null,
         maskExtractor: this.module.selectedMethod === 'autostructn2v' ? this.module.trainingConfig.maskExtractor : null,
-        // Pause after mask extraction for user approval (autoStructN2V only)
         pauseAfterMask: this.module.selectedMethod === 'autostructn2v'
       }
     };

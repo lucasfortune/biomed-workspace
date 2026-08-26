@@ -21,11 +21,13 @@ Train the denoising model on your images. The training process directly produces
 
 Unlike segmentation where training and inference are separate, denoising training directly produces your results. During training, the model learns noise patterns and simultaneously denoises your input images.
 
+For autoStructN2V, the run pauses seconds after start to show the discovered noise mask and routing decision. You approve (or adjust) before any training time is spent.
+
 ## What happens during training
 
 1. Patches are extracted from your images
 
-2. Random pixels are masked
+2. Pixels are masked (randomly for N2V, following the approved mask for StructN2V)
 
 3. The network learns to predict masked pixels from context
 
@@ -37,6 +39,6 @@ Unlike segmentation where training and inference are separate, denoising trainin
 
 - A trained model is saved for processing additional images
 
-- Step 4 (Inference) is optional — use it only if you have more images to process
+- Step 4 (Inference) is optional; use it only if you have more images to process
 
 Tip: You can start viewing results as soon as training completes. Step 4 is only needed to denoise additional images not included in training.

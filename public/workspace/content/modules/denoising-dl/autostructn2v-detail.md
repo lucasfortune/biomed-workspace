@@ -7,10 +7,11 @@ tags:
   - denoising
   - autostructn2v
   - structured-noise
-  - two-stage
+  - routing
+  - spine-mask
 seeAlsoManual:
   - denoising-dl.step1.method
-  - denoising-dl.step1.mode
+  - denoising-dl.routing-decision
   - denoising-dl.step3.autostructn2v
 seeAlsoTags:
   - autostructn2v
@@ -19,42 +20,42 @@ seeAlsoTags:
 
 # autoStructN2V Explained
 
-A two-stage deep learning approach that automatically detects and removes structured noise patterns from images.
+A self-supervised method that measures your noise, decides automatically whether it is structured, and trains a single model with the right mask.
 
-autoStructN2V extends Noise2Void to handle structured (correlated) noise that standard N2V cannot fully remove.
+autoStructN2V (ASN2V) extends Noise2Void to handle structured (correlated) noise that standard N2V cannot fully remove.
 
 ## Why Standard N2V Falls Short
 
-N2V assumes noise is independent between pixels. When noise has structure — like horizontal scan lines or periodic patterns — neighboring pixels share correlated noise. N2V's masking strategy cannot distinguish this correlated noise from real image features.
+N2V assumes noise is independent between pixels. When noise has structure, like horizontal scan lines or detector streaks, neighboring pixels share correlated noise. The network can then "cheat" by copying the correlated noise from neighbors instead of removing it.
 
 ## How autoStructN2V Works
 
-Stage 1: Standard N2V Training
+Noise Measurement on the Raw Stack
 
-First, a standard N2V model is trained. This removes most random noise but leaves structured patterns partially intact.
+Before any training, background regions are selected automatically from your raw images. Your only required input is which intensity side the background is on (see Background Side). The noise autocorrelation function (ACF) is then measured on detrended background tiles. This takes seconds.
 
-Mask Extraction
+Routing Decision
 
-The system analyzes the difference between the original and denoised images in Fourier space. Periodic patterns appear as peaks in the frequency domain. These are automatically detected and converted into a spatial mask showing the noise structure.
+A directionality statistic (Dmax) is computed from the ACF. If the noise shows usable directional correlation, the StructN2V branch is chosen with an automatically discovered mask. Otherwise the plain N2V branch is chosen, which is the same blind-spot training with a single-pixel (1x1) center mask. See the Routing Decision article for details.
 
-Interactive Mask Review
+Mask Discovery (StructN2V route)
 
-You can review and adjust the detected noise pattern before proceeding. This ensures the mask correctly captures the structured noise without including real image features.
+The discovered mask is a "spine": one-pixel-wide line summaries of the significant ACF features (positive and negative correlations alike), ray-connected to the center and symmetric under 180-degree rotation. Two knobs control it: the Correlation Floor (effect-size floor) and the Spine Threshold (statistical certainty).
 
-Stage 2: Structure-Aware Training
+Your Approval, Then One Training
 
-A second N2V model is trained using the noise mask. During training, pixels are masked according to the detected noise pattern, teaching the network to specifically remove that structure.
+The mask and routing decision appear seconds after you press Start, before any GPU time is spent. You can approve, adjust parameters and regenerate (also seconds), or override to plain N2V. Then exactly one model trains, and your full stack is denoised.
 
 ## When to Use autoStructN2V
 
-- Visible line artifacts in EM tomography reconstructions
+- Visible line artifacts in EM or tomography data
 
-- Periodic patterns from detector readout
+- Streaks or periodic patterns from detector readout
 
 - Camera-specific fixed-pattern noise
 
-- Any noise with visible spatial correlation or structure
+- Whenever you are unsure: if no usable structure is found, the router falls back to plain N2V automatically
 
-2.5D Mode:
+## Reference
 
-In 2.5D mode, autoStructN2V extends its analysis to 3D, detecting noise correlations across consecutive slices. The mask becomes three-dimensional (Z-1, Z center, Z+1), allowing the network to learn inter-slice noise patterns. See the 2.5D Mode article for details.
+Fortune (2026), the ASN2V paper. Code: https://github.com/lucasfortune/asn2v
