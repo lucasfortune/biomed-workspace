@@ -146,18 +146,7 @@
   padding: 6px 8px;
 }
 
-/* Step 1: file picker (same look as the stitching module) */
-.pp-module .stack-add-row,
-.preprocess-module .stack-add-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.preprocess-module .stack-add-row select {
-  flex: 1;
-}
-
+/* Step 1: selected-stack info card (below the shared FileSelector) */
 .preprocess-module .stack-item {
   display: flex;
   align-items: center;

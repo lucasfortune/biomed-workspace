@@ -16,7 +16,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator } from '/workspace/js/core/components/index.js';
+import { StepNavigator, FileSelector } from '/workspace/js/core/components/index.js';
 
 class PreprocessModule extends BaseModule {
 
@@ -33,7 +33,7 @@ class PreprocessModule extends BaseModule {
     });
 
     this.stepNavigator = null;
-    this.workspaceFiles = [];
+    this.fileSelector = null;
     this.resetState();
   }
 
@@ -97,19 +97,15 @@ class PreprocessModule extends BaseModule {
             file; the original is never modified.
           </p>
 
-          <div class="section-card">
-            <h4>Image stack</h4>
-            <div class="stack-add-row">
-              <select id="ppFilePicker"><option value="">Loading files...</option></select>
-              <button class="btn small" id="ppSelectBtn">Select</button>
-            </div>
-            <div id="ppSelectedFile"></div>
-            <p class="field-hint">
-              Grayscale stacks only (raw uploads and processing results).
-              Segmentations get their own operations in the segmentation
-              cleanup module.
-            </p>
-          </div>
+          <!-- File Selector Container (shared FileSelector component) -->
+          <div id="ppFileSelectorContainer"></div>
+
+          <div id="ppSelectedFile"></div>
+          <p class="field-hint">
+            Grayscale stacks only (raw uploads and processing results).
+            Segmentations get their own operations in the segmentation
+            cleanup module.
+          </p>
 
           <div class="navigation-buttons">
             <div></div>
@@ -266,12 +262,6 @@ class PreprocessModule extends BaseModule {
             </div>
           </div>
 
-          <div class="pp-actions">
-            <button class="btn btn-danger" id="ppApplyBtn">
-              <span class="btn-icon">&#9658;</span> Apply
-            </button>
-          </div>
-
           <div class="section-card" id="ppProgressSection" style="display: none;">
             <h4>Progress</h4>
             <div class="inference-status" id="ppStatusText">Starting...</div>
@@ -294,7 +284,9 @@ class PreprocessModule extends BaseModule {
 
           <div class="navigation-buttons">
             <button id="ppStep3Back" class="btn secondary">Back</button>
-            <div></div>
+            <button class="btn btn-danger" id="ppApplyBtn">
+              <span class="btn-icon">&#9658;</span> Apply
+            </button>
           </div>
         </div>
       </div>
@@ -317,8 +309,43 @@ class PreprocessModule extends BaseModule {
     document.getElementById('backToHub')?.addEventListener('click',
       () => window.workspace.returnToHub());
 
-    // Step 1
-    document.getElementById('ppSelectBtn')?.addEventListener('click', () => this.selectFile());
+    // Step 1: shared FileSelector component (same setup as the annotation
+    // module - single file, dropdown + upload button)
+    const fileSelectorContainer = document.getElementById('ppFileSelectorContainer');
+    if (fileSelectorContainer) {
+      this.fileSelector = new FileSelector({
+        id: 'preprocess_source',
+        fileType: 'uploads',
+        filterTags: ['raw'],
+        title: 'Image Stack',
+        icon: '🖼️',
+        accept: '.tif,.tiff',
+        showTestData: false,
+        showRecentResults: true,
+        stateManager: this.state,
+        onSelect: (file) => this.onFileSelected(file),
+        onUpload: (rawFile, uploadedFile) => this.onFileSelected(uploadedFile),
+        // Recent Results: grayscale data results (denoised, stitched,
+        // preprocessed) - segmentations are excluded
+        resultCategories: ['results', 'denoised_images'],
+        resultCategoryLabels: {
+          'results': 'Result',
+          'denoised_images': 'Denoised'
+        },
+        filterRecentResults: (files) => files.filter(f => {
+          if (f.category === 'results') {
+            const tags = f.tags || [];
+            return tags.includes('data') && !tags.includes('segmentation');
+          }
+          return f.category === 'denoised_images';
+        }),
+        // Workspace files: raw uploads only
+        filterFiles: (files) => files.filter(f =>
+          f.category === 'uploads' && (f.tags || []).includes('raw'))
+      });
+      fileSelectorContainer.innerHTML = this.fileSelector.render();
+      await this.fileSelector.init();
+    }
     document.getElementById('ppStep1Next')?.addEventListener('click', () => this.goToStep(2));
 
     // Step 2
@@ -330,15 +357,20 @@ class PreprocessModule extends BaseModule {
     document.getElementById('ppStep3Back')?.addEventListener('click', () => this.goToStep(2));
     document.getElementById('ppApplyBtn')?.addEventListener('click', () => this.apply());
     document.getElementById('ppOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
-    document.getElementById('ppNewRunBtn')?.addEventListener('click', () => {
+    document.getElementById('ppNewRunBtn')?.addEventListener('click', async () => {
       this.resetState();
-      this.populateFilePicker();
       this.renderSelectedFile();
+      if (this.fileSelector) {
+        this.fileSelector.selectedFile = null;
+        await this.fileSelector.refresh();
+        const dropdown = document.getElementById(`${this.fileSelector.id}-select`);
+        if (dropdown) dropdown.value = '';
+        this.fileSelector.hidePreview();
+      }
       this.goToStep(1);
     });
 
     window.preprocessModule = this;
-    await this.loadWorkspaceFiles();
   }
 
   async deactivate() {
@@ -349,6 +381,7 @@ class PreprocessModule extends BaseModule {
     }
     // Leaving the module starts fresh next time (user preference)
     this.resetState();
+    this.fileSelector = null;
     try { delete window.preprocessModule; } catch (e) { window.preprocessModule = undefined; }
     await super.deactivate();
   }
@@ -368,59 +401,31 @@ class PreprocessModule extends BaseModule {
   // Step 1: file selection
   // ==========================================================================
 
-  async loadWorkspaceFiles() {
-    try {
-      const response = await fetch('/api/workspace/files');
-      const data = await response.json();
-      this.workspaceFiles = (data.files || []);
-    } catch (e) {
-      console.error('[Preprocess] Error loading files:', e);
-      this.workspaceFiles = [];
+  /**
+   * FileSelector callback: a workspace file was selected (or deselected).
+   * Reads the stack info + histogram before enabling the Adjust step.
+   */
+  async onFileSelected(file) {
+    const next = document.getElementById('ppStep1Next');
+    if (next) next.disabled = true;
+
+    if (!file || !file.path) {
+      this.resetState();
+      this.renderSelectedFile();
+      return;
     }
-    this.populateFilePicker();
-  }
 
-  /** Grayscale image stacks only (same tag logic as the stitching module) */
-  eligibleFiles() {
-    return this.workspaceFiles.filter(f => {
-      if (!/\.tiff?$/i.test(f.name)) return false;
-      const tags = f.tags || [];
-      if (tags.includes('info') || tags.includes('recipe') || tags.includes('segmentation')) return false;
-      const isRawUpload = f.category === 'uploads' && tags.includes('raw');
-      const isProcessed = f.category === 'results' && tags.includes('data');
-      return isRawUpload || isProcessed;
-    });
-  }
-
-  populateFilePicker() {
-    const picker = document.getElementById('ppFilePicker');
-    if (!picker) return;
-    const files = this.eligibleFiles();
-    picker.innerHTML = files.length
-      ? '<option value="">Select a stack...</option>' +
-        files.map(f => `<option value="${f.path}">${f.name}</option>`).join('')
-      : '<option value="">No eligible image stacks in workspace</option>';
-  }
-
-  async selectFile() {
-    const picker = document.getElementById('ppFilePicker');
-    const filePath = picker?.value;
-    if (!filePath) return;
-
-    const btn = document.getElementById('ppSelectBtn');
-    if (btn) btn.disabled = true;
     try {
-      const response = await fetch(`/api/preprocess/info?path=${encodeURIComponent(filePath)}`);
+      const response = await fetch(`/api/preprocess/info?path=${encodeURIComponent(file.path)}`);
       const info = await response.json();
       if (!info.success) throw new Error(info.error || 'Could not read stack info');
 
-      const meta = this.workspaceFiles.find(f => f.path === filePath);
       this.resetState();
       this.file = {
-        path: filePath,
-        name: filePath.split('/').pop(),
-        id: meta?.id || null,
-        voxelSize: meta?.voxelSize || null,
+        path: file.path,
+        name: file.name || file.path.split('/').pop(),
+        id: file.id || null,
+        voxelSize: file.voxelSize || null,
         slices: info.sliceCount,
         width: info.width,
         height: info.height,
@@ -429,12 +434,10 @@ class PreprocessModule extends BaseModule {
       this.info = info;
       this.currentSlice = Math.floor(info.sliceCount / 2);
       this.renderSelectedFile();
-      const next = document.getElementById('ppStep1Next');
       if (next) next.disabled = false;
     } catch (e) {
       this.state.notify('error', `Could not select stack: ${e.message}`);
-    } finally {
-      if (btn) btn.disabled = false;
+      this.renderSelectedFile();
     }
   }
 
@@ -1037,7 +1040,7 @@ class PreprocessModule extends BaseModule {
       if (data.success) {
         this.result = data;
         this.showSuccess(data);
-        this.loadWorkspaceFiles();
+        this.fileSelector?.refresh();
         if (window.workspace?.fileBrowser) window.workspace.fileBrowser.refresh();
       } else {
         this.state.notify('error', `Preprocessing failed: ${data.error || 'unknown error'}`);
