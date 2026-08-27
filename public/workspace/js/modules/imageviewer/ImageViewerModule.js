@@ -45,6 +45,13 @@ class ImageViewerModule extends BaseModule {
     this.currentSlice = 0;
     this.viewMode = 'gallery';  // 'gallery' or 'icon'
 
+    // Comparison mode: 2-4 stacks viewed side by side with synced
+    // z/zoom/pan (single-file behavior is unchanged when empty)
+    this.comparisonFiles = [];  // {id, name, path, sliceCount, width, height}
+
+    // Slice prefetch bookkeeping (browser-cached via Cache-Control)
+    this._prefetched = new Set();
+
     // Zoom/pan state for gallery view
     this.zoomLevel = 1;
     this.panOffset = { x: 0, y: 0 };
@@ -275,6 +282,20 @@ class ImageViewerModule extends BaseModule {
       <!-- Validation Result (rendered by ValidationDisplay) -->
       ${ValidationDisplay.renderContainer('validationResult')}
 
+      <!-- Comparison list: add several stacks to view them side by side -->
+      <div class="comparison-section">
+        <div class="comparison-header">
+          <h4>Compare stacks <span class="comparison-hint">(optional)</span></h4>
+          <button class="btn small" id="addToComparisonBtn" disabled>+ Add selected to comparison</button>
+        </div>
+        <ul class="comparison-list" id="comparisonList"></ul>
+        <p class="field-hint">
+          Add two to four stacks to view them side by side with a shared
+          slice slider, zoom and pan. Leave the list empty to view the
+          selected stack on its own.
+        </p>
+      </div>
+
       <!-- Navigation Buttons -->
       <div class="navigation-buttons">
         <div></div>
@@ -379,17 +400,86 @@ class ImageViewerModule extends BaseModule {
           { label: 'Data Type', value: data.dtype }
         ]);
 
-        // Enable next button
+        // Enable next button + comparison add
         this.navigationButtons.setNextEnabled(true);
+        this.updateComparisonControls();
       } else {
         this.validationDisplay.showError('Validation Failed', data.error || 'Unknown error');
         this.navigationButtons.setNextEnabled(false);
+        this.updateComparisonControls();
       }
     } catch (error) {
       console.error('[ImageViewerModule] Validation error:', error);
       this.validationDisplay.showError('Validation Error', error.message);
       this.navigationButtons.setNextEnabled(false);
+      this.updateComparisonControls();
     }
+  }
+
+  // ===========================================================================
+  // COMPARISON LIST (step 1)
+  // ===========================================================================
+
+  get comparing() {
+    return this.comparisonFiles.length >= 2;
+  }
+
+  updateComparisonControls() {
+    const addBtn = document.getElementById('addToComparisonBtn');
+    if (addBtn) {
+      const eligible = this.selectedFile?.id && this.tiffInfo
+        && this.comparisonFiles.length < 4
+        && !this.comparisonFiles.some(f => f.id === this.selectedFile.id);
+      addBtn.disabled = !eligible;
+    }
+    const next = document.getElementById('step1Next');
+    if (next) {
+      if (this.comparing) {
+        next.disabled = false;
+        next.textContent = `Next: Compare ${this.comparisonFiles.length} Stacks`;
+      } else {
+        next.textContent = 'Next: View Image';
+        if (this.comparisonFiles.length === 1) next.disabled = false;
+      }
+    }
+  }
+
+  addToComparison() {
+    if (!this.selectedFile?.id || !this.tiffInfo) return;
+    if (this.comparisonFiles.length >= 4) {
+      this.state.notify('warning', 'Comparison supports up to four stacks.');
+      return;
+    }
+    if (this.comparisonFiles.some(f => f.id === this.selectedFile.id)) return;
+    this.comparisonFiles.push({
+      id: this.selectedFile.id,
+      name: this.selectedFile.name,
+      path: this.selectedFile.path,
+      sliceCount: this.tiffInfo.sliceCount,
+      width: this.tiffInfo.width,
+      height: this.tiffInfo.height
+    });
+    this.renderComparisonList();
+    this.updateComparisonControls();
+  }
+
+  removeFromComparison(index) {
+    this.comparisonFiles.splice(index, 1);
+    this.renderComparisonList();
+    this.updateComparisonControls();
+  }
+
+  renderComparisonList() {
+    const list = document.getElementById('comparisonList');
+    if (!list) return;
+    list.innerHTML = this.comparisonFiles.map((f, i) => `
+      <li class="comparison-item">
+        <span class="comparison-order">${i + 1}</span>
+        <span class="comparison-name">${f.name}</span>
+        <span class="comparison-dims">${f.width}&times;${f.height}, ${f.sliceCount} slices</span>
+        <button class="btn tiny" onclick="window.imageViewerModule?.removeFromComparison(${i})">&times;</button>
+      </li>
+    `).join('') || '';
   }
 
   /**
@@ -420,6 +510,10 @@ class ImageViewerModule extends BaseModule {
     if (iconBtn) {
       iconBtn.addEventListener('click', () => this.switchToIconMode());
     }
+
+    // Comparison list
+    document.getElementById('addToComparisonBtn')
+      ?.addEventListener('click', () => this.addToComparison());
   }
 
   /**
@@ -441,7 +535,7 @@ class ImageViewerModule extends BaseModule {
     }
 
     // Step-specific initialization
-    if (stepNum === 2 && this.selectedFile) {
+    if (stepNum === 2 && (this.selectedFile || this.comparing)) {
       this.initializeViewer();
     }
   }
@@ -450,13 +544,19 @@ class ImageViewerModule extends BaseModule {
    * Proceed to viewer (Step 1 -> Step 2)
    */
   async proceedToViewer() {
-    if (!this.selectedFile) return;
+    // A single stack in the comparison list is just a viewing choice
+    if (this.comparisonFiles.length === 1 && !this.selectedFile) {
+      const f = this.comparisonFiles[0];
+      this.selectedFile = { id: f.id, path: f.path, name: f.name, source: 'workspace' };
+      this.tiffInfo = { sliceCount: f.sliceCount, width: f.width, height: f.height };
+    }
+    if (!this.selectedFile && !this.comparing) return;
 
     try {
       this.showLoading('Loading image information...');
 
       // Load TIFF info if not already loaded by validation
-      if (!this.tiffInfo) {
+      if (!this.comparing && !this.tiffInfo) {
         await this.loadTiffInfo();
       }
 
@@ -506,16 +606,30 @@ class ImageViewerModule extends BaseModule {
   }
 
   /**
+   * Maximum slice index across the compared stacks
+   */
+  comparisonMaxSlices() {
+    return Math.max(...this.comparisonFiles.map(f => f.sliceCount));
+  }
+
+  /**
    * Initialize the viewer for Step 2
    */
   async initializeViewer() {
     // Update file info display
     const fileInfoDisplay = document.getElementById('fileInfoDisplay');
-    if (fileInfoDisplay && this.tiffInfo) {
-      fileInfoDisplay.innerHTML = `
-        <span class="filename">${this.selectedFile.name}</span>
-        <span class="slice-count">${this.tiffInfo.sliceCount} slices</span>
-      `;
+    if (fileInfoDisplay) {
+      if (this.comparing) {
+        fileInfoDisplay.innerHTML = `
+          <span class="filename">Comparing ${this.comparisonFiles.length} stacks</span>
+          <span class="slice-count">${this.comparisonMaxSlices()} slices</span>
+        `;
+      } else if (this.tiffInfo) {
+        fileInfoDisplay.innerHTML = `
+          <span class="filename">${this.selectedFile.name}</span>
+          <span class="slice-count">${this.tiffInfo.sliceCount} slices</span>
+        `;
+      }
     }
 
     // Render the appropriate view mode
@@ -556,9 +670,44 @@ class ImageViewerModule extends BaseModule {
   }
 
   /**
+   * URL of a slice image for a comparison entry (workspace files)
+   */
+  comparisonSliceUrl(file, sliceIndex, size) {
+    return `/api/workspace/slice/${file.id}/${sliceIndex}?size=${size}`;
+  }
+
+  /**
+   * Warm the browser cache with neighboring slices (slice endpoints send
+   * Cache-Control, so each URL is fetched at most once per day)
+   */
+  prefetchNeighbors(sliceIndex) {
+    if (this._prefetched.size > 800) this._prefetched.clear();
+    const targets = this.comparing ? this.comparisonFiles
+      : (this.selectedFile?.id && this.selectedFile.source !== 'segmentation'
+         && this.selectedFile.source !== 'denoising-dl'
+        ? [{ id: this.selectedFile.id, sliceCount: this.tiffInfo?.sliceCount || 1 }]
+        : []);
+    for (const file of targets) {
+      for (const offset of [1, -1, 2, -2]) {
+        const idx = sliceIndex + offset;
+        if (idx < 0 || idx >= file.sliceCount) continue;
+        const url = this.comparisonSliceUrl(file, idx, 'gallery');
+        if (this._prefetched.has(url)) continue;
+        this._prefetched.add(url);
+        const img = new Image();
+        img.src = url;
+      }
+    }
+  }
+
+  /**
    * Render gallery view
    */
   renderGalleryView() {
+    if (this.comparing) {
+      this.renderComparisonGallery();
+      return;
+    }
     const container = document.getElementById('viewContainer');
     if (!container) return;
 
@@ -619,9 +768,92 @@ class ImageViewerModule extends BaseModule {
   }
 
   /**
-   * Setup gallery view event listeners
+   * Render the comparison gallery: 2-4 panes with shared slice slider,
+   * zoom and pan
    */
-  setupGalleryEventListeners() {
+  renderComparisonGallery() {
+    const container = document.getElementById('viewContainer');
+    if (!container) return;
+
+    const sliceCount = this.comparisonMaxSlices();
+    const n = this.comparisonFiles.length;
+
+    container.innerHTML = `
+      <div class="gallery-view comparison-view">
+        <div class="comparison-grid panes-${n}" id="comparisonGrid">
+          ${this.comparisonFiles.map((f, i) => `
+            <div class="comparison-pane" data-pane="${i}">
+              <div class="comparison-pane-label" title="${f.name}">${f.name}</div>
+              <div class="comparison-pane-image">
+                <img data-pane-img="${i}" alt="" draggable="false" />
+                <div class="pane-end-badge" data-pane-end="${i}" style="display: none;">end of stack</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="gallery-controls">
+          <div class="slice-navigation">
+            <button class="nav-btn" id="prevSliceBtn" ${this.currentSlice <= 0 ? 'disabled' : ''}>
+              ◀ Previous
+            </button>
+            <div class="slice-indicator">
+              <span id="currentSliceNum">${this.currentSlice + 1}</span>
+              <span>/</span>
+              <span id="totalSlicesNum">${sliceCount}</span>
+            </div>
+            <button class="nav-btn" id="nextSliceBtn" ${this.currentSlice >= sliceCount - 1 ? 'disabled' : ''}>
+              Next ▶
+            </button>
+          </div>
+
+          <div class="zoom-controls">
+            <button class="zoom-btn" id="zoomOutBtn">−</button>
+            <span class="zoom-level" id="zoomLevel">${Math.round(this.zoomLevel * 100)}%</span>
+            <button class="zoom-btn" id="zoomInBtn">+</button>
+            <button class="zoom-btn" id="zoomResetBtn">Reset</button>
+          </div>
+        </div>
+
+        <div class="slice-slider-container">
+          <input type="range"
+                 id="sliceSlider"
+                 min="0"
+                 max="${sliceCount - 1}"
+                 value="${this.currentSlice}"
+                 class="slice-slider" />
+        </div>
+      </div>
+    `;
+
+    // Same shared controls as the single gallery; pan attaches to the grid
+    this.setupGalleryEventListeners('comparisonGrid');
+    this.loadComparisonSlices(this.currentSlice);
+  }
+
+  /**
+   * Load the current slice into every comparison pane (shorter stacks
+   * clamp to their last slice and show an end-of-stack badge)
+   */
+  loadComparisonSlices(sliceIndex) {
+    this.comparisonFiles.forEach((f, i) => {
+      const img = document.querySelector(`[data-pane-img="${i}"]`);
+      const badge = document.querySelector(`[data-pane-end="${i}"]`);
+      if (!img) return;
+      const clamped = Math.min(sliceIndex, f.sliceCount - 1);
+      if (badge) badge.style.display = sliceIndex > f.sliceCount - 1 ? '' : 'none';
+      img.src = this.comparisonSliceUrl(f, clamped, 'gallery');
+    });
+    this.applyZoomPan();
+    this.prefetchNeighbors(sliceIndex);
+  }
+
+  /**
+   * Setup gallery view event listeners
+   * @param {string} [panSurfaceId='imageWrapper'] - element that receives
+   *   pan/wheel events (the comparison grid in comparison mode)
+   */
+  setupGalleryEventListeners(panSurfaceId = 'imageWrapper') {
     // Slice navigation
     document.getElementById('prevSliceBtn')?.addEventListener('click', () => this.previousSlice());
     document.getElementById('nextSliceBtn')?.addEventListener('click', () => this.nextSlice());
@@ -640,7 +872,7 @@ class ImageViewerModule extends BaseModule {
     document.getElementById('zoomResetBtn')?.addEventListener('click', () => this.resetZoom());
 
     // Pan handlers
-    const imageWrapper = document.getElementById('imageWrapper');
+    const imageWrapper = document.getElementById(panSurfaceId);
     if (imageWrapper) {
       imageWrapper.addEventListener('mousedown', (e) => this.startPan(e));
       imageWrapper.addEventListener('mousemove', (e) => this.doPan(e));
@@ -681,6 +913,7 @@ class ImageViewerModule extends BaseModule {
           this.applyZoomPan();
         }
         if (loading) loading.style.display = 'none';
+        this.prefetchNeighbors(sliceIndex);
       };
       newImg.onerror = () => {
         if (loading) {
@@ -701,7 +934,9 @@ class ImageViewerModule extends BaseModule {
    * Navigate to specific slice
    */
   goToSlice(index) {
-    const maxSlice = (this.tiffInfo?.sliceCount || 1) - 1;
+    const maxSlice = this.comparing
+      ? this.comparisonMaxSlices() - 1
+      : (this.tiffInfo?.sliceCount || 1) - 1;
     this.currentSlice = Math.max(0, Math.min(index, maxSlice));
 
     // Update UI
@@ -715,15 +950,21 @@ class ImageViewerModule extends BaseModule {
     if (prevBtn) prevBtn.disabled = this.currentSlice <= 0;
     if (nextBtn) nextBtn.disabled = this.currentSlice >= maxSlice;
 
-    // Load the slice
-    this.loadSlice(this.currentSlice);
+    // Load the slice(s)
+    if (this.comparing) {
+      this.loadComparisonSlices(this.currentSlice);
+    } else {
+      this.loadSlice(this.currentSlice);
+    }
   }
 
   /**
    * Go to next slice
    */
   nextSlice() {
-    const maxSlice = (this.tiffInfo?.sliceCount || 1) - 1;
+    const maxSlice = this.comparing
+      ? this.comparisonMaxSlices() - 1
+      : (this.tiffInfo?.sliceCount || 1) - 1;
     if (this.currentSlice < maxSlice) {
       this.goToSlice(this.currentSlice + 1);
     }
@@ -777,13 +1018,16 @@ class ImageViewerModule extends BaseModule {
   }
 
   /**
-   * Apply zoom and pan to image
+   * Apply zoom and pan to the image (or to every comparison pane -
+   * the same transform keeps the views in sync)
    */
   applyZoomPan() {
+    const transform = `scale(${this.zoomLevel}) translate(${this.panOffset.x}px, ${this.panOffset.y}px)`;
     const img = document.getElementById('galleryImage');
-    if (img) {
-      img.style.transform = `scale(${this.zoomLevel}) translate(${this.panOffset.x}px, ${this.panOffset.y}px)`;
-    }
+    if (img) img.style.transform = transform;
+    document.querySelectorAll('[data-pane-img]').forEach(pimg => {
+      pimg.style.transform = transform;
+    });
   }
 
   /**
@@ -833,6 +1077,10 @@ class ImageViewerModule extends BaseModule {
    * Render icon grid view
    */
   renderIconView() {
+    if (this.comparing) {
+      this.renderComparisonIconView();
+      return;
+    }
     const container = document.getElementById('viewContainer');
     if (!container) return;
 
@@ -848,6 +1096,87 @@ class ImageViewerModule extends BaseModule {
 
     // Setup lazy loading
     this.setupLazyLoading();
+  }
+
+  /**
+   * Comparison thumbnail view: one column per stack, one row per slice
+   * index, so the same z position lines up across stacks
+   */
+  renderComparisonIconView() {
+    const container = document.getElementById('viewContainer');
+    if (!container) return;
+
+    const sliceCount = this.comparisonMaxSlices();
+    const n = this.comparisonFiles.length;
+
+    let rows = '';
+    for (let i = 0; i < sliceCount; i++) {
+      rows += `
+        <div class="comparison-thumb-row">
+          <div class="comparison-thumb-index">${i + 1}</div>
+          ${this.comparisonFiles.map((f, col) => i < f.sliceCount ? `
+            <div class="thumbnail-card comparison-thumb-cell" data-slice="${i}" data-col="${col}">
+              <div class="thumbnail-placeholder" id="cmp-thumb-${col}-${i}">
+                <span class="slice-num">${i + 1}</span>
+              </div>
+            </div>` : `
+            <div class="comparison-thumb-cell comparison-thumb-empty"></div>`).join('')}
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="icon-grid-view comparison-icon-view">
+        <div class="comparison-thumb-table cols-${n}">
+          <div class="comparison-thumb-row comparison-thumb-header">
+            <div class="comparison-thumb-index">#</div>
+            ${this.comparisonFiles.map(f =>
+              `<div class="comparison-thumb-cell comparison-thumb-title" title="${f.name}">${f.name}</div>`).join('')}
+          </div>
+          ${rows}
+        </div>
+      </div>
+    `;
+
+    this.setupComparisonLazyLoading();
+  }
+
+  /**
+   * Lazy loading for the comparison thumbnail table
+   */
+  setupComparisonLazyLoading() {
+    const cells = document.querySelectorAll('.comparison-thumb-cell[data-slice]');
+
+    if (this.imageObserver) {
+      this.imageObserver.disconnect();
+    }
+    this.imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const sliceIndex = parseInt(entry.target.dataset.slice);
+          const col = parseInt(entry.target.dataset.col);
+          const file = this.comparisonFiles[col];
+          const placeholder = entry.target.querySelector('.thumbnail-placeholder');
+          if (file && placeholder) {
+            const img = new Image();
+            img.onload = () => {
+              placeholder.innerHTML = '';
+              placeholder.appendChild(img);
+              img.className = 'thumbnail-img';
+            };
+            img.src = this.comparisonSliceUrl(file, sliceIndex, 'icon');
+          }
+          this.imageObserver.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '150px' });
+
+    cells.forEach(cell => {
+      this.imageObserver.observe(cell);
+      cell.addEventListener('click', () => {
+        this.switchToGalleryMode(parseInt(cell.dataset.slice));
+      });
+    });
   }
 
   /**
@@ -949,6 +1278,8 @@ class ImageViewerModule extends BaseModule {
     this.tiffInfo = null;
     this.currentSlice = 0;
     this.viewMode = 'gallery';
+    this.comparisonFiles = [];
+    this._prefetched.clear();
     this.zoomLevel = 1;
     this.panOffset = { x: 0, y: 0 };
     this.isDragging = false;
