@@ -29,6 +29,7 @@ const createMeshRoutes = require('./routes/mesh.routes');
 const createAnnotationRoutes = require('./routes/annotation.routes');
 const createDenoisingRoutes = require('./routes/denoising.routes');
 const createStitchingRoutes = require('./routes/stitching.routes');
+const createPreprocessRoutes = require('./routes/preprocess.routes');
 const createAdminRoutes = require('./routes/admin.routes');
 
 // Python runner wrappers
@@ -412,6 +413,14 @@ function configureApp(app, dependencies) {
 
   // Stitching routes
   app.use('/api/stitching', createStitchingRoutes({
+    workspaceManager,
+    activityLogger,
+    logger,
+    io
+  }));
+
+  // Preprocess routes
+  app.use('/api/preprocess', createPreprocessRoutes({
     workspaceManager,
     activityLogger,
     logger,

@@ -377,6 +377,9 @@ class WorkspaceManager {
       thumbnailPath: null,
       // Tags for additional classification (e.g., ['inference'] for inference data)
       tags: fileInfo.tags || [],
+      // Physical voxel size {x, y, z, unit} - read from TIFF metadata on
+      // upload, inherited through processing, editable in file info (ADR-008)
+      ...(fileInfo.voxelSize && { voxelSize: fileInfo.voxelSize }),
       // Lineage - only added for processed files (not original uploads)
       ...(fileInfo.lineage && { lineage: fileInfo.lineage })
     };
@@ -386,6 +389,28 @@ class WorkspaceManager {
 
     console.log('[WorkspaceManager] File tracked:', fileEntry.id, fileEntry.path);
     return fileEntry;
+  }
+
+  /**
+   * Set or clear the physical voxel size of a tracked file (ADR-008)
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   * @param {object|null} voxelSize - {x, y, z, unit} or null to clear
+   * @returns {object} Updated file entry
+   */
+  updateFileVoxelSize(sessionId, fileId, voxelSize) {
+    const metadata = this.loadMetadata(sessionId);
+    const file = metadata.files.find(f => f.id === fileId);
+    if (!file) {
+      throw new Error('File not found');
+    }
+    if (voxelSize) {
+      file.voxelSize = voxelSize;
+    } else {
+      delete file.voxelSize;
+    }
+    this.saveMetadata(sessionId, metadata);
+    return file;
   }
 
   /**

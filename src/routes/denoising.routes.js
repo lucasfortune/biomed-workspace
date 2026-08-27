@@ -1555,6 +1555,10 @@ function createDenoisingRoutes(dependencies) {
       const cacheFilename = `dl_${pathHash}_${sliceIndex}_${sizeParam}.jpg`;
       const cachePath = path.join(slicesDir, cacheFilename);
 
+      // Result files are immutable, so slice JPEGs can be browser-cached
+      // (same as the workspace slice endpoint)
+      res.set('Cache-Control', 'private, max-age=86400');
+
       // Check cache first
       if (fs.existsSync(cachePath)) {
         return res.sendFile(path.resolve(cachePath));

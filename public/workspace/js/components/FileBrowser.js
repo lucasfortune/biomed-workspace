@@ -1210,6 +1210,15 @@ class FileBrowser {
               <span class="file-info-label">Uploaded:</span>
               <span class="file-info-value">${this.formatDate(file.uploadedAt)}</span>
             </div>
+            ${this.isTiffName(file.name) ? `
+            <div class="file-info-row" id="voxel-size-row-${file.id}">
+              <span class="file-info-label">Voxel size:</span>
+              <span class="file-info-value">
+                <span class="voxel-size-display">${this.formatVoxelSize(file.voxelSize)}</span>
+                <button class="voxel-size-edit-btn" title="Edit voxel size">✏️</button>
+              </span>
+            </div>
+            ` : ''}
             <div class="file-info-row">
               <span class="file-info-label">ID:</span>
               <span class="file-info-value file-info-mono">${this.escapeHtml(file.id)}</span>
@@ -1228,6 +1237,12 @@ class FileBrowser {
 
     // Fetch and display lineage information
     this.fetchAndDisplayLineage(file.id);
+
+    // Voxel size inline editing (ADR-008)
+    const voxelBtn = modal.querySelector('.voxel-size-edit-btn');
+    if (voxelBtn) {
+      voxelBtn.addEventListener('click', () => this.editVoxelSize(file.id));
+    }
 
     // Close handlers
     const closeModal = () => {
@@ -1256,6 +1271,104 @@ class FileBrowser {
       }
     };
     document.addEventListener('keydown', handleEscape);
+  }
+
+  /**
+   * True for .tif/.tiff filenames
+   */
+  isTiffName(name) {
+    return /\.tiff?$/i.test(name || '');
+  }
+
+  /**
+   * Format a voxelSize object for display
+   * @param {object|null} voxelSize - {x, y, z, unit}
+   */
+  formatVoxelSize(voxelSize) {
+    if (!voxelSize || !voxelSize.x) return 'not set';
+    const unit = voxelSize.unit === 'um' ? 'µm' : (voxelSize.unit || '');
+    const fmt = (v) => Number(v).toPrecision(4).replace(/\.?0+$/, '');
+    const z = voxelSize.z != null ? ` × ${fmt(voxelSize.z)}` : '';
+    return `${fmt(voxelSize.x)} × ${fmt(voxelSize.y)}${z} ${unit}`;
+  }
+
+  /**
+   * Swap the voxel-size row of the file info modal into edit mode (ADR-008)
+   * @param {string} fileId - File ID
+   */
+  editVoxelSize(fileId) {
+    const row = document.getElementById(`voxel-size-row-${fileId}`);
+    const file = this.state.get('workspace.files').find(f => f.id === fileId);
+    if (!row || !file) return;
+
+    const vs = file.voxelSize || {};
+    const valueEl = row.querySelector('.file-info-value');
+    valueEl.innerHTML = `
+      <span class="voxel-size-editor">
+        x <input type="number" class="vs-x" min="0" step="any" value="${vs.x ?? ''}" placeholder="x">
+        y <input type="number" class="vs-y" min="0" step="any" value="${vs.y ?? ''}" placeholder="y">
+        z <input type="number" class="vs-z" min="0" step="any" value="${vs.z ?? ''}" placeholder="z">
+        <select class="vs-unit">
+          <option value="um" ${!vs.unit || vs.unit === 'um' ? 'selected' : ''}>µm</option>
+          <option value="nm" ${vs.unit === 'nm' ? 'selected' : ''}>nm</option>
+          <option value="mm" ${vs.unit === 'mm' ? 'selected' : ''}>mm</option>
+        </select>
+        <button class="vs-save">Save</button>
+        <button class="vs-cancel">Cancel</button>
+      </span>
+    `;
+
+    const restore = () => {
+      const current = this.state.get('workspace.files').find(f => f.id === fileId);
+      valueEl.innerHTML = `
+        <span class="voxel-size-display">${this.formatVoxelSize(current?.voxelSize)}</span>
+        <button class="voxel-size-edit-btn" title="Edit voxel size">✏️</button>
+      `;
+      valueEl.querySelector('.voxel-size-edit-btn')
+        ?.addEventListener('click', () => this.editVoxelSize(fileId));
+    };
+
+    valueEl.querySelector('.vs-cancel')?.addEventListener('click', restore);
+    valueEl.querySelector('.vs-save')?.addEventListener('click', async () => {
+      const num = (sel) => {
+        const v = valueEl.querySelector(sel)?.value;
+        return v === '' || v == null ? null : parseFloat(v);
+      };
+      const x = num('.vs-x');
+      const y = num('.vs-y');
+      const z = num('.vs-z');
+      const unit = valueEl.querySelector('.vs-unit')?.value || 'um';
+      const voxelSize = x == null && y == null && z == null
+        ? null
+        : { x: x ?? y, y: y ?? x, z, unit };
+      if (voxelSize && (!(voxelSize.x > 0) || !(voxelSize.y > 0))) {
+        this.state.notify('error', 'x and y voxel sizes must be positive');
+        return;
+      }
+      try {
+        const response = await fetch(`/api/workspace/file/${fileId}/voxel-size`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ voxelSize })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Update failed');
+        // Keep the in-memory file list in sync
+        const files = this.state.get('workspace.files');
+        const idx = files.findIndex(f => f.id === fileId);
+        if (idx >= 0) {
+          const updated = [...files];
+          updated[idx] = { ...updated[idx] };
+          if (voxelSize) updated[idx].voxelSize = data.file.voxelSize;
+          else delete updated[idx].voxelSize;
+          this.state.update('workspace.files', updated);
+        }
+        restore();
+      } catch (e) {
+        this.state.notify('error', `Could not save voxel size: ${e.message}`);
+      }
+    });
   }
 
   /**

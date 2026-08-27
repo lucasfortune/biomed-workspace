@@ -67,7 +67,7 @@ function createStorage(workspaceManager, logger) {
  */
 function tiffFileFilter(req, file, cb) {
   // Accept only TIFF files
-  if (file.mimetype === 'image/tiff' || file.originalname.toLowerCase().endsWith('.tif')) {
+  if (file.mimetype === 'image/tiff' || /\.tiff?$/.test(file.originalname.toLowerCase())) {
     cb(null, true);
   } else {
     cb(new Error('Only TIFF files are allowed!'), false);

@@ -28,6 +28,76 @@ import tifffile
 from tiff_validation_utils import safe_imread
 
 
+def read_voxel_size(tif):
+    """
+    Physical voxel size from TIFF metadata, if present (ADR-008).
+
+    Sources, in priority order: OME-XML PhysicalSize*, ImageJ metadata
+    (spacing for z, unit) + resolution tags, plain resolution tags.
+
+    Returns:
+        {"x": float, "y": float, "z": float|None, "unit": str} or None
+    """
+    x = y = z = None
+    unit = None
+
+    # OME-XML
+    try:
+        if tif.ome_metadata:
+            import re
+            ome = tif.ome_metadata
+            def attr(name):
+                m = re.search(rf'{name}="([\d.eE+-]+)"', ome)
+                return float(m.group(1)) if m else None
+            def attr_unit(name):
+                m = re.search(rf'{name}Unit="([^"]+)"', ome)
+                return m.group(1) if m else None
+            x, y, z = attr("PhysicalSizeX"), attr("PhysicalSizeY"), attr("PhysicalSizeZ")
+            unit = attr_unit("PhysicalSizeX") or unit
+    except Exception:
+        pass
+
+    # Resolution tags (pixels per unit -> size = denominator/numerator)
+    if x is None or y is None:
+        try:
+            page = tif.pages[0]
+            xres = page.tags.get("XResolution")
+            yres = page.tags.get("YResolution")
+            def res_to_size(tag):
+                num, den = tag.value
+                return den / num if num else None
+            if xres and yres:
+                x = x if x is not None else res_to_size(xres)
+                y = y if y is not None else res_to_size(yres)
+        except Exception:
+            pass
+
+    # ImageJ metadata: z spacing + unit
+    try:
+        ij = tif.imagej_metadata or {}
+        if z is None and ij.get("spacing"):
+            z = float(ij["spacing"])
+        if unit is None and ij.get("unit"):
+            unit = ij["unit"]
+    except Exception:
+        pass
+
+    if x is None and y is None:
+        return None
+    if x is None:
+        x = y
+    if y is None:
+        y = x
+    # normalize the micron aliases
+    if unit in ("micron", "microns", "µm", "um"):
+        unit = "um"
+    return {
+        "x": float(x), "y": float(y),
+        "z": float(z) if z is not None else None,
+        "unit": unit or "px",
+    }
+
+
 def get_tiff_info(input_path, detect_classes=True):
     """
     Get TIFF metadata, optionally detecting unique classes.
@@ -37,7 +107,8 @@ def get_tiff_info(input_path, detect_classes=True):
         detect_classes: If True, load data to detect unique class values
 
     Returns:
-        dict with sliceCount, width, height, dtype, and optionally classes
+        dict with sliceCount, width, height, dtype, optional voxelSize,
+        and optionally classes
     """
     with tifffile.TiffFile(input_path) as tif:
         n_pages = len(tif.pages)
@@ -77,6 +148,10 @@ def get_tiff_info(input_path, detect_classes=True):
             }
         else:
             raise ValueError(f"Unexpected image shape: {shape}")
+
+        voxel_size = read_voxel_size(tif)
+        if voxel_size:
+            info["voxelSize"] = voxel_size
 
     # Detect unique classes if requested
     if detect_classes:

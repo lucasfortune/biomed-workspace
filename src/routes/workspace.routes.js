@@ -139,6 +139,32 @@ function createWorkspaceRoutes(dependencies) {
     }
   });
 
+  /**
+   * Read physical voxel size from a TIFF's metadata in the background and
+   * store it on the file entry when found (ADR-008). Fire-and-forget.
+   */
+  function extractVoxelSizeAsync(sessionId, absolutePath, fileId) {
+    try {
+      const proc = spawn(PYTHON_PATH, [
+        'python/extract_slice.py', absolutePath, '--info', '--no-classes'
+      ]);
+      let stdout = '';
+      proc.stdout.on('data', (d) => { stdout += d.toString(); });
+      proc.on('close', () => {
+        try {
+          const line = stdout.split('\n').find(l => l.startsWith('INFO:'));
+          if (!line) return;
+          const info = JSON.parse(line.substring(5));
+          if (info.voxelSize && info.voxelSize.x) {
+            workspaceManager.updateFileVoxelSize(sessionId, fileId, info.voxelSize);
+            if (logger) logger.debug(`[Workspace] Voxel size stored for ${fileId}:`, info.voxelSize);
+          }
+        } catch (e) { /* non-critical */ }
+      });
+      proc.on('error', () => { /* non-critical */ });
+    } catch (e) { /* non-critical */ }
+  }
+
   // ===========================================================================
   // FILE UPLOAD
   // ===========================================================================
@@ -201,6 +227,8 @@ function createWorkspaceRoutes(dependencies) {
       // Trigger thumbnail generation for TIFF files
       if (fileService && fileService.isTiffFile(uploadedFile.originalname)) {
         fileService.generateThumbnailAsync(sessionId, uploadedFile.path, fileEntry.id);
+        // Read physical voxel size from TIFF metadata (ADR-008)
+        extractVoxelSizeAsync(sessionId, uploadedFile.path, fileEntry.id);
       }
 
       if (activityLogger) {
@@ -618,6 +646,11 @@ function createWorkspaceRoutes(dependencies) {
       // Generate cache filename based on fileId, slice, and size
       const cacheFilename = `${fileId}_${sliceIndex}_${size}.jpg`;
       const cachePath = path.join(slicesDir, cacheFilename);
+
+      // Workspace files are immutable (edits create new files), so slice
+      // JPEGs can be browser-cached: revisiting a slice reuses the local
+      // copy instead of re-fetching and re-showing a loading state
+      res.set('Cache-Control', 'private, max-age=86400');
 
       // Check cache first
       if (fs.existsSync(cachePath)) {

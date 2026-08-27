@@ -13,7 +13,8 @@ const MODULE_IDS = {
   IMAGEVIEWER: 'imageviewer',
   MESH: 'mesh',
   VISUALIZATION: 'visualization',
-  STITCHING: 'stitching'
+  STITCHING: 'stitching',
+  PREPROCESS: 'preprocess'
 };
 
 // SVG Icon definitions (filled/solid style)
@@ -30,10 +31,23 @@ const moduleIcons = {
 
   visualization: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`,
 
-  stitching: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h7v7H4V3zm9 0h7v7h-7V3zm-9 11h7v7H4v-7zm12.5 0c.83 0 1.5.67 1.5 1.5V17h1.5c.83 0 1.5.67 1.5 1.5S20.33 20 19.5 20H18v1.5c0 .83-.67 1.5-1.5 1.5S15 22.33 15 21.5V20h-1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5H15v-1.5c0-.83.67-1.5 1.5-1.5z"/></svg>`
+  stitching: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h7v7H4V3zm9 0h7v7h-7V3zm-9 11h7v7H4v-7zm12.5 0c.83 0 1.5.67 1.5 1.5V17h1.5c.83 0 1.5.67 1.5 1.5S20.33 20 19.5 20H18v1.5c0 .83-.67 1.5-1.5 1.5S15 22.33 15 21.5V20h-1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5H15v-1.5c0-.83.67-1.5 1.5-1.5z"/></svg>`,
+
+  preprocess: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/></svg>`
 };
 
 const moduleRegistry = [
+  {
+    id: 'preprocess',
+    name: 'Preprocessing',
+    description: 'Prepare image stacks: crop, z-trim, flip/rotate, downscale, intensity windowing, gamma and bit-depth conversion',
+    icon: moduleIcons.preprocess,
+    path: '/workspace/js/modules/preprocess/PreprocessModule.js',
+    inputs: ['image_stack'],
+    outputs: ['image_stack'],
+    color: '#C29B0C',
+    status: 'available'
+  },
   {
     id: 'denoising',
     name: 'Denoising',

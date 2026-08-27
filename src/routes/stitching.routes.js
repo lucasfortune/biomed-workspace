@@ -258,6 +258,11 @@ function createStitchingRoutes(dependencies) {
 
             const stats = fs.statSync(outputPath);
             const isLabels = pythonRecipe.mode === 'labels';
+            // Voxel size inherited from the first input stack (all stacks
+            // in a stitch share a pixel grid) - ADR-008
+            const voxelSize = inputRelPaths
+              .map(rel => metadata?.files?.find(f => f.path === rel)?.voxelSize)
+              .find(Boolean);
             const outputEntry = workspaceManager.addFileToMetadata(sessionId, {
               name: path.basename(outputPath),
               path: path.relative(workspacePath, outputPath),
@@ -266,6 +271,7 @@ function createStitchingRoutes(dependencies) {
                              : ['stitching', 'raw', 'data'],
               size: stats.size,
               folderId: null,
+              ...(voxelSize && { voxelSize }),
               lineage
             });
             outputFileId = outputEntry?.id || null;

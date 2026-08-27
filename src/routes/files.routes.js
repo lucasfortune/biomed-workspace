@@ -116,6 +116,42 @@ function createFilesRoutes(dependencies) {
   });
 
   /**
+   * Set or clear a file's physical voxel size (ADR-008)
+   * PATCH /api/workspace/file/:fileId/voxel-size
+   * Body: { voxelSize: {x, y, z, unit} | null }
+   */
+  router.patch('/file/:fileId/voxel-size', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const { voxelSize } = req.body;
+      const sessionId = req.session.id;
+
+      let cleaned = null;
+      if (voxelSize != null) {
+        const x = Number(voxelSize.x);
+        const y = Number(voxelSize.y);
+        const z = voxelSize.z != null && voxelSize.z !== '' ? Number(voxelSize.z) : null;
+        if (!(x > 0) || !(y > 0) || (z != null && !(z > 0))) {
+          return res.status(400).json({
+            success: false,
+            error: 'Voxel sizes must be positive numbers'
+          });
+        }
+        const unit = String(voxelSize.unit || 'um').slice(0, 10);
+        cleaned = { x, y, ...(z != null && { z }), unit };
+      }
+
+      const file = workspaceManager.updateFileVoxelSize(sessionId, fileId, cleaned);
+      res.json({ success: true, file });
+    } catch (error) {
+      if (logger) {
+        logger.error('Voxel size update error:', error);
+      }
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
    * Move file to folder
    * PATCH /api/workspace/file/:fileId/move
    */
@@ -275,6 +311,7 @@ function createFilesRoutes(dependencies) {
               category: file.category,
               size: result.size,
               tags: file.tags || [],
+              ...(file.voxelSize && { voxelSize: file.voxelSize }),
               lineage: {
                 processType: 'duplicate',
                 inputs: [fileId],
@@ -383,6 +420,7 @@ function createFilesRoutes(dependencies) {
               category: file.category,
               size: result.part1.size,
               tags: file.tags || [],
+              ...(file.voxelSize && { voxelSize: file.voxelSize }),
               lineage: {
                 processType: 'split',
                 inputs: [fileId],
@@ -397,6 +435,7 @@ function createFilesRoutes(dependencies) {
               category: file.category,
               size: result.part2.size,
               tags: file.tags || [],
+              ...(file.voxelSize && { voxelSize: file.voxelSize }),
               lineage: {
                 processType: 'split',
                 inputs: [fileId],

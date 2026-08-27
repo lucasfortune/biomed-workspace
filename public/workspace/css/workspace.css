@@ -1657,6 +1657,63 @@ body {
   font-style: italic;
 }
 
+/* Voxel size row (ADR-008) */
+.voxel-size-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+  opacity: 0.6;
+}
+
+.voxel-size-edit-btn:hover {
+  opacity: 1;
+}
+
+.voxel-size-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.voxel-size-editor input[type="number"] {
+  width: 64px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  background: var(--primary-bg, #fff);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.voxel-size-editor select {
+  padding: 3px 4px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  background: var(--primary-bg, #fff);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.voxel-size-editor .vs-save,
+.voxel-size-editor .vs-cancel {
+  padding: 3px 10px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  background: var(--secondary-bg, #f5f5f5);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.voxel-size-editor .vs-save {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
 /* ==================== JSON Viewer Modal ==================== */
 
 .json-viewer-content {
