@@ -264,7 +264,9 @@ class SegcleanupModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'segcleanup_source',
-        fileType: 'annotations',
+        // List uploads tagged 'annotation'; upload new files AS annotations
+        fileType: 'uploads',
+        uploadCategory: 'annotations',
         filterTags: ['annotation'],
         title: 'Segmentation',
         icon: '🧩',

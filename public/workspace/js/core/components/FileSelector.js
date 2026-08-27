@@ -59,6 +59,10 @@ class FileSelector {
     this.filterTags = config.filterTags || null;  // Tags files must have (e.g., ['raw'])
     this.excludeTags = config.excludeTags || null;  // Tags to exclude files with (e.g., ['info', 'wip'])
     this.accept = config.accept || '.tif,.tiff';
+    // Category sent with uploads (form field name + category). Defaults to
+    // fileType, but can differ: e.g. list category 'uploads' while
+    // uploading as 'annotations' so the server applies the annotation tag.
+    this.uploadCategory = config.uploadCategory || config.fileType || 'file';
     this.showTestData = config.showTestData !== false;
     this.showRecentResults = config.showRecentResults === true;
     this.acceptAllTiff = config.acceptAllTiff === true;
@@ -599,8 +603,8 @@ class FileSelector {
    */
   async uploadFile(file) {
     const formData = new FormData();
-    formData.append(this.fileType, file);
-    formData.append('category', this.fileType);
+    formData.append(this.uploadCategory, file);
+    formData.append('category', this.uploadCategory);
 
     const response = await fetch(this.uploadEndpoint, {
       method: 'POST',
