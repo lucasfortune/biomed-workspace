@@ -119,7 +119,7 @@ const moduleRegistry = [
   {
     id: 'mesh',
     name: 'Surface Mesh Generation',
-    description: 'Convert segmented volumes to 3D surface meshes for visualization and export (OBJ, STL, Three.js)',
+    description: 'Convert segmented volumes to 3D surface meshes for the 3D viewer (further formats via file-browser conversion)',
     icon: moduleIcons.mesh,
     path: '/workspace/js/modules/mesh/MeshModule.js',
     inputs: ['segmented_stack', 'annotations'],

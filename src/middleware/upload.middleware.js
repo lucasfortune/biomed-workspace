@@ -97,11 +97,13 @@ function workspaceFileFilter(req, file, cb) {
     return;
   }
 
-  // All other categories accept TIFF files
-  if (file.mimetype === 'image/tiff' || filename.endsWith('.tif') || filename.endsWith('.tiff')) {
+  // All other categories accept TIFF files (and MRC, which the upload
+  // route converts to TIFF on import - the workbench is TIFF-internal)
+  if (file.mimetype === 'image/tiff' || filename.endsWith('.tif')
+      || filename.endsWith('.tiff') || filename.endsWith('.mrc')) {
     cb(null, true);
   } else {
-    cb(new Error('Only TIFF files are allowed!'), false);
+    cb(new Error('Only TIFF (or MRC) files are allowed!'), false);
   }
 }
 
@@ -109,7 +111,7 @@ function workspaceFileFilter(req, file, cb) {
  * TIFF file filter - accepts only TIFF files (legacy, for specific routes)
  */
 function tiffFileFilter(req, file, cb) {
-  if (file.mimetype === 'image/tiff' || file.originalname.toLowerCase().endsWith('.tif')) {
+  if (file.mimetype === 'image/tiff' || /\.tiff?$/.test(file.originalname.toLowerCase())) {
     cb(null, true);
   } else {
     cb(new Error('Only TIFF files are allowed!'), false);

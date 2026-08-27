@@ -285,7 +285,7 @@ class FileBrowser {
         </div>
 
         <input type="file" id="fb-file-input" class="fb-file-input-hidden"
-               accept=".tif,.tiff,.pth,.json,.zip" multiple style="display: none;">
+               accept=".tif,.tiff,.mrc,.pth,.json,.zip" multiple style="display: none;">
 
         <div class="fb-upload-progress" id="fb-upload-progress" style="display: none;">
           <div class="fb-progress-bar">
@@ -1088,6 +1088,12 @@ class FileBrowser {
     const isTiff = ['tif', 'tiff'].includes(ext);
     const isJson = ext === 'json';
 
+    // Format-conversion targets by file type
+    const conversions = isTiff ? [['mrc', 'MRC']]
+      : ext === 'mrc' ? [['tif', 'TIFF']]
+      : ext === 'obj' ? [['stl', 'STL'], ['ply', 'PLY'], ['glb', 'glTF (GLB)']]
+      : [];
+
     // Build base menu items
     const menuItems = [
       {
@@ -1148,6 +1154,18 @@ class FileBrowser {
       }
     }
 
+    // Format conversion (tif <-> mrc, obj -> stl/ply/glb)
+    if (conversions.length) {
+      menuItems.push({ separator: true });
+      for (const [format, label] of conversions) {
+        menuItems.push({
+          icon: '🔄',
+          label: `Convert to ${label}`,
+          onClick: () => this.convertFile(fileId, format, label)
+        });
+      }
+    }
+
     menuItems.push({ separator: true });
     menuItems.push({
       icon: '🗑️',
@@ -1157,6 +1175,31 @@ class FileBrowser {
     });
 
     this.contextMenu.show(x, y, menuItems);
+  }
+
+  /**
+   * Convert a file to another format (creates a new tracked file)
+   * @param {string} fileId - File ID
+   * @param {string} format - Target extension (mrc/tif/stl/ply/glb)
+   * @param {string} label - Human-readable format name
+   */
+  async convertFile(fileId, format, label) {
+    this.state.notify('info', `Converting to ${label}...`);
+    try {
+      const response = await fetch(`/api/workspace/file/${fileId}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ format })
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || 'Conversion failed');
+      this.state.notify('success', `Converted: ${data.file.name}`);
+      this.refresh();
+    } catch (error) {
+      console.error('[FileBrowser] Convert error:', error);
+      this.state.notify('error', `Conversion failed: ${error.message}`);
+    }
   }
 
   /**

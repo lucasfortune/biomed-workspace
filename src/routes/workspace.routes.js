@@ -211,6 +211,52 @@ function createWorkspaceRoutes(dependencies) {
       const uploadedFile = req.files[0];
       const workspacePath = workspaceService.getWorkspacePath(sessionId);
 
+      // MRC uploads are converted to TIFF on import - every module in the
+      // workbench operates on TIFF. Voxel size comes from the MRC header.
+      let uploadVoxelSize = null;
+      if (/\.mrc$/i.test(uploadedFile.originalname)) {
+        const tifPath = uploadedFile.path.replace(/\.mrc$/i, '.tif');
+        const conversion = await new Promise((resolve) => {
+          const proc = spawn(PYTHON_PATH, [
+            'python/convert_file.py', '--input', uploadedFile.path, '--output', tifPath
+          ]);
+          let stdout = '';
+          let stderr = '';
+          proc.stdout.on('data', (d) => { stdout += d.toString(); });
+          proc.stderr.on('data', (d) => { stderr += d.toString(); });
+          proc.on('close', (code) => {
+            const line = stdout.split('\n').find(l => l.startsWith('CONVERT_RESULT:'));
+            if (code === 0 && line) {
+              try { return resolve(JSON.parse(line.substring(15))); } catch (e) { /* fall through */ }
+            }
+            const errLine = stdout.split('\n').find(l => l.startsWith('CONVERT_ERROR:'));
+            let message = 'MRC conversion failed';
+            if (errLine) {
+              try { message = JSON.parse(errLine.substring(14)).message || message; } catch (e) { /* keep */ }
+            } else if (stderr) {
+              message = stderr.split('\n').slice(-2).join(' ').trim() || message;
+            }
+            resolve({ error: message });
+          });
+          proc.on('error', (err) => resolve({ error: `Failed to spawn converter: ${err.message}` }));
+        });
+
+        if (conversion.error) {
+          fs.unlink(uploadedFile.path, () => {});
+          return res.status(400).json({
+            success: false,
+            error: `Could not import MRC file: ${conversion.error}`
+          });
+        }
+
+        // Replace the MRC with the converted TIFF
+        fs.unlink(uploadedFile.path, () => {});
+        uploadedFile.path = tifPath;
+        uploadedFile.originalname = uploadedFile.originalname.replace(/\.mrc$/i, '.tif');
+        uploadedFile.size = conversion.size;
+        uploadVoxelSize = conversion.voxelSize || null;
+      }
+
       // Determine relative path within workspace
       const relativePath = path.relative(workspacePath, uploadedFile.path);
 
@@ -221,7 +267,8 @@ function createWorkspaceRoutes(dependencies) {
         category: category,
         tags: tags,
         size: uploadedFile.size,
-        folderId: req.body.folderId || null
+        folderId: req.body.folderId || null,
+        ...(uploadVoxelSize && { voxelSize: uploadVoxelSize })
       });
 
       // Trigger thumbnail generation for TIFF files

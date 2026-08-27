@@ -489,3 +489,10 @@
     width: 100%;
   }
 }
+
+/* Format note (formats are fixed: JSON + OBJ; conversion via file browser) */
+.mesh-module .format-note {
+  font-size: 0.85rem;
+  color: var(--module-text-secondary, #777);
+  margin: 0 0 14px;
+}

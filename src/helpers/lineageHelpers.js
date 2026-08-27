@@ -160,7 +160,8 @@ function getProcessingHistoryString(fileId, allFiles) {
     'split': 'Split',
     'stitching': 'Stitching',
     'preprocess': 'Preprocessing',
-    'segcleanup': 'Segmentation Cleanup'
+    'segcleanup': 'Segmentation Cleanup',
+    'convert': 'Format Conversion'
   };
 
   const steps = chain.map(entry => displayNames[entry.processType] || entry.processType);

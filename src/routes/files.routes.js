@@ -355,6 +355,115 @@ function createFilesRoutes(dependencies) {
   });
 
   /**
+   * Convert a file to another format (file browser "Convert to..." action)
+   * POST /api/workspace/file/:fileId/convert
+   * Body: { format: 'mrc' | 'tif' | 'stl' | 'ply' | 'glb' }
+   *
+   * Allowed: tif -> mrc, mrc -> tif, obj -> stl/ply/glb.
+   */
+  router.post('/file/:fileId/convert', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const { format } = req.body;
+      const sessionId = req.session.id;
+
+      const file = await workspaceService.getFile(sessionId, fileId);
+      const workspacePath = workspaceService.getWorkspacePath(sessionId);
+      const inputPath = path.join(workspacePath, file.path);
+
+      const ext = path.extname(file.name).toLowerCase().replace('.tiff', '.tif');
+      const allowed = { '.tif': ['mrc'], '.mrc': ['tif'], '.obj': ['stl', 'ply', 'glb'] };
+      if (!allowed[ext] || !allowed[ext].includes(format)) {
+        return res.status(400).json({
+          success: false,
+          error: `Conversion ${ext} -> .${format} is not supported`
+        });
+      }
+      if (!fs.existsSync(inputPath)) {
+        return res.status(404).json({ success: false, error: 'Source file not found' });
+      }
+
+      // Output next to the source, conflict-safe
+      const baseName = path.basename(file.name, path.extname(file.name));
+      const dirPath = path.dirname(inputPath);
+      let outputName = `${baseName}.${format}`;
+      let outputPath = path.join(dirPath, outputName);
+      let counter = 1;
+      while (fs.existsSync(outputPath)) {
+        outputName = `${baseName}_${counter}.${format}`;
+        outputPath = path.join(dirPath, outputName);
+        counter++;
+      }
+
+      const args = ['python/convert_file.py', '--input', inputPath, '--output', outputPath];
+      if (format === 'mrc' && file.voxelSize) {
+        args.push('--voxel-size', JSON.stringify(file.voxelSize));
+      }
+
+      const pythonProcess = spawn(PYTHON_PATH, args);
+      let stdout = '';
+      let stderr = '';
+      pythonProcess.stdout.on('data', (data) => { stdout += data.toString(); });
+      pythonProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      pythonProcess.on('close', async (code) => {
+        const line = stdout.split('\n').find(l => l.startsWith('CONVERT_RESULT:'));
+        if (code === 0 && line) {
+          try {
+            const result = JSON.parse(line.substring(15));
+
+            const isMesh = ['stl', 'ply', 'glb'].includes(format);
+            const voxelSize = result.voxelSize || file.voxelSize || null;
+            const newFile = workspaceManager.addFileToMetadata(sessionId, {
+              name: outputName,
+              path: path.relative(workspacePath, outputPath),
+              category: file.category,
+              size: result.size,
+              tags: isMesh ? ['mesh', 'data', format]
+                           : [...new Set([...(file.tags || []), 'converted'])],
+              ...(voxelSize && !isMesh && { voxelSize }),
+              lineage: {
+                processType: 'convert',
+                inputs: [fileId],
+                processedAt: new Date().toISOString()
+              }
+            });
+
+            if (activityLogger) {
+              activityLogger.logActivity(req.session.user.username, 'file_converted', {
+                sourceFileId: fileId,
+                newFileId: newFile.id,
+                format
+              });
+            }
+            return res.json({ success: true, file: newFile });
+          } catch (parseError) {
+            if (logger) logger.error('Parse convert result error:', parseError);
+            return res.status(500).json({ success: false, error: 'Failed to parse result' });
+          }
+        }
+        const errLine = stdout.split('\n').find(l => l.startsWith('CONVERT_ERROR:'));
+        let message = 'Conversion failed';
+        if (errLine) {
+          try { message = JSON.parse(errLine.substring(14)).message || message; } catch (e) { /* keep */ }
+        } else if (stderr) {
+          message = stderr.split('\n').slice(-2).join(' ').trim() || message;
+        }
+        if (logger) logger.error('Convert error:', message);
+        res.status(500).json({ success: false, error: message });
+      });
+
+      pythonProcess.on('error', (err) => {
+        if (logger) logger.error('Python process error:', err);
+        res.status(500).json({ success: false, error: 'Failed to spawn Python process' });
+      });
+    } catch (error) {
+      if (logger) logger.error('Convert file error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
    * Split a TIFF stack at specified slice
    * POST /api/workspace/file/:fileId/split
    * Body: { splitAt: number, deleteOriginal: boolean }

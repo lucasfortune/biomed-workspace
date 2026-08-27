@@ -167,23 +167,12 @@ class MeshModule extends BaseModule {
                   ${this.renderHelpIcon('mesh.step2.output-options')}
                 </div>
 
-                <div class="form-field">
-                  <label>Output Formats</label>
-                  <div class="checkbox-group">
-                    <label>
-                      <input type="checkbox" id="formatJson" value="json" checked>
-                      Three.js JSON (for 3D viewer)
-                    </label>
-                    <label>
-                      <input type="checkbox" id="formatObj" value="obj" checked>
-                      OBJ (Wavefront)
-                    </label>
-                    <label>
-                      <input type="checkbox" id="formatStl" value="stl">
-                      STL (3D printing)
-                    </label>
-                  </div>
-                </div>
+                <p class="format-note">
+                  The mesh is generated as Three.js JSON (for the 3D viewer)
+                  plus OBJ geometry. Other formats (STL, PLY, glTF) are
+                  available afterwards via the file browser's right-click
+                  "Convert to..." action on the OBJ file.
+                </p>
 
                 <div class="form-field">
                   <label for="classSelection">Classes to Generate</label>
@@ -587,12 +576,10 @@ class MeshModule extends BaseModule {
   // ===========================================================================
 
   updateGenerationOptions() {
-    const formats = [];
-    if (document.getElementById('formatJson')?.checked) formats.push('json');
-    if (document.getElementById('formatObj')?.checked) formats.push('obj');
-    if (document.getElementById('formatStl')?.checked) formats.push('stl');
-
-    this.generationOptions.outputFormats = formats;
+    // Fixed formats: JSON feeds the 3D viewer, OBJ is the canonical
+    // triangle geometry that the file browser's format conversion
+    // (STL/PLY/glTF) reads from
+    this.generationOptions.outputFormats = ['json', 'obj'];
 
     const classSelect = document.getElementById('classSelection');
     this.generationOptions.targetClasses = classSelect?.value || 'all';
@@ -664,12 +651,6 @@ class MeshModule extends BaseModule {
 
     // Update options from UI
     this.updateGenerationOptions();
-
-    // Validate at least one format selected
-    if (this.generationOptions.outputFormats.length === 0) {
-      this.state.notify('error', 'Please select at least one output format');
-      return;
-    }
 
     // Show progress, hide options
     document.getElementById('generationOptions').style.display = 'none';

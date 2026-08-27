@@ -9,6 +9,7 @@
 
 # Image processing and data handling
 tifffile>=2023.7.10
+mrcfile>=1.5.0  # MRC import/export (file browser format conversion)
 numpy>=1.21.0,<2.0.0
 Pillow>=9.0.0,<11.0.0
 scikit-image>=0.21.0  # For marching cubes mesh generation and denoising
