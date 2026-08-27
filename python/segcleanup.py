@@ -400,11 +400,39 @@ def run_preview(args):
     emit("SEGCLEANUP_RESULT", {"path": args.output, "slice": index})
 
 
+def apply_edits_inplace(data, config):
+    """Replace slices with the client's edited versions (annotation
+    encodings) before any further processing."""
+    edits = config.get("edits") or {}
+    if not edits:
+        return
+    height, width = data.shape[1], data.shape[2]
+    for key, e in edits.items():
+        i = int(key)
+        if i < 0 or i >= data.shape[0]:
+            continue
+        if e.get("encoding") == "sparse":
+            sl = decode_sparse(e["data"], width, height)
+        else:
+            sl = decode_dense(e["data"], width, height)
+        data[i] = sl.astype(data.dtype)
+
+
+def class_summary(data):
+    values, counts = np.unique(data, return_counts=True)
+    return [
+        {"value": int(v), "voxels": int(c),
+         "color": "#%02x%02x%02x" % color_for(v)}
+        for v, c in zip(values, counts) if v != 0
+    ]
+
+
 def run_apply(args):
     with open(args.config) as fh:
         config = json.load(fh)
     ops = normalize_ops(config.get("ops"))
     data = load_stack(config["input_path"])
+    apply_edits_inplace(data, config)
 
     def progress(stage, frac):
         emit("SEGCLEANUP_PROGRESS", {
@@ -429,17 +457,29 @@ def run_apply(args):
         "dtype": str(result.dtype),
         "size": os.path.getsize(output_path),
         "metrics": metrics,
+        "classes": class_summary(result),
     })
 
 
 def run_quantify(args):
-    voxel_size = json.loads(args.voxel_size) if args.voxel_size else None
-    data = load_stack(args.input)
+    # Config-file form (supports pending edits); legacy arg form kept
+    if args.config:
+        with open(args.config) as fh:
+            config = json.load(fh)
+        data = load_stack(config["input_path"])
+        apply_edits_inplace(data, config)
+        voxel_size = config.get("voxel_size")
+        output_dir = config["output_dir"]
+    else:
+        data = load_stack(args.input)
+        voxel_size = json.loads(args.voxel_size) if args.voxel_size else None
+        output_dir = args.output_dir
+
     emit("SEGCLEANUP_PROGRESS", {"stage": "quantifying", "progress_percent": 10})
     metrics, objects = quantify_volume(data, voxel_size)
-    os.makedirs(args.output_dir, exist_ok=True)
-    write_reports(metrics, objects, args.output_dir)
-    emit("SEGCLEANUP_RESULT", {"output_dir": args.output_dir, "metrics": metrics})
+    os.makedirs(output_dir, exist_ok=True)
+    write_reports(metrics, objects, output_dir)
+    emit("SEGCLEANUP_RESULT", {"output_dir": output_dir, "metrics": metrics})
 
 
 def run_label_slice(args):

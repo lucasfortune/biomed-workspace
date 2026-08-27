@@ -247,13 +247,30 @@ function createSegcleanupRoutes(dependencies) {
     }
   });
 
+  /** True when a path is one of this module's working copies */
+  function isWorkingCopy(absolute) {
+    return absolute.includes(`${path.sep}.segcleanup${path.sep}`);
+  }
+
+  /** Remove a superseded working-copy job dir (best effort) */
+  function cleanupWorkingCopy(absolute) {
+    if (!isWorkingCopy(absolute)) return;
+    fsp.rm(path.dirname(absolute), { recursive: true, force: true }).catch(() => {});
+  }
+
   /**
-   * Full cleanup pipeline + quantification
+   * Run the cleanup pipeline (incl. pending paint edits) into a NEW
+   * WORKING COPY and quantify the result. The working copy lives under
+   * the workspace's .segcleanup/ cache dir and is not tracked; the final
+   * tracked output is produced by /save-edits.
+   *
    * POST /api/segcleanup/apply
-   * Body: { path, ops, outputName }
+   * Body: { path, ops, edits, sourceFileId }
+   *   - path: current editing source (original file or a working copy)
+   *   - sourceFileId: the ORIGINAL tracked file (voxel size lookup)
    */
   router.post('/apply', requireAuth, async (req, res) => {
-    const { path: fileReq, ops = {}, outputName } = req.body;
+    const { path: fileReq, ops = {}, edits = {}, sourceFileId } = req.body;
     const sessionId = req.session.id;
     if (!fileReq) {
       return res.status(400).json({ success: false, error: 'path is required' });
@@ -264,40 +281,41 @@ function createSegcleanupRoutes(dependencies) {
       if (!fs.existsSync(absolute)) {
         return res.status(404).json({ success: false, error: 'File not found' });
       }
-      const inputFile = lookupFile(sessionId, workspacePath, absolute);
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const sourceFile = metadata?.files?.find(f => f.id === sourceFileId)
+        || lookupFile(sessionId, workspacePath, absolute);
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
-      await fsp.mkdir(outputDir, { recursive: true });
-      const safeName = (outputName || 'cleaned')
-        .replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
-      const outputPath = path.join(outputDir, `${safeName}.tif`);
+      const workDir = path.join(workspacePath, '.segcleanup', `work_${jobId}`);
+      await fsp.mkdir(workDir, { recursive: true });
+      const outputPath = path.join(workDir, 'working.tif');
 
       const config = {
         input_path: absolute,
         output_path: outputPath,
         ops,
-        voxel_size: inputFile?.voxelSize || null
+        edits,
+        voxel_size: sourceFile?.voxelSize || null
       };
-      const configPath = path.join(outputDir, `config_${jobId}.json`);
-      await fsp.writeFile(configPath, JSON.stringify(config, null, 2));
+      const configPath = path.join(workDir, `config_${jobId}.json`);
+      await fsp.writeFile(configPath, JSON.stringify(config));
 
       const roomName = `segcleanup-${jobId}`;
       runJob(['--mode', 'apply', '--config', configPath], roomName, (resultData, stderr) => {
         fsp.unlink(configPath).catch(() => {});
         if (resultData) {
-          const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId);
+          // The previous working copy is superseded
+          cleanupWorkingCopy(absolute);
           io.to(roomName).emit('segcleanup-complete', {
             success: true,
             jobId,
             kind: 'apply',
-            outputPath: path.relative(workspacePath, outputPath),
-            outputFileId: entry?.id || null,
-            reportDir: path.relative(workspacePath, outputDir),
+            workingPath: path.relative(workspacePath, outputPath),
+            reportDir: path.relative(workspacePath, workDir),
             slices: resultData.slices,
             width: resultData.width,
             height: resultData.height,
-            dtype: resultData.dtype,
+            classes: resultData.classes,
             metrics: resultData.metrics
           });
           if (activityLogger && req.session.user) {
@@ -320,12 +338,12 @@ function createSegcleanupRoutes(dependencies) {
   });
 
   /**
-   * Quantification only
+   * Quantification of the current editing state (source + pending edits)
    * POST /api/segcleanup/quantify
-   * Body: { path }
+   * Body: { path, edits, sourceFileId }
    */
   router.post('/quantify', requireAuth, async (req, res) => {
-    const { path: fileReq } = req.body;
+    const { path: fileReq, edits = {}, sourceFileId } = req.body;
     const sessionId = req.session.id;
     if (!fileReq) {
       return res.status(400).json({ success: false, error: 'path is required' });
@@ -336,19 +354,26 @@ function createSegcleanupRoutes(dependencies) {
       if (!fs.existsSync(absolute)) {
         return res.status(404).json({ success: false, error: 'File not found' });
       }
-      const inputFile = lookupFile(sessionId, workspacePath, absolute);
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const sourceFile = metadata?.files?.find(f => f.id === sourceFileId)
+        || lookupFile(sessionId, workspacePath, absolute);
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
+      const outputDir = path.join(workspacePath, '.segcleanup', `quant_${jobId}`);
       await fsp.mkdir(outputDir, { recursive: true });
 
-      const args = ['--mode', 'quantify', '--input', absolute, '--output-dir', outputDir];
-      if (inputFile?.voxelSize) {
-        args.push('--voxel-size', JSON.stringify(inputFile.voxelSize));
-      }
+      const config = {
+        input_path: absolute,
+        output_dir: outputDir,
+        edits,
+        voxel_size: sourceFile?.voxelSize || null
+      };
+      const configPath = path.join(outputDir, `config_${jobId}.json`);
+      await fsp.writeFile(configPath, JSON.stringify(config));
 
       const roomName = `segcleanup-${jobId}`;
-      runJob(args, roomName, (resultData, stderr) => {
+      runJob(['--mode', 'quantify', '--config', configPath], roomName, (resultData, stderr) => {
+        fsp.unlink(configPath).catch(() => {});
         if (resultData) {
           io.to(roomName).emit('segcleanup-complete', {
             success: true,
@@ -374,18 +399,18 @@ function createSegcleanupRoutes(dependencies) {
   });
 
   /**
-   * Save manual edits into a new stack
+   * Save the current editing state (source + pending edits) as a NEW
+   * tracked file. Empty edits are allowed when saving from a working
+   * copy (the automated cleanup already changed the data).
+   *
    * POST /api/segcleanup/save-edits
-   * Body: { path, width, height, edits: {sliceIdx: {encoding, data}}, outputName }
+   * Body: { path, width, height, edits, outputName, sourceFileId }
    */
   router.post('/save-edits', requireAuth, async (req, res) => {
-    const { path: fileReq, width, height, edits = {}, outputName } = req.body;
+    const { path: fileReq, width, height, edits = {}, outputName, sourceFileId } = req.body;
     const sessionId = req.session.id;
     if (!fileReq || !width || !height) {
       return res.status(400).json({ success: false, error: 'path, width and height are required' });
-    }
-    if (!Object.keys(edits).length) {
-      return res.status(400).json({ success: false, error: 'No edited slices to save' });
     }
     try {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
@@ -393,7 +418,12 @@ function createSegcleanupRoutes(dependencies) {
       if (!fs.existsSync(absolute)) {
         return res.status(404).json({ success: false, error: 'File not found' });
       }
-      const inputFile = lookupFile(sessionId, workspacePath, absolute);
+      if (!Object.keys(edits).length && !isWorkingCopy(absolute)) {
+        return res.status(400).json({ success: false, error: 'No changes to save' });
+      }
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const inputFile = metadata?.files?.find(f => f.id === sourceFileId)
+        || lookupFile(sessionId, workspacePath, absolute);
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
@@ -417,6 +447,8 @@ function createSegcleanupRoutes(dependencies) {
         fsp.unlink(configPath).catch(() => {});
         if (resultData) {
           const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId);
+          // A working copy is superseded by the tracked output
+          cleanupWorkingCopy(absolute);
           io.to(roomName).emit('segcleanup-complete', {
             success: true,
             jobId,
@@ -448,7 +480,11 @@ function createSegcleanupRoutes(dependencies) {
   });
 
   /**
-   * Register a job's report CSVs in the file browser
+   * Register a quantification's report CSVs in the file browser.
+   * The CSVs are COPIED from the (transient) job dir into a results
+   * directory first, so later cleanup of working copies cannot remove
+   * a registered report.
+   *
    * POST /api/segcleanup/report
    * Body: { reportDir, sourceFileId }
    */
@@ -462,17 +498,23 @@ function createSegcleanupRoutes(dependencies) {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
       const absoluteDir = resolveWorkspacePath(workspacePath, reportDir);
 
+      const reportId = `report_${Date.now()}`;
+      const destDir = path.join(workspacePath, 'results', 'segcleanup', reportId);
+
       const tracked = [];
       for (const name of ['report.csv', 'objects.csv']) {
-        const filePath = path.join(absoluteDir, name);
-        if (!fs.existsSync(filePath)) continue;
-        const stats = fs.statSync(filePath);
+        const srcPath = path.join(absoluteDir, name);
+        if (!fs.existsSync(srcPath)) continue;
+        await fsp.mkdir(destDir, { recursive: true });
+        const destPath = path.join(destDir, name);
+        await fsp.copyFile(srcPath, destPath);
+        const stats = fs.statSync(destPath);
         const lineage = sourceFileId
-          ? createLineage('segcleanup', [sourceFileId], path.basename(absoluteDir))
+          ? createLineage('segcleanup', [sourceFileId], reportId)
           : null;
         const entry = workspaceManager.addFileToMetadata(sessionId, {
           name,
-          path: path.relative(workspacePath, filePath),
+          path: path.relative(workspacePath, destPath),
           category: 'results',
           tags: ['segcleanup', 'report'],
           size: stats.size,

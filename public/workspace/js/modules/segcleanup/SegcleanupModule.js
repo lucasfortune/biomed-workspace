@@ -1,22 +1,20 @@
 /**
  * SegcleanupModule - Segmentation Cleanup & Quantification (ADR-009)
  *
- * Three workflows on segmentation stacks, chosen in step 1:
- *  - Automated cleanup: merge/relabel classes, fill holes, remove small
- *    components, smooth boundaries - with a live per-slice preview.
- *    Applying runs the full volume and quantifies the result.
- *  - Manual touch-up: paint corrections with brush / eraser / flood
- *    fill, reusing the annotation module's painting stack
- *    (AnnotationCanvas + BrushEngine + HistoryManager). Only edited
- *    slices are uploaded on save.
- *  - Quantify: metrics only, no changes.
+ * Two steps: Select -> Edit & Quantify. The edit step is ONE integrated
+ * environment (Lucas's design, 2026-08-27 revision):
+ *  - painting is always active (brush / eraser / flood fill, reusing the
+ *    annotation module's AnnotationCanvas + BrushEngine + HistoryManager)
+ *  - automated cleanup (merge classes, fill holes, remove small
+ *    components, smooth boundaries) runs on a server-side WORKING COPY,
+ *    including any unsaved paint edits; the editor reloads from the
+ *    result
+ *  - quantification is computed on entry and always visible below the
+ *    viewer; it goes stale on edits and can be updated; "Create report"
+ *    registers the CSVs in the file browser
+ *  - "Save as New File" writes the current state as a tracked output
  *
- * Quantification: per-class voxel counts, physical volumes (when the
- * file carries a voxel size, ADR-008), component counts and sizes,
- * surface areas. "Save report" registers the CSVs in the file browser.
- *
- * All outputs are new tracked files with lineage; inputs are never
- * modified.
+ * The original file is never modified.
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
@@ -34,8 +32,7 @@ class SegcleanupModule extends BaseModule {
       cssPath: '/workspace/js/modules/segcleanup/css/segcleanup.css',
       steps: [
         { id: 'select', name: 'Select' },
-        { id: 'edit', name: 'Edit' },
-        { id: 'result', name: 'Result & Report' }
+        { id: 'edit', name: 'Edit & Quantify' }
       ]
     });
 
@@ -45,38 +42,41 @@ class SegcleanupModule extends BaseModule {
   }
 
   resetState() {
-    this.workflow = 'auto';   // 'auto' | 'manual' | 'quantify'
-
     // {path, name, id, slices, width, height, dtype, classes, voxelSize}
     this.file = null;
-    this.underlay = null;     // {id, path, name} grayscale origin via lineage
+    this.underlay = null;      // {id, path, name} grayscale origin via lineage
     this.currentSlice = 0;
 
-    // Automated-cleanup ops
+    // Current editing source: null = the original file; otherwise the
+    // server-side working copy produced by automated cleanup / saving
+    this.workingPath = null;
+
+    // Automated-cleanup ops (consumed on Apply)
     this.ops = {
-      mergeMap: {},           // {classValue: targetValue} (0 = remove)
-      fillHoles: 'off',       // 'off' | '2d' | '3d'
+      mergeMap: {},
+      fillHoles: 'off',
       minSize: 0,
       smoothRadius: 0
     };
-    this.showUnderlay = true;
 
-    // Manual touch-up state
-    this.canvas = null;       // AnnotationCanvas
+    // Painting state
+    this.canvas = null;
     this.brushEngine = null;
     this.historyManager = null;
-    this.tool = 'brush';      // 'brush' | 'eraser' | 'fill'
+    this.tool = 'brush';
     this.loadedSlices = new Set();
     this.editedSlices = new Set();
     this._fillHandler = null;
 
-    this._previewTimer = null;
-    this._previewSeq = 0;
-    this.jobId = null;
-    this.result = null;
+    // Quantification
     this.metrics = null;
+    this.metricsStale = false;
     this.reportDir = null;
     this.reportSaved = false;
+
+    this.busy = false;         // one server job at a time
+    this.jobId = null;
+    this.lastSaved = null;     // {outputPath, outputFileId}
   }
 
   // ==========================================================================
@@ -91,7 +91,6 @@ class SegcleanupModule extends BaseModule {
         <div class="step-contents">
           ${this.renderStep1()}
           ${this.renderStep2()}
-          ${this.renderStep3()}
         </div>
       </div>
     `;
@@ -103,35 +102,17 @@ class SegcleanupModule extends BaseModule {
         <div class="step-inner">
           <h3>Select Segmentation</h3>
           <p class="step-description">
-            Pick a segmentation (or annotation mask) and choose what to do
-            with it. Results are saved as new files; the original is never
+            Pick a segmentation (or annotation mask) to edit and measure.
+            All changes are saved as new files; the original is never
             modified.
           </p>
-
-          <div class="section-card">
-            <label class="radio-option">
-              <input type="radio" name="sc-workflow" value="auto" checked>
-              <strong>Automated cleanup</strong> - fill holes, remove small
-              components, smooth boundaries, merge classes
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="sc-workflow" value="manual">
-              <strong>Manual touch-up</strong> - paint corrections with
-              brush, eraser and flood fill
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="sc-workflow" value="quantify">
-              <strong>Quantify</strong> - volumes, object counts and surface
-              areas, without changing the data
-            </label>
-          </div>
 
           <div id="scFileSelectorContainer"></div>
           <div id="scSelectedFile"></div>
 
           <div class="navigation-buttons">
             <div></div>
-            <button id="scStep1Next" class="btn" disabled>Next: Clean Up</button>
+            <button id="scStep1Next" class="btn" disabled>Next: Edit &amp; Quantify</button>
           </div>
         </div>
       </div>
@@ -142,191 +123,119 @@ class SegcleanupModule extends BaseModule {
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
+          <h3>Edit &amp; Quantify</h3>
+          <p class="step-description">
+            Paint corrections directly, run automated cleanup on the whole
+            stack, and measure the result. Left-drag paints, right-drag or
+            space+drag pans, wheel zooms.
+          </p>
 
-          <!-- Automated cleanup layout -->
-          <div id="scAutoEdit" style="display: none;">
-            <h3>Automated Cleanup</h3>
-            <p class="step-description">
-              Configure the operations; the preview shows the current slice
-              with a 2D approximation (hole filling and component removal
-              run in full 3D on apply).
-            </p>
+          <div class="section-card success-card" id="scSavedBanner" style="display: none;">
+            <div class="success-header">
+              <span class="success-icon">&#10003;</span>
+              <span class="success-title">Saved</span>
+              <span id="scSavedName" class="sc-saved-name"></span>
+            </div>
+            <div class="success-actions">
+              <button class="btn primary small" id="scOpenViewerBtn">Open in Image Viewer</button>
+            </div>
+          </div>
 
-            <div class="sc-main">
-              <div class="sc-viewer-wrap">
-                <div class="sc-viewer-controls">
-                  <div class="control-group sc-slice-group">
-                    <label>Slice:</label>
-                    <input type="range" id="scSliceRange" min="0" value="0">
-                    <input type="number" id="scSliceNum" min="0" value="0">
-                    <span class="sc-slice-total" id="scSliceTotal"></span>
-                  </div>
-                  <label class="checkbox-inline" id="scUnderlayToggleWrap" style="display: none;">
-                    <input type="checkbox" id="scUnderlayToggle" checked> image underlay
-                  </label>
+          <div class="sc-main">
+            <div class="sc-viewer-wrap">
+              <div class="sc-viewer-controls">
+                <div class="control-group sc-slice-group">
+                  <label>Slice:</label>
+                  <input type="range" id="scEditSliceRange" min="0" value="0">
+                  <input type="number" id="scEditSliceNum" min="0" value="0">
+                  <span class="sc-slice-total" id="scEditSliceTotal"></span>
                 </div>
-                <div class="sc-viewer-area">
-                  <img id="scPreviewImg" alt="">
-                  <div class="viewer-status" id="scViewerStatus">Loading preview...</div>
+                <div class="control-group">
+                  <button class="btn-icon" id="scUndoBtn" title="Undo (this slice)">&#8630;</button>
+                  <button class="btn-icon" id="scRedoBtn" title="Redo (this slice)">&#8631;</button>
                 </div>
-                <div class="sc-viewer-footer">
-                  <span id="scImageInfo" class="field-hint"></span>
+              </div>
+              <div class="sc-canvas-area" id="scCanvasArea">
+                <div class="viewer-status" id="scEditStatus">Loading...</div>
+              </div>
+              <div class="sc-viewer-footer">
+                <span class="field-hint" id="scEditedInfo"></span>
+                <span class="field-hint">left-drag = paint &middot; right-drag / space = pan &middot; wheel = zoom</span>
+              </div>
+            </div>
+
+            <div class="sc-toolbar">
+              <div class="toolbar-section">
+                <div class="toolbar-section-title">Tool</div>
+                <div class="sc-tool-row">
+                  <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">&#128396; Brush</button>
+                  <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">&#9003; Eraser</button>
+                  <button class="sc-tool-btn" data-tool="fill" title="Flood-fill the clicked region with the active class">&#127754; Fill</button>
+                </div>
+                <div class="sc-row">
+                  <label>size</label>
+                  <input type="range" id="scBrushSize" min="1" max="100" value="10">
+                  <span id="scBrushSizeVal">10px</span>
                 </div>
               </div>
 
-              <div class="sc-toolbar">
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Classes</div>
-                  <div id="scClassOps"></div>
-                </div>
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Fill holes</div>
+              <div class="toolbar-section">
+                <div class="toolbar-section-title">Active class</div>
+                <div id="scClassList"></div>
+              </div>
+
+              <div class="toolbar-section">
+                <div class="toolbar-section-title">Automated cleanup</div>
+                <div id="scClassOps"></div>
+                <div class="sc-row">
+                  <label>fill holes</label>
                   <select id="scFillHoles">
                     <option value="off">off</option>
                     <option value="2d">2D (per slice)</option>
-                    <option value="3d">3D (volumetric)</option>
+                    <option value="3d">3D</option>
                   </select>
                 </div>
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Remove small components</div>
-                  <div class="sc-row">
-                    <label>min size</label>
-                    <input type="number" id="scMinSize" min="0" step="1" value="0">
-                    <span class="field-hint-inline">voxels (3D)</span>
-                  </div>
+                <div class="sc-row">
+                  <label>min size</label>
+                  <input type="number" id="scMinSize" min="0" step="1" value="0">
+                  <span class="field-hint-inline">voxels</span>
                 </div>
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Smooth boundaries</div>
-                  <div class="sc-row">
-                    <label>radius</label>
-                    <input type="range" id="scSmoothRadius" min="0" max="5" step="1" value="0">
-                    <span id="scSmoothVal">0</span>
-                  </div>
-                  <p class="field-hint">Majority filter per slice; 0 = off.</p>
+                <div class="sc-row">
+                  <label>smooth</label>
+                  <input type="range" id="scSmoothRadius" min="0" max="5" step="1" value="0">
+                  <span id="scSmoothVal">0</span>
                 </div>
-                <div class="toolbar-section">
-                  <button class="btn small secondary" id="scOpsResetBtn">Reset all operations</button>
-                </div>
+                <button class="btn small primary" id="scApplyCleanupBtn">Apply cleanup</button>
+                <div class="sc-job-status" id="scCleanupStatus"></div>
+                <p class="field-hint">Runs on the full stack (including your
+                  unsaved paint edits) and reloads the editor.</p>
+              </div>
+
+              <div class="toolbar-section">
+                <div class="toolbar-section-title">Output</div>
+                <input type="text" id="scOutputName" value="cleaned" class="sc-name-input">
+                <div class="sc-job-status" id="scSaveStatus"></div>
               </div>
             </div>
           </div>
 
-          <!-- Manual touch-up layout -->
-          <div id="scManualEdit" style="display: none;">
-            <h3>Manual Touch-Up</h3>
-            <p class="step-description">
-              Paint corrections onto the labels. Left-drag paints, right-drag
-              or space+drag pans, wheel zooms. Only edited slices are written
-              on save.
-            </p>
-
-            <div class="sc-main">
-              <div class="sc-viewer-wrap">
-                <div class="sc-viewer-controls">
-                  <div class="control-group sc-slice-group">
-                    <label>Slice:</label>
-                    <input type="range" id="scEditSliceRange" min="0" value="0">
-                    <input type="number" id="scEditSliceNum" min="0" value="0">
-                    <span class="sc-slice-total" id="scEditSliceTotal"></span>
-                  </div>
-                  <div class="control-group">
-                    <button class="btn-icon" id="scUndoBtn" title="Undo (this slice)">&#8630;</button>
-                    <button class="btn-icon" id="scRedoBtn" title="Redo (this slice)">&#8631;</button>
-                  </div>
-                </div>
-                <div class="sc-canvas-area" id="scCanvasArea">
-                  <div class="viewer-status" id="scEditStatus">Loading...</div>
-                </div>
-                <div class="sc-viewer-footer">
-                  <span class="field-hint" id="scEditedInfo"></span>
-                  <span class="field-hint">left-drag = paint &middot; right-drag / space = pan &middot; wheel = zoom</span>
-                </div>
-              </div>
-
-              <div class="sc-toolbar">
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Tool</div>
-                  <div class="sc-tool-row">
-                    <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">&#128396; Brush</button>
-                    <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">&#9003; Eraser</button>
-                    <button class="sc-tool-btn" data-tool="fill" title="Flood-fill the clicked region with the active class">&#127754; Fill</button>
-                  </div>
-                </div>
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Brush size</div>
-                  <div class="sc-row">
-                    <input type="range" id="scBrushSize" min="1" max="100" value="10">
-                    <span id="scBrushSizeVal">10px</span>
-                  </div>
-                </div>
-                <div class="toolbar-section">
-                  <div class="toolbar-section-title">Active class</div>
-                  <div id="scClassList"></div>
-                </div>
+          <div class="section-card sc-quant-card">
+            <div class="sc-quant-header">
+              <h4>Quantification</h4>
+              <div class="sc-quant-actions">
+                <span class="sc-stale-badge" id="scStaleBadge" style="display: none;">labels edited</span>
+                <button class="btn small" id="scUpdateQuantBtn" style="display: none;">Update</button>
+                <button class="btn small" id="scSaveReportBtn" disabled>Create report (CSV)</button>
               </div>
             </div>
+            <div id="scQuantStatus" class="field-hint"></div>
+            <div id="scMetrics"></div>
           </div>
 
           <div class="navigation-buttons">
             <button id="scStep2Back" class="btn secondary">Back</button>
-            <button id="scStep2Next" class="btn">Next</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  renderStep3() {
-    return `
-      <div id="step3" class="step-content">
-        <div class="step-inner">
-          <h3 id="scStep3Title">Result &amp; Report</h3>
-
-          <div class="section-card" id="scSummarySection">
-            <h4>Summary</h4>
-            <div id="scSummary"></div>
-          </div>
-
-          <div class="section-card" id="scOutputSection">
-            <h4>Output</h4>
-            <div class="form-field">
-              <label for="scOutputName">Output name</label>
-              <input type="text" id="scOutputName" value="cleaned">
-            </div>
-          </div>
-
-          <div class="section-card" id="scProgressSection" style="display: none;">
-            <h4>Progress</h4>
-            <div class="inference-status" id="scStatusText">Starting...</div>
-            <div class="progress-bar-container">
-              <div class="progress-bar" id="scProgressBar" style="width: 0%"></div>
-            </div>
-          </div>
-
-          <div class="section-card success-card" id="scSuccessSection" style="display: none;">
-            <div class="success-header">
-              <span class="success-icon">&#10003;</span>
-              <span class="success-title" id="scSuccessTitle">Done</span>
-            </div>
-            <div id="scResultInfo"></div>
-            <div class="success-actions">
-              <button class="btn primary" id="scOpenViewerBtn" style="display: none;">Open in Image Viewer</button>
-              <button class="btn secondary" id="scNewRunBtn">Start Over</button>
-            </div>
-          </div>
-
-          <div class="section-card" id="scMetricsSection" style="display: none;">
-            <h4>Quantification</h4>
-            <div id="scMetrics"></div>
-            <div class="success-actions">
-              <button class="btn" id="scSaveReportBtn">Save report (CSV) to workspace</button>
-            </div>
-          </div>
-
-          <div class="navigation-buttons">
-            <button id="scStep3Back" class="btn secondary">Back</button>
-            <button class="btn btn-danger" id="scRunBtn">
-              <span class="btn-icon">&#9658;</span> <span id="scRunBtnLabel">Apply</span>
+            <button class="btn btn-danger" id="scSaveBtn">
+              <span class="btn-icon">&#9658;</span> Save as New File
             </button>
           </div>
         </div>
@@ -350,10 +259,7 @@ class SegcleanupModule extends BaseModule {
     document.getElementById('backToHub')?.addEventListener('click',
       () => window.workspace.returnToHub());
 
-    // Step 1
-    document.querySelectorAll('input[name="sc-workflow"]').forEach(r =>
-      r.addEventListener('change', (e) => this.onWorkflowChange(e.target.value)));
-
+    // Step 1: shared FileSelector
     const fileSelectorContainer = document.getElementById('scFileSelectorContainer');
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
@@ -386,43 +292,21 @@ class SegcleanupModule extends BaseModule {
       fileSelectorContainer.innerHTML = this.fileSelector.render();
       await this.fileSelector.init();
     }
-    document.getElementById('scStep1Next')?.addEventListener('click', () => {
-      this.goToStep(this.workflow === 'quantify' ? 3 : 2);
-    });
+    document.getElementById('scStep1Next')?.addEventListener('click', () => this.goToStep(2));
 
     // Step 2
     document.getElementById('scStep2Back')?.addEventListener('click', () => this.goToStep(1));
-    document.getElementById('scStep2Next')?.addEventListener('click', () => this.goToStep(3));
-    this.setupAutoControls();
-    this.setupManualControls();
-
-    // Step 3
-    document.getElementById('scStep3Back')?.addEventListener('click', () => {
-      this.goToStep(this.workflow === 'quantify' ? 1 : 2);
-    });
-    document.getElementById('scRunBtn')?.addEventListener('click', () => this.run());
+    document.getElementById('scSaveBtn')?.addEventListener('click', () => this.save());
     document.getElementById('scOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
+    document.getElementById('scApplyCleanupBtn')?.addEventListener('click', () => this.applyCleanup());
+    document.getElementById('scUpdateQuantBtn')?.addEventListener('click', () => this.runQuantify());
     document.getElementById('scSaveReportBtn')?.addEventListener('click', () => this.saveReport());
-    document.getElementById('scNewRunBtn')?.addEventListener('click', async () => {
-      this.teardownEditor();
-      this.resetState();
-      this.renderSelectedFile();
-      if (this.fileSelector) {
-        this.fileSelector.selectedFile = null;
-        await this.fileSelector.refresh();
-        const dropdown = document.getElementById(`${this.fileSelector.id}-select`);
-        if (dropdown) dropdown.value = '';
-        this.fileSelector.hidePreview();
-      }
-      this.onWorkflowChange(this.workflow);
-      this.goToStep(1);
-    });
+    this.setupEditControls();
 
     window.segcleanupModule = this;
   }
 
   async deactivate() {
-    clearTimeout(this._previewTimer);
     this.teardownEditor();
     if (this.socket && this.jobId) {
       this.socket.emit('leave-segcleanup', this.jobId);
@@ -448,28 +332,17 @@ class SegcleanupModule extends BaseModule {
 
   canNavigateToStep(n) {
     if (n === 1) return true;
-    if (n === 2) return this.file != null && this.workflow !== 'quantify';
     return this.file != null;
   }
 
   onStepChange(prev, next) {
     if (this.stepNavigator) this.stepNavigator.update(next);
     if (next === 2) this.enterEditStep();
-    if (next === 3) this.enterResultStep();
   }
 
   // ==========================================================================
   // Step 1
   // ==========================================================================
-
-  onWorkflowChange(workflow) {
-    this.workflow = workflow;
-    const next = document.getElementById('scStep1Next');
-    if (next) {
-      next.textContent = workflow === 'auto' ? 'Next: Clean Up'
-        : workflow === 'manual' ? 'Next: Touch Up' : 'Next: Quantify';
-    }
-  }
 
   async onFileSelected(file) {
     const next = document.getElementById('scStep1Next');
@@ -487,10 +360,8 @@ class SegcleanupModule extends BaseModule {
       if (!info.success) throw new Error(info.error || 'Could not read stack info');
       if (!info.classes.length) throw new Error('No labeled classes found in this stack');
 
-      const workflow = this.workflow;
       this.teardownEditor();
       this.resetState();
-      this.workflow = workflow;
       this.file = {
         path: file.path,
         name: file.name || file.path.split('/').pop(),
@@ -558,190 +429,20 @@ class SegcleanupModule extends BaseModule {
   }
 
   // ==========================================================================
-  // Step 2 shared
+  // Step 2: integrated editor
   // ==========================================================================
 
-  enterEditStep() {
-    const auto = document.getElementById('scAutoEdit');
-    const manual = document.getElementById('scManualEdit');
-    if (auto) auto.style.display = this.workflow === 'auto' ? '' : 'none';
-    if (manual) manual.style.display = this.workflow === 'manual' ? '' : 'none';
-    const next = document.getElementById('scStep2Next');
-    if (next) next.textContent = this.workflow === 'auto' ? 'Next: Apply' : 'Next: Save';
-
-    if (this.workflow === 'auto') this.enterAutoStep();
-    else this.enterManualStep();
+  /** The file the editor currently reads labels from */
+  currentSourcePath() {
+    return this.workingPath || this.file.path;
   }
 
-  // ==========================================================================
-  // Automated cleanup (workflow A)
-  // ==========================================================================
-
-  setupAutoControls() {
-    const bind = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
-
-    const onSlice = (e) => {
-      const v = Math.max(0, Math.min(this.file ? this.file.slices - 1 : 0,
-        parseInt(e.target.value, 10) || 0));
-      this.currentSlice = v;
-      const r = document.getElementById('scSliceRange');
-      const n = document.getElementById('scSliceNum');
-      if (r) r.value = v;
-      if (n) n.value = v;
-      this.requestPreview();
-    };
-    bind('scSliceRange', 'input', onSlice);
-    bind('scSliceNum', 'change', onSlice);
-
-    bind('scUnderlayToggle', 'change', (e) => {
-      this.showUnderlay = e.target.checked;
-      this.requestPreview();
-    });
-    bind('scFillHoles', 'change', (e) => {
-      this.ops.fillHoles = e.target.value;
-      this.requestPreview();
-    });
-    bind('scMinSize', 'change', (e) => {
-      this.ops.minSize = Math.max(0, parseInt(e.target.value, 10) || 0);
-      this.requestPreview();
-    });
-    bind('scSmoothRadius', 'input', (e) => {
-      this.ops.smoothRadius = parseInt(e.target.value, 10) || 0;
-      const val = document.getElementById('scSmoothVal');
-      if (val) val.textContent = String(this.ops.smoothRadius);
-      this.requestPreview();
-    });
-    bind('scOpsResetBtn', 'click', () => {
-      this.ops = { mergeMap: {}, fillHoles: 'off', minSize: 0, smoothRadius: 0 };
-      this.syncOpsInputs();
-      this.renderClassOps();
-      this.requestPreview();
-    });
+  /** File id (or path) whose full-res slices back the canvas image */
+  editorImageFileId() {
+    return this.underlay?.id || this.workingPath || this.file.id || this.file.path;
   }
 
-  enterAutoStep() {
-    if (!this.file) return;
-    const setup = (id, value, max) => {
-      const el = document.getElementById(id);
-      if (el) { if (max != null) el.max = max; el.value = value; }
-    };
-    setup('scSliceRange', this.currentSlice, this.file.slices - 1);
-    setup('scSliceNum', this.currentSlice, this.file.slices - 1);
-    const total = document.getElementById('scSliceTotal');
-    if (total) total.textContent = `/ ${this.file.slices - 1}`;
-
-    const underlayWrap = document.getElementById('scUnderlayToggleWrap');
-    if (underlayWrap) underlayWrap.style.display = this.underlay ? '' : 'none';
-
-    const info = document.getElementById('scImageInfo');
-    if (info) info.textContent = `${this.file.name} - ${this.file.width}×${this.file.height}`;
-
-    this.syncOpsInputs();
-    this.renderClassOps();
-    this.requestPreview(true);
-  }
-
-  syncOpsInputs() {
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-    set('scFillHoles', this.ops.fillHoles);
-    set('scMinSize', this.ops.minSize);
-    set('scSmoothRadius', this.ops.smoothRadius);
-    const val = document.getElementById('scSmoothVal');
-    if (val) val.textContent = String(this.ops.smoothRadius);
-    const toggle = document.getElementById('scUnderlayToggle');
-    if (toggle) toggle.checked = this.showUnderlay;
-  }
-
-  renderClassOps() {
-    const el = document.getElementById('scClassOps');
-    if (!el || !this.file) return;
-    el.innerHTML = this.file.classes.map(c => {
-      const target = this.ops.mergeMap[c.value];
-      const options = [
-        `<option value="keep" ${target == null ? 'selected' : ''}>keep</option>`,
-        `<option value="0" ${target === 0 ? 'selected' : ''}>remove</option>`,
-        ...this.file.classes.filter(o => o.value !== c.value).map(o =>
-          `<option value="${o.value}" ${target === o.value ? 'selected' : ''}>merge into ${o.value}</option>`)
-      ].join('');
-      return `
-        <div class="sc-class-row">
-          <span class="sc-color" style="background:${c.color}"></span>
-          <span class="sc-class-label">${c.value}</span>
-          <select data-class="${c.value}">${options}</select>
-        </div>`;
-    }).join('');
-    el.querySelectorAll('select[data-class]').forEach(sel => {
-      sel.addEventListener('change', (e) => {
-        const cls = parseInt(e.target.getAttribute('data-class'), 10);
-        const v = e.target.value;
-        if (v === 'keep') delete this.ops.mergeMap[cls];
-        else this.ops.mergeMap[cls] = parseInt(v, 10);
-        this.requestPreview();
-      });
-    });
-  }
-
-  buildOpsPayload() {
-    return {
-      merge_map: this.ops.mergeMap,
-      fill_holes: this.ops.fillHoles,
-      min_size: this.ops.minSize,
-      smooth_radius: this.ops.smoothRadius
-    };
-  }
-
-  requestPreview(immediate = false) {
-    clearTimeout(this._previewTimer);
-    this._previewTimer = setTimeout(() => this.loadPreview(), immediate ? 0 : 350);
-  }
-
-  async loadPreview() {
-    if (!this.file || this.workflow !== 'auto') return;
-    const seq = ++this._previewSeq;
-    const img = document.getElementById('scPreviewImg');
-    const status = document.getElementById('scViewerStatus');
-    if (status && (!img || !img.src)) {
-      status.style.display = 'block';
-      status.textContent = 'Loading preview...';
-    }
-    try {
-      const response = await fetch('/api/segcleanup/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: this.file.path,
-          slice: this.currentSlice,
-          ops: this.buildOpsPayload(),
-          underlayPath: this.showUnderlay ? this.underlay?.path : null
-        })
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `Preview failed (${response.status})`);
-      }
-      const blob = await response.blob();
-      if (seq !== this._previewSeq) return;
-      const url = URL.createObjectURL(blob);
-      if (img) {
-        const old = img.src;
-        img.onload = () => { if (old && old.startsWith('blob:')) URL.revokeObjectURL(old); };
-        img.src = url;
-      }
-      if (status) status.style.display = 'none';
-    } catch (e) {
-      if (seq !== this._previewSeq) return;
-      if (status) {
-        status.style.display = 'block';
-        status.textContent = `Could not load preview: ${e.message}`;
-      }
-    }
-  }
-
-  // ==========================================================================
-  // Manual touch-up (workflow B)
-  // ==========================================================================
-
-  setupManualControls() {
+  setupEditControls() {
     const bind = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
 
     const onSlice = (e) => {
@@ -767,9 +468,19 @@ class SegcleanupModule extends BaseModule {
     });
     bind('scUndoBtn', 'click', () => this.undo());
     bind('scRedoBtn', 'click', () => this.redo());
+
+    bind('scFillHoles', 'change', (e) => { this.ops.fillHoles = e.target.value; });
+    bind('scMinSize', 'change', (e) => {
+      this.ops.minSize = Math.max(0, parseInt(e.target.value, 10) || 0);
+    });
+    bind('scSmoothRadius', 'input', (e) => {
+      this.ops.smoothRadius = parseInt(e.target.value, 10) || 0;
+      const val = document.getElementById('scSmoothVal');
+      if (val) val.textContent = String(this.ops.smoothRadius);
+    });
   }
 
-  async enterManualStep() {
+  async enterEditStep() {
     if (!this.file) return;
     const setup = (id, value, max) => {
       const el = document.getElementById(id);
@@ -785,13 +496,7 @@ class SegcleanupModule extends BaseModule {
       this.canvas = new AnnotationCanvas(area);
       this.brushEngine = new BrushEngine(this.canvas);
       this.historyManager = new HistoryManager();
-
-      // Classes = the stack's label values (id = label value)
-      this.brushEngine.classes = this.file.classes.map(c => ({
-        id: c.value, name: `Class ${c.value}`, color: c.color, visible: true
-      }));
-      this.brushEngine.activeClassId = this.file.classes[0].value;
-      this.brushEngine.nextClassId = Math.max(...this.file.classes.map(c => c.value)) + 1;
+      this.seedClasses(this.file.classes);
 
       this.brushEngine.onStrokeStart = () => {
         const idx = this.canvas.currentSlice;
@@ -799,25 +504,37 @@ class SegcleanupModule extends BaseModule {
         if (data) this.historyManager.saveState(idx, new Uint8Array(data));
       };
       this.brushEngine.onStrokeEnd = () => this.updateHistoryButtons();
-      this.brushEngine.onAnnotationChange = () => {
-        this.editedSlices.add(this.canvas.currentSlice);
-        this.updateEditedInfo();
-      };
+      this.brushEngine.onAnnotationChange = () => this.markEdited(this.canvas.currentSlice);
       this.brushEngine.onStrokeCancel = () => this.undo();
       this.canvas.onTwoFingerStart = () => this.brushEngine.cancelCurrentStroke();
       this.canvas.onMouseMove = (coords) => this.brushEngine.updatePreview(coords);
-      this.canvas.onSliceLoaded = () => { /* labels ensured in goToEditSlice */ };
 
       this.renderClassList();
+      this.renderClassOps();
       this.setTool(this.tool);
     }
     this.updateEditedInfo();
+    this.updateQuantUI();
     await this.goToEditSlice(this.currentSlice);
+
+    // Quantification runs automatically on entry
+    if (!this.metrics && !this.busy) this.runQuantify();
   }
 
-  /** File id whose full-resolution slices back the editor view */
-  editorImageFileId() {
-    return this.underlay?.id || this.file.id || this.file.path;
+  seedClasses(classes) {
+    this.brushEngine.classes = classes.map(c => ({
+      id: c.value, name: `Class ${c.value}`, color: c.color, visible: true
+    }));
+    this.brushEngine.activeClassId = classes[0]?.value ?? 1;
+    this.brushEngine.nextClassId =
+      classes.length ? Math.max(...classes.map(c => c.value)) + 1 : 2;
+  }
+
+  markEdited(sliceIndex) {
+    this.editedSlices.add(sliceIndex);
+    this.metricsStale = true;
+    this.updateEditedInfo();
+    this.updateQuantUI();
   }
 
   async goToEditSlice(index) {
@@ -845,7 +562,7 @@ class SegcleanupModule extends BaseModule {
   /** Fetch the slice's label values (lossless L-mode PNG) into the engine */
   async ensureLabelsLoaded(index) {
     if (this.loadedSlices.has(index)) return;
-    const url = `/api/segcleanup/label-slice?path=${encodeURIComponent(this.file.path)}&slice=${index}`;
+    const url = `/api/segcleanup/label-slice?path=${encodeURIComponent(this.currentSourcePath())}&slice=${index}`;
     const img = await new Promise((resolve, reject) => {
       const im = new Image();
       im.onload = () => resolve(im);
@@ -930,10 +647,9 @@ class SegcleanupModule extends BaseModule {
       }
     }
 
-    this.editedSlices.add(idx);
     this.brushEngine.renderAnnotations();
     this.updateHistoryButtons();
-    this.updateEditedInfo();
+    this.markEdited(idx);
   }
 
   undo() {
@@ -945,8 +661,7 @@ class SegcleanupModule extends BaseModule {
     if (previous) {
       this.brushEngine.setAnnotationData(idx, previous);
       this.brushEngine.renderAnnotations();
-      this.editedSlices.add(idx);
-      this.updateEditedInfo();
+      this.markEdited(idx);
     }
     this.updateHistoryButtons();
   }
@@ -960,8 +675,7 @@ class SegcleanupModule extends BaseModule {
     if (next) {
       this.brushEngine.setAnnotationData(idx, next);
       this.brushEngine.renderAnnotations();
-      this.editedSlices.add(idx);
-      this.updateEditedInfo();
+      this.markEdited(idx);
     }
     this.updateHistoryButtons();
   }
@@ -977,9 +691,12 @@ class SegcleanupModule extends BaseModule {
   updateEditedInfo() {
     const el = document.getElementById('scEditedInfo');
     if (el) {
-      el.textContent = this.editedSlices.size
-        ? `${this.editedSlices.size} slice${this.editedSlices.size > 1 ? 's' : ''} edited`
-        : 'No edits yet';
+      const parts = [];
+      if (this.workingPath) parts.push('automated cleanup applied');
+      if (this.editedSlices.size) {
+        parts.push(`${this.editedSlices.size} slice${this.editedSlices.size > 1 ? 's' : ''} painted`);
+      }
+      el.textContent = parts.join(' · ') || 'No changes yet';
     }
   }
 
@@ -997,6 +714,355 @@ class SegcleanupModule extends BaseModule {
         this.brushEngine.setActiveClass(parseInt(btn.getAttribute('data-class'), 10));
         this.renderClassList();
       });
+    });
+  }
+
+  // ---- automated cleanup ----------------------------------------------------
+
+  renderClassOps() {
+    const el = document.getElementById('scClassOps');
+    if (!el || !this.file) return;
+    el.innerHTML = this.file.classes.map(c => {
+      const target = this.ops.mergeMap[c.value];
+      const options = [
+        `<option value="keep" ${target == null ? 'selected' : ''}>keep</option>`,
+        `<option value="0" ${target === 0 ? 'selected' : ''}>remove</option>`,
+        ...this.file.classes.filter(o => o.value !== c.value).map(o =>
+          `<option value="${o.value}" ${target === o.value ? 'selected' : ''}>merge into ${o.value}</option>`)
+      ].join('');
+      return `
+        <div class="sc-class-row">
+          <span class="sc-color" style="background:${c.color}"></span>
+          <span class="sc-class-label">${c.value}</span>
+          <select data-class="${c.value}">${options}</select>
+        </div>`;
+    }).join('');
+    el.querySelectorAll('select[data-class]').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const cls = parseInt(e.target.getAttribute('data-class'), 10);
+        const v = e.target.value;
+        if (v === 'keep') delete this.ops.mergeMap[cls];
+        else this.ops.mergeMap[cls] = parseInt(v, 10);
+      });
+    });
+  }
+
+  buildOpsPayload() {
+    return {
+      merge_map: this.ops.mergeMap,
+      fill_holes: this.ops.fillHoles,
+      min_size: this.ops.minSize,
+      smooth_radius: this.ops.smoothRadius
+    };
+  }
+
+  opsActive() {
+    return Object.keys(this.ops.mergeMap).length > 0
+      || this.ops.fillHoles !== 'off'
+      || this.ops.minSize > 0
+      || this.ops.smoothRadius > 0;
+  }
+
+  collectEdits() {
+    const edits = {};
+    for (const idx of this.editedSlices) {
+      const data = this.brushEngine?.getAllAnnotations().get(idx);
+      if (data) edits[idx] = this.encodeSlice(data);
+    }
+    return edits;
+  }
+
+  setStatus(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text || '';
+  }
+
+  setBusy(busy) {
+    this.busy = busy;
+    ['scApplyCleanupBtn', 'scUpdateQuantBtn', 'scSaveBtn', 'scSaveReportBtn'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = busy || (id === 'scSaveReportBtn' && !this.reportDir);
+    });
+  }
+
+  async applyCleanup() {
+    if (!this.file || this.busy) return;
+    if (!this.opsActive()) {
+      this.state.notify('info', 'Configure at least one cleanup operation first.');
+      return;
+    }
+    this.setBusy(true);
+    this._statusTarget = 'scCleanupStatus';
+    this.setStatus('scCleanupStatus', 'Starting...');
+    try {
+      const response = await fetch('/api/segcleanup/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: this.currentSourcePath(),
+          ops: this.buildOpsPayload(),
+          edits: this.collectEdits(),
+          sourceFileId: this.file.id
+        })
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to start cleanup');
+      this.jobId = result.jobId;
+      this.connectSocket();
+    } catch (e) {
+      this.state.notify('error', `Cleanup failed: ${e.message}`);
+      this.setStatus('scCleanupStatus', '');
+      this.setBusy(false);
+    }
+  }
+
+  /** Apply-cleanup completed: switch the editor to the new working copy */
+  async onCleanupComplete(data) {
+    this.workingPath = data.workingPath;
+    this.metrics = data.metrics || null;
+    this.metricsStale = false;
+    this.reportDir = data.reportDir || null;
+    this.reportSaved = false;
+
+    // The working copy already contains the paint edits and ops
+    this.editedSlices.clear();
+    this.loadedSlices.clear();
+    this.brushEngine.clearAllAnnotations();
+    this.historyManager.clearAllHistory();
+
+    // Classes may have changed (merges/removals)
+    if (data.classes) {
+      const prevActive = this.brushEngine.activeClassId;
+      this.file.classes = data.classes;
+      this.seedClasses(data.classes);
+      if (data.classes.some(c => c.value === prevActive)) {
+        this.brushEngine.activeClassId = prevActive;
+      }
+      this.renderClassList();
+    }
+
+    // Ops were consumed by this run
+    this.ops = { mergeMap: {}, fillHoles: 'off', minSize: 0, smoothRadius: 0 };
+    this.renderClassOps();
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('scFillHoles', 'off');
+    set('scMinSize', 0);
+    set('scSmoothRadius', 0);
+    const val = document.getElementById('scSmoothVal');
+    if (val) val.textContent = '0';
+
+    this.setStatus('scCleanupStatus', '');
+    this.updateEditedInfo();
+    this.updateQuantUI();
+    await this.goToEditSlice(this.currentSlice);
+    this.state.notify('success', 'Automated cleanup applied.');
+  }
+
+  // ---- quantification -------------------------------------------------------
+
+  async runQuantify() {
+    if (!this.file || this.busy) return;
+    this.setBusy(true);
+    this._statusTarget = 'scQuantStatus';
+    this.setStatus('scQuantStatus', 'Computing quantification...');
+    try {
+      const response = await fetch('/api/segcleanup/quantify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: this.currentSourcePath(),
+          edits: this.collectEdits(),
+          sourceFileId: this.file.id
+        })
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to start quantification');
+      this.jobId = result.jobId;
+      this.connectSocket();
+    } catch (e) {
+      this.state.notify('error', `Quantification failed: ${e.message}`);
+      this.setStatus('scQuantStatus', '');
+      this.setBusy(false);
+    }
+  }
+
+  updateQuantUI() {
+    const stale = document.getElementById('scStaleBadge');
+    const update = document.getElementById('scUpdateQuantBtn');
+    const report = document.getElementById('scSaveReportBtn');
+    if (stale) stale.style.display = this.metricsStale && this.metrics ? '' : 'none';
+    if (update) update.style.display = this.metricsStale && this.metrics ? '' : 'none';
+    if (report) {
+      report.disabled = this.busy || !this.reportDir;
+      report.textContent = this.reportSaved
+        ? 'Report saved to workspace' : 'Create report (CSV)';
+    }
+    this.renderMetrics();
+  }
+
+  renderMetrics() {
+    const el = document.getElementById('scMetrics');
+    if (!el) return;
+    if (!this.metrics) {
+      el.innerHTML = '';
+      return;
+    }
+
+    const hasPhysical = this.metrics.classes.some(c => c.volume != null);
+    const unit = this.metrics.voxel_size?.unit === 'um' ? '&micro;m' : (this.metrics.voxel_size?.unit || '');
+    const fmt = (v, digits = 2) => v == null ? '&ndash;'
+      : Number(v).toLocaleString('en-US', { maximumFractionDigits: digits });
+    const colorOf = (value) => this.file?.classes.find(c => c.value === value)?.color || '#999';
+
+    el.innerHTML = `
+      <div class="sc-table-scroll">
+        <table class="sc-metrics-table">
+          <tr>
+            <th></th><th>class</th><th>voxels</th>
+            ${hasPhysical ? `<th>volume (${unit}&sup3;)</th>` : ''}
+            <th>objects</th><th>mean size</th><th>largest</th>
+            <th>surface area${hasPhysical ? ` (${unit}&sup2;)` : ' (px&sup2;)'}</th>
+          </tr>
+          ${this.metrics.classes.map(c => `
+            <tr>
+              <td><span class="sc-color" style="background:${colorOf(c.class)}"></span></td>
+              <td>${c.class}</td>
+              <td>${fmt(c.voxels, 0)}</td>
+              ${hasPhysical ? `<td>${fmt(c.volume)}</td>` : ''}
+              <td>${fmt(c.components, 0)}</td>
+              <td>${fmt(c.component_voxels.mean, 1)}</td>
+              <td>${fmt(c.component_voxels.max, 0)}</td>
+              <td>${fmt(c.surface_area)}</td>
+            </tr>`).join('')}
+        </table>
+      </div>
+      ${hasPhysical ? '' : '<p class="field-hint">Set a voxel size on the input file (file browser &rarr; file info) for physical units.</p>'}
+    `;
+  }
+
+  async saveReport() {
+    if (!this.reportDir || this.busy) return;
+    const btn = document.getElementById('scSaveReportBtn');
+    if (btn) btn.disabled = true;
+    try {
+      const response = await fetch('/api/segcleanup/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportDir: this.reportDir,
+          sourceFileId: this.file?.id || null
+        })
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to save report');
+      this.reportSaved = true;
+      this.state.notify('success',
+        `Report saved (${result.files.map(f => f.name).join(', ')})`);
+      if (window.workspace?.fileBrowser) window.workspace.fileBrowser.refresh();
+      this.updateQuantUI();
+    } catch (e) {
+      this.state.notify('error', `Could not save report: ${e.message}`);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ---- save -----------------------------------------------------------------
+
+  async save() {
+    if (!this.file || this.busy) return;
+    const edits = this.collectEdits();
+    if (!Object.keys(edits).length && !this.workingPath) {
+      this.state.notify('info', 'No changes to save yet.');
+      return;
+    }
+    this.setBusy(true);
+    this._statusTarget = 'scSaveStatus';
+    this.setStatus('scSaveStatus', 'Saving...');
+    try {
+      const response = await fetch('/api/segcleanup/save-edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: this.currentSourcePath(),
+          width: this.file.width,
+          height: this.file.height,
+          edits,
+          outputName: document.getElementById('scOutputName')?.value || 'cleaned',
+          sourceFileId: this.file.id
+        })
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to start saving');
+      this.jobId = result.jobId;
+      this.connectSocket();
+    } catch (e) {
+      this.state.notify('error', `Save failed: ${e.message}`);
+      this.setStatus('scSaveStatus', '');
+      this.setBusy(false);
+    }
+  }
+
+  onSaveComplete(data) {
+    this.lastSaved = { outputPath: data.outputPath, outputFileId: data.outputFileId };
+    // Continue editing on top of the saved (tracked) file
+    this.workingPath = data.outputPath;
+    this.editedSlices.clear();
+    this.setStatus('scSaveStatus', '');
+    this.updateEditedInfo();
+
+    const banner = document.getElementById('scSavedBanner');
+    const name = document.getElementById('scSavedName');
+    if (banner) banner.style.display = '';
+    if (name) name.textContent = data.outputPath.split('/').pop();
+
+    this.fileSelector?.refresh();
+    if (window.workspace?.fileBrowser) window.workspace.fileBrowser.refresh();
+    this.state.notify('success', `Saved: ${data.outputPath.split('/').pop()}`);
+  }
+
+  // ---- socket ---------------------------------------------------------------
+
+  connectSocket() {
+    if (!this.socket) {
+      if (!window.io) { this.state.notify('error', 'Socket.IO not available'); return; }
+      this.socket = window.io();
+    }
+    this.socket.off('segcleanup-progress');
+    this.socket.off('segcleanup-complete');
+    this.socket.off('segcleanup-error');
+    this.socket.emit('join-segcleanup', this.jobId);
+
+    this.socket.on('segcleanup-progress', (data) => {
+      const text = data.current_slice != null
+        ? `Slice ${data.current_slice} of ${data.total_slices}`
+        : (data.stage || '');
+      if (this._statusTarget) this.setStatus(this._statusTarget, text);
+    });
+    this.socket.on('segcleanup-complete', async (data) => {
+      this.setBusy(false);
+      if (!data.success) {
+        this.state.notify('error', `Failed: ${data.error || 'unknown error'}`);
+        this.setStatus('scCleanupStatus', '');
+        this.setStatus('scQuantStatus', '');
+        this.setStatus('scSaveStatus', '');
+        return;
+      }
+      if (data.kind === 'apply') {
+        await this.onCleanupComplete(data);
+      } else if (data.kind === 'quantify') {
+        this.metrics = data.metrics || null;
+        this.metricsStale = false;
+        this.reportDir = data.reportDir || null;
+        this.reportSaved = false;
+        this.setStatus('scQuantStatus', '');
+        this.updateQuantUI();
+      } else if (data.kind === 'edit') {
+        this.onSaveComplete(data);
+      }
+      this.setBusy(false);
+    });
+    this.socket.on('segcleanup-error', (data) => {
+      this.state.notify('error', `Error: ${data.message}`);
     });
   }
 
@@ -1033,309 +1099,12 @@ class SegcleanupModule extends BaseModule {
     return btoa(binary);
   }
 
-  // ==========================================================================
-  // Step 3: run + results
-  // ==========================================================================
-
-  enterResultStep() {
-    const summarySection = document.getElementById('scSummarySection');
-    const outputSection = document.getElementById('scOutputSection');
-    const runBtn = document.getElementById('scRunBtn');
-    const runLabel = document.getElementById('scRunBtnLabel');
-    const title = document.getElementById('scStep3Title');
-    const nameInput = document.getElementById('scOutputName');
-    document.getElementById('scSuccessSection').style.display = 'none';
-    document.getElementById('scMetricsSection').style.display = 'none';
-    document.getElementById('scProgressSection').style.display = 'none';
-    if (runBtn) { runBtn.style.display = ''; runBtn.disabled = false; }
-
-    if (this.workflow === 'auto') {
-      if (title) title.innerHTML = 'Apply &amp; Quantify';
-      if (runLabel) runLabel.textContent = 'Apply';
-      if (outputSection) outputSection.style.display = '';
-      if (nameInput && nameInput.value === 'edited') nameInput.value = 'cleaned';
-      this.renderAutoSummary();
-    } else if (this.workflow === 'manual') {
-      if (title) title.textContent = 'Save Edits';
-      if (runLabel) runLabel.textContent = 'Save';
-      if (outputSection) outputSection.style.display = '';
-      if (nameInput && nameInput.value === 'cleaned') nameInput.value = 'edited';
-      this.renderManualSummary();
-    } else {
-      if (title) title.textContent = 'Quantify';
-      if (runLabel) runLabel.textContent = 'Quantify';
-      if (outputSection) outputSection.style.display = 'none';
-      const el = document.getElementById('scSummary');
-      if (el && this.file) {
-        el.innerHTML = `
-          <div class="detail-row"><span class="detail-label">Input:</span>
-            <span class="detail-value">${this.file.name} (${this.file.classes.length}
-            class${this.file.classes.length > 1 ? 'es' : ''})</span></div>
-          ${this.voxelSizeNote()}`;
-      }
-    }
-    if (summarySection) summarySection.style.display = '';
-  }
-
-  voxelSizeNote() {
-    const vs = this.file?.voxelSize;
-    if (vs?.x && vs?.z) {
-      const unit = vs.unit === 'um' ? '&micro;m' : (vs.unit || '');
-      return `<div class="detail-row"><span class="detail-label">Voxel size:</span>
-        <span class="detail-value">${vs.x} &times; ${vs.y} &times; ${vs.z} ${unit}
-        - volumes and areas in physical units</span></div>`;
-    }
-    return `<div class="detail-row"><span class="detail-label">Voxel size:</span>
-      <span class="detail-value">not set - metrics in voxels</span></div>`;
-  }
-
-  renderAutoSummary() {
-    const el = document.getElementById('scSummary');
-    if (!el || !this.file) return;
-    const items = [];
-    for (const [cls, target] of Object.entries(this.ops.mergeMap)) {
-      items.push(target === 0 ? `Remove class ${cls}` : `Merge class ${cls} into ${target}`);
-    }
-    if (this.ops.fillHoles !== 'off') items.push(`Fill holes (${this.ops.fillHoles.toUpperCase()})`);
-    if (this.ops.minSize > 0) items.push(`Remove components smaller than ${this.ops.minSize} voxels`);
-    if (this.ops.smoothRadius > 0) items.push(`Smooth boundaries (radius ${this.ops.smoothRadius})`);
-    el.innerHTML = `
-      <div class="detail-row"><span class="detail-label">Input:</span>
-        <span class="detail-value">${this.file.name}</span></div>
-      ${items.length
-        ? `<ul class="sc-ops-list">${items.map(i => `<li>${i}</li>`).join('')}</ul>`
-        : '<p class="field-hint">No operations configured - the output will be an identical copy (still quantified).</p>'}
-      ${this.voxelSizeNote()}`;
-  }
-
-  renderManualSummary() {
-    const el = document.getElementById('scSummary');
-    if (!el || !this.file) return;
-    el.innerHTML = `
-      <div class="detail-row"><span class="detail-label">Input:</span>
-        <span class="detail-value">${this.file.name}</span></div>
-      <div class="detail-row"><span class="detail-label">Edited slices:</span>
-        <span class="detail-value">${this.editedSlices.size
-          ? [...this.editedSlices].sort((a, b) => a - b).join(', ')
-          : 'none yet - go back to paint'}</span></div>`;
-  }
-
-  async run() {
-    if (!this.file) return;
-    if (this.workflow === 'manual' && this.editedSlices.size === 0) {
-      this.state.notify('warning', 'No edited slices to save yet.');
-      return;
-    }
-
-    const progressSection = document.getElementById('scProgressSection');
-    const runBtn = document.getElementById('scRunBtn');
-    if (progressSection) progressSection.style.display = 'block';
-    if (runBtn) runBtn.disabled = true;
-    this.updateProgress(0, 'Starting...');
-
-    try {
-      let response;
-      if (this.workflow === 'auto') {
-        response = await fetch('/api/segcleanup/apply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            path: this.file.path,
-            ops: this.buildOpsPayload(),
-            outputName: document.getElementById('scOutputName')?.value || 'cleaned'
-          })
-        });
-      } else if (this.workflow === 'manual') {
-        this.updateProgress(0, 'Encoding edited slices...');
-        const edits = {};
-        for (const idx of this.editedSlices) {
-          const data = this.brushEngine.getAllAnnotations().get(idx);
-          if (data) edits[idx] = this.encodeSlice(data);
-        }
-        response = await fetch('/api/segcleanup/save-edits', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            path: this.file.path,
-            width: this.file.width,
-            height: this.file.height,
-            edits,
-            outputName: document.getElementById('scOutputName')?.value || 'edited'
-          })
-        });
-      } else {
-        response = await fetch('/api/segcleanup/quantify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: this.file.path })
-        });
-      }
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error || 'Failed to start');
-      this.jobId = result.jobId;
-      this.connectSocket();
-    } catch (e) {
-      this.state.notify('error', `Failed: ${e.message}`);
-      if (progressSection) progressSection.style.display = 'none';
-      if (runBtn) runBtn.disabled = false;
-    }
-  }
-
-  connectSocket() {
-    if (!this.socket) {
-      if (!window.io) { this.state.notify('error', 'Socket.IO not available'); return; }
-      this.socket = window.io();
-    }
-    this.socket.off('segcleanup-progress');
-    this.socket.off('segcleanup-complete');
-    this.socket.off('segcleanup-error');
-    this.socket.emit('join-segcleanup', this.jobId);
-
-    this.socket.on('segcleanup-progress', (data) => {
-      if (data.current_slice != null) {
-        this.updateProgress(data.progress_percent || 0,
-          `Slice ${data.current_slice} of ${data.total_slices}`);
-      } else if (data.stage) {
-        this.updateProgress(data.progress_percent || 0, data.stage);
-      }
-    });
-    this.socket.on('segcleanup-complete', (data) => {
-      const runBtn = document.getElementById('scRunBtn');
-      if (runBtn) runBtn.disabled = false;
-      if (data.success) {
-        this.result = data;
-        this.metrics = data.metrics || null;
-        this.reportDir = data.reportDir || null;
-        this.reportSaved = false;
-        this.showSuccess(data);
-        this.fileSelector?.refresh();
-        if (window.workspace?.fileBrowser) window.workspace.fileBrowser.refresh();
-      } else {
-        this.state.notify('error', `Failed: ${data.error || 'unknown error'}`);
-        const progressSection = document.getElementById('scProgressSection');
-        if (progressSection) progressSection.style.display = 'none';
-      }
-    });
-    this.socket.on('segcleanup-error', (data) => {
-      this.state.notify('error', `Error: ${data.message}`);
-    });
-  }
-
-  updateProgress(percent, text) {
-    const bar = document.getElementById('scProgressBar');
-    const status = document.getElementById('scStatusText');
-    if (bar) bar.style.width = `${percent}%`;
-    if (status) status.textContent = text;
-  }
-
-  showSuccess(data) {
-    document.getElementById('scProgressSection').style.display = 'none';
-    const successSection = document.getElementById('scSuccessSection');
-    const runBtn = document.getElementById('scRunBtn');
-    if (runBtn) runBtn.style.display = 'none';
-
-    const titleEl = document.getElementById('scSuccessTitle');
-    const info = document.getElementById('scResultInfo');
-    const viewerBtn = document.getElementById('scOpenViewerBtn');
-
-    if (data.kind === 'quantify') {
-      if (successSection) successSection.style.display = 'none';
-    } else {
-      if (successSection) successSection.style.display = 'block';
-      if (titleEl) {
-        titleEl.textContent = data.kind === 'edit' ? 'Edits Saved' : 'Cleanup Complete';
-      }
-      if (viewerBtn) viewerBtn.style.display = data.outputPath ? '' : 'none';
-      if (info) {
-        info.innerHTML = `
-          <div class="detail-row"><span class="detail-label">Output:</span>
-            <span class="detail-value">${data.outputPath}</span></div>
-          ${data.editedSlices != null
-            ? `<div class="detail-row"><span class="detail-label">Edited slices:</span>
-               <span class="detail-value">${data.editedSlices}</span></div>` : ''}`;
-      }
-    }
-
-    if (this.metrics) this.renderMetrics();
-  }
-
-  renderMetrics() {
-    const section = document.getElementById('scMetricsSection');
-    const el = document.getElementById('scMetrics');
-    if (!section || !el || !this.metrics) return;
-    section.style.display = 'block';
-
-    const hasPhysical = this.metrics.classes.some(c => c.volume != null);
-    const unit = this.metrics.voxel_size?.unit === 'um' ? '&micro;m' : (this.metrics.voxel_size?.unit || '');
-    const fmt = (v, digits = 2) => v == null ? '&ndash;'
-      : Number(v).toLocaleString('en-US', { maximumFractionDigits: digits });
-
-    const colorOf = (value) => this.file?.classes.find(c => c.value === value)?.color || '#999';
-
-    el.innerHTML = `
-      <div class="sc-table-scroll">
-        <table class="sc-metrics-table">
-          <tr>
-            <th></th><th>class</th><th>voxels</th>
-            ${hasPhysical ? `<th>volume (${unit}&sup3;)</th>` : ''}
-            <th>objects</th><th>mean size</th><th>largest</th>
-            <th>surface area${hasPhysical ? ` (${unit}&sup2;)` : ' (px&sup2;)'}</th>
-          </tr>
-          ${this.metrics.classes.map(c => `
-            <tr>
-              <td><span class="sc-color" style="background:${colorOf(c.class)}"></span></td>
-              <td>${c.class}</td>
-              <td>${fmt(c.voxels, 0)}</td>
-              ${hasPhysical ? `<td>${fmt(c.volume)}</td>` : ''}
-              <td>${fmt(c.components, 0)}</td>
-              <td>${fmt(c.component_voxels.mean, 1)}</td>
-              <td>${fmt(c.component_voxels.max, 0)}</td>
-              <td>${fmt(c.surface_area)}</td>
-            </tr>`).join('')}
-        </table>
-      </div>
-      ${hasPhysical ? '' : '<p class="field-hint">Set a voxel size on the input file (file browser &rarr; file info) for physical units.</p>'}
-    `;
-    const saveBtn = document.getElementById('scSaveReportBtn');
-    if (saveBtn) {
-      saveBtn.disabled = this.reportSaved;
-      saveBtn.textContent = this.reportSaved
-        ? 'Report saved to workspace' : 'Save report (CSV) to workspace';
-    }
-  }
-
-  async saveReport() {
-    if (!this.reportDir) return;
-    const btn = document.getElementById('scSaveReportBtn');
-    if (btn) btn.disabled = true;
-    try {
-      const response = await fetch('/api/segcleanup/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reportDir: this.reportDir,
-          sourceFileId: this.file?.id || null
-        })
-      });
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error || 'Failed to save report');
-      this.reportSaved = true;
-      this.state.notify('success',
-        `Report saved (${result.files.map(f => f.name).join(', ')})`);
-      if (window.workspace?.fileBrowser) window.workspace.fileBrowser.refresh();
-      this.renderMetrics();
-    } catch (e) {
-      this.state.notify('error', `Could not save report: ${e.message}`);
-      if (btn) btn.disabled = false;
-    }
-  }
-
   openResultInViewer() {
-    if (!this.result?.outputPath) return;
+    if (!this.lastSaved?.outputPath) return;
     this.state.update('workspace.viewerFile', {
-      fileId: this.result.outputFileId,
-      path: this.result.outputPath,
-      name: this.result.outputPath.split('/').pop(),
+      fileId: this.lastSaved.outputFileId,
+      path: this.lastSaved.outputPath,
+      name: this.lastSaved.outputPath.split('/').pop(),
       source: 'segcleanup'
     });
     window.workspace.loadModule('imageviewer');

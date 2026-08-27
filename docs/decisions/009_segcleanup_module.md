@@ -6,13 +6,40 @@ segmentation is not great, the user has no way to fix this on-platform
 right now" - and he explicitly asked for a MANUAL editing option, not
 only automated ops.
 
-## Decision
+## Decision (REVISED 2026-08-27, after Lucas's first look)
 
-One module (`segcleanup`) with three workflows, chosen in step 1
-(the stitching module's workflow-radio pattern). Steps: **Select ->
-Edit -> Result & Report**; the quantify-only workflow skips Edit.
+> Original design: three workflows (auto / manual / quantify) chosen in
+> step 1, three steps. Lucas: "would it be possible for the 3 different
+> options to be part of step 2? ... i dont think this module necessarily
+> needs 3 steps" -> **revised to TWO steps with ONE integrated edit
+> environment.**
 
-### Workflow A: Automated cleanup
+**Steps: Select -> Edit & Quantify.** The edit step always has the
+painting canvas active, and the toolbar carries the automated-cleanup
+controls (class merge/remove dropdowns, fill holes, min component size,
+smoothing) with an **Apply cleanup** button. Quantification is computed
+automatically on entry and always visible in a card below the viewer;
+edits mark it stale (badge + Update button); **Create report** registers
+the CSVs. **Save as New File** (navigation row) writes the current state
+as a tracked output. The original file is never modified.
+
+**Working-copy model** (how server-side ops and client-side painting
+compose): painting accumulates client-side per-slice edits as before.
+"Apply cleanup" POSTs the current source + pending edits + ops; the
+server applies the edits, runs the pipeline, and writes an untracked
+WORKING COPY under the workspace's `.segcleanup/` cache dir (returned
+with fresh metrics and the possibly-changed class list). The editor then
+reloads from the working copy with cleared edit state. Quantify likewise
+accepts pending edits (applied in memory). Save (`/save-edits`) accepts
+empty edits when saving from a working copy and passes `sourceFileId`
+so lineage and voxel size always reference the original tracked file.
+Superseded working copies are deleted when replaced or saved; registered
+reports are COPIED into `results/segcleanup/` first so cleanup cannot
+remove them. After a save the editor continues on top of the saved file.
+
+Section details below (the operation semantics are unchanged):
+
+### Automated cleanup
 
 Operation pipeline, fixed order, each optional:
 
@@ -28,16 +55,12 @@ Operation pipeline, fixed order, each optional:
    by smoothing become 0, pixels gained only claim background; classes
    processed in ascending label order (deterministic)
 
-**Preview** on the current slice: server renders a colored PNG of the
-ops applied in 2D approximation (3D fill/components approximated
-per-slice - labeled as approximate in the UI), optional grayscale
-underlay found via lineage. Debounced like the preprocess module.
-
 Apply runs the full volume **in memory** (precedent: mesh generation
-already loads full segmentations) and finishes with quantification, so
-step 3 shows metrics immediately.
+already loads full segmentations) and finishes with quantification.
+(The original per-slice preview endpoint still exists but the revised
+UI applies directly to the working copy instead of previewing.)
 
-### Workflow B: Manual touch-up
+### Manual painting
 
 Reuses the annotation module's painting stack **unchanged**:
 `AnnotationCanvas` (layered viewport, zoom/pan, full-res slice loading
@@ -57,10 +80,6 @@ clicked connected region with the active class, pushes history).
 - Save sends only EDITED slices, using the annotation system's existing
   encodings (sparse 5-byte x/y/class tuples, dense base64 fallback);
   the server streams the original TIFF and swaps in edited slices.
-
-### Workflow C: Quantify only
-
-Runs quantification on the selected segmentation without changes.
 
 ### Quantification
 
