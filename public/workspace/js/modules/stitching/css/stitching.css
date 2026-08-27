@@ -555,10 +555,6 @@
   color: var(--text-secondary, #666);
 }
 
-.stitch-actions {
-  margin: 16px 0;
-}
-
 .stitch-warning {
   margin-top: 8px;
   padding: 8px 10px;

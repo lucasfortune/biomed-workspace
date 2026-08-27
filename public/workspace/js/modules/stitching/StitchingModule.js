@@ -302,12 +302,6 @@ class StitchingModule extends BaseModule {
             </div>
           </div>
 
-          <div class="stitch-actions">
-            <button class="btn btn-danger" id="stitchComposeBtn">
-              <span class="btn-icon">&#9658;</span> Compose
-            </button>
-          </div>
-
           <div class="section-card" id="stitchProgressSection" style="display: none;">
             <h4>Progress</h4>
             <div class="inference-status" id="stitchStatusText">Starting...</div>
@@ -330,7 +324,9 @@ class StitchingModule extends BaseModule {
 
           <div class="navigation-buttons">
             <button id="stitchStep3Back" class="btn secondary">Back</button>
-            <div></div>
+            <button class="btn btn-danger" id="stitchComposeBtn">
+              <span class="btn-icon">&#9658;</span> Compose
+            </button>
           </div>
         </div>
       </div>
