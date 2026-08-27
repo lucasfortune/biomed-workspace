@@ -1,0 +1,497 @@
+/**
+ * Segmentation Cleanup Routes (ADR-009)
+ *
+ * Automated cleanup, manual touch-up saving and quantification for
+ * segmentation stacks. Mounted at /api/segcleanup.
+ *
+ * Endpoints:
+ *   GET  /info        - classes + counts + shape (sync)
+ *   POST /preview     - one slice with cleanup ops applied, as PNG (sync)
+ *   GET  /label-slice - raw label values of one slice as L-mode PNG (sync)
+ *   POST /apply       - full cleanup pipeline + quantification (async job)
+ *   POST /quantify    - quantification only (async job)
+ *   POST /save-edits  - write manually edited slices into a new stack (async job)
+ *   POST /report      - register a job's report CSVs in the file browser
+ *
+ * Async jobs emit segcleanup-progress / segcleanup-complete /
+ * segcleanup-error into Socket.IO room `segcleanup-<jobId>`.
+ */
+
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const fsp = fs.promises;
+const { spawn } = require('child_process');
+const { requireAuth } = require('../middleware/auth.middleware');
+const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
+const { createLineage } = require('../helpers/lineageHelpers');
+
+function createSegcleanupRoutes(dependencies) {
+  const router = express.Router();
+  const { workspaceManager, activityLogger, logger, io } = dependencies;
+
+  function resolveWorkspacePath(workspacePath, p) {
+    const absolute = path.isAbsolute(p) ? p : path.join(workspacePath, p);
+    const normalized = path.normalize(absolute);
+    if (!normalized.startsWith(path.normalize(DATA_PATHS.workspaces))) {
+      throw new Error('Access denied: path outside workspaces');
+    }
+    return normalized;
+  }
+
+  function findPayload(stdout, prefix) {
+    const line = stdout.split('\n').find(l => l.startsWith(`${prefix}:`));
+    if (!line) return null;
+    try {
+      return JSON.parse(line.substring(prefix.length + 1));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function errorMessage(stdout, stderr, fallback) {
+    const err = findPayload(stdout, 'SEGCLEANUP_ERROR');
+    if (err && err.message) return err.message;
+    if (stderr) return stderr.split('\n').slice(-3).join(' ').trim() || fallback;
+    return fallback;
+  }
+
+  /** Spawn a synchronous (request-scoped) segcleanup.py call */
+  function runSync(args, res, onSuccess, failMessage) {
+    const proc = spawn(PYTHON_PATH, ['python/segcleanup.py', ...args]);
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0) return onSuccess(stdout);
+      const message = errorMessage(stdout, stderr, failMessage);
+      if (logger) logger.error(`[Segcleanup] ${failMessage}:`, message);
+      res.status(500).json({ success: false, error: message });
+    });
+    proc.on('error', (err) => {
+      res.status(500).json({ success: false, error: `Failed to spawn process: ${err.message}` });
+    });
+  }
+
+  /**
+   * Run an async job process; wires stdout protocol lines into the
+   * Socket.IO room and calls done(resultData|null, stderr) on close.
+   */
+  function runJob(args, roomName, done) {
+    const proc = spawn(PYTHON_PATH, ['python/segcleanup.py', ...args]);
+    let buffer = '';
+    let stderrBuffer = '';
+    let resultData = null;
+
+    proc.stdout.on('data', (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('SEGCLEANUP_PROGRESS:')) {
+          try {
+            io.to(roomName).emit('segcleanup-progress', JSON.parse(line.substring(20)));
+          } catch (e) { /* ignore parse errors */ }
+        } else if (line.startsWith('SEGCLEANUP_RESULT:')) {
+          try {
+            resultData = JSON.parse(line.substring(18));
+          } catch (e) { /* ignore parse errors */ }
+        } else if (line.startsWith('SEGCLEANUP_ERROR:')) {
+          try {
+            io.to(roomName).emit('segcleanup-error', JSON.parse(line.substring(17)));
+          } catch (e) { /* ignore parse errors */ }
+        }
+      }
+    });
+    proc.stderr.on('data', (d) => { stderrBuffer += d.toString(); });
+    proc.on('close', () => done(resultData, stderrBuffer));
+    proc.on('error', (err) => {
+      io.to(roomName).emit('segcleanup-error', { message: `Failed to spawn process: ${err.message}` });
+    });
+  }
+
+  /** Track a produced label stack in metadata; returns the entry or null */
+  function trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId) {
+    try {
+      const stats = fs.statSync(outputPath);
+      const lineage = inputFile
+        ? createLineage('segcleanup', [inputFile.id], jobId)
+        : null;
+      return workspaceManager.addFileToMetadata(sessionId, {
+        name: path.basename(outputPath),
+        path: path.relative(workspacePath, outputPath),
+        category: 'results',
+        tags: ['segcleanup', 'segmentation', 'data'],
+        size: stats.size,
+        folderId: null,
+        ...(inputFile?.voxelSize && { voxelSize: inputFile.voxelSize }),
+        ...(lineage && { lineage })
+      });
+    } catch (e) {
+      if (logger) logger.error('[Segcleanup] Error tracking output:', e);
+      return null;
+    }
+  }
+
+  function lookupFile(sessionId, workspacePath, absolute) {
+    const metadata = workspaceManager.loadMetadata(sessionId);
+    const rel = path.relative(workspacePath, absolute);
+    return metadata?.files?.find(f => f.path === rel) || null;
+  }
+
+  /**
+   * Classes + counts + shape
+   * GET /api/segcleanup/info?path=<workspace-relative tiff>
+   */
+  router.get('/info', requireAuth, async (req, res) => {
+    const { path: fileReq } = req.query;
+    const sessionId = req.session.id;
+    if (!fileReq) {
+      return res.status(400).json({ success: false, error: 'path is required' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolute = resolveWorkspacePath(workspacePath, fileReq);
+      if (!fs.existsSync(absolute)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+      runSync(['--mode', 'info', '--input', absolute], res, (stdout) => {
+        const info = findPayload(stdout, 'SEGCLEANUP_INFO');
+        if (!info) return res.status(500).json({ success: false, error: 'Could not read stack info' });
+        res.json({ success: true, ...info });
+      }, 'Info failed');
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Preview one slice with ops applied (2D approximation), colored PNG
+   * POST /api/segcleanup/preview
+   * Body: { path, slice, ops, underlayPath }
+   */
+  router.post('/preview', requireAuth, async (req, res) => {
+    const { path: fileReq, slice = 0, ops = {}, underlayPath } = req.body;
+    const sessionId = req.session.id;
+    if (!fileReq) {
+      return res.status(400).json({ success: false, error: 'path is required' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolute = resolveWorkspacePath(workspacePath, fileReq);
+      if (!fs.existsSync(absolute)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+
+      const previewDir = path.join(workspacePath, '.segcleanup');
+      await fsp.mkdir(previewDir, { recursive: true });
+      const previewPath = path.join(previewDir,
+        `preview_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.png`);
+
+      const args = ['--mode', 'preview', '--input', absolute,
+        '--slice', String(parseInt(slice, 10) || 0),
+        '--ops', JSON.stringify(ops), '--output', previewPath];
+      if (underlayPath) {
+        const absUnderlay = resolveWorkspacePath(workspacePath, underlayPath);
+        if (fs.existsSync(absUnderlay)) args.push('--underlay', absUnderlay);
+      }
+
+      runSync(args, res, () => {
+        if (!fs.existsSync(previewPath)) {
+          return res.status(500).json({ success: false, error: 'Preview failed' });
+        }
+        res.set('Cache-Control', 'no-store');
+        res.sendFile(previewPath, () => {
+          fsp.unlink(previewPath).catch(() => {});
+        });
+      }, 'Preview failed');
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Raw label values of one slice as L-mode PNG (for the touch-up editor)
+   * GET /api/segcleanup/label-slice?path=<rel>&slice=<n>
+   */
+  router.get('/label-slice', requireAuth, async (req, res) => {
+    const { path: fileReq, slice = 0 } = req.query;
+    const sessionId = req.session.id;
+    if (!fileReq) {
+      return res.status(400).json({ success: false, error: 'path is required' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolute = resolveWorkspacePath(workspacePath, fileReq);
+      if (!fs.existsSync(absolute)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+
+      const cacheDir = path.join(workspacePath, '.segcleanup');
+      await fsp.mkdir(cacheDir, { recursive: true });
+      const outPath = path.join(cacheDir,
+        `label_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.png`);
+
+      runSync(['--mode', 'label-slice', '--input', absolute,
+        '--slice', String(parseInt(slice, 10) || 0), '--output', outPath],
+      res, () => {
+        // Label files are immutable -> browser-cacheable
+        res.set('Cache-Control', 'private, max-age=86400');
+        res.sendFile(outPath, () => {
+          fsp.unlink(outPath).catch(() => {});
+        });
+      }, 'Label slice failed');
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Full cleanup pipeline + quantification
+   * POST /api/segcleanup/apply
+   * Body: { path, ops, outputName }
+   */
+  router.post('/apply', requireAuth, async (req, res) => {
+    const { path: fileReq, ops = {}, outputName } = req.body;
+    const sessionId = req.session.id;
+    if (!fileReq) {
+      return res.status(400).json({ success: false, error: 'path is required' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolute = resolveWorkspacePath(workspacePath, fileReq);
+      if (!fs.existsSync(absolute)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+      const inputFile = lookupFile(sessionId, workspacePath, absolute);
+
+      const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
+      await fsp.mkdir(outputDir, { recursive: true });
+      const safeName = (outputName || 'cleaned')
+        .replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
+      const outputPath = path.join(outputDir, `${safeName}.tif`);
+
+      const config = {
+        input_path: absolute,
+        output_path: outputPath,
+        ops,
+        voxel_size: inputFile?.voxelSize || null
+      };
+      const configPath = path.join(outputDir, `config_${jobId}.json`);
+      await fsp.writeFile(configPath, JSON.stringify(config, null, 2));
+
+      const roomName = `segcleanup-${jobId}`;
+      runJob(['--mode', 'apply', '--config', configPath], roomName, (resultData, stderr) => {
+        fsp.unlink(configPath).catch(() => {});
+        if (resultData) {
+          const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId);
+          io.to(roomName).emit('segcleanup-complete', {
+            success: true,
+            jobId,
+            kind: 'apply',
+            outputPath: path.relative(workspacePath, outputPath),
+            outputFileId: entry?.id || null,
+            reportDir: path.relative(workspacePath, outputDir),
+            slices: resultData.slices,
+            width: resultData.width,
+            height: resultData.height,
+            dtype: resultData.dtype,
+            metrics: resultData.metrics
+          });
+          if (activityLogger && req.session.user) {
+            activityLogger.logActivity(req.session.user.username, 'segcleanup_apply', { jobId });
+          }
+        } else {
+          io.to(roomName).emit('segcleanup-complete', {
+            success: false, jobId, kind: 'apply',
+            error: errorMessage('', stderr, 'Cleanup failed'), details: stderr
+          });
+          if (logger) logger.error(`[Segcleanup] Apply failed (${jobId}):`, stderr);
+        }
+      });
+
+      res.json({ success: true, jobId });
+    } catch (error) {
+      if (logger) logger.error('[Segcleanup] Apply error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Quantification only
+   * POST /api/segcleanup/quantify
+   * Body: { path }
+   */
+  router.post('/quantify', requireAuth, async (req, res) => {
+    const { path: fileReq } = req.body;
+    const sessionId = req.session.id;
+    if (!fileReq) {
+      return res.status(400).json({ success: false, error: 'path is required' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolute = resolveWorkspacePath(workspacePath, fileReq);
+      if (!fs.existsSync(absolute)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+      const inputFile = lookupFile(sessionId, workspacePath, absolute);
+
+      const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
+      await fsp.mkdir(outputDir, { recursive: true });
+
+      const args = ['--mode', 'quantify', '--input', absolute, '--output-dir', outputDir];
+      if (inputFile?.voxelSize) {
+        args.push('--voxel-size', JSON.stringify(inputFile.voxelSize));
+      }
+
+      const roomName = `segcleanup-${jobId}`;
+      runJob(args, roomName, (resultData, stderr) => {
+        if (resultData) {
+          io.to(roomName).emit('segcleanup-complete', {
+            success: true,
+            jobId,
+            kind: 'quantify',
+            reportDir: path.relative(workspacePath, outputDir),
+            metrics: resultData.metrics
+          });
+        } else {
+          io.to(roomName).emit('segcleanup-complete', {
+            success: false, jobId, kind: 'quantify',
+            error: errorMessage('', stderr, 'Quantification failed'), details: stderr
+          });
+          if (logger) logger.error(`[Segcleanup] Quantify failed (${jobId}):`, stderr);
+        }
+      });
+
+      res.json({ success: true, jobId });
+    } catch (error) {
+      if (logger) logger.error('[Segcleanup] Quantify error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Save manual edits into a new stack
+   * POST /api/segcleanup/save-edits
+   * Body: { path, width, height, edits: {sliceIdx: {encoding, data}}, outputName }
+   */
+  router.post('/save-edits', requireAuth, async (req, res) => {
+    const { path: fileReq, width, height, edits = {}, outputName } = req.body;
+    const sessionId = req.session.id;
+    if (!fileReq || !width || !height) {
+      return res.status(400).json({ success: false, error: 'path, width and height are required' });
+    }
+    if (!Object.keys(edits).length) {
+      return res.status(400).json({ success: false, error: 'No edited slices to save' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absolute = resolveWorkspacePath(workspacePath, fileReq);
+      if (!fs.existsSync(absolute)) {
+        return res.status(404).json({ success: false, error: 'File not found' });
+      }
+      const inputFile = lookupFile(sessionId, workspacePath, absolute);
+
+      const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
+      await fsp.mkdir(outputDir, { recursive: true });
+      const safeName = (outputName || 'edited')
+        .replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
+      const outputPath = path.join(outputDir, `${safeName}.tif`);
+
+      const config = {
+        input_path: absolute,
+        output_path: outputPath,
+        width: parseInt(width, 10),
+        height: parseInt(height, 10),
+        edits
+      };
+      const configPath = path.join(outputDir, `edits_${jobId}.json`);
+      await fsp.writeFile(configPath, JSON.stringify(config));
+
+      const roomName = `segcleanup-${jobId}`;
+      runJob(['--mode', 'edit-save', '--config', configPath], roomName, (resultData, stderr) => {
+        fsp.unlink(configPath).catch(() => {});
+        if (resultData) {
+          const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId);
+          io.to(roomName).emit('segcleanup-complete', {
+            success: true,
+            jobId,
+            kind: 'edit',
+            outputPath: path.relative(workspacePath, outputPath),
+            outputFileId: entry?.id || null,
+            editedSlices: resultData.editedSlices,
+            slices: resultData.slices
+          });
+          if (activityLogger && req.session.user) {
+            activityLogger.logActivity(req.session.user.username, 'segcleanup_edit', {
+              jobId, editedSlices: resultData.editedSlices
+            });
+          }
+        } else {
+          io.to(roomName).emit('segcleanup-complete', {
+            success: false, jobId, kind: 'edit',
+            error: errorMessage('', stderr, 'Saving edits failed'), details: stderr
+          });
+          if (logger) logger.error(`[Segcleanup] Edit save failed (${jobId}):`, stderr);
+        }
+      });
+
+      res.json({ success: true, jobId });
+    } catch (error) {
+      if (logger) logger.error('[Segcleanup] Save edits error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Register a job's report CSVs in the file browser
+   * POST /api/segcleanup/report
+   * Body: { reportDir, sourceFileId }
+   */
+  router.post('/report', requireAuth, async (req, res) => {
+    const { reportDir, sourceFileId } = req.body;
+    const sessionId = req.session.id;
+    if (!reportDir) {
+      return res.status(400).json({ success: false, error: 'reportDir is required' });
+    }
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const absoluteDir = resolveWorkspacePath(workspacePath, reportDir);
+
+      const tracked = [];
+      for (const name of ['report.csv', 'objects.csv']) {
+        const filePath = path.join(absoluteDir, name);
+        if (!fs.existsSync(filePath)) continue;
+        const stats = fs.statSync(filePath);
+        const lineage = sourceFileId
+          ? createLineage('segcleanup', [sourceFileId], path.basename(absoluteDir))
+          : null;
+        const entry = workspaceManager.addFileToMetadata(sessionId, {
+          name,
+          path: path.relative(workspacePath, filePath),
+          category: 'results',
+          tags: ['segcleanup', 'report'],
+          size: stats.size,
+          folderId: null,
+          ...(lineage && { lineage })
+        });
+        tracked.push(entry);
+      }
+      if (!tracked.length) {
+        return res.status(404).json({ success: false, error: 'No report files found' });
+      }
+      res.json({ success: true, files: tracked });
+    } catch (error) {
+      if (logger) logger.error('[Segcleanup] Report error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  return router;
+}
+
+module.exports = createSegcleanupRoutes;

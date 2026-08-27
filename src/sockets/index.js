@@ -10,6 +10,7 @@ const { registerMeshHandlers, emitMeshProgress, emitMeshComplete, emitMeshError 
 const { registerRestoreHandlers, emitRestoreProgress, emitRestoreComplete } = require('./restore.socket');
 const { registerStitchingHandlers } = require('./stitching.socket');
 const { registerPreprocessHandlers } = require('./preprocess.socket');
+const { registerSegcleanupHandlers } = require('./segcleanup.socket');
 const {
   registerDenoisingHandlers,
   emitDenoisingStage1Progress,
@@ -53,6 +54,9 @@ function initializeSocketHandlers(io, logger) {
 
     // Register preprocess event handlers
     registerPreprocessHandlers(socket, logger);
+
+    // Register segcleanup event handlers
+    registerSegcleanupHandlers(socket, logger);
 
     // Handle disconnection
     socket.on('disconnect', () => {

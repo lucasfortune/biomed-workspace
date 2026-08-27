@@ -320,7 +320,7 @@ class WorkspaceService {
     }
 
     // Cache directories to exclude
-    const excludeDirs = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess'];
+    const excludeDirs = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '.segcleanup'];
 
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

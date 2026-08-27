@@ -14,7 +14,8 @@ const MODULE_IDS = {
   MESH: 'mesh',
   VISUALIZATION: 'visualization',
   STITCHING: 'stitching',
-  PREPROCESS: 'preprocess'
+  PREPROCESS: 'preprocess',
+  SEGCLEANUP: 'segcleanup'
 };
 
 // SVG Icon definitions (filled/solid style)
@@ -33,7 +34,9 @@ const moduleIcons = {
 
   stitching: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h7v7H4V3zm9 0h7v7h-7V3zm-9 11h7v7H4v-7zm12.5 0c.83 0 1.5.67 1.5 1.5V17h1.5c.83 0 1.5.67 1.5 1.5S20.33 20 19.5 20H18v1.5c0 .83-.67 1.5-1.5 1.5S15 22.33 15 21.5V20h-1.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5H15v-1.5c0-.83.67-1.5 1.5-1.5z"/></svg>`,
 
-  preprocess: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/></svg>`
+  preprocess: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/></svg>`,
+
+  segcleanup: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29c-.39-.39-1.02-.39-1.41 0L1.29 18.96c-.39.39-.39 1.02 0 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.7 11.05c.39-.39.39-1.02 0-1.41l-2.33-2.35zm-1.03 5.49l-2.12-2.12 2.44-2.44 2.12 2.12-2.44 2.44z"/></svg>`
 };
 
 const moduleRegistry = [
@@ -124,6 +127,17 @@ const moduleRegistry = [
     color: '#9B59B6',
     status: 'available',
     helpArticleId: 'mesh'
+  },
+  {
+    id: 'segcleanup',
+    name: 'Segmentation Cleanup',
+    description: 'Fix and measure segmentations: fill holes, remove specks, smooth, merge classes, manual touch-up painting, and quantification reports',
+    icon: moduleIcons.segcleanup,
+    path: '/workspace/js/modules/segcleanup/SegcleanupModule.js',
+    inputs: ['segmented_stack', 'annotations'],
+    outputs: ['segmented_stack'],
+    color: '#C2185B',
+    status: 'available'
   },
   {
     id: 'stitching',

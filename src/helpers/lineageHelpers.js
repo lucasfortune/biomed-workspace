@@ -159,7 +159,8 @@ function getProcessingHistoryString(fileId, allFiles) {
     'duplicate': 'Duplicated',
     'split': 'Split',
     'stitching': 'Stitching',
-    'preprocess': 'Preprocessing'
+    'preprocess': 'Preprocessing',
+    'segcleanup': 'Segmentation Cleanup'
   };
 
   const steps = chain.map(entry => displayNames[entry.processType] || entry.processType);

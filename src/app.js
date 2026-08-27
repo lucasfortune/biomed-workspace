@@ -30,6 +30,7 @@ const createAnnotationRoutes = require('./routes/annotation.routes');
 const createDenoisingRoutes = require('./routes/denoising.routes');
 const createStitchingRoutes = require('./routes/stitching.routes');
 const createPreprocessRoutes = require('./routes/preprocess.routes');
+const createSegcleanupRoutes = require('./routes/segcleanup.routes');
 const createAdminRoutes = require('./routes/admin.routes');
 
 // Python runner wrappers
@@ -421,6 +422,14 @@ function configureApp(app, dependencies) {
 
   // Preprocess routes
   app.use('/api/preprocess', createPreprocessRoutes({
+    workspaceManager,
+    activityLogger,
+    logger,
+    io
+  }));
+
+  // Segmentation cleanup routes
+  app.use('/api/segcleanup', createSegcleanupRoutes({
     workspaceManager,
     activityLogger,
     logger,
