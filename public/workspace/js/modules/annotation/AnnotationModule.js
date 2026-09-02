@@ -18,6 +18,27 @@
 // =============================================================================
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
+// ---------------------------------------------------------------------------
+// File classification helpers (workspace metadata: category + tags)
+// ---------------------------------------------------------------------------
+const hasTag = (f, tag) => Array.isArray(f.tags) && f.tags.includes(tag);
+/** Raw image stack a new annotation can be started from */
+const isRawImageFile = (f) =>
+  (f.category === 'uploads' && hasTag(f, 'raw')) ||
+  f.category === 'raw' || f.category === 'raw_images' || f.category === 'inference_data';
+/** Processed image stack (denoised / segmented) that can also be annotated */
+const isImageResultFile = (f) =>
+  (f.category === 'results' && hasTag(f, 'data') && (hasTag(f, 'denoising') || hasTag(f, 'segmentation'))) ||
+  f.category === 'denoised_images' || f.category === 'segmentations';
+/** Unfinished annotation saved with "Save Progress" */
+const isUnfinishedAnnotation = (f) =>
+  f.category === 'results' && hasTag(f, 'annotation') && hasTag(f, 'wip');
+/** Finished annotation (created by this module or uploaded as a mask) */
+const isFinishedAnnotation = (f) =>
+  f.category === 'uploads' && hasTag(f, 'annotation') && !hasTag(f, 'info');
+const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g,
+  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import AnnotationAPI from './AnnotationAPI.js';
@@ -75,6 +96,7 @@ class AnnotationModule extends BaseModule {
     // Annotation file info (for resume/edit scenarios)
     this.annotationFile = null;
     this.isResuming = false;
+    this.annotationMode = 'new';      // 'new' | 'resume' (WIP, saves update it) | 'edit' (saves create a new file)
     this.currentAnnotationId = null;  // ID of current unfinished annotation (for updates)
 
     // Slice navigation
@@ -155,6 +177,9 @@ class AnnotationModule extends BaseModule {
 
               <!-- Validation Display -->
               <div id="validationResult"></div>
+
+              <!-- Source image picker (only when an annotation has no known source) -->
+              <div id="annotationSourcePicker" style="display: none;"></div>
 
               <!-- Navigation Buttons -->
               <div class="navigation-buttons">
@@ -383,32 +408,16 @@ class AnnotationModule extends BaseModule {
           'denoised_images': 'Denoised',
           'segmentations': 'Segmentation'
         },
-        // Filter recent results to only show data files (denoising or segmentation), not info/wip
-        filterRecentResults: (files) => {
-          return files.filter(f => {
-            // New system: results with denoising or segmentation data tag
-            if (f.category === 'results' && f.tags) {
-              const isDenoising = f.tags.includes('denoising') && f.tags.includes('data');
-              const isSegmentation = f.tags.includes('segmentation') && f.tags.includes('data');
-              return isDenoising || isSegmentation;
-            }
-            // Legacy categories
-            return f.category === 'denoised_images' || f.category === 'segmentations';
-          });
-        },
-        // Filter workspace files to show only raw images (uploads with raw tag)
-        filterFiles: (files) => {
-          return files.filter(f => {
-            // New system: uploads with raw tag
-            if (f.category === 'uploads' && f.tags && f.tags.includes('raw')) {
-              return true;
-            }
-            // Legacy categories for backward compat
-            return f.category === 'raw' ||
-                   f.category === 'raw_images' ||
-                   f.category === 'inference_data';
-          });
-        }
+        // Recent results: only image data (denoising or segmentation output), not info/wip files
+        filterRecentResults: (files) => files.filter(isImageResultFile),
+        // Workspace files: raw image stacks (new annotation)
+        filterFiles: (files) => files.filter(isRawImageFile),
+        // Resume / edit: WIP results and finished annotations are not raw images, so they
+        // get their own groups (the mode is decided from the tags in onFileSelected)
+        extraGroups: [
+          { label: 'Unfinished annotations (resume)', filter: (files) => files.filter(isUnfinishedAnnotation) },
+          { label: 'Existing annotations (edit)', filter: (files) => files.filter(isFinishedAnnotation) }
+        ]
       });
 
       fileSelectorContainer.innerHTML = this.fileSelector.render();
@@ -1355,6 +1364,8 @@ class AnnotationModule extends BaseModule {
     }
 
     // Restore slice annotations (handles both sparse and dense encoding)
+    const hasClassList = !!(annotationData.classes && annotationData.classes.length > 0);
+    const labelsSeen = new Set();
     if (annotationData.sliceData) {
       const width = annotationData.width || this.tiffInfo?.width;
       const height = annotationData.height || this.tiffInfo?.height;
@@ -1376,8 +1387,31 @@ class AnnotationModule extends BaseModule {
           uint8Array = this.base64ToUint8Array(sliceInfo);
         }
 
+        if (!hasClassList) {
+          for (let i = 0; i < uint8Array.length; i++) {
+            if (uint8Array[i] !== 0) labelsSeen.add(uint8Array[i]);
+          }
+        }
+
         this.brushEngine.setAnnotationData(sliceIndex, uint8Array);
       }
+    }
+
+    // Uploaded masks have no class list: derive one from the label values present
+    if (!hasClassList && labelsSeen.size > 0) {
+      const labels = [...labelsSeen].sort((a, b) => a - b);
+      this.brushEngine.classes = [];
+      labels.forEach(id => {
+        // getNextColor() spaces hues by the current class count, so push one at a time
+        this.brushEngine.classes.push({
+          id,
+          name: `Class ${id}`,
+          color: this.brushEngine.getNextColor(),
+          visible: true
+        });
+      });
+      this.brushEngine.nextClassId = labels[labels.length - 1] + 1;
+      this.brushEngine.activeClassId = labels[0];
     }
 
     // Re-render class list
@@ -1404,8 +1438,9 @@ class AnnotationModule extends BaseModule {
 
     const annotationFileId = this.annotationFile.id || this.annotationFile.path;
 
-    // Store the annotation ID for future saves (to update instead of create new)
-    this.currentAnnotationId = annotationFileId;
+    // Resume: "Save Progress" keeps updating the same WIP file.
+    // Edit: the finished annotation is never overwritten; saves create a new file.
+    this.currentAnnotationId = this.annotationMode === 'resume' ? annotationFileId : null;
 
     try {
       // Load annotation data from API
@@ -1415,14 +1450,16 @@ class AnnotationModule extends BaseModule {
         throw new Error(result.error || 'Failed to load annotation');
       }
 
-      // Store source file info from sidecar
-      if (result.sourceFileId) {
-        this.sourceFile = {
-          id: result.sourceFileId,
-          name: result.sourceFileName
-        };
-      } else {
-        console.warn('[AnnotationModule] No sourceFileId in annotation data');
+      // Source image: the one resolved (or chosen) in step 1 wins; fall back to the sidecar
+      if (!this.sourceFile?.id) {
+        if (result.sourceFileId) {
+          this.sourceFile = {
+            id: result.sourceFileId,
+            name: result.sourceFileName
+          };
+        } else {
+          console.warn('[AnnotationModule] No sourceFileId in annotation data');
+        }
       }
 
       // Update TIFF info
@@ -1709,8 +1746,10 @@ class AnnotationModule extends BaseModule {
     this.annotationFile = null;
     this.tiffInfo = null;
     this.isResuming = false;
+    this.annotationMode = 'new';
     this.sourceFileLoaded = false;
     this.currentAnnotationId = null;
+    this.hideSourcePicker();
 
     // Disable next button until validation passes
     const step1Next = document.getElementById('step1Next');
@@ -1728,15 +1767,15 @@ class AnnotationModule extends BaseModule {
     this.validationDisplay.showLoading('Loading file information...');
 
     try {
-      // Determine scenario based on file category or test data flag
+      // Determine scenario from the file's tags (or the test data flag)
       if (file.isTestData) {
         // Test data scenario - treat as new annotation
         await this.handleNewAnnotation(file);
-      } else if (file.category === 'unfinished_annotations') {
-        // Resume unfinished annotation
+      } else if (isUnfinishedAnnotation(file)) {
+        // Resume unfinished annotation (saves keep updating the same WIP file)
         await this.handleResumeAnnotation(file);
-      } else if (file.category === 'annotations') {
-        // Edit existing annotation
+      } else if (isFinishedAnnotation(file)) {
+        // Edit existing annotation (saves create a new file)
         await this.handleEditAnnotation(file);
       } else {
         // New annotation from raw image
@@ -1813,51 +1852,180 @@ class AnnotationModule extends BaseModule {
   }
 
   /**
-   * Handle resume unfinished annotation scenario
-   * Will load annotation data and find source image
+   * Handle resume unfinished annotation scenario (WIP file from "Save Progress")
    */
   async handleResumeAnnotation(file) {
-    console.log('[AnnotationModule] Resume annotation:', file.name);
-
-    // Store as annotation file - source will be loaded from sidecar in Step 2
-    this.annotationFile = file;
-    this.isResuming = true;
-    this.sourceFileLoaded = true;
-
-    // For Phase 2, just show info - actual loading happens in later phases
-    this.validationDisplay.showSuccess('Unfinished Annotation Selected', [
-      { label: 'File', value: file.name },
-      { label: 'Mode', value: 'Resume Previous Work' },
-      { label: 'Note', value: 'Your previous progress will be restored' }
-    ]);
-
-    // Enable next button
-    const step1Next = document.getElementById('step1Next');
-    if (step1Next) step1Next.disabled = false;
+    await this.handleExistingAnnotation(file, 'resume');
   }
 
   /**
-   * Handle edit existing annotation scenario
-   * Will load annotation and create new version
+   * Handle edit existing annotation scenario (finished or uploaded mask).
+   * Saving creates a new file; the original is never overwritten.
    */
   async handleEditAnnotation(file) {
-    console.log('[AnnotationModule] Edit annotation:', file.name);
+    await this.handleExistingAnnotation(file, 'edit');
+  }
 
-    // Store as annotation file - source will be loaded from sidecar in Step 2
+  /**
+   * Shared resume/edit preparation: read the annotation's dimensions and
+   * resolve its source image via lineage. Without a resolvable source the
+   * user picks one (uploaded masks have no lineage).
+   * @param {object} file - Workspace file entry of the annotation TIFF
+   * @param {'resume'|'edit'} mode
+   */
+  async handleExistingAnnotation(file, mode) {
+    console.log(`[AnnotationModule] ${mode} annotation:`, file.name);
+
+    this.annotationMode = mode;
     this.annotationFile = file;
-    this.isResuming = true;  // Similar flow to resume
-    this.sourceFileLoaded = true;
+    this.isResuming = true;
 
-    // For Phase 2, just show info - actual loading happens in later phases
-    this.validationDisplay.showSuccess('Existing Annotation Selected', [
+    const fileId = file.id || file.path;
+    const info = await this.api.getTiffInfo(fileId);
+    if (!info.success) {
+      throw new Error(info.error || 'Failed to read the annotation file');
+    }
+    this.tiffInfo = {
+      width: info.width,
+      height: info.height,
+      sliceCount: info.sliceCount,
+      dtype: info.dtype
+    };
+
+    const title = mode === 'resume' ? 'Unfinished Annotation Selected' : 'Existing Annotation Selected';
+    const details = [
       { label: 'File', value: file.name },
-      { label: 'Mode', value: 'Edit Existing (creates new version)' },
-      { label: 'Note', value: 'Changes will be saved as a new file' }
-    ]);
+      { label: 'Dimensions', value: `${this.tiffInfo.width} × ${this.tiffInfo.height}` },
+      { label: 'Slices', value: this.tiffInfo.sliceCount },
+      { label: 'Mode', value: mode === 'resume' ? 'Resume Previous Work' : 'Edit Existing (saved as a new file)' }
+    ];
 
-    // Enable next button
     const step1Next = document.getElementById('step1Next');
-    if (step1Next) step1Next.disabled = false;
+    const source = await this.resolveAnnotationSource(file);
+
+    if (source) {
+      this.sourceFile = source;
+      this.sourceFileLoaded = true;
+      details.push({ label: 'Source Image', value: source.name });
+      this.validationDisplay.showSuccess(title, details);
+      if (step1Next) step1Next.disabled = false;
+      return;
+    }
+
+    // No lineage (uploaded mask) or the source was deleted: ask for it
+    this.sourceFileLoaded = false;
+    details.push({ label: 'Source Image', value: 'not found - choose it below' });
+    this.validationDisplay.showWarning(title, details);
+    await this.showSourcePicker();
+    if (step1Next) step1Next.disabled = true;
+  }
+
+  /**
+   * Resolve an annotation's source image from its lineage
+   * @param {object} file - Annotation file entry
+   * @returns {Promise<{id: string, name: string, path: string}|null>}
+   */
+  async resolveAnnotationSource(file) {
+    const sourceId = file.lineage?.inputs?.[0];
+    if (!sourceId) return null;
+    const files = await this.fetchWorkspaceFiles();
+    const src = files.find(f => f.id === sourceId);
+    return src ? { id: src.id, name: src.name, path: src.path } : null;
+  }
+
+  /**
+   * Current workspace file listing
+   * @returns {Promise<Array>}
+   */
+  async fetchWorkspaceFiles() {
+    try {
+      const response = await fetch('/api/workspace/files', { credentials: 'include' });
+      const data = await response.json();
+      return data.success ? (data.files || []) : [];
+    } catch (error) {
+      console.error('[AnnotationModule] Failed to list workspace files:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Render the source image picker below the validation display
+   */
+  async showSourcePicker() {
+    const el = document.getElementById('annotationSourcePicker');
+    if (!el) return;
+
+    const candidates = (await this.fetchWorkspaceFiles())
+      .filter(f => (isRawImageFile(f) || isImageResultFile(f)) && /\.tiff?$/i.test(f.name || ''));
+
+    el.innerHTML = `
+      <div class="section-card">
+        <h4>Source Image</h4>
+        <p class="step-description">
+          Choose the image stack this annotation belongs to. It must have the same
+          dimensions and slice count as the annotation.
+        </p>
+        <select id="annotationSourceSelect" class="file-dropdown">
+          <option value="">-- Select the source image --</option>
+          ${candidates.map(f => `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('')}
+        </select>
+        ${candidates.length ? '' : '<p class="step-description">No image stacks in the workspace. Upload the source image first.</p>'}
+      </div>
+    `;
+    el.style.display = '';
+
+    el.querySelector('#annotationSourceSelect')?.addEventListener('change', (e) => {
+      const picked = candidates.find(f => f.id === e.target.value) || null;
+      this.onSourcePicked(picked);
+    });
+  }
+
+  hideSourcePicker() {
+    const el = document.getElementById('annotationSourcePicker');
+    if (!el) return;
+    el.style.display = 'none';
+    el.innerHTML = '';
+  }
+
+  /**
+   * A source image was chosen for an annotation without lineage:
+   * check the dimensions against the annotation
+   * @param {object|null} file - Chosen workspace file entry
+   */
+  async onSourcePicked(file) {
+    const step1Next = document.getElementById('step1Next');
+    if (step1Next) step1Next.disabled = true;
+    this.sourceFile = null;
+    this.sourceFileLoaded = false;
+    if (!file) return;
+
+    try {
+      const info = await this.api.getTiffInfo(file.id);
+      if (!info.success) throw new Error(info.error || 'Failed to read the image');
+
+      const a = this.tiffInfo;
+      if (info.width !== a.width || info.height !== a.height || info.sliceCount !== a.sliceCount) {
+        this.validationDisplay.showError('Source Image Does Not Match', [
+          { label: 'Annotation', value: `${a.width} × ${a.height}, ${a.sliceCount} slices` },
+          { label: file.name, value: `${info.width} × ${info.height}, ${info.sliceCount} slices` }
+        ]);
+        return;
+      }
+
+      this.sourceFile = { id: file.id, name: file.name, path: file.path };
+      this.sourceFileLoaded = true;
+      this.validationDisplay.showSuccess(
+        this.annotationMode === 'resume' ? 'Unfinished Annotation Selected' : 'Existing Annotation Selected', [
+          { label: 'File', value: this.annotationFile?.name },
+          { label: 'Source Image', value: file.name },
+          { label: 'Dimensions', value: `${a.width} × ${a.height}` },
+          { label: 'Slices', value: a.sliceCount },
+          { label: 'Mode', value: this.annotationMode === 'resume' ? 'Resume Previous Work' : 'Edit Existing (saved as a new file)' }
+        ]);
+      if (step1Next) step1Next.disabled = false;
+    } catch (error) {
+      this.validationDisplay.showError('Error', error.message);
+    }
   }
 
   /**
@@ -1921,6 +2089,7 @@ class AnnotationModule extends BaseModule {
     this.tiffInfo = null;
     this.annotationFile = null;
     this.isResuming = false;
+    this.annotationMode = 'new';
     this.sourceFileLoaded = false;
     this.currentAnnotationId = null;
     this.currentSlice = 0;

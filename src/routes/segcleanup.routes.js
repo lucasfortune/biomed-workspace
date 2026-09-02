@@ -443,10 +443,27 @@ function createSegcleanupRoutes(dependencies) {
       await fsp.writeFile(configPath, JSON.stringify(config));
 
       const roomName = `segcleanup-${jobId}`;
-      runJob(['--mode', 'edit-save', '--config', configPath], roomName, (resultData, stderr) => {
+      runJob(['--mode', 'edit-save', '--config', configPath], roomName, async (resultData, stderr) => {
         fsp.unlink(configPath).catch(() => {});
         if (resultData) {
           const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId);
+          // The working copy's quantification (metrics + report CSVs) would be
+          // lost with the working copy; keep a copy next to the tracked output
+          // so "Create report" still works after saving.
+          let reportDir = null;
+          if (isWorkingCopy(absolute)) {
+            const workDir = path.dirname(absolute);
+            for (const name of ['metrics.json', 'report.csv', 'objects.csv']) {
+              const src = path.join(workDir, name);
+              if (!fs.existsSync(src)) continue;
+              try {
+                await fsp.copyFile(src, path.join(outputDir, name));
+                reportDir = path.relative(workspacePath, outputDir);
+              } catch (e) {
+                if (logger) logger.warn(`[Segcleanup] Could not keep ${name}: ${e.message}`);
+              }
+            }
+          }
           // A working copy is superseded by the tracked output
           cleanupWorkingCopy(absolute);
           io.to(roomName).emit('segcleanup-complete', {
@@ -455,6 +472,7 @@ function createSegcleanupRoutes(dependencies) {
             kind: 'edit',
             outputPath: path.relative(workspacePath, outputPath),
             outputFileId: entry?.id || null,
+            reportDir,
             editedSlices: resultData.editedSlices,
             slices: resultData.slices
           });

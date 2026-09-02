@@ -355,8 +355,9 @@ class Templates {
     return `
       <div class="section-card-inner">
         <div id="importConfigSelector"></div>
+        <div id="importConfigValidation" class="validation-result"></div>
         <div id="importStage1ModelSelector"></div>
-        <div id="importValidationResult" class="validation-result"></div>
+        <div id="importStage1Validation" class="validation-result"></div>
       </div>
     `;
   }
@@ -369,9 +370,11 @@ class Templates {
     return `
       <div class="section-card-inner">
         <div id="importConfigSelector"></div>
+        <div id="importConfigValidation" class="validation-result"></div>
         <div id="importStage1ModelSelector"></div>
+        <div id="importStage1Validation" class="validation-result"></div>
         <div id="importStage2ModelSelector"></div>
-        <div id="importValidationResult" class="validation-result"></div>
+        <div id="importStage2Validation" class="validation-result"></div>
       </div>
     `;
   }

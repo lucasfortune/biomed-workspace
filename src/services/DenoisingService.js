@@ -1033,7 +1033,7 @@ class DenoisingService {
 
       // Add to workspace metadata
       // New metadata system: results category with denoising/data tags
-      this.workspaceManager.addFileToMetadata(sessionId, {
+      const entry = this.workspaceManager.addFileToMetadata(sessionId, {
         name: path.basename(outputPath),
         path: relativePath,
         category: 'results',
@@ -1042,6 +1042,13 @@ class DenoisingService {
         folderId: null,
         lineage: lineage
       });
+
+      // Expose the tracked file to the client (used for the Image Viewer hand-off)
+      if (entry) {
+        resultData.fileId = entry.id;
+        resultData.relativePath = entry.path;
+        resultData.fileName = entry.name;
+      }
 
       if (this.logger) {
         this.logger.info(`Tracked inference output: ${relativePath} (lineage: ${JSON.stringify(lineage)})`);

@@ -82,7 +82,7 @@ const PYTHON_SCRIPTS = {
 
 // Training configuration validation ranges
 const TRAINING_CONFIG_RANGES = {
-  patchSize: { min: 64, max: 1024 },
+  patchSize: { min: 32, max: 1024, multipleOf: 16 },
   learningRate: { min: 0, max: 1 }
 };
 

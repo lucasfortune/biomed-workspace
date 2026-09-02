@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-02 (Critical Bugs — Annotation Resume, Patch Size, MRC Upload, DL Viewer/Validation, Segcleanup Save)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-02 | [Critical Bugs — Annotation Resume, Patch Size, MRC Upload, DL Viewer/Validation, Segcleanup Save](2026-09-02_critical_bugs.md) | 🐛 Bug Fix | ~1.5 hrs | ✅ Complete |
+
 ### 2026-09-02 (CSS Foundation — Shared Buttons, Sliders, Tokens, Layout Rules)
 
 | Date | Session | Type | Duration | Status |

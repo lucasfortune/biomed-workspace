@@ -24,9 +24,11 @@ function validateTrainingConfig(config) {
 
   // Validate ranges
   if (config.patch_size) {
-    const { min, max } = TRAINING_CONFIG_RANGES.patchSize;
+    const { min, max, multipleOf } = TRAINING_CONFIG_RANGES.patchSize;
     if (config.patch_size < min || config.patch_size > max) {
       errors.push(`patch_size must be between ${min} and ${max}`);
+    } else if (multipleOf && config.patch_size % multipleOf !== 0) {
+      errors.push(`patch_size must be a multiple of ${multipleOf}`);
     }
   }
 

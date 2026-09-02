@@ -529,14 +529,28 @@ class InferenceHandler {
 
     console.log('[InferenceHandler] Opening in viewer:', outputPath);
 
-    // Store path for Image Viewer module
-    this.module.state.update('modules.image-viewer.pendingFile', {
-      path: outputPath,
-      source: 'denoising-dl'
-    });
+    if (this.inferenceResult.fileId) {
+      // Tracked workspace file: use the generic hand-off (loads by file id)
+      this.module.state.update('workspace.viewerFile', {
+        fileId: this.inferenceResult.fileId,
+        path: this.inferenceResult.relativePath || outputPath,
+        name: this.inferenceResult.fileName || outputPath.split('/').pop(),
+        source: 'denoising-dl'
+      });
+    } else {
+      // Untracked output: the viewer resolves DL results by absolute path
+      this.module.state.update('modules.denoising-dl.viewerFile', {
+        type: 'denoising_dl_result',
+        trainingId: this.module.trainingId,
+        outputPath,
+        method: this.module.selectedMethod,
+        stage: this.inferenceResult.stage || null,
+        timestamp: Date.now()
+      });
+    }
 
-    // Navigate to Image Viewer
-    window.workspace.loadModule('image-viewer');
+    // Navigate to Image Viewer (registry id: 'imageviewer')
+    window.workspace.loadModule('imageviewer');
   }
 
   /**

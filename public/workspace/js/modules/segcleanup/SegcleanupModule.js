@@ -72,6 +72,8 @@ class SegcleanupModule extends BaseModule {
     this.metrics = null;
     this.metricsStale = false;
     this.reportDir = null;
+    // True while the editing state differs from the last saved (or original) file
+    this.dirtySinceSave = false;
     this.reportSaved = false;
 
     this.busy = false;         // one server job at a time
@@ -535,6 +537,7 @@ class SegcleanupModule extends BaseModule {
   markEdited(sliceIndex) {
     this.editedSlices.add(sliceIndex);
     this.metricsStale = true;
+    this.dirtySinceSave = true;
     this.updateEditedInfo();
     this.updateQuantUI();
   }
@@ -821,6 +824,7 @@ class SegcleanupModule extends BaseModule {
   /** Apply-cleanup completed: switch the editor to the new working copy */
   async onCleanupComplete(data) {
     this.workingPath = data.workingPath;
+    this.dirtySinceSave = true;
     this.metrics = data.metrics || null;
     this.metricsStale = false;
     this.reportDir = data.reportDir || null;
@@ -973,7 +977,7 @@ class SegcleanupModule extends BaseModule {
   async save() {
     if (!this.file || this.busy) return;
     const edits = this.collectEdits();
-    if (!Object.keys(edits).length && !this.workingPath) {
+    if (!Object.keys(edits).length && !this.dirtySinceSave) {
       this.state.notify('info', 'No changes to save yet.');
       return;
     }
@@ -1006,11 +1010,21 @@ class SegcleanupModule extends BaseModule {
 
   onSaveComplete(data) {
     this.lastSaved = { outputPath: data.outputPath, outputFileId: data.outputFileId };
+    // The report files of a superseded working copy were moved next to the
+    // saved file by the server; follow them so "Create report" keeps working.
+    const reportWasInWorkingCopy = this.reportDir && this.workingPath
+      && this.workingPath.startsWith(this.reportDir + '/');
+    if (reportWasInWorkingCopy) {
+      this.reportDir = data.reportDir || null;
+      this.reportSaved = false;
+    }
     // Continue editing on top of the saved (tracked) file
     this.workingPath = data.outputPath;
+    this.dirtySinceSave = false;
     this.editedSlices.clear();
     this.setStatus('scSaveStatus', '');
     this.updateEditedInfo();
+    this.updateQuantUI();
 
     const banner = document.getElementById('scSavedBanner');
     const name = document.getElementById('scSavedName');

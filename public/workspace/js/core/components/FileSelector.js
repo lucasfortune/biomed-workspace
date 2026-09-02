@@ -47,6 +47,10 @@ class FileSelector {
    * @param {Function} [config.onValidate] - Callback for file validation (file) => Promise<boolean>
    * @param {Function} [config.filterFiles] - Custom file filter function (files) => files
    * @param {Function} [config.filterRecentResults] - Custom filter for recent results (results) => results
+   * @param {Array} [config.extraGroups] - Additional optgroups rendered after the workspace files:
+   *   [{ label: 'Unfinished annotations', filter: (allFiles) => files }]. Files are taken from the
+   *   full workspace listing (only the accept-extension check is applied), so a group can list
+   *   files the regular category/tag filters would drop (e.g. WIP results).
    * @param {string} [config.uploadEndpoint='/api/workspace/upload'] - Upload endpoint
    * @param {Object} [config.stateManager] - Optional StateManager for notifications
    */
@@ -87,6 +91,8 @@ class FileSelector {
     this.onValidate = config.onValidate || null;
     this.filterFiles = config.filterFiles || null;
     this.filterRecentResults = config.filterRecentResults || null;
+    this.extraGroups = Array.isArray(config.extraGroups) ? config.extraGroups : [];
+    this.allFiles = [];
     this.stateManager = config.stateManager || null;
 
     // External recent results (passed via config, not fetched from API)
@@ -159,6 +165,7 @@ class FileSelector {
 
       if (data.success) {
         const allFiles = data.files || [];
+        this.allFiles = allFiles;
 
         if (this.showRecentResults) {
           // Separate results from regular files using configurable categories
@@ -323,6 +330,27 @@ class FileSelector {
 
       dropdown.appendChild(workspaceGroup);
     }
+
+    // Add configured extra groups (e.g. unfinished / existing annotations)
+    this.extraGroups.forEach(group => {
+      let files = [];
+      try {
+        files = (group.filter ? group.filter(this.allFiles) : []).filter(f => this.isAcceptedFile(f.name));
+      } catch (e) {
+        console.warn(`[FileSelector] extra group "${group.label}" filter failed:`, e);
+      }
+      if (!files.length) return;
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = group.label || 'Files';
+      files.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file.path;
+        option.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+        option.dataset.fileInfo = JSON.stringify(file);
+        optgroup.appendChild(option);
+      });
+      dropdown.appendChild(optgroup);
+    });
 
     // Add help text only if dropdown has no selectable files at all
     const hasAnyFiles = dropdown.querySelectorAll('option:not([disabled])').length > 1; // >1 because placeholder

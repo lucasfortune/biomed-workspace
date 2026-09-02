@@ -13,6 +13,7 @@ const fs = require('fs');
 
 // Configuration
 const { PYTHON_PATH, ensureDirectories, DATA_PATHS } = require('./config/constants');
+const { validateTrainingConfig } = require('./helpers/validation');
 
 // Middleware
 const { createSessionMiddleware } = require('./middleware/session.middleware');
@@ -149,27 +150,6 @@ function configureApp(app, dependencies) {
         }
       }
     });
-  }
-
-  function validateTrainingConfig(config) {
-    const errors = [];
-    const required = ['patch_size', 'patches_per_image', 'batch_size', 'num_epochs', 'learning_rate', 'features', 'num_layers'];
-
-    for (const field of required) {
-      if (!config[field]) {
-        errors.push(`${field} is required`);
-      }
-    }
-
-    if (config.patch_size && (config.patch_size < 64 || config.patch_size > 1024)) {
-      errors.push('patch_size must be between 64 and 1024');
-    }
-
-    if (config.learning_rate && (config.learning_rate <= 0 || config.learning_rate > 1)) {
-      errors.push('learning_rate must be between 0 and 1');
-    }
-
-    return { valid: errors.length === 0, errors };
   }
 
   // =============================================================================

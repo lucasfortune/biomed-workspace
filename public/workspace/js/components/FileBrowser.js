@@ -1705,7 +1705,8 @@ class FileBrowser {
       fileInput.accept = '.pth,.json';
       fileInput.multiple = true;
     } else {
-      fileInput.accept = '.tif,.tiff';
+      // Image categories: TIFF, plus MRC (converted to TIFF on import, ADR-010)
+      fileInput.accept = '.tif,.tiff,.mrc';
       fileInput.multiple = true;
     }
   }
@@ -2015,13 +2016,13 @@ class FileBrowser {
     } else {
       const invalidFiles = fileArray.filter(file => {
         const ext = file.name.toLowerCase().split('.').pop();
-        return !['tif', 'tiff'].includes(ext);
+        return !['tif', 'tiff', 'mrc'].includes(ext);
       });
 
       if (invalidFiles.length > 0) {
         return {
           valid: false,
-          error: `Invalid file type(s). Only TIFF files (.tif, .tiff) allowed.`
+          error: `Invalid file type(s). Only TIFF (.tif, .tiff) or MRC (.mrc) files allowed.`
         };
       }
     }
