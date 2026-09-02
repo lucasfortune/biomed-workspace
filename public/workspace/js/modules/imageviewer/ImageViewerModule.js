@@ -755,7 +755,7 @@ class ImageViewerModule extends BaseModule {
                  min="0"
                  max="${sliceCount - 1}"
                  value="${this.currentSlice}"
-                 class="slice-slider" />
+                 class="slice-slider range-slider" />
         </div>
       </div>
     `;
@@ -821,7 +821,7 @@ class ImageViewerModule extends BaseModule {
                  min="0"
                  max="${sliceCount - 1}"
                  value="${this.currentSlice}"
-                 class="slice-slider" />
+                 class="slice-slider range-slider" />
         </div>
       </div>
     `;

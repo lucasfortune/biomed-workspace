@@ -146,7 +146,7 @@ class SegcleanupModule extends BaseModule {
               <div class="sc-viewer-controls">
                 <div class="control-group sc-slice-group">
                   <label>Slice:</label>
-                  <input type="range" id="scEditSliceRange" min="0" value="0">
+                  <input type="range" class="range-slider" id="scEditSliceRange" min="0" value="0">
                   <input type="number" id="scEditSliceNum" min="0" value="0">
                   <span class="sc-slice-total" id="scEditSliceTotal"></span>
                 </div>
@@ -174,7 +174,7 @@ class SegcleanupModule extends BaseModule {
                 </div>
                 <div class="sc-row">
                   <label>size</label>
-                  <input type="range" id="scBrushSize" min="1" max="100" value="10">
+                  <input type="range" class="range-slider" id="scBrushSize" min="1" max="100" value="10">
                   <span id="scBrushSizeVal">10px</span>
                 </div>
               </div>
@@ -202,7 +202,7 @@ class SegcleanupModule extends BaseModule {
                 </div>
                 <div class="sc-row">
                   <label>smooth</label>
-                  <input type="range" id="scSmoothRadius" min="0" max="5" step="1" value="0">
+                  <input type="range" class="range-slider" id="scSmoothRadius" min="0" max="5" step="1" value="0">
                   <span id="scSmoothVal">0</span>
                 </div>
                 <button class="btn small primary" id="scApplyCleanupBtn">Apply cleanup</button>
@@ -234,8 +234,8 @@ class SegcleanupModule extends BaseModule {
 
           <div class="navigation-buttons">
             <button id="scStep2Back" class="btn secondary">Back</button>
-            <button class="btn btn-danger" id="scSaveBtn">
-              <span class="btn-icon">&#9658;</span> Save as New File
+            <button class="btn primary" id="scSaveBtn">
+              <span class="btn-glyph">&#9658;</span> Save as New File
             </button>
           </div>
         </div>

@@ -124,7 +124,7 @@ class FileSelector {
           <div class="file-upload-group">
             <label>Or upload new:</label>
             <button class="btn-upload" id="${this.id}-upload-btn">
-              <span class="btn-icon">+</span>
+              <span class="btn-glyph">+</span>
               Add ${this.title}
             </button>
             <input type="file" id="${this.id}-input" class="file-input-hidden" accept="${this.accept}">

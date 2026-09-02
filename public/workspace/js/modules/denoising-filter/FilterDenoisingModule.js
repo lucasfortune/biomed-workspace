@@ -125,7 +125,7 @@ class FilterDenoisingModule extends BaseModule {
                   <div class="form-field">
                     <label for="sigma">Sigma (\u03C3)</label>
                     <div class="slider-input">
-                      <input type="range" id="sigma" min="0.5" max="5" step="0.1" value="1.5">
+                      <input type="range" class="range-slider" id="sigma" min="0.5" max="5" step="0.1" value="1.5">
                       <input type="number" id="sigmaValue" min="0.5" max="5" step="0.1" value="1.5">
                     </div>
                     <span class="field-hint">Higher = more smoothing (range: 0.5-5.0)</span>
@@ -151,7 +151,7 @@ class FilterDenoisingModule extends BaseModule {
                   <div class="form-field">
                     <label for="filterH">Filter Strength (h)</label>
                     <div class="slider-input">
-                      <input type="range" id="filterH" min="1" max="30" step="1" value="10">
+                      <input type="range" class="range-slider" id="filterH" min="1" max="30" step="1" value="10">
                       <input type="number" id="filterHValue" min="1" max="30" step="1" value="10">
                     </div>
                     <span class="field-hint">Higher = more denoising, may blur details (range: 1-30)</span>

@@ -21,12 +21,6 @@ body {
   background-image: none !important;
 }
 
-/* Standardize loading overlay with workspace dark theme */
-.module-loading-overlay {
-  z-index: 2000 !important;
-  background: rgba(30, 30, 30, 0.9) !important;
-}
-
 /* Prevent generic container class conflicts */
 .segmentation-module .container {
   max-width: none !important;
@@ -80,15 +74,6 @@ body {
   margin: 0 0 var(--module-spacing-lg) 0;
   color: var(--module-text-secondary);
   font-size: var(--module-font-size-sm);
-}
-
-.segmentation-module .btn-large {
-  padding: 16px 32px;
-  font-size: var(--module-font-size-md);
-}
-
-.segmentation-module .btn-large .btn-icon {
-  margin-right: var(--module-spacing-sm);
 }
 
 /* Training Status Header */

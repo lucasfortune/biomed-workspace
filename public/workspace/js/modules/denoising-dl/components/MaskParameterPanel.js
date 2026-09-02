@@ -68,7 +68,7 @@ class MaskParameterPanel {
             <div class="parameter-row">
               <label for="slider_rho_floor">Correlation Floor</label>
               <div class="slider-container">
-                <input type="range" id="slider_rho_floor"
+                <input type="range" class="range-slider" id="slider_rho_floor"
                        min="0" max="0.15" step="0.005"
                        value="${this.parameters.rho_floor != null ? this.parameters.rho_floor : 0.05}"
                        oninput="window.dlDenoisingModule?.updateMaskParameter('rho_floor', parseFloat(this.value))">
@@ -80,7 +80,7 @@ class MaskParameterPanel {
             <div class="parameter-row">
               <label for="slider_spine_thresh">Significance |z|</label>
               <div class="slider-container">
-                <input type="range" id="slider_spine_thresh"
+                <input type="range" class="range-slider" id="slider_spine_thresh"
                        min="4" max="12" step="0.5"
                        value="${this.parameters.spine_thresh != null ? this.parameters.spine_thresh : 8}"
                        oninput="window.dlDenoisingModule?.updateMaskParameter('spine_thresh', parseFloat(this.value))">
@@ -92,7 +92,7 @@ class MaskParameterPanel {
             <div class="parameter-row">
               <label for="slider_max_pixels">Max Masked Pixels</label>
               <div class="slider-container">
-                <input type="range" id="slider_max_pixels"
+                <input type="range" class="range-slider" id="slider_max_pixels"
                        min="5" max="50" step="1"
                        value="${maxPixelsValue}"
                        oninput="window.dlDenoisingModule?.updateMaskParameter('max_pixels', parseInt(this.value))">

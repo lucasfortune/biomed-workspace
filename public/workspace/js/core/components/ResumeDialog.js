@@ -97,7 +97,7 @@ class ResumeDialog {
           to { transform: translateY(0); opacity: 1; }
         }
         .resume-dialog-content {
-          background: var(--surface-primary, #ffffff);
+          background: var(--bg-primary, #ffffff);
           border-radius: 12px;
           padding: 28px 32px;
           max-width: 440px;
@@ -108,7 +108,7 @@ class ResumeDialog {
         .resume-dialog-icon {
           width: 56px;
           height: 56px;
-          background: var(--accent-primary, #4A90E2);
+          background: var(--accent-primary, #EB1F17);
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -132,7 +132,7 @@ class ResumeDialog {
           margin-bottom: 24px;
         }
         .resume-dialog-info {
-          background: var(--surface-secondary, #f5f5f5);
+          background: var(--bg-secondary, #f5f5f5);
           border-radius: 8px;
           padding: 14px 16px;
           margin-bottom: 24px;
@@ -168,18 +168,18 @@ class ResumeDialog {
           transition: all 0.2s ease;
         }
         .resume-dialog-btn-fresh {
-          background: var(--surface-secondary, #f0f0f0);
+          background: var(--bg-secondary, #f0f0f0);
           color: var(--text-primary, #333);
         }
         .resume-dialog-btn-fresh:hover {
-          background: var(--surface-tertiary, #e0e0e0);
+          background: var(--bg-tertiary, #e0e0e0);
         }
         .resume-dialog-btn-resume {
-          background: var(--accent-primary, #4A90E2);
+          background: var(--accent-primary, #EB1F17);
           color: white;
         }
         .resume-dialog-btn-resume:hover {
-          background: var(--accent-primary-hover, #357ABD);
+          background: var(--accent-hover, #C91810);
         }
       </style>
       <div class="resume-dialog-content">

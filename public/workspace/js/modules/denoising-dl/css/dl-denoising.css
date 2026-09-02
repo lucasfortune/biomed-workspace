@@ -46,16 +46,6 @@
   display: block;
 }
 
-.dl-denoising-module .step-inner {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.dl-denoising-module .step-description {
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-lg);
-}
-
 /* ============================================
    METHOD SELECTOR (N2V vs autoStructN2V)
    ============================================ */
@@ -174,19 +164,6 @@
 /* ============================================
    SECTION CARDS
    ============================================ */
-
-.dl-denoising-module .section-card {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-lg);
-  margin-bottom: var(--module-spacing-lg);
-}
-
-.dl-denoising-module .section-card h4 {
-  margin-bottom: var(--module-spacing-md);
-  color: var(--module-text-primary);
-}
 
 /* ============================================
    PLACEHOLDER SECTIONS (for future phases)
@@ -754,10 +731,6 @@
 }
 
 @media (max-width: 768px) {
-  .dl-denoising-module .step-inner {
-    padding: 0 var(--module-spacing-sm);
-  }
-
   .dl-denoising-module .method-option {
     flex-direction: column;
     align-items: stretch;
@@ -784,15 +757,6 @@
 
 .dl-denoising-module .training-start-section {
   text-align: center;
-}
-
-.dl-denoising-module .btn.large {
-  padding: 16px 32px;
-  font-size: var(--module-font-size-md);
-}
-
-.dl-denoising-module .btn.large .btn-icon {
-  margin-right: var(--module-spacing-sm);
 }
 
 /* ============================================
@@ -1347,15 +1311,6 @@
   gap: var(--module-spacing-sm);
 }
 
-.results-display .btn.small {
-  padding: 6px 12px;
-  font-size: var(--module-font-size-xs);
-}
-
-.results-display .btn.small .btn-icon {
-  margin-right: 4px;
-}
-
 /* Model Files */
 .results-display .model-files .model-info {
   display: flex;
@@ -1688,31 +1643,7 @@
 
 .mask-parameter-panel .slider-container input[type="range"] {
   flex: 1;
-  height: 6px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: rgba(155, 89, 182, 0.2);
-  border-radius: 3px;
-  outline: none;
-}
-
-.mask-parameter-panel .slider-container input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #9B59B6;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.mask-parameter-panel .slider-container input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #9B59B6;
-  border-radius: 50%;
-  cursor: pointer;
-  border: none;
+  min-width: 0;
 }
 
 .mask-parameter-panel .slider-value {
@@ -1978,11 +1909,6 @@
   flex-direction: row;
   gap: 8px;
   flex-shrink: 0;
-}
-
-.dl-denoising-module .training-status .download-buttons .btn.small {
-  padding: 4px 10px;
-  font-size: 14px;
 }
 
 .dl-denoising-module .training-status .training-progress {
@@ -2502,36 +2428,7 @@
   font-size: var(--module-font-size-sm);
 }
 
-/* Success Card */
-.dl-denoising-module .success-card {
-  background: rgba(72, 187, 120, 0.1);
-  border-color: rgba(72, 187, 120, 0.3);
-}
-
-.dl-denoising-module .success-header {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-md);
-  margin-bottom: var(--module-spacing-md);
-}
-
-.dl-denoising-module .success-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #48bb78;
-  color: white;
-  border-radius: 50%;
-  font-weight: bold;
-}
-
-.dl-denoising-module .success-title {
-  font-size: var(--module-font-size-lg);
-  font-weight: 600;
-  color: #48bb78;
-}
+/* Success Card: shared .success-card family in module-base.css */
 
 .dl-denoising-module .result-info {
   margin-bottom: var(--module-spacing-lg);
@@ -2558,12 +2455,6 @@
 .dl-denoising-module .result-value {
   color: var(--module-text-primary);
   font-weight: 500;
-}
-
-.dl-denoising-module .success-actions {
-  display: flex;
-  gap: var(--module-spacing-md);
-  justify-content: center;
 }
 
 /* Section Hint */
@@ -2709,10 +2600,10 @@
 .route-decision-card {
   margin-bottom: 16px;
   padding: 14px 16px;
-  border: 1px solid var(--border-color, #d0d0d0);
-  border-left: 4px solid var(--accent-color, #1DA924);
+  border: 1px solid var(--module-border);
+  border-left: 4px solid var(--module-secondary);
   border-radius: 6px;
-  background: var(--surface-secondary, rgba(0, 0, 0, 0.03));
+  background: var(--module-surface);
 }
 
 .route-decision-header {
@@ -2730,7 +2621,7 @@
 
 .route-badge.route-struct {
   background: rgba(29, 169, 36, 0.15);
-  color: var(--accent-color, #1DA924);
+  color: var(--module-secondary);
 }
 
 .route-badge.route-n2v {
@@ -2753,13 +2644,13 @@
 
 .route-metric {
   font-size: 0.82rem;
-  color: var(--text-secondary, #555);
+  color: var(--module-text-secondary);
 }
 
 .route-note {
   margin: 8px 0 0;
   font-size: 0.82rem;
-  color: var(--text-secondary, #555);
+  color: var(--module-text-secondary);
   font-style: italic;
 }
 

@@ -1748,7 +1748,7 @@ class FileBrowser {
 
       if (!category) {
         categoryText.textContent = '⚠️ Please select a category first';
-        categoryText.style.color = 'var(--error-color, #e74c3c)';
+        categoryText.style.color = 'var(--danger-color)';
       } else {
         const categoryNames = {
           raw_images: 'Raw Images',

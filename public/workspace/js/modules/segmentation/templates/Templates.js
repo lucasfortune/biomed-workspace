@@ -213,7 +213,7 @@ class Templates {
               Your configuration has been saved. Click below to start training your U-Net model.
             </p>
             <button class="btn btn-large primary" id="startTrainingBtn">
-              <span class="btn-icon">&#9658;</span>
+              <span class="btn-glyph">&#9658;</span>
               Start Training
             </button>
           </div>

@@ -189,7 +189,7 @@ class StitchingModule extends BaseModule {
                 </div>
                 <div class="control-group">
                   <label>Overlay:</label>
-                  <input type="range" id="overlayOpacity" min="0" max="100" value="50" title="Moving slice opacity">
+                  <input type="range" class="range-slider" id="overlayOpacity" min="0" max="100" value="50" title="Moving slice opacity">
                   <label class="checkbox-inline" title="Rapidly alternate the two slices">
                     <input type="checkbox" id="flickerToggle"> flicker
                   </label>
@@ -214,7 +214,7 @@ class StitchingModule extends BaseModule {
               <div class="toolbar-section">
                 <div class="toolbar-section-title">Fixed slice <span class="stack-label" id="fixedStackName"></span></div>
                 <div class="slice-picker">
-                  <input type="range" id="fixedSliceRange" min="0" value="0">
+                  <input type="range" class="range-slider" id="fixedSliceRange" min="0" value="0">
                   <input type="number" id="fixedSliceNum" min="0" value="0">
                 </div>
               </div>
@@ -236,7 +236,7 @@ class StitchingModule extends BaseModule {
               <div class="toolbar-section">
                 <div class="toolbar-section-title">Moving slice <span class="stack-label" id="movingStackName"></span></div>
                 <div class="slice-picker">
-                  <input type="range" id="movingSliceRange" min="0" value="0">
+                  <input type="range" class="range-slider" id="movingSliceRange" min="0" value="0">
                   <input type="number" id="movingSliceNum" min="0" value="0">
                 </div>
               </div>
@@ -324,8 +324,8 @@ class StitchingModule extends BaseModule {
 
           <div class="navigation-buttons">
             <button id="stitchStep3Back" class="btn secondary">Back</button>
-            <button class="btn btn-danger" id="stitchComposeBtn">
-              <span class="btn-icon">&#9658;</span> Compose
+            <button class="btn primary" id="stitchComposeBtn">
+              <span class="btn-glyph">&#9658;</span> Compose
             </button>
           </div>
         </div>

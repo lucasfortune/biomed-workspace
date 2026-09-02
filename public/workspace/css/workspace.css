@@ -211,7 +211,7 @@ body {
   color: var(--text-secondary);
   cursor: pointer;
   padding: 6px;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -889,7 +889,7 @@ body {
   background-color: var(--darker-bg);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
   text-align: left;
@@ -1231,7 +1231,7 @@ body {
   background-color: var(--sidebar-bg);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
@@ -1653,7 +1653,7 @@ body {
 }
 
 .file-info-no-tags {
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -1683,7 +1683,7 @@ body {
   padding: 3px 6px;
   border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
-  background: var(--primary-bg, #fff);
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 12px;
 }
@@ -1692,7 +1692,7 @@ body {
   padding: 3px 4px;
   border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
-  background: var(--primary-bg, #fff);
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 12px;
 }
@@ -1702,7 +1702,7 @@ body {
   padding: 3px 10px;
   border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
-  background: var(--secondary-bg, #f5f5f5);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   cursor: pointer;
   font-size: 12px;
@@ -1755,7 +1755,7 @@ body {
 }
 
 .json-viewer-error {
-  color: var(--error-color, #e74c3c);
+  color: var(--danger-color);
   padding: 20px;
   text-align: center;
 }
@@ -1779,7 +1779,7 @@ body {
 }
 
 .json-null {
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -2105,7 +2105,7 @@ body {
 .btn-workspace-download {
   background: none;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   padding: 4px 6px;
   display: flex;
@@ -2226,7 +2226,7 @@ body {
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
@@ -2241,7 +2241,7 @@ body {
   border: none;
   color: white;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;

@@ -311,7 +311,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: var(--module-bg-tertiary, var(--bg-tertiary, #E9ECEF));
+  background: var(--module-bg-tertiary);
   position: relative;
   cursor: grab;
 }
@@ -428,33 +428,7 @@
   background: var(--module-bg);
 }
 
-.slice-slider {
-  width: 100%;
-  height: 6px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--module-border);
-  border-radius: 3px;
-  outline: none;
-}
-
-.slice-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  background: var(--module-primary);
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.slice-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  background: var(--module-primary);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-}
+/* .slice-slider is a .range-slider (module-base.css) */
 
 /* ============================================
    ICON GRID VIEW
@@ -558,7 +532,7 @@
   padding: 14px 16px;
   border: 1px solid var(--module-border, #d8d8d8);
   border-radius: 8px;
-  background: var(--module-surface, rgba(0, 0, 0, 0.02));
+  background: var(--module-surface);
 }
 
 .comparison-header {
@@ -598,7 +572,7 @@
   align-items: center;
   gap: 12px;
   padding: 6px 10px;
-  border: 1px solid var(--border-color, #d0d0d0);
+  border: 1px solid var(--module-border);
   border-radius: 6px;
   margin-bottom: 6px;
   background: var(--module-card-bg, #fff);
@@ -621,20 +595,9 @@
 }
 
 .comparison-dims {
-  color: var(--text-secondary, #777);
+  color: var(--module-text-secondary);
   font-size: 0.82rem;
   white-space: nowrap;
-}
-
-.imageviewer-module .btn.tiny {
-  padding: 2px 8px;
-  font-size: 0.8rem;
-  line-height: 1.4;
-}
-
-.imageviewer-module .btn.small {
-  padding: 6px 12px;
-  font-size: 0.85rem;
 }
 
 /* Step 2: comparison gallery grid */
@@ -643,7 +606,7 @@
   gap: 8px;
   flex: 1;
   min-height: 0;
-  background: var(--module-bg-dark, #1a1a1a);
+  background: var(--module-bg-dark);
   border-radius: 8px;
   padding: 8px;
   cursor: grab;

@@ -19,6 +19,8 @@
   /* Primary Colors (Physics of Parasitism) */
   --module-primary: #EB1F17;
   --module-primary-dark: #C91810;
+  --module-primary-hover: var(--module-primary-dark);
+  --module-primary-light: rgba(235, 31, 23, 0.1);
   --module-secondary: #1DA924;
   --module-gradient: linear-gradient(135deg, #EB1F17 0%, #C91810 100%);
   --module-gradient-hover: linear-gradient(135deg, #C91810 0%, #A11410 100%);
@@ -40,14 +42,23 @@
   --module-warning-border: #ffeeba;
   --module-warning-text: #856404;
 
-  /* Neutral Colors */
-  --module-bg: #f6f8fa;
-  --module-card-bg: white;
-  --module-border: #e1e4e8;
-  --module-border-dark: #d1d5da;
-  --module-text-primary: #24292e;
-  --module-text-secondary: #6a737d;
-  --module-text-muted: #586069;
+  /* Neutral Colors (aligned with workspace.css globals) */
+  --module-bg: #F8F9FA;
+  --module-bg-secondary: #F8F9FA;
+  --module-bg-tertiary: #E9ECEF;
+  --module-bg-hover: #E9ECEF;
+  --module-card-bg: #FFFFFF;
+  --module-surface: rgba(0, 0, 0, 0.02);
+  --module-border: #DEE2E6;
+  --module-border-dark: #CED4DA;
+  --module-text-primary: #343A40;
+  --module-text-secondary: #6C757D;
+  --module-text-muted: #868E96;
+
+  /* Viewer surfaces (same in both themes: image canvases are always dark) */
+  --module-viewer-bg: #1a1a2e;
+  --module-bg-dark: #1a1a1a;
+  --module-chrome-bg: rgba(0, 0, 0, 0.2);
 
   /* Spacing Rhythm */
   --module-spacing-xs: 8px;
@@ -93,6 +104,8 @@
   /* Primary Colors (same accents) */
   --module-primary: #EB1F17;
   --module-primary-dark: #FF3B30;
+  --module-primary-hover: var(--module-primary-dark);
+  --module-primary-light: rgba(235, 31, 23, 0.18);
   --module-secondary: #28A745;
 
   /* Status Colors - Dark Mode */
@@ -114,12 +127,20 @@
 
   /* Neutral Colors - Dark Mode */
   --module-bg: #1A1A1A;
+  --module-bg-secondary: #2D2D2D;
+  --module-bg-tertiary: #3D3D3D;
+  --module-bg-hover: #3D3D3D;
   --module-card-bg: #2D2D2D;
+  --module-surface: rgba(255, 255, 255, 0.03);
   --module-border: #4D4D4D;
   --module-border-dark: #5D5D5D;
   --module-text-primary: #F8F9FA;
   --module-text-secondary: #ADB5BD;
-  --module-text-muted: #868e96;
+  --module-text-muted: #868E96;
+
+  --module-viewer-bg: #1a1a2e;
+  --module-bg-dark: #1a1a1a;
+  --module-chrome-bg: rgba(0, 0, 0, 0.2);
 
   /* Shadows - Dark Mode */
   --module-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -358,6 +379,27 @@
   margin: 0 0 var(--module-spacing-xl) 0;
 }
 
+/* Inner wrapper used by every module step (centred, readable width) */
+.step-inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Editor steps (slice viewers + toolbar) need the full width. The wrapper
+   .step-content is capped at 900px by the rule above, so the wide variant
+   must be applied to the .step-content as well (modules do this via
+   `#stepN.step-content`). */
+.step-content.wide,
+.step-inner.wide {
+  max-width: 1500px;
+  width: 100%;
+}
+
+.step-description {
+  color: var(--module-text-secondary);
+  margin-bottom: var(--module-spacing-lg);
+}
+
 /* ============================================
    CARDS
    ============================================ */
@@ -379,6 +421,62 @@
 .file-selector-card:hover {
   box-shadow: var(--module-shadow-md);
   border-color: var(--module-primary);
+}
+
+/* Section card: the standard bordered container for a group of controls */
+.section-card {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  padding: var(--module-spacing-lg);
+  margin-bottom: var(--module-spacing-lg);
+}
+
+.section-card h4 {
+  margin: 0 0 var(--module-spacing-md) 0;
+  font-size: var(--module-font-size-md);
+  font-weight: 600;
+  color: var(--module-text-primary);
+}
+
+/* Success card: a .section-card announcing a finished job */
+.success-card {
+  background: var(--module-success-bg);
+  border-color: var(--module-success-border);
+}
+
+.success-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.success-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--module-secondary);
+  color: white;
+  font-size: var(--module-font-size-md);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.success-title {
+  font-size: var(--module-font-size-lg);
+  font-weight: 600;
+  color: var(--module-success-text);
+}
+
+.success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--module-spacing-sm);
+  margin: var(--module-spacing-sm) 0;
 }
 
 /* ============================================
@@ -487,14 +585,20 @@
    ============================================ */
 
 .btn,
+.btn.primary,
 .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 12px 24px;
   border-radius: var(--module-radius-sm);
   font-size: var(--module-font-size-sm);
   font-weight: 500;
+  line-height: 1.2;
   cursor: pointer;
   transition: var(--module-transition-fast);
-  border: none;
+  border: 1px solid transparent;
   background: var(--module-primary);
   color: white;
 }
@@ -509,6 +613,7 @@
 .btn:disabled,
 .btn-primary:disabled {
   background: var(--module-border-dark);
+  border-color: transparent;
   color: #959da5;
   cursor: not-allowed;
   transform: none;
@@ -522,11 +627,98 @@
   border: 1px solid var(--module-border-dark);
 }
 
-.btn-secondary:hover,
-.btn.secondary:hover {
+.btn-secondary:hover:not(:disabled),
+.btn.secondary:hover:not(:disabled) {
   background: var(--module-bg);
   border-color: var(--module-primary);
   transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.btn-secondary:disabled,
+.btn.secondary:disabled {
+  background: var(--module-card-bg);
+  border-color: var(--module-border);
+  color: var(--module-text-muted);
+}
+
+/* Destructive / cancel actions: outlined so they never compete with the
+   red primary action next to them (Start vs Cancel Training). */
+.btn.danger,
+.btn.btn-danger {
+  background: var(--module-card-bg);
+  color: var(--danger-color, #DC3545);
+  border: 1px solid var(--danger-color, #DC3545);
+}
+
+.btn.danger:hover:not(:disabled),
+.btn.btn-danger:hover:not(:disabled) {
+  background: var(--danger-color, #DC3545);
+  color: white;
+  border-color: var(--danger-color, #DC3545);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+/* Size variants */
+.btn.small {
+  padding: 6px 12px;
+  font-size: var(--module-font-size-xs);
+}
+
+.btn.tiny {
+  padding: 2px 8px;
+  font-size: var(--module-font-size-xs);
+  line-height: 1.4;
+}
+
+.btn.large,
+.btn-large {
+  padding: 14px 32px;
+  font-size: var(--module-font-size-md);
+}
+
+/* Toggle state for small option buttons (e.g. "Draw on image") */
+.btn.active {
+  border-color: var(--module-primary);
+  background: var(--module-primary-light);
+  color: var(--module-text-primary);
+  font-weight: 600;
+}
+
+/* Glyph inside a text button (play triangle, download arrow, ...) */
+.btn-glyph {
+  display: inline-block;
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+/* Square icon-only button (zoom, prev/next, undo/redo) */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  color: var(--module-text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.btn-icon:hover:not(:disabled) {
+  border-color: var(--module-primary);
+  color: var(--module-primary);
+}
+
+.btn-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .btn-upload {
@@ -555,14 +747,72 @@
   transform: translateY(0);
 }
 
-.btn-upload .btn-icon {
+.btn-upload .btn-glyph {
   font-size: 18px;
   font-weight: 600;
 }
 
-.btn-large {
-  padding: 14px 32px;
-  font-size: var(--module-font-size-md);
+/* ============================================
+   RANGE SLIDERS
+   ============================================ */
+
+/* One look for every <input type="range">: grey track, red thumb with a
+   white ring. Add class="range-slider" to the input. */
+.range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  margin: 8px 0;
+  background: var(--module-border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--module-primary);
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--module-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.range-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--module-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.range-slider::-moz-range-track {
+  height: 6px;
+  background: var(--module-border);
+  border-radius: 3px;
+}
+
+.range-slider:hover::-webkit-slider-thumb,
+.range-slider:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.range-slider:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.range-slider:disabled::-webkit-slider-thumb {
+  cursor: default;
+  transform: none;
 }
 
 /* ============================================
@@ -743,6 +993,8 @@
 .navigation-buttons {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: var(--module-spacing-sm);
   margin-top: var(--module-spacing-xxl);
   padding-top: var(--module-spacing-md);
   border-top: 1px solid var(--module-border);
@@ -935,6 +1187,10 @@
 
   .step-content h2 {
     font-size: var(--module-font-size-xl);
+  }
+
+  .step-inner {
+    padding: 0 var(--module-spacing-sm);
   }
 
   .step {

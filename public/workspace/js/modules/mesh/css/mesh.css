@@ -48,16 +48,6 @@
   display: block;
 }
 
-.mesh-module .step-inner {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.mesh-module .step-description {
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-lg);
-}
-
 /* ============================================
    DATA INFO CARD
    ============================================ */
@@ -456,10 +446,6 @@
    ============================================ */
 
 @media (max-width: 768px) {
-  .mesh-module .step-inner {
-    padding: 0 var(--module-spacing-sm);
-  }
-
   .mesh-module .info-grid {
     grid-template-columns: 1fr 1fr;
   }

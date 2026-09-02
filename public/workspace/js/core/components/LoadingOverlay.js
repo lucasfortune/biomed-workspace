@@ -40,7 +40,7 @@ class LoadingOverlay {
    * @param {boolean} [config.showSpinner=true] - Show spinner animation
    * @param {string} [config.spinnerSize='medium'] - Spinner size: 'small', 'medium', 'large'
    * @param {boolean} [config.backdrop=true] - Show backdrop overlay
-   * @param {string} [config.backdropColor='rgba(255, 255, 255, 0.9)'] - Backdrop color
+   * @param {string} [config.backdropColor] - Backdrop colour (defaults to the theme's page background at 90%)
    */
   constructor(config = {}) {
     this.containerId = config.containerId || null;
@@ -48,7 +48,7 @@ class LoadingOverlay {
     this.showSpinner = config.showSpinner !== false;
     this.spinnerSize = config.spinnerSize || 'medium';
     this.backdrop = config.backdrop !== false;
-    this.backdropColor = config.backdropColor || 'rgba(255, 255, 255, 0.9)';
+    this.backdropColor = config.backdropColor || 'color-mix(in srgb, var(--bg-primary, #fff) 90%, transparent)';
 
     this.overlayElement = null;
     this.refCount = 0;

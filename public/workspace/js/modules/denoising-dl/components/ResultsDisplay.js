@@ -101,11 +101,11 @@ class ResultsDisplay {
         <!-- Action Buttons -->
         <div class="results-actions">
           <button class="btn secondary" onclick="window.dlDenoisingModule?.downloadAllResults()">
-            <span class="btn-icon">&#128229;</span>
+            <span class="btn-glyph">&#128229;</span>
             Download All Results
           </button>
           <button class="btn" onclick="window.dlDenoisingModule?.goToStep(4)">
-            <span class="btn-icon">&#10132;</span>
+            <span class="btn-glyph">&#10132;</span>
             Process Additional Images (Optional)
           </button>
         </div>
@@ -154,11 +154,11 @@ class ResultsDisplay {
 
         <div class="stack-actions">
           <button class="btn small" onclick="window.dlDenoisingModule?.downloadResult()">
-            <span class="btn-icon">&#128229;</span>
+            <span class="btn-glyph">&#128229;</span>
             Download
           </button>
           <button class="btn small secondary" onclick="window.dlDenoisingModule?.viewInViewer()">
-            <span class="btn-icon">&#128065;</span>
+            <span class="btn-glyph">&#128065;</span>
             View in Viewer
           </button>
         </div>

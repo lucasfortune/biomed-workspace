@@ -46,16 +46,6 @@
   display: block;
 }
 
-.filter-denoising-module .step-inner {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.filter-denoising-module .step-description {
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-lg);
-}
-
 /* ============================================
    METHOD SELECTOR (module-specific)
    ============================================ */
@@ -171,26 +161,7 @@
 
 .filter-denoising-module .slider-input input[type="range"] {
   flex: 1;
-  height: 6px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--module-border);
-  border-radius: 3px;
-}
-
-.filter-denoising-module .slider-input input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  background: var(--module-primary);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: var(--module-transition-fast);
-}
-
-.filter-denoising-module .slider-input input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
+  min-width: 0;
 }
 
 .filter-denoising-module .slider-input input[type="number"] {
@@ -353,10 +324,6 @@
    ============================================ */
 
 @media (max-width: 768px) {
-  .filter-denoising-module .step-inner {
-    padding: 0 var(--module-spacing-sm);
-  }
-
   .filter-denoising-module .result-actions {
     flex-direction: column;
   }

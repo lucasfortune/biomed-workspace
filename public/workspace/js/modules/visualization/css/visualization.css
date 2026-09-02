@@ -60,16 +60,6 @@
   width: 100%;
 }
 
-.viz-module .step-inner {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.viz-module .step-description {
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-lg);
-}
-
 /* Step 2 needs full width for the viewer - override .step-inner centering */
 .viz-module .step-inner.viz-step-2 {
   max-width: none !important;
@@ -512,10 +502,6 @@
 }
 
 @media (max-width: 600px) {
-  .viz-module .step-inner {
-    padding: 0 var(--module-spacing-sm);
-  }
-
   .viz-module .viz-controls-section {
     padding: var(--module-spacing-sm);
   }

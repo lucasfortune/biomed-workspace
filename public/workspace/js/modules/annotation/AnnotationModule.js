@@ -224,7 +224,7 @@ class AnnotationModule extends BaseModule {
                   <div class="slice-slider-container">
                     <input type="range"
                            id="sliceSlider"
-                           class="slice-slider"
+                           class="slice-slider range-slider"
                            min="0"
                            max="0"
                            value="0"
@@ -266,7 +266,7 @@ class AnnotationModule extends BaseModule {
                     </div>
                     <div class="brush-size-control">
                       <input type="range" id="brushSizeSlider" min="1" max="50" value="10"
-                             class="brush-slider" title="Brush size">
+                             class="brush-slider range-slider" title="Brush size">
                       <span id="brushSizeValue" class="brush-size-value">10px</span>
                     </div>
                   </div>

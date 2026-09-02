@@ -30,29 +30,6 @@
   padding: var(--module-spacing-lg, 24px) var(--module-spacing-md, 16px) var(--module-spacing-md, 16px);
 }
 
-.preprocess-module .step-inner {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.preprocess-module .step-description {
-  color: var(--module-text-secondary, #666);
-  margin-bottom: 20px;
-}
-
-.preprocess-module .section-card {
-  background: var(--module-surface, var(--surface-secondary, rgba(0, 0, 0, 0.02)));
-  border: 1px solid var(--module-border, var(--border-color, #d8d8d8));
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.preprocess-module .section-card h4 {
-  margin: 0 0 10px;
-  font-size: 0.95rem;
-}
-
 .preprocess-module .field-hint {
   display: block;
   font-size: 0.8rem;
@@ -85,28 +62,6 @@
   height: 100%;
   background: var(--module-primary);
   transition: width 0.3s ease;
-}
-
-.preprocess-module .success-card .success-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.preprocess-module .success-icon {
-  color: var(--accent-color, #1DA924);
-  font-size: 1.3rem;
-  font-weight: 700;
-}
-
-.preprocess-module .success-title {
-  font-weight: 600;
-  font-size: 1.05rem;
-}
-
-.preprocess-module .success-actions {
-  margin: 12px 0;
 }
 
 .preprocess-module .detail-row {
@@ -152,10 +107,10 @@
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
-  border: 1px solid var(--border-color, #d0d0d0);
+  border: 1px solid var(--module-border);
   border-radius: 6px;
   margin-bottom: 6px;
-  background: var(--surface-secondary, rgba(0, 0, 0, 0.02));
+  background: var(--module-surface);
 }
 
 .preprocess-module .stack-item .stack-name {
@@ -166,7 +121,7 @@
 }
 
 .preprocess-module .stack-item .stack-dims {
-  color: var(--text-secondary, #777);
+  color: var(--module-text-secondary);
   font-size: 0.85rem;
 }
 
@@ -178,11 +133,6 @@
    (the wrapper, not .step-inner) at 900px, so the wrapper itself must be
    widened too. */
 .preprocess-module #step2.step-content {
-  max-width: 1500px;
-  width: 100%;
-}
-
-.preprocess-module .step-inner.wide {
   max-width: 1500px;
   width: 100%;
 }
@@ -371,12 +321,6 @@
   cursor: pointer;
   font-size: 0.85rem;
   margin-bottom: 6px;
-}
-
-.preprocess-module .btn.small.active {
-  border-color: var(--module-primary);
-  background: color-mix(in srgb, var(--module-primary) 12%, transparent);
-  font-weight: 600;
 }
 
 #ppHistCanvas {

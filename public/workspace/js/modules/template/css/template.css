@@ -48,16 +48,6 @@
   display: block;
 }
 
-.template-module .step-inner {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.template-module .step-description {
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-lg);
-}
-
 /* ============================================
    CONFIGURATION FORM
    ============================================ */
@@ -180,10 +170,6 @@
    ============================================ */
 
 @media (max-width: 768px) {
-  .template-module .step-inner {
-    padding: 0 var(--module-spacing-sm);
-  }
-
   .template-module .result-actions {
     flex-direction: column;
   }

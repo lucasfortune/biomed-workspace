@@ -132,7 +132,7 @@ class PreprocessModule extends BaseModule {
               <div class="pp-viewer-controls">
                 <div class="control-group pp-slice-group">
                   <label>Slice:</label>
-                  <input type="range" id="ppSliceRange" min="0" value="0">
+                  <input type="range" class="range-slider" id="ppSliceRange" min="0" value="0">
                   <input type="number" id="ppSliceNum" min="0" value="0">
                   <span class="pp-slice-total" id="ppSliceTotal"></span>
                 </div>
@@ -209,7 +209,7 @@ class PreprocessModule extends BaseModule {
                 </div>
                 <div class="pp-row">
                   <label>gamma</label>
-                  <input type="range" id="ppGamma" min="0.2" max="3" step="0.05" value="1">
+                  <input type="range" class="range-slider" id="ppGamma" min="0.2" max="3" step="0.05" value="1">
                   <span id="ppGammaVal">1.00</span>
                 </div>
                 <label class="checkbox-inline"><input type="checkbox" id="ppInvert"> invert</label>
@@ -284,8 +284,8 @@ class PreprocessModule extends BaseModule {
 
           <div class="navigation-buttons">
             <button id="ppStep3Back" class="btn secondary">Back</button>
-            <button class="btn btn-danger" id="ppApplyBtn">
-              <span class="btn-icon">&#9658;</span> Apply
+            <button class="btn primary" id="ppApplyBtn">
+              <span class="btn-glyph">&#9658;</span> Apply
             </button>
           </div>
         </div>
