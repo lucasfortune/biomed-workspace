@@ -100,19 +100,6 @@
 }
 
 /* ============================================
-   ACTION SECTION
-   ============================================ */
-
-.template-module .action-section {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-xl);
-  text-align: center;
-  margin-bottom: var(--module-spacing-lg);
-}
-
-/* ============================================
    PROGRESS SECTION
    ============================================ */
 
@@ -131,46 +118,13 @@
   font-weight: 500;
 }
 
-.template-module .progress-bar-container {
-  height: 8px;
-  background: var(--module-border);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: var(--module-spacing-sm);
-}
-
-.template-module .progress-fill {
-  height: 100%;
-  background: var(--module-gradient);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
+/* The job progress track/fill are shared: module-base.css styles
+   .progress-bar-container and .job-progress-fill - do not redefine them */
 
 .template-module #progressStatus {
   color: var(--module-text-secondary);
   font-size: var(--module-font-size-sm);
 }
 
-/* ============================================
-   RESULTS SECTION
-   ============================================ */
-
-.template-module .results-section {
-  margin-bottom: var(--module-spacing-lg);
-}
-
-.template-module .result-actions {
-  display: flex;
-  gap: var(--module-spacing-md);
-  margin-top: var(--module-spacing-lg);
-}
-
-/* ============================================
-   RESPONSIVE
-   ============================================ */
-
-@media (max-width: 768px) {
-  .template-module .result-actions {
-    flex-direction: column;
-  }
-}
+/* The result block uses the shared .section-card.success-card /
+   .success-header / .success-actions rules from module-base.css */

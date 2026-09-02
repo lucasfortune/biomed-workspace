@@ -755,10 +755,6 @@
    STEP 3 - TRAINING UI
    ============================================ */
 
-.dl-denoising-module .training-start-section {
-  text-align: center;
-}
-
 /* ============================================
    TRAINING PROGRESS COMPONENT
    ============================================ */
@@ -902,7 +898,7 @@
   margin-bottom: var(--module-spacing-md);
 }
 
-.training-progress .progress-bar {
+.training-progress .job-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--module-primary), #8B5CF6);
   border-radius: 12px;
@@ -1141,34 +1137,9 @@
   padding: var(--module-spacing-md);
 }
 
-.results-display .results-header {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-md);
-  margin-bottom: var(--module-spacing-lg);
-  text-align: left;
-}
-
-.results-display .success-icon {
-  width: 48px;
-  height: 48px;
-  background: rgba(80, 200, 120, 0.2);
-  color: #50C878;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.results-display .results-title h3 {
-  margin: 0;
-  color: var(--module-text-primary);
-}
-
-.results-display .results-title p {
-  margin: 4px 0 0;
+/* Header/icon/title come from the shared .success-card family */
+.results-display .results-subtitle {
+  margin: 0 0 var(--module-spacing-lg);
   color: var(--module-text-secondary);
   font-size: var(--module-font-size-sm);
 }
@@ -1896,19 +1867,12 @@
   margin-bottom: 8px;
 }
 
-/* Progress header row - epoch info and download buttons */
+/* Progress header row - epoch info */
 .dl-denoising-module .training-status .progress-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
-}
-
-.dl-denoising-module .training-status .download-buttons {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  flex-shrink: 0;
 }
 
 .dl-denoising-module .training-status .training-progress {
@@ -2386,13 +2350,6 @@
   color: var(--module-text-primary);
 }
 
-/* Inference Actions */
-.dl-denoising-module .inference-actions {
-  display: flex;
-  justify-content: center;
-  padding: var(--module-spacing-lg) 0;
-}
-
 /* Inference Progress */
 .dl-denoising-module .inference-progress {
   display: flex;
@@ -2415,7 +2372,7 @@
   overflow: hidden;
 }
 
-.dl-denoising-module .inference-progress .progress-bar {
+.dl-denoising-module .inference-progress .job-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--module-primary), #8b5cf6);
   border-radius: var(--module-radius-md);

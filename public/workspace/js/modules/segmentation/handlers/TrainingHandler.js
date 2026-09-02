@@ -79,16 +79,8 @@ class TrainingHandler {
           processStates.trainingInProgress = true;
         }
 
-        // Switch from action button to progress display
-        const trainingActionContent = document.getElementById('trainingActionContent');
-        const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-        if (trainingActionContent) {
-          trainingActionContent.style.display = 'none';
-        }
-        if (trainingProgressContent) {
-          trainingProgressContent.style.display = 'block';
-        }
+        // Switch to the running state: Start hidden, Cancel shown
+        this.module.applyTrainingUIState?.('running');
 
         // Initialize training UI
         document.getElementById('totalEpochs').textContent = config.num_epochs;
@@ -234,6 +226,9 @@ class TrainingHandler {
         statusText.textContent = 'Training completed successfully!';
       }
 
+      // Finished: Cancel hidden, Start stays hidden
+      this.module.applyTrainingUIState?.('finished');
+
       // Update status badge to show completion
       if (stageStatus) {
         stageStatus.textContent = 'Complete';
@@ -276,6 +271,9 @@ class TrainingHandler {
         statusText.textContent = 'Training failed!';
       }
       this.showError('Training failed. Please check your configuration and try again.');
+
+      // Failed: keep the failure message visible, offer Start again
+      this.module.applyTrainingUIState?.('failed');
 
       // Update status badge to show failure
       if (stageStatus) {

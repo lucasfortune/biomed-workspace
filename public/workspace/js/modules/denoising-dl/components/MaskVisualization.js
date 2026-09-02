@@ -179,7 +179,7 @@ class MaskVisualization {
             or the detection parameters need adjustment.
           </p>
           <div class="warning-actions">
-            <button class="btn secondary small" onclick="window.dlDenoisingModule?.skipStage2()">
+            <button class="btn secondary small" data-action="skipStage2">
               Use N2V Results (Skip Stage 2)
             </button>
           </div>
@@ -206,7 +206,7 @@ class MaskVisualization {
         ${this.sliceLabels.map((label, i) => `
           <button class="mask-tab ${i === this.activeSlice ? 'active' : ''}"
                   data-slice-index="${i}"
-                  onclick="window.dlDenoisingModule?.maskVisualization?.switchSlice(${i})">
+                  data-action="switchMaskSlice" data-index="${i}">
             ${label}
           </button>
         `).join('')}

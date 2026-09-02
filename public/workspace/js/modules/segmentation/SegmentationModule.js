@@ -258,10 +258,11 @@ class SegmentationModule extends BaseModule {
     // Initialize ValidationDisplay component
     this.validationDisplay = new ValidationDisplay('validationResult');
 
-    // Set up back button handler (use onclick to prevent duplicate handlers)
+    // Set up back button handler (the DOM is rebuilt on every activate, so
+    // a plain listener never accumulates duplicates)
     const backButton = document.getElementById('backToHub');
     if (backButton) {
-      backButton.onclick = () => workspace.returnToHub();
+      backButton.addEventListener('click', () => window.workspace.returnToHub());
     }
 
     // Initialize Socket.IO
@@ -357,16 +358,8 @@ class SegmentationModule extends BaseModule {
     // Wait for DOM to be fully ready after step change
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Show training in progress UI
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-    console.log('[SegmentationModule] DOM elements found:', {
-      trainingActionContent: !!trainingActionContent,
-      trainingProgressContent: !!trainingProgressContent
-    });
-
-    if (trainingActionContent) trainingActionContent.style.display = 'none';
-    if (trainingProgressContent) trainingProgressContent.style.display = 'block';
+    // Show training in progress UI (Start hidden, Cancel shown)
+    this.applyTrainingUIState('running');
 
     // Ensure charts are initialized (goToStep should have done this, but be safe)
     this.initializeCharts();
@@ -409,9 +402,8 @@ class SegmentationModule extends BaseModule {
           // Training failed
           this.state.notify('error', 'Training failed while you were away.');
           TrainingSessionPersistence.clearAll();
-          // Reset UI
-          if (trainingActionContent) trainingActionContent.style.display = 'block';
-          if (trainingProgressContent) trainingProgressContent.style.display = 'none';
+          // Failed while away: keep the message, offer Start again
+          this.applyTrainingUIState('failed');
         } else if (status.status === 'unknown') {
           // Session not in server memory - server may have restarted
           // DON'T clear localStorage or hide epoch counter - training might still be running
@@ -559,15 +551,45 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
+   * Apply one of the training UI states to step 3. Exactly one enabled red
+   * action is visible at a time (Start is swapped for Cancel while a run is
+   * active, and stays hidden once the run has succeeded).
+   *   'idle'     - ready message shown, Start enabled, Cancel hidden
+   *   'running'  - progress shown, Start hidden, Cancel shown
+   *   'finished' - progress shown, Start stays hidden, Cancel hidden
+   *   'failed'   - progress (with the failure message) stays visible,
+   *                Start shown again, Cancel hidden
+   * @param {'idle'|'running'|'finished'|'failed'} mode
+   */
+  applyTrainingUIState(mode) {
+    const actionContent = document.getElementById('trainingActionContent');
+    const progressContent = document.getElementById('trainingProgressContent');
+    const startBtn = document.getElementById('startTrainingBtn');
+    const cancelBtn = document.getElementById('cancelTrainingBtn');
+
+    const idle = mode === 'idle';
+    const running = mode === 'running';
+    const failed = mode === 'failed';
+
+    if (actionContent) actionContent.style.display = idle ? 'block' : 'none';
+    if (progressContent) progressContent.style.display = idle ? 'none' : 'block';
+
+    if (startBtn) {
+      startBtn.style.display = (idle || failed) ? '' : 'none';
+      if (idle || failed) startBtn.disabled = false;
+    }
+    if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+
+    console.log('[SegmentationModule] Training UI state:', mode);
+  }
+
+  /**
    * Show training complete UI state
    * @param {Object} status - Optional status object with history and epoch info
    */
   showTrainingCompleteUI(status = {}) {
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-    if (trainingActionContent) trainingActionContent.style.display = 'none';
-    if (trainingProgressContent) trainingProgressContent.style.display = 'block';
+    // Progress stays visible; Start stays hidden and Cancel is hidden
+    this.applyTrainingUIState('finished');
 
     // Update status text and progress bar
     const statusText = document.getElementById('trainingStatusText');
@@ -601,10 +623,6 @@ class SegmentationModule extends BaseModule {
       stageStatus.textContent = 'Complete';
       stageStatus.className = 'stage-status completed';
     }
-
-    // Hide cancel button
-    const cancelBtn = document.getElementById('cancelTrainingBtn');
-    if (cancelBtn) cancelBtn.style.display = 'none';
 
     // Enable navigation buttons
     const nextBtn = document.getElementById('trainingNextBtn');
@@ -1023,64 +1041,47 @@ class SegmentationModule extends BaseModule {
    * Set up event listeners
    */
   setupEventListeners() {
-    // Workflow section toggle handlers
-    // Use onclick instead of addEventListener to prevent duplicate handlers
-    document.querySelectorAll('.workflow-header').forEach(header => {
-      header.onclick = () => {
+    // Small helper: the DOM is rebuilt by render() on every activate, so a
+    // plain addEventListener never accumulates duplicate handlers.
+    const on = (id, handler) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', handler);
+    };
+
+    // Workflow section toggle handlers (delegated on the stable section
+    // wrapper so the headers can be re-rendered freely)
+    const workflowSection = document.querySelector('.workflow-selection-section');
+    if (workflowSection) {
+      workflowSection.addEventListener('click', (event) => {
+        const header = event.target.closest('.workflow-header');
+        if (!header || !workflowSection.contains(header)) return;
         const workflow = header.dataset.workflow;
         if (workflow) {
           this.onWorkflowSectionToggle(workflow);
         }
-      };
-    });
+      });
+    }
 
     // Step 1: Navigation
-    const step1Next = document.getElementById('step1Next');
-    if (step1Next) {
-      step1Next.onclick = () => this.handleStep1Next();
-    }
+    on('step1Next', () => this.handleStep1Next());
 
     // Step 2: Configuration
-    const step2Back = document.getElementById('step2Back');
-    const step2Next = document.getElementById('step2Next');
-    if (step2Back) step2Back.onclick = () => this.goToStep(1);
-    if (step2Next) step2Next.onclick = () => this.configureAndProceed();
+    on('step2Back', () => this.goToStep(1));
+    on('step2Next', () => this.configureAndProceed());
 
     // Step 3: Training
-    const startTrainingBtn = document.getElementById('startTrainingBtn');
-    if (startTrainingBtn) {
-      startTrainingBtn.onclick = () => this.startTraining();
-    }
-
-    const cancelTrainingBtn = document.getElementById('cancelTrainingBtn');
-    if (cancelTrainingBtn) {
-      cancelTrainingBtn.onclick = () => this.cancelTraining();
-    }
-
-    const trainingBackBtn = document.getElementById('trainingBackBtn');
-    const trainingNextBtn = document.getElementById('trainingNextBtn');
-    if (trainingBackBtn) trainingBackBtn.onclick = () => this.goToStep(2);
-    if (trainingNextBtn) trainingNextBtn.onclick = () => this.goToStep(4);
+    on('startTrainingBtn', () => this.startTraining());
+    on('cancelTrainingBtn', () => this.cancelTraining());
+    on('trainingBackBtn', () => this.goToStep(2));
+    on('trainingNextBtn', () => this.goToStep(4));
 
     // Step 4: Inference
-    const runInferenceBtn = document.getElementById('runInferenceBtn');
-    if (runInferenceBtn) {
-      runInferenceBtn.onclick = () => this.runInference();
-    }
-
-    const step4Back = document.getElementById('step4Back');
-    if (step4Back) step4Back.onclick = () => this.goToStep(3);
+    on('runInferenceBtn', () => this.runInference());
+    on('step4Back', () => this.goToStep(3));
 
     // Step 4 Completion: Image Viewer and Reset
-    const openInViewerBtn = document.getElementById('openInViewerBtn');
-    if (openInViewerBtn) {
-      openInViewerBtn.onclick = () => this.openInImageViewer();
-    }
-
-    const resetWorkflowBtn = document.getElementById('resetWorkflowBtn');
-    if (resetWorkflowBtn) {
-      resetWorkflowBtn.onclick = () => this.resetWorkflow();
-    }
+    on('openInViewerBtn', () => this.openInImageViewer());
+    on('resetWorkflowBtn', () => this.resetWorkflow());
 
     console.log('[SegmentationModule] Event listeners set up');
   }
@@ -1142,10 +1143,10 @@ class SegmentationModule extends BaseModule {
       this._validateInferenceCompatibility();
     }
 
-    // Scroll main-content container to top when changing steps
-    const mainContent = document.querySelector('.segmentation-module .main-content');
-    if (mainContent) {
-      mainContent.scrollTop = 0;
+    // Scroll step contents container to top when changing steps
+    const stepContentsContainer = document.querySelector('.segmentation-module .step-contents');
+    if (stepContentsContainer) {
+      stepContentsContainer.scrollTop = 0;
     }
 
     // Save state to persist current step
@@ -1257,17 +1258,14 @@ class SegmentationModule extends BaseModule {
 
     if (runInferenceBtn) runInferenceBtn.disabled = true;
 
-    // Inline warning above the run button so the user sees it in context.
-    if (runInferenceBtn) {
+    // Inline warning under the file selector so the user sees it in context.
+    const warningSlot = document.getElementById('inferenceWarningSlot');
+    if (warningSlot) {
       const warning = document.createElement('div');
       warning.id = warningId;
       warning.className = 'inference-compatibility-warning';
-      warning.style.cssText =
-        'margin: 12px 0; padding: 10px 12px; border-radius: 6px; ' +
-        'background: rgba(220,53,69,0.08); color: var(--text-primary, #333); ' +
-        'border-left: 3px solid #dc3545; font-size: 13px; line-height: 1.4;';
       warning.textContent = message;
-      runInferenceBtn.parentNode?.insertBefore(warning, runInferenceBtn);
+      warningSlot.appendChild(warning);
     }
 
     this.state.notify('error', message, 8000);
@@ -1336,16 +1334,8 @@ class SegmentationModule extends BaseModule {
     }
 
     try {
-      // Switch from action button to progress display
-      const trainingActionContent = document.getElementById('trainingActionContent');
-      const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-      if (trainingActionContent) {
-        trainingActionContent.style.display = 'none';
-      }
-      if (trainingProgressContent) {
-        trainingProgressContent.style.display = 'block';
-      }
+      // Switch to the running state: Start hidden, Cancel shown
+      this.applyTrainingUIState('running');
 
       const response = await fetch('/start-training', {
         method: 'POST',
@@ -1403,12 +1393,8 @@ class SegmentationModule extends BaseModule {
         // Clear localStorage session
         TrainingSessionPersistence.clearAll();
 
-        // Reset UI
-        const trainingActionContent = document.getElementById('trainingActionContent');
-        const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-        if (trainingActionContent) trainingActionContent.style.display = 'block';
-        if (trainingProgressContent) trainingProgressContent.style.display = 'none';
+        // Reset UI (Start available again)
+        this.applyTrainingUIState('idle');
 
         // Reset progress display
         const progressFill = document.getElementById('trainingProgressFill');
@@ -1551,7 +1537,7 @@ class SegmentationModule extends BaseModule {
    * Reset entire workflow (frontend only - files are preserved in workspace)
    */
   async resetWorkflow() {
-    const confirmed = confirm('Are you sure you want to start a new analysis? This will reset the current workflow. Your workspace files will be preserved.');
+    const confirmed = confirm('Start a new run? This resets the current workflow. Your workspace files will be preserved.');
 
     if (confirmed) {
       console.log('[SegmentationModule] Resetting workflow (frontend only)...');
@@ -1646,7 +1632,7 @@ class SegmentationModule extends BaseModule {
         this.stepNavigator.update(1);
       }
 
-      this.state.notify('success', 'Ready for new analysis');
+      this.state.notify('success', 'Ready for a new run');
       this.goToStep(1);
 
       // Note: Do NOT call initialize() here - it would add duplicate event listeners
@@ -1691,15 +1677,7 @@ class SegmentationModule extends BaseModule {
    */
   resetTrainingUIState() {
     // Show start button, hide progress
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-    if (trainingActionContent) {
-      trainingActionContent.style.display = 'block';
-    }
-    if (trainingProgressContent) {
-      trainingProgressContent.style.display = 'none';
-    }
+    this.applyTrainingUIState('idle');
 
     // Reset progress bar
     const trainingProgressFill = document.getElementById('trainingProgressFill');
@@ -1837,9 +1815,71 @@ class SegmentationModule extends BaseModule {
     // Clear training ID so resume check works correctly
     // (the actual training ID is stored in localStorage, not here)
     this.currentTrainingId = null;
+    this.currentInferenceId = null;
 
     // Clear the resume flag
     this._resumedViaDialog = false;
+
+    // Reset selected files
+    this.uploadedFiles = {
+      raw_images: null,
+      annotations: null,
+      inference_data: null
+    };
+
+    // Reset step condition flags
+    this.filesValidated = false;
+    this.configSaved = false;
+    this.trainingComplete = false;
+    this.hasImportedModel = false;
+
+    // Reset workflow mode + imported model state
+    this.workflowMode = null;
+    this.importSelectors = { model: null, config: null };
+    this.importSelectorsInitialized = false;
+    this.importFiles = { model: null, config: null };
+    this.importValidation = {
+      model: { valid: false, result: null },
+      config: { valid: false, result: null }
+    };
+    this.importValidated = false;
+    this.importedModelConfig = null;
+
+    // Reset cached configuration / dimensions used by validation
+    this.trainingConfig = null;
+    this.imageDimensions = null;
+    this.inferenceDimensions = null;
+    this.paramValidator = null;
+
+    // Clear inference result shared with the Image Viewer
+    if (typeof window !== 'undefined') {
+      window.inferenceResult = null;
+      window.importedModelInfo = null;
+    }
+
+    // Drop component references (they are rebuilt by render()/initialize())
+    this.rawImageSelector = null;
+    this.annotationsSelector = null;
+    this.inferenceSelector = null;
+    this.stepNavigator = null;
+    this.validationDisplay = null;
+
+    // Clear the persisted module state so the next visit starts on step 1
+    // with nothing selected. The localStorage training session used by the
+    // resume dialog (TrainingSessionPersistence) is deliberately untouched.
+    this.state.update('modules.segmentation.currentStep', 1);
+    this.state.update('modules.segmentation.uploadedFiles', this.uploadedFiles);
+    this.state.update('modules.segmentation.currentTrainingId', null);
+    this.state.update('modules.segmentation.currentInferenceId', null);
+    this.state.update('modules.segmentation.currentTask', null);
+    this.state.update('modules.segmentation.filesValidated', false);
+    this.state.update('modules.segmentation.configSaved', false);
+    this.state.update('modules.segmentation.trainingComplete', false);
+    this.state.update('modules.segmentation.hasImportedModel', false);
+    this.state.update('modules.segmentation.workflowMode', null);
+    this.state.update('modules.segmentation.importFiles', this.importFiles);
+    this.state.update('modules.segmentation.importValidated', false);
+    this.state.update('modules.segmentation.importedModelConfig', null);
 
     // Clear container
     if (this.container) {

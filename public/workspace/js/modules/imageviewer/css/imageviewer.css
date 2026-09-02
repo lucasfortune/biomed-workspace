@@ -67,6 +67,35 @@
   flex-direction: column;
 }
 
+/* Step 1 is a form step: keep its inner wrapper at its natural height so a
+   long page scrolls in .step-contents instead of being squashed. */
+.imageviewer-module #step1 .step-inner {
+  flex-shrink: 0;
+}
+
+/* Step 2 is a viewer step: it needs the full width, so the cap has to be
+   lifted on the .step-content wrapper as well as the .step-inner. */
+.imageviewer-module #step2.step-content {
+  max-width: 1500px;
+  width: 100%;
+}
+
+.imageviewer-module #step2 .step-inner {
+  max-width: 1500px;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The nav row under the viewer stays visible at the bottom */
+.imageviewer-module #step2 .navigation-buttons {
+  flex-shrink: 0;
+  margin-top: var(--module-spacing-md);
+}
+
 /* ============================================
    STEP 1: FILE SELECTION
    ============================================ */
@@ -200,6 +229,7 @@
 
 .image-viewer-container {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

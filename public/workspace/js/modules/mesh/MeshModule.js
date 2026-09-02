@@ -192,10 +192,6 @@ class MeshModule extends BaseModule {
                     z-step is twice the in-plane pixel size (aspect 1:1:2).
                   </small>
                 </div>
-
-                <button id="startGenerationBtn" class="btn btn-primary" onclick="startGeneration()">
-                  Generate Mesh
-                </button>
               </div>
 
               <!-- Progress Section (shown during generation) -->
@@ -212,7 +208,7 @@ class MeshModule extends BaseModule {
                   <span id="progressPercent">0%</span>
                 </div>
                 <div class="progress-bar-container">
-                  <div id="progressBar" class="progress-fill" style="width: 0%"></div>
+                  <div id="progressBar" class="job-progress-fill" style="width: 0%"></div>
                 </div>
                 <div class="progress-details">
                   <span id="progressClassInfo">Preparing data...</span>
@@ -220,30 +216,32 @@ class MeshModule extends BaseModule {
               </div>
 
               <!-- Results Section (shown after generation) -->
-              <div id="generationResults" class="results-section" style="display: none;">
-                <div class="validation-success">
-                  <div class="validation-header">Mesh Generation Complete!</div>
-                  <div class="validation-details" id="resultsDetails"></div>
+              <div class="section-card success-card" id="generationResults" style="display: none;">
+                <div class="success-header">
+                  <span class="success-icon">&#10003;</span>
+                  <span class="success-title">Mesh Generation Complete</span>
                 </div>
+
+                <div id="resultsDetails" class="validation-details"></div>
 
                 <div class="download-buttons" id="downloadButtons"></div>
 
-                <div class="result-actions">
-                  <button id="openVisualizationBtn" class="btn" onclick="openInVisualization()">
+                <div class="success-actions">
+                  <button class="btn primary" id="openVisualizationBtn">
                     Open in 3D Visualization
                   </button>
-                  <button id="generateAnotherBtn" class="btn secondary" onclick="generateAnother()">
-                    Generate Another
+                  <button class="btn secondary" id="generateAnotherBtn">
+                    Start New Run
                   </button>
                 </div>
               </div>
 
-              <!-- Navigation Buttons -->
+              <!-- Navigation Buttons (the job action lives in the right slot) -->
               <div class="navigation-buttons">
-                <button id="step2Back" class="btn secondary" onclick="previousStep()">
-                  Back
+                <button id="step2Back" class="btn secondary">Back</button>
+                <button id="startGenerationBtn" class="btn primary">
+                  <span class="btn-glyph">&#9658;</span> Generate Mesh
                 </button>
-                <div></div>
               </div>
             </div>
           </div>
@@ -294,7 +292,11 @@ class MeshModule extends BaseModule {
         title: 'Segmentation Data',
         icon: '🧩',
         helpIconHtml: this.renderHelpIcon('mesh.step1.segmentation-data'),
-        showTestData: false,
+        // Mesh input is a mask, and a built-in test mask exists: offer it.
+        // The import lands as an `uploads` file tagged `annotation`, which
+        // the filters below already accept.
+        showTestData: true,
+        testDataKind: 'annotations',
         showRecentResults: true, // Show segmentation results in "Recent Results" section
         stateManager: this.state,
         onSelect: this.onFileSelected,
@@ -343,11 +345,6 @@ class MeshModule extends BaseModule {
     // =========================================================================
 
     window.meshModule = this;
-    window.nextStep = () => this.nextStep();
-    window.previousStep = () => this.previousStep();
-    window.startGeneration = () => this.startGeneration();
-    window.openInVisualization = () => this.openInVisualization();
-    window.generateAnother = () => this.reset();
 
     // =========================================================================
     // Check for Resume
@@ -376,13 +373,33 @@ class MeshModule extends BaseModule {
       window.workspace.returnToHub();
     });
 
-    // Step 1 Next button
+    // Step navigation buttons
     addListener(document.getElementById('step1Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step2Back'), 'click', () => this.previousStep());
 
-    // Format checkboxes
-    ['formatJson', 'formatObj', 'formatStl'].forEach(id => {
-      addListener(document.getElementById(id), 'change', () => this.updateGenerationOptions());
+    // Job action (nav row, step 2)
+    addListener(document.getElementById('startGenerationBtn'), 'click', () => this.startGeneration());
+
+    // Result actions
+    addListener(document.getElementById('openVisualizationBtn'), 'click', () => this.openInVisualization());
+    addListener(document.getElementById('generateAnotherBtn'), 'click', () => this.reset());
+
+    // Download buttons are re-rendered after each run: delegate from the
+    // stable parent so the handler survives the innerHTML replacement
+    addListener(document.getElementById('downloadButtons'), 'click', (event) => {
+      const button = event.target.closest('[data-format]');
+      if (button) this.downloadMesh(button.dataset.format);
     });
+  }
+
+  /**
+   * Show/hide the nav-row job button. It is hidden while a generation runs
+   * and while the results card is shown, and comes back on reset/failure.
+   * @param {boolean} visible
+   */
+  setJobButtonVisible(visible) {
+    const btn = document.getElementById('startGenerationBtn');
+    if (btn) btn.style.display = visible ? '' : 'none';
   }
 
   // ===========================================================================
@@ -634,12 +651,21 @@ class MeshModule extends BaseModule {
             </div>
           </div>
           <div class="summary-preview">
-            <img id="summaryPreviewImage" src="${previewUrl}" alt="Slice preview" onerror="this.parentElement.style.display='none'">
+            <img id="summaryPreviewImage" src="${previewUrl}" alt="Slice preview">
             <span class="preview-label">Slice ${middleSlice + 1} of ${this.dataInfo.dimensions[0]}</span>
           </div>
         </div>
       </div>
     `;
+
+    // Hide the preview box if the slice image cannot be loaded (wired here
+    // rather than with an inline onerror attribute)
+    const previewImage = document.getElementById('summaryPreviewImage');
+    if (previewImage) {
+      previewImage.addEventListener('error', () => {
+        if (previewImage.parentElement) previewImage.parentElement.style.display = 'none';
+      }, { once: true });
+    }
   }
 
   // ===========================================================================
@@ -652,9 +678,10 @@ class MeshModule extends BaseModule {
     // Update options from UI
     this.updateGenerationOptions();
 
-    // Show progress, hide options
+    // Show progress, hide the options and the job button
     document.getElementById('generationOptions').style.display = 'none';
     document.getElementById('generationProgress').style.display = 'block';
+    this.setJobButtonVisible(false);
 
     // Reset and start elapsed time timer
     this.startElapsedTimer();
@@ -734,9 +761,11 @@ class MeshModule extends BaseModule {
     this.meshResult = data;
     this.generationComplete = true;
 
-    // Hide progress, show results
+    // Hide progress, show results (the job button stays hidden until
+    // "Start New Run")
     document.getElementById('generationProgress').style.display = 'none';
     document.getElementById('generationResults').style.display = 'block';
+    this.setJobButtonVisible(false);
 
     // Display results with elapsed time
     const elapsedTime = this.getElapsedTime();
@@ -759,9 +788,10 @@ class MeshModule extends BaseModule {
     // Stop timer
     this.stopElapsedTimer();
 
-    // Show options again
+    // Show options and the job button again
     document.getElementById('generationProgress').style.display = 'none';
     document.getElementById('generationOptions').style.display = 'block';
+    this.setJobButtonVisible(true);
 
     this.state.notify('error', `Mesh generation failed: ${error}`);
   }
@@ -859,8 +889,9 @@ class MeshModule extends BaseModule {
 
     if (downloadBtns && data.formats) {
       const formatIcons = { json: '📊', obj: '📐', stl: '🖨️' };
+      // Handled by the delegated click listener on #downloadButtons
       downloadBtns.innerHTML = data.formats.map(format => `
-        <button class="btn secondary download-btn" onclick="meshModule.downloadMesh('${format}')">
+        <button class="btn secondary download-btn" data-format="${format}">
           ${formatIcons[format] || '📁'} Download ${format.toUpperCase()}
         </button>
       `).join('');
@@ -924,15 +955,28 @@ class MeshModule extends BaseModule {
     this.currentMeshId = null;
     this.meshResult = null;
     this.generationStartTime = null;
-    this.generationOptions.zAspect = 1;
+    this.generationOptions = {
+      outputFormats: ['json', 'obj'],
+      targetClasses: 'all',
+      zAspect: 1
+    };
 
     // Reset UI
     const zAspectInput = document.getElementById('zAspectInput');
     if (zAspectInput) zAspectInput.value = 1;
 
-    document.getElementById('generationOptions').style.display = 'block';
-    document.getElementById('generationProgress').style.display = 'none';
-    document.getElementById('generationResults').style.display = 'none';
+    const classSelect = document.getElementById('classSelection');
+    if (classSelect) classSelect.innerHTML = '<option value="all" selected>All Classes</option>';
+
+    const options = document.getElementById('generationOptions');
+    if (options) options.style.display = 'block';
+    const progress = document.getElementById('generationProgress');
+    if (progress) progress.style.display = 'none';
+    const results = document.getElementById('generationResults');
+    if (results) results.style.display = 'none';
+    const downloadBtns = document.getElementById('downloadButtons');
+    if (downloadBtns) downloadBtns.innerHTML = '';
+    this.setJobButtonVisible(true);
 
     // Reset progress UI
     this.updateProgressUI(0, 'Initializing...', 'Preparing data...');
@@ -953,8 +997,12 @@ class MeshModule extends BaseModule {
       this.fileSelector.clearSelection();
     }
 
-    // Clear state
-    this.state.update('modules.mesh', {});
+    // Clear the persisted step state. `modules.mesh.result` is deliberately
+    // left alone: it is the hand-off to the visualization module (set by
+    // openInVisualization just before we are deactivated) and is cleared
+    // there once consumed.
+    ['currentStep', 'selectedFile', 'dataInfo', 'dataValidated', 'currentMeshId', 'generationComplete']
+      .forEach(key => this.state.update(`modules.mesh.${key}`, null));
 
     // Go back to step 1
     this.goToStep(1);
@@ -1018,6 +1066,7 @@ class MeshModule extends BaseModule {
 
           document.getElementById('generationOptions').style.display = 'none';
           document.getElementById('generationProgress').style.display = 'block';
+          this.setJobButtonVisible(false);
 
           // Rejoin Socket.IO room
           if (this.socket) {
@@ -1046,6 +1095,7 @@ class MeshModule extends BaseModule {
           document.getElementById('generationOptions').style.display = 'none';
           document.getElementById('generationProgress').style.display = 'none';
           document.getElementById('generationResults').style.display = 'block';
+          this.setJobButtonVisible(false);
 
           this.showGenerationResults(status.result);
 
@@ -1054,6 +1104,7 @@ class MeshModule extends BaseModule {
           console.log('[MeshModule] Generation failed:', status.error);
           this.stopElapsedTimer(); // Ensure timer is stopped on failure
           this.currentMeshId = null;
+          this.setJobButtonVisible(true);
           this.state.notify('error', `Previous generation failed: ${status.error}`);
         }
       }
@@ -1068,6 +1119,11 @@ class MeshModule extends BaseModule {
 
   async deactivate() {
     console.log('[MeshModule] Deactivating...');
+
+    // Reset to a fresh state: the instance is cached by ModuleLoader and
+    // re-rendered on the next visit, so anything left here would survive.
+    // reset() runs while the DOM still exists (before super.deactivate()).
+    this.reset();
 
     // Stop elapsed time timer
     this.stopElapsedTimer();
@@ -1087,7 +1143,7 @@ class MeshModule extends BaseModule {
     }
 
     // Clean up global references (use try-catch for non-configurable properties)
-    const globalsToClean = ['meshModule', 'nextStep', 'previousStep', 'startGeneration', 'openInVisualization', 'generateAnother'];
+    const globalsToClean = ['meshModule'];
     for (const name of globalsToClean) {
       try {
         delete window[name];

@@ -154,6 +154,7 @@ class SegcleanupModule extends BaseModule {
             </div>
             <div class="success-actions">
               <button class="btn primary small" id="scOpenViewerBtn">Open in Image Viewer</button>
+              <button class="btn secondary small" id="scStartNewBtn">Start New Run</button>
             </div>
           </div>
 
@@ -267,7 +268,8 @@ class SegcleanupModule extends BaseModule {
         title: 'Segmentation',
         icon: '🧩',
         accept: '.tif,.tiff',
-        showTestData: false,
+        showTestData: true,
+        testDataKind: 'annotations',
         showRecentResults: true,
         stateManager: this.state,
         onSelect: (file) => this.onFileSelected(file),
@@ -296,6 +298,7 @@ class SegcleanupModule extends BaseModule {
     document.getElementById('scStep2Back')?.addEventListener('click', () => this.goToStep(1));
     document.getElementById('scSaveBtn')?.addEventListener('click', () => this.save());
     document.getElementById('scOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
+    document.getElementById('scStartNewBtn')?.addEventListener('click', () => this.startNewRun());
     document.getElementById('scApplyCleanupBtn')?.addEventListener('click', () => this.applyCleanup());
     document.getElementById('scUpdateQuantBtn')?.addEventListener('click', () => this.runQuantify());
     document.getElementById('scSaveReportBtn')?.addEventListener('click', () => this.saveReport());
@@ -315,6 +318,30 @@ class SegcleanupModule extends BaseModule {
     this.fileSelector = null;
     try { delete window.segcleanupModule; } catch (e) { window.segcleanupModule = undefined; }
     await super.deactivate();
+  }
+
+  /**
+   * Saved banner action: drop the current editing session and return to a
+   * clean step 1 (same teardown as deactivate, minus removing the DOM).
+   */
+  startNewRun() {
+    this.teardownEditor();
+    if (this.socket && this.jobId) {
+      this.socket.emit('leave-segcleanup', this.jobId);
+    }
+    this.resetState();
+
+    const banner = document.getElementById('scSavedBanner');
+    if (banner) banner.style.display = 'none';
+    const savedName = document.getElementById('scSavedName');
+    if (savedName) savedName.textContent = '';
+
+    this.fileSelector?.clearSelection();
+    this.renderSelectedFile();
+    const next = document.getElementById('scStep1Next');
+    if (next) next.disabled = true;
+
+    this.goToStep(1);
   }
 
   teardownEditor() {

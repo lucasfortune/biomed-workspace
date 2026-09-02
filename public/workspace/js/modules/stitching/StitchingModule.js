@@ -20,7 +20,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator, SliceViewerChrome } from '/workspace/js/core/components/index.js';
+import { StepNavigator, SliceViewerChrome, FileSelector } from '/workspace/js/core/components/index.js';
 
 const TIFF_INFO_URL = '/api/denoising/dl/tiff-info';
 const SLICE_URL = (idx, filePath) =>
@@ -49,6 +49,8 @@ class StitchingModule extends BaseModule {
     });
 
     this.stepNavigator = null;
+    this.stackSelector = null;
+    this.recipeSelector = null;
     this.workspaceFiles = [];
     this.resetState();
 
@@ -131,13 +133,10 @@ class StitchingModule extends BaseModule {
           </div>
 
           <div class="section-card" id="newStitchSection">
+            <div id="stitchStackSelectorContainer"></div>
             <div class="section-title-row">
               <h4>Stacks (in order)</h4>
               <span class="mode-badge" id="stitchModeBadge" style="display: none;"></span>
-            </div>
-            <div class="stack-add-row">
-              <select id="stitchFilePicker"><option value="">Loading files...</option></select>
-              <button class="btn small" id="stitchAddStack">Add</button>
             </div>
             <ul class="stack-list" id="stitchStackList"></ul>
             <p class="field-hint">
@@ -149,11 +148,7 @@ class StitchingModule extends BaseModule {
           </div>
 
           <div class="section-card" id="recipeSection" style="display: none;">
-            <h4>Recipe</h4>
-            <div class="stack-add-row">
-              <select id="recipePicker"><option value="">Loading recipes...</option></select>
-              <button class="btn small" id="recipeLoadBtn">Load</button>
-            </div>
+            <div id="stitchRecipeSelectorContainer"></div>
             <div id="recipeStacks"></div>
             <p class="field-hint">
               The recipe stores the placements. Swap each entry for a
@@ -305,7 +300,7 @@ class StitchingModule extends BaseModule {
             <h4>Progress</h4>
             <div class="inference-status" id="stitchStatusText">Starting...</div>
             <div class="progress-bar-container">
-              <div class="progress-bar" id="stitchProgressBar" style="width: 0%"></div>
+              <div class="job-progress-fill" id="stitchProgressBar" style="width: 0%"></div>
             </div>
           </div>
 
@@ -317,7 +312,7 @@ class StitchingModule extends BaseModule {
             <div id="stitchResultInfo"></div>
             <div class="success-actions">
               <button class="btn primary" id="stitchOpenViewerBtn">Open in Image Viewer</button>
-              <button class="btn secondary" id="stitchNewRunBtn">New Stitch</button>
+              <button class="btn secondary" id="stitchNewRunBtn">Start New Run</button>
             </div>
           </div>
 
@@ -351,14 +346,72 @@ class StitchingModule extends BaseModule {
     // Step 1
     document.querySelectorAll('input[name="stitch-workflow"]').forEach(r =>
       r.addEventListener('change', (e) => this.onWorkflowChange(e.target.value)));
-    document.getElementById('stitchAddStack')?.addEventListener('click', () => this.addStack());
-    document.getElementById('recipeLoadBtn')?.addEventListener('click', () => this.loadRecipe());
+    const stackSelectorContainer = document.getElementById('stitchStackSelectorContainer');
+    if (stackSelectorContainer) {
+      this.stackSelector = new FileSelector({
+        id: 'stitch_stacks',
+        title: 'Stacks',
+        icon: '🧩',
+        helpIconHtml: '',
+        mode: 'list',
+        addLabel: 'Add',
+        accept: '.tif,.tiff',
+        acceptAllTiff: true,
+        showRecentResults: true,
+        showTestData: true,
+        testDataKind: 'raw',
+        stateManager: this.state,
+        filterFiles: (files) => this.eligibleFiles(files),
+        filterRecentResults: (files) => this.eligibleFiles(files),
+        onAdd: (file) => this.addStack(file)
+      });
+      stackSelectorContainer.innerHTML = this.stackSelector.render();
+      await this.stackSelector.init();
+    }
+
+    const recipeSelectorContainer = document.getElementById('stitchRecipeSelectorContainer');
+    if (recipeSelectorContainer) {
+      this.recipeSelector = new FileSelector({
+        id: 'stitch_recipe',
+        title: 'Recipe',
+        icon: '📜',
+        helpIconHtml: '',
+        mode: 'select',
+        accept: '.json',
+        fileType: 'results',
+        filterTags: ['recipe', 'stitching'],
+        showUpload: false,
+        showTestData: false,
+        stateManager: this.state,
+        onSelect: (file) => file ? this.loadRecipe(file) : this.clearRecipe()
+      });
+      recipeSelectorContainer.innerHTML = this.recipeSelector.render();
+      await this.recipeSelector.init();
+    }
+
+    // Delegated actions on the innerHTML-rendered stack list
+    document.getElementById('stitchStackList')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const index = parseInt(btn.dataset.index, 10);
+      if (Number.isNaN(index)) return;
+      if (btn.dataset.action === 'up') this.moveStack(index, -1);
+      else if (btn.dataset.action === 'down') this.moveStack(index, 1);
+      else if (btn.dataset.action === 'remove') this.removeStack(index);
+    });
+
     document.getElementById('stitchStep1Next')?.addEventListener('click', () => {
       this.goToStep(this.workflow === 'recipe' ? 3 : 2);
     });
 
     // Step 2
     document.getElementById('stitchStep2Back')?.addEventListener('click', () => this.goToStep(1));
+    document.getElementById('junctionNav')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('button[data-junction]');
+      if (!tab) return;
+      const i = parseInt(tab.dataset.junction, 10);
+      if (!Number.isNaN(i)) this.selectJunction(i);
+    });
     document.getElementById('stitchStep2Next')?.addEventListener('click', () => this.goToStep(3));
     this.setupAlignControls();
 
@@ -370,9 +423,13 @@ class StitchingModule extends BaseModule {
     document.getElementById('stitchOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
     document.getElementById('stitchNewRunBtn')?.addEventListener('click', () => {
       this.resetState();
-      this.populateFilePicker();
-      this.populateRecipePicker();
+      this.stackSelector?.clearSelection();
+      this.stackSelector?.repopulate();
+      this.recipeSelector?.clearSelection();
+      this.recipeSelector?.refresh();
+      this.clearRecipeStacks();
       this.renderStackList();
+      this.updateModeBadge();
       this.updateStep1Next();
       this.goToStep(1);
     });
@@ -394,6 +451,8 @@ class StitchingModule extends BaseModule {
     }
     // Leaving the module starts fresh next time (user preference)
     this.resetState();
+    this.stackSelector = null;
+    this.recipeSelector = null;
     try { delete window.stitchingModule; } catch (e) { window.stitchingModule = undefined; }
     await super.deactivate();
   }
@@ -430,7 +489,7 @@ class StitchingModule extends BaseModule {
     if (nextBtn) {
       nextBtn.textContent = workflow === 'recipe' ? 'Next: Compose' : 'Next: Align';
     }
-    if (workflow === 'recipe') this.populateRecipePicker();
+    if (workflow === 'recipe') this.recipeSelector?.refresh();
     this.updateStep1Next();
   }
 
@@ -443,8 +502,15 @@ class StitchingModule extends BaseModule {
       console.error('[Stitching] Error loading files:', e);
       this.workspaceFiles = [];
     }
-    this.populateFilePicker();
-    this.populateRecipePicker();
+    // Feed the fresh listing to both pickers without another round trip
+    if (this.stackSelector) {
+      this.stackSelector.allFiles = this.workspaceFiles;
+      this.stackSelector.repopulate();
+    }
+    if (this.recipeSelector) {
+      this.recipeSelector.allFiles = this.workspaceFiles;
+      this.recipeSelector.repopulate();
+    }
   }
 
   /** Data mode of a workspace file, from its metadata tags */
@@ -456,27 +522,22 @@ class StitchingModule extends BaseModule {
     return (isRawUpload || isProcessed) ? 'grayscale' : null;
   }
 
-  eligibleFiles() {
-    return this.workspaceFiles.filter(f => {
+  /**
+   * Files that can still be added as a stack: TIFFs of a known data mode,
+   * compatible with the mode fixed by the first stack, not already listed.
+   * @param {Array} files - candidate workspace files (from the FileSelector)
+   */
+  eligibleFiles(files) {
+    return (files || []).filter(f => {
       if (!/\.tiff?$/i.test(f.name)) return false;
       const tags = f.tags || [];
       if (tags.includes('info') || tags.includes('recipe')) return false;
       const mode = this.fileMode(f);
       if (!mode) return false;
       // The first added stack fixes the mode; only compatible files remain
-      return this.mode == null || mode === this.mode;
+      if (this.mode != null && mode !== this.mode) return false;
+      return !this.stacks.some(s => s.path === f.path);
     });
-  }
-
-  populateFilePicker() {
-    const picker = document.getElementById('stitchFilePicker');
-    if (!picker) return;
-    const files = this.eligibleFiles()
-      .filter(f => !this.stacks.some(s => s.path === f.path));
-    picker.innerHTML = files.length
-      ? '<option value="">Select a stack...</option>' +
-        files.map(f => `<option value="${f.path}">${f.name}</option>`).join('')
-      : `<option value="">No ${this.mode === 'labels' ? 'compatible segmentation' : 'eligible'} files in workspace</option>`;
   }
 
   updateModeBadge() {
@@ -492,21 +553,23 @@ class StitchingModule extends BaseModule {
     }
   }
 
-  async addStack() {
-    const picker = document.getElementById('stitchFilePicker');
-    const filePath = picker?.value;
+  /**
+   * FileSelector (list mode) callback: add the picked workspace file as the
+   * next stack.
+   * @param {{path: string, name?: string, tags?: Array}} file
+   */
+  async addStack(file) {
+    const filePath = file?.path;
     if (!filePath) return;
+    if (this.stacks.some(s => s.path === filePath)) return;
 
-    const file = this.workspaceFiles.find(f => f.path === filePath);
-    const mode = file ? this.fileMode(file) : null;
+    const mode = this.fileMode(file);
     if (this.mode && mode !== this.mode) {
       this.state.notify('error',
         'Image stacks and segmentation results cannot be mixed in one stitch.');
       return;
     }
 
-    const btn = document.getElementById('stitchAddStack');
-    if (btn) btn.disabled = true;
     try {
       const response = await fetch(`${TIFF_INFO_URL}?path=${encodeURIComponent(filePath)}`);
       const info = await response.json();
@@ -515,19 +578,17 @@ class StitchingModule extends BaseModule {
       if (this.mode == null) this.mode = mode;
       this.stacks.push({
         path: filePath,
-        name: filePath.split('/').pop(),
+        name: file.name || filePath.split('/').pop(),
         slices: info.sliceCount,
         width: info.width,
         height: info.height
       });
       this.renderStackList();
-      this.populateFilePicker();
+      this.stackSelector?.repopulate();
       this.updateModeBadge();
       this.updateStep1Next();
     } catch (e) {
       this.state.notify('error', `Could not add stack: ${e.message}`);
-    } finally {
-      if (btn) btn.disabled = false;
     }
   }
 
@@ -536,7 +597,7 @@ class StitchingModule extends BaseModule {
     this.junctions = [];
     if (this.stacks.length === 0) this.mode = null;
     this.renderStackList();
-    this.populateFilePicker();
+    this.stackSelector?.repopulate();
     this.updateModeBadge();
     this.updateStep1Next();
   }
@@ -558,9 +619,9 @@ class StitchingModule extends BaseModule {
         <span class="stack-name">${s.name}</span>
         <span class="stack-dims">${s.width}&times;${s.height}, ${s.slices} slices</span>
         <span class="stack-item-actions">
-          <button class="btn tiny" onclick="window.stitchingModule?.moveStack(${i}, -1)" ${i === 0 ? 'disabled' : ''}>&uarr;</button>
-          <button class="btn tiny" onclick="window.stitchingModule?.moveStack(${i}, 1)" ${i === this.stacks.length - 1 ? 'disabled' : ''}>&darr;</button>
-          <button class="btn tiny" onclick="window.stitchingModule?.removeStack(${i})">&times;</button>
+          <button class="btn tiny" data-action="up" data-index="${i}" ${i === 0 ? 'disabled' : ''}>&uarr;</button>
+          <button class="btn tiny" data-action="down" data-index="${i}" ${i === this.stacks.length - 1 ? 'disabled' : ''}>&darr;</button>
+          <button class="btn tiny" data-action="remove" data-index="${i}">&times;</button>
         </span>
       </li>
     `).join('') || '<li class="stack-item empty">No stacks added yet</li>';
@@ -576,20 +637,25 @@ class StitchingModule extends BaseModule {
 
   // ---- saved recipe workflow ------------------------------------------------
 
-  populateRecipePicker() {
-    const picker = document.getElementById('recipePicker');
-    if (!picker) return;
-    const recipes = this.workspaceFiles.filter(f =>
-      (f.tags || []).includes('recipe') && (f.tags || []).includes('stitching'));
-    picker.innerHTML = recipes.length
-      ? '<option value="">Select a recipe...</option>' +
-        recipes.map(f => `<option value="${f.path}">${f.path}</option>`).join('')
-      : '<option value="">No saved recipes in workspace</option>';
+  /** Clear the recipe UI (its FileSelector was deselected) */
+  clearRecipe() {
+    this.loadedRecipe = null;
+    this.recipeStackPaths = [];
+    this.clearRecipeStacks();
+    this.updateStep1Next();
   }
 
-  async loadRecipe() {
-    const picker = document.getElementById('recipePicker');
-    const recipePath = picker?.value;
+  clearRecipeStacks() {
+    const el = document.getElementById('recipeStacks');
+    if (el) el.innerHTML = '';
+  }
+
+  /**
+   * FileSelector callback: load the placements of a saved recipe.
+   * @param {{path: string}} file
+   */
+  async loadRecipe(file) {
+    const recipePath = file?.path;
     if (!recipePath) return;
     try {
       const response = await fetch(`/api/stitching/recipe?path=${encodeURIComponent(recipePath)}`);
@@ -656,7 +722,7 @@ class StitchingModule extends BaseModule {
       const j = this.junctions[i];
       const done = j && (j.score != null || j.dx !== 0 || j.dy !== 0);
       parts.push(`<button class="junction-tab ${i === this.currentJunction ? 'active' : ''} ${done ? 'done' : ''}"
-        onclick="window.stitchingModule?.selectJunction(${i})">
+        data-junction="${i}">
         ${i}: ${this.stacks[i - 1].name} &rarr; ${this.stacks[i].name}</button>`);
     }
     nav.innerHTML = parts.join('');

@@ -138,6 +138,8 @@ class DLDenoisingModule extends BaseModule {
     this.onMethodChange = this.onMethodChange.bind(this);
     this.onPresetChange = this.onPresetChange.bind(this);
     this.startTraining = this.startTraining.bind(this);
+    this._onActionClick = this._onActionClick.bind(this);
+    this._onParamInput = this._onParamInput.bind(this);
   }
 
   render() {
@@ -196,13 +198,99 @@ class DLDenoisingModule extends BaseModule {
     // Load configuration presets
     await this.loadPresets();
 
-    // Expose global for onclick handlers
+    // One delegated click handler for every [data-action] button in the module
+    this.container.removeEventListener('click', this._onActionClick);
+    this.container.addEventListener('click', this._onActionClick);
+    for (const type of ['input', 'change']) {
+      this.container.removeEventListener(type, this._onParamInput);
+      this.container.addEventListener(type, this._onParamInput);
+    }
+
+    // Legacy global reference (kept for console debugging / external callers)
     window.dlDenoisingModule = this;
 
     // Check for active training session that can be resumed
     await this.checkForActiveSession();
 
     console.log('[DLDenoisingModule] Initialization complete');
+  }
+
+  /**
+   * Delegated input/change handler for the mask-parameter controls
+   * (data-mask-param="name" data-parse="float|int|string"); ranges report
+   * on `input`, selects on `change`.
+   * @param {Event} event
+   */
+  _onParamInput(event) {
+    const el = event.target;
+    if (!el || !el.dataset || !el.dataset.maskParam) return;
+    if (el.tagName === 'SELECT' && event.type !== 'change') return;
+    if (el.type === 'range' && event.type !== 'input') return;
+    const raw = el.value;
+    const value = el.dataset.parse === 'float' ? parseFloat(raw)
+      : el.dataset.parse === 'int' ? parseInt(raw, 10)
+      : raw;
+    this.updateMaskParameter(el.dataset.maskParam, value);
+  }
+
+  /**
+   * Delegated click handler: maps [data-action] buttons to module methods.
+   * Replaces the inline onclick attributes the templates used to carry.
+   * @param {MouseEvent} event
+   */
+  _onActionClick(event) {
+    const target = event.target.closest('[data-action]');
+    if (!target || !this.container?.contains(target)) return;
+
+    const action = target.dataset.action;
+
+    switch (action) {
+      case 'startTraining':
+        this.startTraining();
+        break;
+      case 'cancelTraining':
+        this.progressHandler?.cancelTraining();
+        break;
+      case 'approveMask':
+        this.approveMask();
+        break;
+      case 'skipStage2':
+        this.skipStage2();
+        break;
+      case 'openInImageViewer':
+        this.openInImageViewer('result');
+        break;
+      case 'viewInViewer':
+        this.viewInViewer();
+        break;
+      case 'startNewAnalysis':
+        this.startNewAnalysis();
+        break;
+      case 'downloadResult':
+        this.downloadResult();
+        break;
+      case 'downloadAllResults':
+        this.downloadAllResults();
+        break;
+      case 'goToStep': {
+        const step = parseInt(target.dataset.step, 10);
+        if (!Number.isNaN(step)) this.goToStep(step);
+        break;
+      }
+      case 'resetMaskParameters':
+        this.resetMaskParameters();
+        break;
+      case 'regenerateMask':
+        this.regenerateMask();
+        break;
+      case 'switchMaskSlice': {
+        const index = parseInt(target.dataset.index, 10);
+        if (!Number.isNaN(index)) this.maskVisualization?.switchSlice(index);
+        break;
+      }
+      default:
+        console.warn('[DLDenoisingModule] Unknown data-action:', action);
+    }
   }
 
   /**
@@ -416,10 +504,6 @@ class DLDenoisingModule extends BaseModule {
   showTrainingCompleteResumed(status = {}) {
     const maskApprovalSection = document.getElementById('maskApprovalSection');
     const trainSection = document.getElementById('trainSection');
-    const startSection = document.getElementById('startTrainingSection');
-
-    // Hide start button
-    if (startSection) startSection.style.display = 'none';
 
     // Determine method from status or use stored method
     const method = status.method || this.selectedMethod || 'n2v';
@@ -451,9 +535,8 @@ class DLDenoisingModule extends BaseModule {
     }
     this.uiStateHandler.updateStageStatus('train', 'completed', 'Complete');
 
-    // Enable next button
-    const step3Next = document.getElementById('step3Next');
-    if (step3Next) step3Next.disabled = false;
+    // Nav row: Start hidden, Cancel hidden, Next enabled
+    this.uiStateHandler.setJobButtons('finished');
 
     // Mark training as complete
     this.trainingComplete = true;
@@ -1138,6 +1221,13 @@ class DLDenoisingModule extends BaseModule {
       this.progressHandler.disconnectSocket();
     }
 
+    // Remove the delegated action handler
+    if (this.container) {
+      this.container.removeEventListener('click', this._onActionClick);
+      this.container.removeEventListener('input', this._onParamInput);
+      this.container.removeEventListener('change', this._onParamInput);
+    }
+
     // Clean up global references
     try { delete window.dlDenoisingModule; } catch (e) { window.dlDenoisingModule = undefined; }
 
@@ -1146,9 +1236,80 @@ class DLDenoisingModule extends BaseModule {
       this.configHandler.destroyValidation();
     }
 
+    // The module instance is cached by ModuleLoader, so wipe every field the
+    // next visit must not inherit. The DOM still exists here (super.deactivate
+    // clears the container afterwards), so the DOM-touching resets are safe.
+    // NOTE: localStorage training-session persistence is deliberately left
+    // untouched so an in-flight run can still be resumed on the next visit.
+    this.resetForLeave();
+
     await super.deactivate();
 
     console.log('[DLDenoisingModule] Deactivated');
+  }
+
+  /**
+   * Full reset applied when leaving the module, so the next activation starts
+   * on Step 1 with nothing selected.
+   */
+  resetForLeave() {
+    // Step 3 UI (hides mask/train sections, destroys charts, resets badges,
+    // progress bar and the nav-row job buttons)
+    if (this.uiStateHandler) {
+      this.uiStateHandler.showTrainingReady();
+    }
+
+    // Step 4 / inference state
+    if (this.inferenceHandler) {
+      if (this.inferenceHandler.socket) {
+        this.inferenceHandler.socket.disconnect();
+        this.inferenceHandler.socket = null;
+      }
+      this.inferenceHandler.resetInferenceState();
+      this.inferenceHandler.inferenceFileSelector = null;
+      this.inferenceHandler.inferenceValidationDisplay = null;
+    }
+
+    // Import workflow state (selectors, chosen files, validation results)
+    if (this.fileHandler) {
+      this.fileHandler.destroyImportSelectors();
+      this.fileHandler.importFiles = { config: null, stage1Model: null, stage2Model: null };
+      this.fileHandler.importValidation = {
+        config: { valid: false, result: null },
+        stage1: { valid: false, result: null },
+        stage2: { valid: false, result: null }
+      };
+      this.fileHandler.parsedConfig = null;
+    }
+
+    // Mask components / data
+    this.maskVisualization = null;
+    this.maskParameterPanel = null;
+    this.maskData = null;
+
+    // Training/results components
+    this.trainingProgress = null;
+    this.resultsDisplay = null;
+    this.lossChart = null;
+    this.charts = { train: null };
+    this.bestValLoss = { train: Infinity };
+    this.gpuInfo = null;
+    this.presets = null;
+    this.parameterRanges = null;
+    this.configSections = {};
+    this.autoApproveEnabled = false;
+
+    // Flags, selected file, method, config and result ids
+    this.reset();
+
+    // Components are rebuilt by initialize() on the next activation
+    this.fileSelector = null;
+    this.validationDisplay = null;
+    this.stepNavigator = null;
+
+    // BaseModule.deactivate() also resets this, set it here so a caller that
+    // only calls resetForLeave() ends up on Step 1 too
+    this.currentStep = 1;
   }
 }
 

@@ -365,20 +365,8 @@
   font-weight: 600;
 }
 
-.mesh-module .progress-bar-container {
-  height: 8px;
-  background: var(--module-border);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: var(--module-spacing-sm);
-}
-
-.mesh-module .progress-fill {
-  height: 100%;
-  background: var(--module-gradient);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
+/* The progress track/fill come from module-base.css
+   (.progress-bar-container + .job-progress-fill) */
 
 .mesh-module .progress-details {
   font-size: var(--module-font-size-xs);
@@ -387,12 +375,8 @@
 }
 
 /* ============================================
-   RESULTS SECTION
+   RESULTS (the card itself is .section-card.success-card from module-base)
    ============================================ */
-
-.mesh-module .results-section {
-  margin-bottom: var(--module-spacing-lg);
-}
 
 .mesh-module .download-buttons {
   display: flex;
@@ -407,38 +391,6 @@
   gap: 6px;
   padding: 10px 16px;
   font-size: var(--module-font-size-sm);
-}
-
-.mesh-module .result-actions {
-  display: flex;
-  gap: var(--module-spacing-md);
-  margin-top: var(--module-spacing-lg);
-  padding-top: var(--module-spacing-lg);
-  border-top: 1px solid var(--module-border);
-}
-
-/* ============================================
-   BUTTONS
-   ============================================ */
-
-.mesh-module .btn-primary {
-  background: var(--module-gradient);
-  color: white;
-  font-weight: 500;
-  padding: 12px 24px;
-  border: none;
-  border-radius: var(--module-radius-md);
-  cursor: pointer;
-  transition: var(--module-transition-normal);
-}
-
-.mesh-module .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--module-shadow-md);
-}
-
-.mesh-module .btn-primary:active {
-  transform: translateY(0);
 }
 
 /* ============================================
@@ -461,10 +413,6 @@
   .mesh-module .summary-preview img {
     max-width: 100%;
     max-height: 200px;
-  }
-
-  .mesh-module .result-actions {
-    flex-direction: column;
   }
 
   .mesh-module .download-buttons {

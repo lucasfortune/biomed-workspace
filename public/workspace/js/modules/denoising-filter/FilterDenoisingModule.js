@@ -193,30 +193,31 @@ class FilterDenoisingModule extends BaseModule {
             <div class="step-inner">
               <h3>Processing</h3>
 
-              <div id="processingAction" class="action-section">
-                <div id="configSummary" class="config-summary"></div>
-                <button id="startProcessingBtn" class="btn btn-large">Start Denoising</button>
-              </div>
+              <div id="configSummary" class="config-summary"></div>
 
               <div id="processingProgress" class="progress-section" style="display: none;">
                 <div class="spinner"></div>
                 <p id="progressStatus">Processing image...</p>
               </div>
 
-              <div id="processingResults" class="results-section" style="display: none;">
-                <div class="validation-success">
-                  <div class="validation-header">Processing Complete!</div>
-                  <div class="validation-details" id="resultsDetails"></div>
+              <div class="section-card success-card" id="processingResults" style="display: none;">
+                <div class="success-header">
+                  <span class="success-icon">&#10003;</span>
+                  <span class="success-title">Denoising Complete</span>
                 </div>
-                <div class="result-actions">
-                  <button id="viewResultsBtn" class="btn">View in Image Viewer</button>
-                  <button id="resetBtn" class="btn secondary">Process Another</button>
+                <div id="resultsDetails" class="validation-details"></div>
+                <div class="success-actions">
+                  <button class="btn primary" id="viewResultsBtn">Open in Image Viewer</button>
+                  <button class="btn secondary" id="resetBtn">Start New Run</button>
                 </div>
               </div>
 
+              <!-- Navigation Buttons (the job action lives in the right slot) -->
               <div class="navigation-buttons">
                 <button id="step3Back" class="btn secondary">Back</button>
-                <div></div>
+                <button id="startProcessingBtn" class="btn primary">
+                  <span class="btn-glyph">&#9658;</span> Start Denoising
+                </button>
               </div>
             </div>
           </div>
@@ -321,18 +322,33 @@ class FilterDenoisingModule extends BaseModule {
     addListener(document.getElementById('resetBtn'), 'click', () => this.reset());
   }
 
+  /**
+   * Show/hide the nav-row job button. Hidden while processing runs and while
+   * the results card is shown; visible again after reset.
+   * @param {boolean} visible
+   */
+  setJobButtonVisible(visible) {
+    const btn = document.getElementById('startProcessingBtn');
+    if (btn) btn.style.display = visible ? '' : 'none';
+  }
+
   onMethodChange(method) {
     this.selectedMethod = method;
     const gaussianParams = document.getElementById('gaussianParams');
     const nlmParams = document.getElementById('nlmParams');
 
-    if (method === 'gaussian') {
-      gaussianParams.style.display = 'block';
-      nlmParams.style.display = 'none';
-    } else {
-      gaussianParams.style.display = 'none';
-      nlmParams.style.display = 'block';
-    }
+    if (gaussianParams) gaussianParams.style.display = method === 'gaussian' ? 'block' : 'none';
+    if (nlmParams) nlmParams.style.display = method === 'gaussian' ? 'none' : 'block';
+  }
+
+  /**
+   * Set a form field's value if the element exists
+   * @param {string} id
+   * @param {number|string} value
+   */
+  setFieldValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = String(value);
   }
 
   async onFileSelected(fileInfo) {
@@ -503,7 +519,7 @@ class FilterDenoisingModule extends BaseModule {
   async startProcessing() {
     console.log('[FilterDenoisingModule] Starting processing...');
 
-    document.getElementById('processingAction').style.display = 'none';
+    this.setJobButtonVisible(false);
     document.getElementById('processingProgress').style.display = 'block';
 
     try {
@@ -532,7 +548,7 @@ class FilterDenoisingModule extends BaseModule {
       this.state.notify('error', `Processing failed: ${error.message}`);
 
       document.getElementById('processingProgress').style.display = 'none';
-      document.getElementById('processingAction').style.display = 'block';
+      this.setJobButtonVisible(true);
     }
   }
 
@@ -543,6 +559,8 @@ class FilterDenoisingModule extends BaseModule {
 
     document.getElementById('processingProgress').style.display = 'none';
     document.getElementById('processingResults').style.display = 'block';
+    // Job button stays hidden until "Start New Run"
+    this.setJobButtonVisible(false);
 
     const resultsDetails = document.getElementById('resultsDetails');
     if (resultsDetails) {
@@ -592,10 +610,33 @@ class FilterDenoisingModule extends BaseModule {
     this.uploadedFile = null;
     this.processingResult = null;
 
+    // Config back to constructor defaults
+    this.selectedMethod = 'gaussian';
+    this.parameters = {
+      gaussian: { sigma: 1.5, kernel_size: 5 },
+      nlm: { h: 10, template_window: 7, search_window: 21 }
+    };
+
     // Reset UI
-    document.getElementById('processingAction').style.display = 'block';
-    document.getElementById('processingProgress').style.display = 'none';
-    document.getElementById('processingResults').style.display = 'none';
+    const progress = document.getElementById('processingProgress');
+    if (progress) progress.style.display = 'none';
+    const results = document.getElementById('processingResults');
+    if (results) results.style.display = 'none';
+    const summary = document.getElementById('configSummary');
+    if (summary) summary.innerHTML = '';
+    this.setJobButtonVisible(true);
+
+    // Config form back to defaults
+    const gaussianRadio = document.querySelector('input[name="denoise-method"][value="gaussian"]');
+    if (gaussianRadio) gaussianRadio.checked = true;
+    this.onMethodChange('gaussian');
+    this.setFieldValue('sigma', 1.5);
+    this.setFieldValue('sigmaValue', 1.5);
+    this.setFieldValue('kernelSize', 5);
+    this.setFieldValue('filterH', 10);
+    this.setFieldValue('filterHValue', 10);
+    this.setFieldValue('templateWindow', 7);
+    this.setFieldValue('searchWindow', 21);
 
     const step1Next = document.getElementById('step1Next');
     if (step1Next) step1Next.disabled = true;
@@ -628,6 +669,11 @@ class FilterDenoisingModule extends BaseModule {
 
   async deactivate() {
     console.log('[FilterDenoisingModule] Deactivating...');
+
+    // Reset to a fresh state: ModuleLoader caches the instance, so any
+    // leftover selection/config would still be here on the next visit.
+    // reset() runs while the DOM still exists (before super.deactivate()).
+    this.reset();
 
     // Remove all event listeners
     for (const { element, event, handler } of this.eventListeners) {

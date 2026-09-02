@@ -212,11 +212,8 @@ class AnnotationModule extends BaseModule {
               <div class="annotation-header">
                 <h3>Annotation Interface</h3>
                 <div class="annotation-actions">
-                  <button id="saveProgressBtn" class="btn btn-secondary" disabled>
+                  <button id="saveProgressBtn" class="btn secondary" disabled>
                     Save Progress
-                  </button>
-                  <button id="createAnnotationBtn" class="btn btn-primary" disabled>
-                    Create Annotation
                   </button>
                 </div>
               </div>
@@ -300,10 +297,10 @@ class AnnotationModule extends BaseModule {
 
               <!-- Navigation Buttons -->
               <div class="navigation-buttons">
-                <button id="step2Back" class="btn btn-secondary">
-                  ← Back to Selection
+                <button id="step2Back" class="btn secondary">Back</button>
+                <button id="createAnnotationBtn" class="btn primary" disabled>
+                  <span class="btn-glyph">&#9658;</span> Create Annotation
                 </button>
-                <div></div>
               </div>
             </div>
           </div>
@@ -358,7 +355,8 @@ class AnnotationModule extends BaseModule {
         icon: '🖼️',
         helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
         accept: '.tif,.tiff',
-        showTestData: false,
+        showTestData: true,
+        testDataKind: 'raw',
         showRecentResults: true,
         stateManager: this.state,
         onSelect: this.onFileSelected,
@@ -393,6 +391,8 @@ class AnnotationModule extends BaseModule {
     if (this.autosaveEnabled) {
       this.startAutosaveInterval();
     }
+
+    window.annotationModule = this;
 
     console.log('[AnnotationModule] Initialized');
   }
@@ -1520,7 +1520,7 @@ class AnnotationModule extends BaseModule {
       // Re-enable button
       if (createBtn) {
         createBtn.disabled = false;
-        createBtn.textContent = 'Create Annotation';
+        createBtn.innerHTML = '<span class="btn-glyph">&#9658;</span> Create Annotation';
       }
     }
   }
@@ -1984,6 +1984,8 @@ class AnnotationModule extends BaseModule {
     this.currentSlice = 0;
     this.totalSlices = 1;
     this.isDirty = false;
+
+    try { delete window.annotationModule; } catch (e) { window.annotationModule = undefined; }
 
     await super.deactivate();
     console.log('[AnnotationModule] Deactivated');

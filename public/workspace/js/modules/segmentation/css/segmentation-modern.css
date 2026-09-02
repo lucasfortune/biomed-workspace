@@ -754,3 +754,60 @@ body {
   border: 1px solid var(--module-error-border);
 }
 
+
+/* ============================================
+   STEP 2: CONFIG GROUP HEADINGS
+   Group titles are h4 so each step keeps a single h3; mirror the base
+   .config-group h3 look.
+   ============================================ */
+
+.segmentation-module .config-group h4 {
+  margin: 0 0 var(--module-spacing-sm) 0;
+  font-size: var(--module-font-size-md);
+  color: var(--module-text-primary);
+  font-weight: 600;
+  padding-bottom: var(--module-spacing-xs);
+  border-bottom: 2px solid var(--module-border);
+}
+
+/* ============================================
+   STEP 3: CHART CANVAS WRAPPER
+   ============================================ */
+
+.segmentation-module .chart-canvas-wrap {
+  position: relative;
+  height: 220px;
+  margin-top: var(--module-spacing-xxl);
+}
+
+/* ============================================
+   STEP 4: INFERENCE PROGRESS + WARNINGS
+   ============================================ */
+
+.segmentation-module .inference-section {
+  margin-top: var(--module-spacing-md);
+}
+
+.segmentation-module .inference-progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .inference-status-line {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .inference-compatibility-warning {
+  margin: var(--module-spacing-sm) 0;
+  padding: 10px 12px;
+  border-radius: var(--module-radius-sm);
+  background: var(--module-error-bg);
+  border-left: 3px solid var(--module-error-border);
+  color: var(--module-error-text);
+  font-size: 13px;
+  line-height: 1.4;
+}

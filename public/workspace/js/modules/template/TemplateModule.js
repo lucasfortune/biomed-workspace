@@ -8,9 +8,14 @@
  * - Extending BaseModule with step configuration
  * - Using StepNavigator, FileSelector, and ValidationDisplay components
  * - Conditional step navigation
+ * - The shared step chrome: `.step-inner` wrappers, the job button in the
+ *   nav row's right slot, and a `.section-card.success-card` result block
+ * - Wiring every button with addEventListener (never inline onclick, never
+ *   window.* free functions)
+ * - Built-in test data through FileSelector's `testDataKind`
  * - State management integration
  * - Socket.IO for real-time updates
- * - Proper cleanup on deactivation
+ * - Proper cleanup + reset-on-leave in deactivate()
  *
  * @example
  * // To use this template:
@@ -87,7 +92,9 @@ class TemplateModule extends BaseModule {
     // =========================================================================
 
     this.uploadedFile = null;
-    this.config = null;
+    // NOTE: never assign to `this.config` - BaseModule keeps the module
+    // configuration (id, name, steps, cssPath) there.
+    this.processingConfig = null;
     this.socket = null;
 
     // =========================================================================
@@ -98,6 +105,9 @@ class TemplateModule extends BaseModule {
     this.onFileSelected = this.onFileSelected.bind(this);
     this.onFileUploaded = this.onFileUploaded.bind(this);
     this.startProcessing = this.startProcessing.bind(this);
+
+    // Tracked listeners so deactivate() can remove every one of them
+    this.eventListeners = [];
   }
 
   // ===========================================================================
@@ -177,14 +187,10 @@ class TemplateModule extends BaseModule {
                 </div>
               </div>
 
-              <!-- Navigation Buttons -->
+              <!-- Navigation Buttons (wired in setupEventListeners) -->
               <div class="navigation-buttons">
-                <button id="step2Back" class="btn secondary" onclick="previousStep()">
-                  Back
-                </button>
-                <button id="step2Next" class="btn" onclick="nextStep()">
-                  Next: Process
-                </button>
+                <button id="step2Back" class="btn secondary">Back</button>
+                <button id="step2Next" class="btn">Next: Process</button>
               </div>
             </div>
           </div>
@@ -195,52 +201,49 @@ class TemplateModule extends BaseModule {
           <div id="step3" class="step-content">
             <div class="step-inner">
               <h3>Processing</h3>
+              <p class="step-description">
+                Ready to process your data with the configured parameters.
+              </p>
 
-              <!-- Action Section (shown before processing starts) -->
-              <div id="processingAction" class="action-section">
-                <p class="step-description">
-                  Ready to process your data with the configured parameters.
-                </p>
-                <button id="startProcessingBtn" class="btn" onclick="startProcessing()">
-                  Start Processing
-                </button>
-              </div>
-
-              <!-- Progress Section (shown during processing) -->
+              <!-- Progress Section (shown during processing).
+                   The track + fill come from module-base.css:
+                   .progress-bar-container wraps a .job-progress-fill -->
               <div id="processingProgress" class="progress-section" style="display: none;">
                 <div class="progress-info">
                   <span>Processing...</span>
                   <span id="progressPercent">0%</span>
                 </div>
                 <div class="progress-bar-container">
-                  <div id="progressBar" class="progress-fill" style="width: 0%"></div>
+                  <div id="progressBar" class="job-progress-fill" style="width: 0%"></div>
                 </div>
                 <p id="progressStatus">Initializing...</p>
               </div>
 
-              <!-- Results Section (shown after processing completes) -->
-              <div id="processingResults" class="results-section" style="display: none;">
-                <div class="validation-success">
-                  <div class="validation-header">Processing Complete!</div>
-                  <div class="validation-details" id="resultsDetails"></div>
+              <!-- Results (shown after processing completes).
+                   The standard result block: a .section-card.success-card
+                   with a success header, details, and .success-actions -->
+              <div class="section-card success-card" id="processingResults" style="display: none;">
+                <div class="success-header">
+                  <span class="success-icon">&#10003;</span>
+                  <span class="success-title">Processing Complete</span>
                 </div>
 
-                <div class="result-actions">
-                  <button id="downloadBtn" class="btn">
-                    Download Results
-                  </button>
-                  <button id="resetBtn" class="btn secondary">
-                    Process Another
-                  </button>
+                <div id="resultsDetails" class="validation-details"></div>
+
+                <div class="success-actions">
+                  <button class="btn primary" id="downloadBtn">Download Results</button>
+                  <button class="btn secondary" id="resetBtn">Start New Run</button>
                 </div>
               </div>
 
-              <!-- Navigation Buttons -->
+              <!-- Navigation Buttons.
+                   The primary job action lives in the nav row's right slot,
+                   so there is exactly one enabled red button on the step. -->
               <div class="navigation-buttons">
-                <button id="step3Back" class="btn secondary" onclick="previousStep()">
-                  Back
+                <button id="step3Back" class="btn secondary">Back</button>
+                <button id="startProcessingBtn" class="btn primary">
+                  <span class="btn-glyph">&#9658;</span> Start Processing
                 </button>
-                <div></div>
               </div>
             </div>
           </div>
@@ -284,10 +287,15 @@ class TemplateModule extends BaseModule {
     if (fileSelectorContainer) {
       this.fileSelector = new FileSelector({
         id: 'input_data',
-        fileType: 'input_data',
+        fileType: 'uploads',
+        filterTags: ['raw'],
         title: 'Input Data',
         icon: '📁',
-        showTestData: true,  // Show "Use Test Data" option
+        // Offer the built-in test stack. With testDataKind set, picking the
+        // test option copies the stack into the workspace and then reports it
+        // like any other workspace file - no isTestData branch needed here.
+        showTestData: true,
+        testDataKind: 'raw',
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded
@@ -304,52 +312,54 @@ class TemplateModule extends BaseModule {
     this.setupEventListeners();
 
     // =========================================================================
-    // Make Module Globally Accessible (for helper scripts)
+    // Make Module Globally Accessible (debugging handle only - never rely on
+    // window.* free functions such as window.nextStep for wiring buttons)
     // =========================================================================
 
     window.templateModule = this;
-
-    // =========================================================================
-    // Expose Helper Functions Globally (for onclick handlers in HTML)
-    // =========================================================================
-
-    window.nextStep = () => this.nextStep();
-    window.previousStep = () => this.previousStep();
-    window.startProcessing = () => this.startProcessing();
 
     console.log('[TemplateModule] Initialization complete');
   }
 
   // ===========================================================================
   // EVENT LISTENERS
+  // Every button is wired here with addEventListener - no inline onclick in
+  // render(). Listeners are tracked so deactivate() can remove them all.
   // ===========================================================================
 
   setupEventListeners() {
-    // Back to Hub button
-    const backButton = document.getElementById('backToHub');
-    if (backButton) {
-      backButton.addEventListener('click', () => {
-        window.workspace.returnToHub();
-      });
-    }
+    const addListener = (element, event, handler) => {
+      if (element) {
+        element.addEventListener(event, handler);
+        this.eventListeners.push({ element, event, handler });
+      }
+    };
 
-    // Step 1 Next button
-    const step1Next = document.getElementById('step1Next');
-    if (step1Next) {
-      step1Next.addEventListener('click', () => this.nextStep());
-    }
+    // Back to Hub button (rendered by BaseModule.renderHeader)
+    addListener(document.getElementById('backToHub'), 'click', () => window.workspace.returnToHub());
 
-    // Download button
-    const downloadBtn = document.getElementById('downloadBtn');
-    if (downloadBtn) {
-      downloadBtn.addEventListener('click', () => this.downloadResults());
-    }
+    // Step navigation
+    addListener(document.getElementById('step1Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step2Back'), 'click', () => this.previousStep());
+    addListener(document.getElementById('step2Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step3Back'), 'click', () => this.previousStep());
 
-    // Reset button
-    const resetBtn = document.getElementById('resetBtn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => this.reset());
-    }
+    // Job action (nav row, step 3)
+    addListener(document.getElementById('startProcessingBtn'), 'click', () => this.startProcessing());
+
+    // Result actions
+    addListener(document.getElementById('downloadBtn'), 'click', () => this.downloadResults());
+    addListener(document.getElementById('resetBtn'), 'click', () => this.reset());
+  }
+
+  /**
+   * Show/hide the nav-row job button. It is hidden while the job runs and
+   * while the result card is shown; "Start New Run" brings it back.
+   * @param {boolean} visible
+   */
+  setJobButtonVisible(visible) {
+    const btn = document.getElementById('startProcessingBtn');
+    if (btn) btn.style.display = visible ? '' : 'none';
   }
 
   // ===========================================================================
@@ -359,12 +369,24 @@ class TemplateModule extends BaseModule {
   onFileSelected(fileInfo) {
     console.log('[TemplateModule] File selected:', fileInfo);
 
+    // The selector reports null when the user clears the dropdown
+    if (!fileInfo) {
+      this.uploadedFile = null;
+      this.filesValidated = false;
+      this.validationDisplay.hide();
+      const step1Next = document.getElementById('step1Next');
+      if (step1Next) step1Next.disabled = true;
+      return;
+    }
+
+    // Test data arrives here as a regular workspace file (see testDataKind),
+    // so there is nothing special to branch on.
     this.uploadedFile = fileInfo;
 
     // Show validation
     this.validationDisplay.showSuccess('File Selected', [
       { label: 'Name', value: fileInfo.name || 'Selected file' },
-      { label: 'Type', value: fileInfo.isTestData ? 'Test Data' : 'Custom Upload' }
+      { label: 'Type', value: 'Workspace File' }
     ]);
 
     // Enable next button
@@ -376,10 +398,11 @@ class TemplateModule extends BaseModule {
   onFileUploaded(file, uploadResult) {
     console.log('[TemplateModule] File uploaded:', uploadResult);
 
+    // uploadResult is the workspace file entry returned by the server
     this.uploadedFile = {
-      name: file.name,
-      path: uploadResult.file_path,
-      isTestData: false
+      id: uploadResult.id,
+      name: uploadResult.name || file.name,
+      path: uploadResult.path
     };
 
     // Show validation
@@ -477,8 +500,8 @@ class TemplateModule extends BaseModule {
   async startProcessing() {
     console.log('[TemplateModule] Starting processing...');
 
-    // Hide action, show progress
-    document.getElementById('processingAction').style.display = 'none';
+    // Hide the job button, show progress
+    this.setJobButtonVisible(false);
     document.getElementById('processingProgress').style.display = 'block';
 
     try {
@@ -504,9 +527,9 @@ class TemplateModule extends BaseModule {
       console.error('[TemplateModule] Processing error:', error);
       this.state.notify('error', `Processing failed: ${error.message}`);
 
-      // Show action section again
+      // Offer the job button again so the run can be retried
       document.getElementById('processingProgress').style.display = 'none';
-      document.getElementById('processingAction').style.display = 'block';
+      this.setJobButtonVisible(true);
     }
   }
 
@@ -523,9 +546,11 @@ class TemplateModule extends BaseModule {
   onProcessingComplete(result) {
     console.log('[TemplateModule] Processing complete:', result);
 
-    // Hide progress, show results
+    // Hide progress, show results. The job button stays hidden until the
+    // user asks for another run ("Start New Run").
     document.getElementById('processingProgress').style.display = 'none';
     document.getElementById('processingResults').style.display = 'block';
+    this.setJobButtonVisible(false);
 
     // Display results
     const resultsDetails = document.getElementById('resultsDetails');
@@ -563,19 +588,38 @@ class TemplateModule extends BaseModule {
     this.state.notify('info', 'Download started');
   }
 
+  /**
+   * Put the module back into its fresh state.
+   *
+   * Called by "Start New Run" and by deactivate(): ModuleLoader caches the
+   * instance and BaseModule.activate() only re-renders, so anything left in
+   * an instance field would still be here on the user's next visit.
+   */
   reset() {
     console.log('[TemplateModule] Resetting module...');
 
-    // Reset state flags
+    // Reset state flags and data back to the constructor defaults
     this.filesValidated = false;
     this.configSaved = false;
     this.processingComplete = false;
     this.uploadedFile = null;
+    this.processingConfig = null;
 
-    // Reset UI
-    document.getElementById('processingAction').style.display = 'block';
-    document.getElementById('processingProgress').style.display = 'none';
-    document.getElementById('processingResults').style.display = 'none';
+    // Reset UI (guarded: reset() may run while a step is not rendered)
+    const progress = document.getElementById('processingProgress');
+    if (progress) progress.style.display = 'none';
+    const results = document.getElementById('processingResults');
+    if (results) results.style.display = 'none';
+    this.setJobButtonVisible(true);
+    this.updateProgress(0, 'Initializing...');
+
+    // Config form back to defaults
+    const paramA = document.getElementById('paramA');
+    if (paramA) paramA.value = 10;
+    const paramB = document.getElementById('paramB');
+    if (paramB) paramB.value = 'option1';
+    const paramC = document.getElementById('paramC');
+    if (paramC) paramC.checked = true;
 
     // Reset step 1
     const step1Next = document.getElementById('step1Next');
@@ -586,9 +630,9 @@ class TemplateModule extends BaseModule {
       this.validationDisplay.hide();
     }
 
-    // Reset file selector
+    // Clear the file selection (not just the file list)
     if (this.fileSelector) {
-      this.fileSelector.refresh();
+      this.fileSelector.clearSelection();
     }
 
     // Go back to step 1
@@ -610,6 +654,16 @@ class TemplateModule extends BaseModule {
   async deactivate() {
     console.log('[TemplateModule] Deactivating...');
 
+    // Reset on leave: the DOM still exists here (super.deactivate() clears
+    // the container below), so reset() can touch it safely.
+    this.reset();
+
+    // Remove every listener registered in setupEventListeners()
+    for (const { element, event, handler } of this.eventListeners) {
+      element.removeEventListener(event, handler);
+    }
+    this.eventListeners = [];
+
     // Disconnect Socket.IO if connected
     if (this.socket) {
       this.socket.disconnect();
@@ -617,7 +671,7 @@ class TemplateModule extends BaseModule {
     }
 
     // Clean up global references (use try-catch for non-configurable properties)
-    const globalsToClean = ['templateModule', 'nextStep', 'previousStep', 'startProcessing'];
+    const globalsToClean = ['templateModule'];
     for (const name of globalsToClean) {
       try {
         delete window[name];

@@ -300,7 +300,7 @@ class InferenceHandler {
     // Show progress section
     const progressSection = document.getElementById('inferenceProgressSection');
     const successSection = document.getElementById('inferenceSuccessSection');
-    const actionsSection = document.getElementById('inferenceActions');
+    const actionsSection = document.getElementById('processDataBtn');
 
     if (progressSection) progressSection.style.display = 'block';
     if (successSection) successSection.style.display = 'none';
@@ -353,7 +353,7 @@ class InferenceHandler {
       this.isProcessing = false;
       this.updateProcessButton();
       if (progressSection) progressSection.style.display = 'none';
-      if (actionsSection) actionsSection.style.display = 'flex';
+      if (actionsSection) actionsSection.style.display = '';
     }
   }
 
@@ -448,10 +448,10 @@ class InferenceHandler {
 
     // Hide progress, show actions
     const progressSection = document.getElementById('inferenceProgressSection');
-    const actionsSection = document.getElementById('inferenceActions');
+    const actionsSection = document.getElementById('processDataBtn');
 
     if (progressSection) progressSection.style.display = 'none';
-    if (actionsSection) actionsSection.style.display = 'flex';
+    if (actionsSection) actionsSection.style.display = '';
 
     this.isProcessing = false;
     this.updateProcessButton();
@@ -562,11 +562,11 @@ class InferenceHandler {
     // Reset UI
     const progressSection = document.getElementById('inferenceProgressSection');
     const successSection = document.getElementById('inferenceSuccessSection');
-    const actionsSection = document.getElementById('inferenceActions');
+    const actionsSection = document.getElementById('processDataBtn');
 
     if (progressSection) progressSection.style.display = 'none';
     if (successSection) successSection.style.display = 'none';
-    if (actionsSection) actionsSection.style.display = 'flex';
+    if (actionsSection) actionsSection.style.display = '';
 
     // Reset state
     this.inferenceInputFile = null;
@@ -600,11 +600,11 @@ class InferenceHandler {
     // Reset UI
     const progressSection = document.getElementById('inferenceProgressSection');
     const successSection = document.getElementById('inferenceSuccessSection');
-    const actionsSection = document.getElementById('inferenceActions');
+    const actionsSection = document.getElementById('processDataBtn');
 
     if (progressSection) progressSection.style.display = 'none';
     if (successSection) successSection.style.display = 'none';
-    if (actionsSection) actionsSection.style.display = 'flex';
+    if (actionsSection) actionsSection.style.display = '';
 
     this.updateProcessButton();
   }

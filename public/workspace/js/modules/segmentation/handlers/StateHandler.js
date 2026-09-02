@@ -210,16 +210,8 @@ class StateHandler {
    * Restore training UI state (show progress, hide start button)
    */
   restoreTrainingUI() {
-    // Toggle UI visibility
-    const trainingActionContent = document.getElementById('trainingActionContent');
-    const trainingProgressContent = document.getElementById('trainingProgressContent');
-
-    if (trainingActionContent) {
-      trainingActionContent.style.display = 'none';
-    }
-    if (trainingProgressContent) {
-      trainingProgressContent.style.display = 'block';
-    }
+    // Toggle UI visibility (running: Start hidden, Cancel shown)
+    this.module.applyTrainingUIState?.('running');
 
     // Ensure epoch counter is visible
     const epochInfo = document.querySelector('.epoch-info');

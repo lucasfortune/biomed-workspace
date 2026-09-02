@@ -13,10 +13,16 @@
  *   fileType: 'raw_images',
  *   accept: '.tif,.tiff',
  *   showTestData: true,
+ *   testDataKind: 'raw',          // the test option imports the built-in stack
  *   showRecentResults: false,
  *   onSelect: (file) => console.log('Selected:', file),
  *   onUpload: async (file) => { ... }
  * });
+ *
+ * // "Add to list" mode (e.g. the stitching stack list): the dropdown gets an
+ * // Add button; choosing a file, uploading one or importing the test stack
+ * // calls onAdd(file) and resets the dropdown instead of keeping a selection.
+ * const picker = new FileSelector({ id: 'stacks', mode: 'list', onAdd: (file) => list.push(file) });
  *
  * container.innerHTML = selector.render();
  * await selector.init();
@@ -37,6 +43,16 @@ class FileSelector {
    * @param {Array} [config.filterTags] - Tags files must have (e.g., ['inference'] for inference data)
    * @param {string} [config.accept='.tif,.tiff'] - Accepted file extensions
    * @param {boolean} [config.showTestData=true] - Show test data optgroup
+   * @param {string} [config.testDataKind] - 'raw' | 'inference' | 'denoising' | 'annotations'. When set,
+   *   choosing the test option POSTs /api/workspace/test-data, which copies the built-in stack into the
+   *   workspace, and the selector then behaves exactly as if that workspace file had been picked
+   *   (no `isTestData` branch needed in the module). Without it the legacy `{ isTestData: true }`
+   *   selection is passed to onSelect.
+   * @param {'select'|'list'} [config.mode='select'] - 'list' adds an Add button next to the dropdown and
+   *   reports files through onAdd instead of keeping a selection
+   * @param {Function} [config.onAdd] - List mode: called with the file to add (file) => {}
+   * @param {string} [config.addLabel='Add'] - List mode: label of the Add button
+   * @param {boolean} [config.showUpload=true] - Render the upload button
    * @param {boolean} [config.showRecentResults=false] - Show recent results optgroup
    * @param {boolean} [config.acceptAllTiff=false] - Accept any TIFF regardless of category
    * @param {Array} [config.resultCategories] - Categories to show in Recent Results (default: segmentations, denoised, processed)
@@ -68,6 +84,10 @@ class FileSelector {
     // uploading as 'annotations' so the server applies the annotation tag.
     this.uploadCategory = config.uploadCategory || config.fileType || 'file';
     this.showTestData = config.showTestData !== false;
+    this.testDataKind = config.testDataKind || null;
+    this.mode = config.mode === 'list' ? 'list' : 'select';
+    this.addLabel = config.addLabel || 'Add';
+    this.showUpload = config.showUpload !== false;
     this.showRecentResults = config.showRecentResults === true;
     this.acceptAllTiff = config.acceptAllTiff === true;
     this.testDataOptions = config.testDataOptions || null;
@@ -88,6 +108,7 @@ class FileSelector {
     // Callbacks
     this.onSelect = config.onSelect || null;
     this.onUpload = config.onUpload || null;
+    this.onAdd = config.onAdd || null;
     this.onValidate = config.onValidate || null;
     this.filterFiles = config.filterFiles || null;
     this.filterRecentResults = config.filterRecentResults || null;
@@ -118,14 +139,22 @@ class FileSelector {
         </div>
 
         <div class="file-selector-body">
-          <!-- Dropdown Selection -->
+          <!-- Dropdown Selection (list mode adds an Add button in the same row) -->
           <div class="file-select-group">
             <label for="${this.id}-select">Select file:</label>
+            ${this.mode === 'list' ? `
+            <div class="file-select-row">
+              <select id="${this.id}-select" class="file-dropdown">
+                <option value="">-- Select a file --</option>
+              </select>
+              <button type="button" class="btn small" id="${this.id}-add-btn" disabled>${this.addLabel}</button>
+            </div>` : `
             <select id="${this.id}-select" class="file-dropdown">
               <option value="">-- Select a file --</option>
-            </select>
+            </select>`}
           </div>
 
+          ${this.showUpload ? `
           <!-- Upload New File -->
           <div class="file-upload-group">
             <label>Or upload new:</label>
@@ -134,7 +163,7 @@ class FileSelector {
               Add ${this.title}
             </button>
             <input type="file" id="${this.id}-input" class="file-input-hidden" accept="${this.accept}">
-          </div>
+          </div>` : ''}
 
           <!-- File Preview/Info -->
           <div class="file-preview" id="${this.id}-preview" style="display: none;">
@@ -164,52 +193,70 @@ class FileSelector {
       const data = await response.json();
 
       if (data.success) {
-        const allFiles = data.files || [];
-        this.allFiles = allFiles;
-
-        if (this.showRecentResults) {
-          // Separate results from regular files using configurable categories
-          this.recentResults = allFiles.filter(file => {
-            const isAccepted = this.isAcceptedFile(file.name);
-            const categoryMatch = this.resultCategories.includes(file.category);
-
-            // For new 'results' category, optionally filter by resultTags
-            let tagsMatch = true;
-            if (categoryMatch && file.category === 'results' && this.resultTags && this.resultTags.length > 0) {
-              const fileTags = file.tags || [];
-              tagsMatch = this.resultTags.every(tag => fileTags.includes(tag));
-            }
-
-            // Exclude info and wip files from recent results by default
-            const fileTags = file.tags || [];
-            const notExcluded = !fileTags.includes('info') && !fileTags.includes('wip');
-
-            return isAccepted && categoryMatch && tagsMatch && notExcluded;
-          });
-
-          // Apply custom filter to recent results if provided
-          if (this.filterRecentResults) {
-            this.recentResults = this.filterRecentResults(this.recentResults);
-          }
-
-          // Regular files exclude result categories
-          this.availableFiles = this.filterFilesByType(
-            allFiles.filter(file => !this.resultCategories.includes(file.category))
-          );
-        } else {
-          this.availableFiles = this.filterFilesByType(allFiles);
-        }
-
-        // Apply custom filter if provided
-        if (this.filterFiles) {
-          this.availableFiles = this.filterFiles(this.availableFiles);
-        }
-
+        this.allFiles = data.files || [];
+        this.applyFilters();
         this.populateDropdown();
       }
     } catch (error) {
       console.error(`[FileSelector] Error loading files for ${this.id}:`, error);
       this.populateDropdown();
+    }
+  }
+
+  /**
+   * Re-run the category/tag/custom filters on the cached workspace listing
+   * and rebuild the dropdown without fetching again. Use it when the custom
+   * filterFiles / filterRecentResults outcome changed (e.g. a list-mode
+   * picker whose eligible files depend on what was already added).
+   */
+  repopulate() {
+    this.applyFilters();
+    this.populateDropdown();
+  }
+
+  /**
+   * Split this.allFiles into availableFiles / recentResults
+   */
+  applyFilters() {
+    const allFiles = this.allFiles || [];
+
+    if (this.showRecentResults) {
+      // Separate results from regular files using configurable categories
+      this.recentResults = allFiles.filter(file => {
+        const isAccepted = this.isAcceptedFile(file.name);
+        const categoryMatch = this.resultCategories.includes(file.category);
+
+        // For new 'results' category, optionally filter by resultTags
+        let tagsMatch = true;
+        if (categoryMatch && file.category === 'results' && this.resultTags && this.resultTags.length > 0) {
+          const fileTags = file.tags || [];
+          tagsMatch = this.resultTags.every(tag => fileTags.includes(tag));
+        }
+
+        // Exclude info and wip files from recent results by default
+        const fileTags = file.tags || [];
+        const notExcluded = !fileTags.includes('info') && !fileTags.includes('wip');
+
+        return isAccepted && categoryMatch && tagsMatch && notExcluded;
+      });
+
+      // Apply custom filter to recent results if provided
+      if (this.filterRecentResults) {
+        this.recentResults = this.filterRecentResults(this.recentResults);
+      }
+
+      // Regular files exclude result categories
+      this.availableFiles = this.filterFilesByType(
+        allFiles.filter(file => !this.resultCategories.includes(file.category))
+      );
+    } else {
+      this.recentResults = [];
+      this.availableFiles = this.filterFilesByType(allFiles);
+    }
+
+    // Apply custom filter if provided
+    if (this.filterFiles) {
+      this.availableFiles = this.filterFiles(this.availableFiles);
     }
   }
 
@@ -416,7 +463,14 @@ class FileSelector {
         image_stack: 'Test Dataset - Image Stack'
       };
 
-      const label = defaults[this.fileType] || `Test Dataset - ${this.title}`;
+      const kindLabels = {
+        raw: 'Test image stack (trypB, training)',
+        inference: 'Test image stack (trypB, inference)',
+        denoising: 'Test image stack (trypB, denoising)',
+        annotations: 'Test annotation mask (trypB)'
+      };
+      const label = (this.testDataKind && kindLabels[this.testDataKind])
+        || defaults[this.fileType] || `Test Dataset - ${this.title}`;
       const option = document.createElement('option');
       option.value = 'test_data';
       option.textContent = label;
@@ -477,6 +531,69 @@ class FileSelector {
       uploadBtn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
     }
+
+    const addBtn = document.getElementById(`${this.id}-add-btn`);
+    if (addBtn) {
+      addBtn.addEventListener('click', () => this.addSelected());
+    }
+  }
+
+  /**
+   * List mode: enable/disable the Add button
+   * @param {boolean} enabled
+   */
+  setAddEnabled(enabled) {
+    const addBtn = document.getElementById(`${this.id}-add-btn`);
+    if (addBtn) addBtn.disabled = !enabled;
+  }
+
+  /**
+   * List mode: hand a resolved file to onAdd and reset the dropdown
+   * @param {Object} [file] - defaults to the current selection
+   */
+  async addSelected(file = this.selectedFile) {
+    if (!file) return;
+    this.setAddEnabled(false);
+    try {
+      if (this.onAdd) await this.onAdd(file);
+    } finally {
+      this.clearSelection();
+    }
+  }
+
+  /**
+   * Copy the built-in test stack into the workspace (idempotent) and return
+   * its workspace file record.
+   * @returns {Promise<Object>}
+   */
+  async importTestData() {
+    const response = await fetch('/api/workspace/test-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: this.testDataKind || 'raw' })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success || !data.file) {
+      throw new Error(data.error || `Test data import failed (${response.status})`);
+    }
+    return data.file;
+  }
+
+  /**
+   * Register a file that just entered the workspace (upload or test import)
+   * in the cached listings so the dropdown can show and select it.
+   * @param {Object} file
+   */
+  trackNewFile(file) {
+    if (!file || !file.path) return;
+    if (!this.allFiles.some(f => f.path === file.path)) this.allFiles.push(file);
+    this.applyFilters();
+    if (!this.availableFiles.some(f => f.path === file.path)
+        && !this.recentResults.some(f => f.path === file.path)) {
+      // The module's filters would hide it; list it anyway so the choice is visible
+      this.availableFiles.push(file);
+    }
+    this.populateDropdown();
   }
 
   /**
@@ -490,15 +607,40 @@ class FileSelector {
     if (!selectedOption.value) {
       this.hidePreview();
       this.selectedFile = null;
+      this.setAddEnabled(false);
       // Call onSelect with null to notify of deselection
-      if (this.onSelect) {
+      if (this.mode !== 'list' && this.onSelect) {
         this.onSelect(null);
       }
       return;
     }
 
-    if (selectedOption.dataset.testData) {
-      // Test data selected
+    if (selectedOption.dataset.testData && this.testDataKind) {
+      // Test data via the workspace import: becomes a regular workspace file
+      this.setAddEnabled(false);
+      this.showImporting();
+      try {
+        const file = await this.importTestData();
+        this.trackNewFile(file);
+        dropdown.value = file.path;
+        this.selectedFile = file;
+        this.showPreview({
+          name: file.name,
+          size: this.formatFileSize(file.size),
+          info: 'Built-in test dataset (copied into your workspace)'
+        });
+        if (window.workspace && typeof window.workspace.refreshWorkspace === 'function') {
+          window.workspace.refreshWorkspace();
+        }
+      } catch (error) {
+        console.error('[FileSelector] Test data import failed:', error);
+        this.notify('error', `Could not load test data: ${error.message}`);
+        this.clearSelection();
+        if (this.mode !== 'list' && this.onSelect) this.onSelect(null);
+        return;
+      }
+    } else if (selectedOption.dataset.testData) {
+      // Legacy test data selection (module handles isTestData itself)
       const testInfo = selectedOption.dataset.testInfo
         ? JSON.parse(selectedOption.dataset.testInfo)
         : {};
@@ -541,6 +683,12 @@ class FileSelector {
       });
     }
 
+    if (this.mode === 'list') {
+      // List mode: the file is only added when the user presses Add
+      this.setAddEnabled(true);
+      return;
+    }
+
     // Call onSelect callback
     if (this.onSelect) {
       this.onSelect(this.selectedFile);
@@ -580,8 +728,19 @@ class FileSelector {
       const uploadedFile = await this.uploadFile(file);
 
       // Add to available files
-      this.availableFiles.push(uploadedFile);
-      this.populateDropdown();
+      this.trackNewFile(uploadedFile);
+
+      if (this.mode === 'list') {
+        this.hideUploading();
+        this.isLoading = false;
+        event.target.value = '';
+        if (this.onUpload) {
+          await this.onUpload(file, uploadedFile);
+        }
+        this.notify('success', `File uploaded: ${file.name}`);
+        await this.addSelected(uploadedFile);
+        return;
+      }
 
       // Auto-select the newly uploaded file
       const dropdown = document.getElementById(`${this.id}-select`);
@@ -708,6 +867,22 @@ class FileSelector {
   }
 
   /**
+   * Show test-data import state
+   */
+  showImporting() {
+    const preview = document.getElementById(`${this.id}-preview`);
+    if (preview) {
+      preview.innerHTML = `
+        <div class="preview-item uploading">
+          <span class="spinner-small"></span>
+          Preparing test data...
+        </div>
+      `;
+      preview.style.display = 'block';
+    }
+  }
+
+  /**
    * Hide uploading state
    */
   hideUploading() {
@@ -776,6 +951,7 @@ class FileSelector {
       dropdown.value = '';
     }
     this.selectedFile = null;
+    this.setAddEnabled(false);
     this.hidePreview();
   }
 
@@ -812,6 +988,7 @@ class FileSelector {
     if (dropdown) dropdown.disabled = !enabled;
     if (uploadBtn) uploadBtn.disabled = !enabled;
     if (fileInput) fileInput.disabled = !enabled;
+    if (!enabled) this.setAddEnabled(false);
   }
 }
 

@@ -40,16 +40,34 @@ const moduleIcons = {
 };
 
 const moduleRegistry = [
+  // Hub order follows the processing pipeline (tracker B3): view, prepare,
+  // denoise, annotate, segment, clean up, stitch, mesh, visualise.
+  // Descriptions are at most 14 words; colours come from the --card-* tokens
+  // in workspace.css; helpArticleId links the card's help icon to the module
+  // overview article (the three newest modules get theirs in Phase 7).
+  {
+    id: 'imageviewer',
+    name: 'Image Viewer',
+    description: 'View and compare TIFF image stacks in gallery and thumbnail modes',
+    icon: moduleIcons.imageviewer,
+    path: '/workspace/js/modules/imageviewer/ImageViewerModule.js',
+    inputs: ['image_stack', 'segmented_stack'],
+    outputs: [],
+    color: 'var(--card-imageviewer)',
+    status: 'available',
+    helpArticleId: 'imageviewer'
+  },
   {
     id: 'preprocess',
     name: 'Preprocessing',
-    description: 'Prepare image stacks: crop, z-trim, flip/rotate, downscale, intensity windowing, gamma and bit-depth conversion',
+    description: 'Crop, trim, flip, downscale and re-window image stacks before processing',
     icon: moduleIcons.preprocess,
     path: '/workspace/js/modules/preprocess/PreprocessModule.js',
     inputs: ['image_stack'],
     outputs: ['image_stack'],
-    color: '#C29B0C',
-    status: 'available'
+    color: 'var(--card-preprocess)',
+    status: 'available',
+    helpArticleId: 'preprocess'
   },
   {
     id: 'denoising',
@@ -58,7 +76,7 @@ const moduleRegistry = [
     icon: moduleIcons.denoising,
     inputs: ['image_stack'],
     outputs: ['denoised_stack'],
-    color: '#1DA924',
+    color: 'var(--card-denoising)',
     cardType: 'multi-launch',
     helpArticleId: 'denoising',
     launchOptions: [
@@ -83,72 +101,62 @@ const moduleRegistry = [
   {
     id: 'annotation',
     name: 'Quick Annotation Tool',
-    description: 'Simple brush-based annotation tool for creating training data with multi-class support',
+    description: 'Paint multi-class annotations on image stacks to create training data',
     icon: moduleIcons.annotation,
     path: '/workspace/js/modules/annotation/AnnotationModule.js',
     inputs: ['image_stack'],
     outputs: ['annotations'],
-    color: '#EB1F17',
+    color: 'var(--card-annotation)',
     status: 'available',
     helpArticleId: 'annotation'
   },
   {
     id: 'segmentation',
     name: 'U-Net Segmentation',
-    description: 'Segment annotated image volumes with a U-Net annotation algorithm',
+    description: 'Train a U-Net on annotated stacks and segment new image volumes',
     icon: moduleIcons.segmentation,
     path: '/workspace/js/modules/segmentation/SegmentationModule.js',
     inputs: ['image_stack', 'annotations'],
     outputs: ['segmented_stack', 'trained_model'],
-    color: '#17A2B8',
+    color: 'var(--card-segmentation)',
     status: 'available',
     helpArticleId: 'segmentation'
   },
   {
-    id: 'imageviewer',
-    name: 'Image Viewer',
-    description: 'View TIFF image stacks with gallery and thumbnail modes',
-    icon: moduleIcons.imageviewer,
-    path: '/workspace/js/modules/imageviewer/ImageViewerModule.js',
-    inputs: ['image_stack', 'segmented_stack'],
-    outputs: [],
-    color: '#6C757D',
-    status: 'available',
-    helpArticleId: 'imageviewer'
-  },
-  {
-    id: 'mesh',
-    name: 'Surface Mesh Generation',
-    description: 'Convert segmented volumes to 3D surface meshes for the 3D viewer (further formats via file-browser conversion)',
-    icon: moduleIcons.mesh,
-    path: '/workspace/js/modules/mesh/MeshModule.js',
-    inputs: ['segmented_stack', 'annotations'],
-    outputs: ['mesh_file'],
-    color: '#9B59B6',
-    status: 'available',
-    helpArticleId: 'mesh'
-  },
-  {
     id: 'segcleanup',
     name: 'Segmentation Cleanup',
-    description: 'Fix and measure segmentations: fill holes, remove specks, smooth, merge classes, manual touch-up painting, and quantification reports',
+    description: 'Fill holes, remove specks, smooth, merge classes, touch up by hand, quantify',
     icon: moduleIcons.segcleanup,
     path: '/workspace/js/modules/segcleanup/SegcleanupModule.js',
     inputs: ['segmented_stack', 'annotations'],
     outputs: ['segmented_stack'],
-    color: '#C2185B',
-    status: 'available'
+    color: 'var(--card-segcleanup)',
+    status: 'available',
+    helpArticleId: 'segcleanup'
   },
   {
     id: 'stitching',
     name: 'Stack Stitching',
-    description: 'Join multiple stacks into one volume: z-concatenation and mosaics with overlay alignment and reusable stitch recipes',
+    description: 'Join stacks along z or as mosaics with overlay alignment and reusable recipes',
     icon: moduleIcons.stitching,
     path: '/workspace/js/modules/stitching/StitchingModule.js',
     inputs: ['image_stack', 'segmented_stack'],
     outputs: ['image_stack', 'segmented_stack'],
-    color: '#0FA3B1',
-    status: 'available'
+    color: 'var(--card-stitching)',
+    status: 'available',
+    helpArticleId: 'stitching'
+  },
+  {
+    id: 'mesh',
+    name: 'Surface Mesh Generation',
+    description: 'Convert segmented volumes to 3D surface meshes for the 3D viewer',
+    icon: moduleIcons.mesh,
+    path: '/workspace/js/modules/mesh/MeshModule.js',
+    inputs: ['segmented_stack', 'annotations'],
+    outputs: ['mesh_file'],
+    color: 'var(--card-mesh)',
+    status: 'available',
+    helpArticleId: 'mesh'
   },
   {
     id: 'visualization',
@@ -158,7 +166,7 @@ const moduleRegistry = [
     path: '/workspace/js/modules/visualization/VisualizationModule.js',
     inputs: ['mesh_file'],
     outputs: [],
-    color: '#E67E22',
+    color: 'var(--card-visualization)',
     status: 'available',
     helpArticleId: 'visualization'
   }

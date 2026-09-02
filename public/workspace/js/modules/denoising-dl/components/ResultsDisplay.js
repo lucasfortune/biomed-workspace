@@ -47,14 +47,12 @@ class ResultsDisplay {
       : (branch === 'n2v' ? 'Plain N2V' : null);
 
     return `
-      <div class="results-display" id="${this.containerId}">
-        <div class="results-header">
-          <div class="success-icon">&#10003;</div>
-          <div class="results-title">
-            <h3>Denoising Complete!</h3>
-            <p>Your images have been successfully denoised${branchLabel ? ` (${branchLabel})` : ''}.</p>
-          </div>
+      <div class="results-display section-card success-card" id="${this.containerId}">
+        <div class="success-header">
+          <span class="success-icon">&#10003;</span>
+          <span class="success-title">Denoising Complete!</span>
         </div>
+        <p class="results-subtitle">Your images have been successfully denoised${branchLabel ? ` (${branchLabel})` : ''}.</p>
 
         <div class="results-info-box">
           <span class="info-icon">&#9432;</span>
@@ -99,12 +97,12 @@ class ResultsDisplay {
         </div>
 
         <!-- Action Buttons -->
-        <div class="results-actions">
-          <button class="btn secondary" onclick="window.dlDenoisingModule?.downloadAllResults()">
+        <div class="results-actions success-actions">
+          <button class="btn secondary" data-action="downloadAllResults">
             <span class="btn-glyph">&#128229;</span>
             Download All Results
           </button>
-          <button class="btn" onclick="window.dlDenoisingModule?.goToStep(4)">
+          <button class="btn" data-action="goToStep" data-step="4">
             <span class="btn-glyph">&#10132;</span>
             Process Additional Images (Optional)
           </button>
@@ -153,13 +151,13 @@ class ResultsDisplay {
         </div>
 
         <div class="stack-actions">
-          <button class="btn small" onclick="window.dlDenoisingModule?.downloadResult()">
+          <button class="btn small" data-action="downloadResult">
             <span class="btn-glyph">&#128229;</span>
             Download
           </button>
-          <button class="btn small secondary" onclick="window.dlDenoisingModule?.viewInViewer()">
+          <button class="btn small secondary" data-action="viewInViewer">
             <span class="btn-glyph">&#128065;</span>
-            View in Viewer
+            Open in Image Viewer
           </button>
         </div>
       </div>

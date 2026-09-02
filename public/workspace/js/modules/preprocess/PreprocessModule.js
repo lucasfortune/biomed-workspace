@@ -260,7 +260,7 @@ class PreprocessModule extends BaseModule {
             <h4>Progress</h4>
             <div class="inference-status" id="ppStatusText">Starting...</div>
             <div class="progress-bar-container">
-              <div class="progress-bar" id="ppProgressBar" style="width: 0%"></div>
+              <div class="job-progress-fill" id="ppProgressBar" style="width: 0%"></div>
             </div>
           </div>
 
@@ -272,7 +272,7 @@ class PreprocessModule extends BaseModule {
             <div id="ppResultInfo"></div>
             <div class="success-actions">
               <button class="btn primary" id="ppOpenViewerBtn">Open in Image Viewer</button>
-              <button class="btn secondary" id="ppNewRunBtn">New Preprocess</button>
+              <button class="btn secondary" id="ppNewRunBtn">Start New Run</button>
             </div>
           </div>
 
@@ -314,7 +314,8 @@ class PreprocessModule extends BaseModule {
         title: 'Image Stack',
         icon: '🖼️',
         accept: '.tif,.tiff',
-        showTestData: false,
+        showTestData: true,
+        testDataKind: 'raw',
         showRecentResults: true,
         stateManager: this.state,
         onSelect: (file) => this.onFileSelected(file),

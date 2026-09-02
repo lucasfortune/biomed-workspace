@@ -53,6 +53,9 @@ Edit `YourModule.js`:
 
 4. **Implement your processing logic** in `startProcessing()` and related methods
 
+5. **Keep the shared step chrome** (see "Module UI Contract" below) - it is what
+   makes every module look and behave the same way
+
 ### 4. Register Your Module
 
 Edit `/workspace/js/modules/registry.js`:
@@ -79,6 +82,141 @@ Edit `/workspace/js/modules/registry.js`:
 
 ---
 
+## Module UI Contract
+
+Every workspace module follows the same conventions. The template already
+implements them - keep them when you copy it.
+
+### 1. Step markup
+
+```html
+<div class="yourmodule-module module-container">
+  ${this.renderHeader()}
+  ${this.renderStepNav()}
+  <div class="step-contents">
+    <div id="step1" class="step-content active">
+      <div class="step-inner">
+        <h3>Step Title</h3>
+        ...
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+Headings are `<h3>`; every step body sits in a `.step-inner` wrapper.
+
+### 2. The job button lives in the nav row
+
+The primary long-running action (Start Processing, Generate Mesh, Start
+Denoising, ...) is the right-hand button of the step's `.navigation-buttons`
+row - not a button floating in the middle of the step:
+
+```html
+<div class="navigation-buttons">
+  <button id="step3Back" class="btn secondary">Back</button>
+  <button id="startProcessingBtn" class="btn primary">
+    <span class="btn-glyph">&#9658;</span> Start Processing
+  </button>
+</div>
+```
+
+If the right slot needs two buttons, wrap them in `<div class="nav-actions">`.
+There must be exactly one enabled red (`.btn.primary`) button on screen, so
+hide the job button while the job runs and while the result card is shown
+(`setJobButtonVisible(false)`), and bring it back on failure and on reset.
+
+### 3. Result block = success card
+
+```html
+<div class="section-card success-card" id="processingResults" style="display: none;">
+  <div class="success-header">
+    <span class="success-icon">&#10003;</span>
+    <span class="success-title">Processing Complete</span>
+  </div>
+  <div id="resultsDetails" class="validation-details"></div>
+  <div class="success-actions">
+    <button class="btn primary" id="downloadBtn">Download Results</button>
+    <button class="btn secondary" id="resetBtn">Start New Run</button>
+  </div>
+</div>
+```
+
+The secondary action is always labelled **Start New Run**; a "view the output"
+action is labelled **Open in Image Viewer** (or **Open in 3D Visualization**
+for meshes). Do not reintroduce `.validation-success` wrappers or
+`.result-actions` containers.
+
+### 4. Job progress bar
+
+```html
+<div class="progress-bar-container">
+  <div id="progressBar" class="job-progress-fill" style="width: 0%"></div>
+</div>
+```
+
+Both rules live in `module-base.css` - never copy them into module CSS.
+
+### 5. No inline handlers, no global free functions
+
+No `onclick="..."` in `render()`, and no `window.nextStep` / `window.startProcessing`
+style globals. Wire everything in `setupEventListeners()` with
+`addEventListener`, tracking each listener so `deactivate()` can remove it:
+
+```javascript
+setupEventListeners() {
+  const addListener = (element, event, handler) => {
+    if (element) {
+      element.addEventListener(event, handler);
+      this.eventListeners.push({ element, event, handler });
+    }
+  };
+  addListener(document.getElementById('startProcessingBtn'), 'click', () => this.startProcessing());
+}
+```
+
+For markup you re-render with `innerHTML` (e.g. a list of download buttons),
+delegate from the stable parent and read a `data-` attribute:
+
+```javascript
+addListener(document.getElementById('downloadButtons'), 'click', (event) => {
+  const button = event.target.closest('[data-format]');
+  if (button) this.download(button.dataset.format);
+});
+```
+
+A `window.yourModule = this` debugging handle is fine, as long as
+`deactivate()` deletes it.
+
+### 6. Reset on leave
+
+`ModuleLoader` caches the module instance, and `BaseModule.activate()` calls
+`render()` + `initialize()` again - so instance fields survive between visits.
+`deactivate()` must therefore call `reset()` **before** `super.deactivate()`
+(the DOM still exists at that point): clear the selected file, clear the
+`FileSelector` selection, put config back to the constructor defaults, drop
+result/job ids, and return to step 1.
+
+### 7. Test data
+
+Raw image inputs always offer the built-in test stack; mask inputs do so only
+where a test mask exists. Ask the `FileSelector` for it - do not add an
+`isTestData` branch:
+
+```javascript
+this.fileSelector = new FileSelector({
+  showTestData: true,
+  testDataKind: 'raw',   // 'raw' | 'inference' | 'denoising' | 'annotations'
+  // ...
+});
+```
+
+The test option copies the stack into the workspace via
+`POST /api/workspace/test-data` and then reports it to `onSelect` exactly like
+a picked workspace file.
+
+---
+
 ## Customization Checklist
 
 ### Essential Changes
@@ -101,15 +239,24 @@ Edit `/workspace/js/modules/registry.js`:
 ### File Selection
 
 - [ ] Configure FileSelector options (fileType, title, etc.)
-- [ ] Implement `onFileSelected()` handler
+- [ ] Offer test data via `showTestData` + `testDataKind` where one exists
+- [ ] Implement `onFileSelected()` handler (including the `null` deselection case)
 - [ ] Implement `onFileUploaded()` handler
 
 ### Processing
 
 - [ ] Implement actual processing logic in `startProcessing()`
 - [ ] Set up Socket.IO for real-time progress (if needed)
-- [ ] Handle processing errors
-- [ ] Display results in `onProcessingComplete()`
+- [ ] Handle processing errors (job button visible again)
+- [ ] Display results in `onProcessingComplete()` (success card, job button hidden)
+
+### UI Contract
+
+- [ ] Job button in the nav row's right slot, hidden while running / showing results
+- [ ] Result block is a `.section-card.success-card` with `Start New Run`
+- [ ] Progress bar uses `.progress-bar-container` + `.job-progress-fill`
+- [ ] No inline `onclick`, no `window.*` free functions
+- [ ] `deactivate()` calls `reset()` before `super.deactivate()`
 
 ### Backend Integration
 

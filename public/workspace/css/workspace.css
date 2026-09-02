@@ -34,6 +34,19 @@
   /* Muted accent for hover states */
   --accent-muted: #E88A86;
 
+  /* Hub module-card colours (registry.js `color`, exposed on each card as
+     --card-color). One token per module family so the palette lives here,
+     not as raw hex in the registry. */
+  --card-imageviewer: #6C757D;
+  --card-preprocess: #C29B0C;
+  --card-denoising: #1DA924;
+  --card-annotation: #EB1F17;
+  --card-segmentation: #17A2B8;
+  --card-segcleanup: #C2185B;
+  --card-stitching: #0FA3B1;
+  --card-mesh: #9B59B6;
+  --card-visualization: #E67E22;
+
   /* Legacy mappings for compatibility */
   --primary-color: var(--accent-primary);
   --secondary-color: var(--accent-secondary);
@@ -85,6 +98,17 @@
 
   /* Muted accent for hover states */
   --accent-muted: #E88A86;
+
+  /* Hub module-card colours (lighter for the dark ground) */
+  --card-imageviewer: #ADB5BD;
+  --card-preprocess: #E0B92A;
+  --card-denoising: #28A745;
+  --card-annotation: #FF3B30;
+  --card-segmentation: #4ECDC4;
+  --card-segcleanup: #E0559A;
+  --card-stitching: #3CC4D2;
+  --card-mesh: #B07CD1;
+  --card-visualization: #F39C4A;
 
   /* Legacy mappings */
   --primary-color: var(--accent-primary);

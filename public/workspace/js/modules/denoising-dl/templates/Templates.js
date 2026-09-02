@@ -210,23 +210,20 @@ class Templates {
             denoise your images - results are available once training completes.
           </p>
 
-          <!-- Start Training Button (shown when not training) -->
-          <div id="startTrainingSection" class="training-start-section">
-            <button id="startTrainingBtn" class="btn primary" onclick="window.dlDenoisingModule?.startTraining()">
-              <span class="btn-glyph">&#9658;</span>
-              Start Denoising
-            </button>
-            <button id="cancelTrainingBtn" class="btn btn-danger" onclick="window.dlDenoisingModule?.progressHandler?.cancelTraining()" style="display: none; margin-bottom: 12px;">
-              Cancel Training
-            </button>
-          </div>
-
           ${this.renderMaskApprovalSection()}
           ${this.renderTrainSection()}
+          ${this.renderTrainSuccessSection()}
 
           <div class="navigation-buttons">
             <button id="step3Back" class="btn secondary">Back</button>
-            <button id="step3Next" class="btn" disabled>Process Additional Images (Optional)</button>
+            <div class="nav-actions">
+              <button id="cancelTrainingBtn" class="btn danger" style="display: none;" data-action="cancelTraining">Cancel Training</button>
+              <button id="startTrainingBtn" class="btn primary" data-action="startTraining">
+                <span class="btn-glyph">&#9658;</span>
+                Start Denoising
+              </button>
+              <button id="step3Next" class="btn" disabled>Process Additional Images (Optional)</button>
+            </div>
           </div>
         </div>
       </div>
@@ -263,10 +260,10 @@ class Templates {
               <div id="maskParameterContainer"></div>
             </div>
             <div class="mask-actions" id="maskActions" style="display: none;">
-              <button class="btn primary" id="approveMaskBtn" onclick="window.dlDenoisingModule?.approveMask()">
+              <button class="btn primary" id="approveMaskBtn" data-action="approveMask">
                 Approve & Train
               </button>
-              <button class="btn secondary" id="forceN2VBtn" onclick="window.dlDenoisingModule?.skipStage2()">
+              <button class="btn secondary" id="forceN2VBtn" data-action="skipStage2">
                 Use Plain N2V Instead
               </button>
             </div>
@@ -297,14 +294,6 @@ class Templates {
               <div class="training-progress">
                 <div class="progress-header-row">
                   <span class="epoch-info">Epoch <span id="trainCurrentEpoch">0</span> of <span id="trainTotalEpochs">0</span></span>
-                  <div class="download-buttons" id="trainDownloadButtons" style="display: none;">
-                    <button class="btn primary small" onclick="window.dlDenoisingModule?.openInImageViewer('result')">
-                      Open in Viewer
-                    </button>
-                    <button class="btn secondary small" onclick="window.dlDenoisingModule?.startNewAnalysis()">
-                      Start new Analysis
-                    </button>
-                  </div>
                 </div>
                 <div class="training-progress-bar">
                   <div class="training-progress-fill" id="trainProgressFill"></div>
@@ -342,6 +331,25 @@ class Templates {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render the Step 3 success card, shown once denoising finished
+   */
+  static renderTrainSuccessSection() {
+    return `
+      <!-- Training Success (hidden until training completes) -->
+      <div id="trainSuccessSection" class="section-card success-card" style="display: none;">
+        <div class="success-header">
+          <span class="success-icon">&#10003;</span>
+          <span class="success-title">Denoising Complete!</span>
+        </div>
+        <div class="success-actions">
+          <button class="btn primary" data-action="openInImageViewer">Open in Image Viewer</button>
+          <button class="btn secondary" data-action="startNewAnalysis">Start New Run</button>
         </div>
       </div>
     `;
@@ -409,20 +417,13 @@ class Templates {
             <div id="inferenceValidationResult"></div>
           </div>
 
-          <!-- Process Button -->
-          <div id="inferenceActions" class="inference-actions">
-            <button id="processDataBtn" class="btn primary" disabled>
-              Process Data
-            </button>
-          </div>
-
           <!-- Progress Section (hidden initially) -->
           <div id="inferenceProgressSection" class="section-card" style="display: none;">
             <h4>Processing Progress</h4>
             <div class="inference-progress">
               <div id="inferenceStatusText" class="inference-status">Initializing...</div>
               <div class="progress-bar-container">
-                <div id="inferenceProgressBar" class="progress-bar" style="width: 0%"></div>
+                <div id="inferenceProgressBar" class="job-progress-fill" style="width: 0%"></div>
               </div>
               <div id="inferenceProgressText" class="progress-text">0%</div>
             </div>
@@ -439,13 +440,18 @@ class Templates {
             </div>
             <div class="success-actions">
               <button id="openInViewerBtn" class="btn primary">Open in Image Viewer</button>
-              <button id="processMoreBtn" class="btn secondary">Process More</button>
+              <button id="processMoreBtn" class="btn secondary">Start New Run</button>
             </div>
           </div>
 
           <div class="navigation-buttons">
             <button id="step4Back" class="btn secondary">Back</button>
-            <button id="step4Finish" class="btn" style="display: none;">Done</button>
+            <div class="nav-actions">
+              <button id="processDataBtn" class="btn primary" disabled>
+                <span class="btn-glyph">&#9658;</span> Process Data
+              </button>
+              <button id="step4Finish" class="btn" style="display: none;">Done</button>
+            </div>
           </div>
         </div>
       </div>

@@ -56,7 +56,7 @@ class MaskParameterPanel {
               <label for="slider_bg_side">Background Side</label>
               <div class="slider-container">
                 <select id="slider_bg_side"
-                        onchange="window.dlDenoisingModule?.updateMaskParameter('bg_side', this.value)">
+                        data-mask-param="bg_side" data-parse="string">
                   <option value="light" ${this.parameters.bg_side === 'light' ? 'selected' : ''}>Light (dense EM)</option>
                   <option value="dark" ${this.parameters.bg_side === 'dark' ? 'selected' : ''}>Dark (fluorescence-like)</option>
                   <option value="off" ${this.parameters.bg_side === 'off' ? 'selected' : ''}>Off (flatness-only)</option>
@@ -71,7 +71,7 @@ class MaskParameterPanel {
                 <input type="range" class="range-slider" id="slider_rho_floor"
                        min="0" max="0.15" step="0.005"
                        value="${this.parameters.rho_floor != null ? this.parameters.rho_floor : 0.05}"
-                       oninput="window.dlDenoisingModule?.updateMaskParameter('rho_floor', parseFloat(this.value))">
+                       data-mask-param="rho_floor" data-parse="float">
                 <span class="slider-value">${(this.parameters.rho_floor != null ? this.parameters.rho_floor : 0.05).toFixed(3)}</span>
               </div>
               <span class="param-hint">Drop mask pixels whose noise correlation is below this (0 disables)</span>
@@ -83,7 +83,7 @@ class MaskParameterPanel {
                 <input type="range" class="range-slider" id="slider_spine_thresh"
                        min="4" max="12" step="0.5"
                        value="${this.parameters.spine_thresh != null ? this.parameters.spine_thresh : 8}"
-                       oninput="window.dlDenoisingModule?.updateMaskParameter('spine_thresh', parseFloat(this.value))">
+                       data-mask-param="spine_thresh" data-parse="float">
                 <span class="slider-value">${(this.parameters.spine_thresh != null ? this.parameters.spine_thresh : 8).toFixed(1)}</span>
               </div>
               <span class="param-hint">Certainty required for a correlation feature to enter the mask</span>
@@ -95,7 +95,7 @@ class MaskParameterPanel {
                 <input type="range" class="range-slider" id="slider_max_pixels"
                        min="5" max="50" step="1"
                        value="${maxPixelsValue}"
-                       oninput="window.dlDenoisingModule?.updateMaskParameter('max_pixels', parseInt(this.value))">
+                       data-mask-param="max_pixels" data-parse="int">
                 <span class="slider-value">${maxPixelsLabel}</span>
               </div>
               <span class="param-hint">Cap on active mask pixels (Reset restores: no cap)</span>
@@ -103,11 +103,11 @@ class MaskParameterPanel {
           </div>
 
           <div class="panel-actions">
-            <button class="btn secondary" onclick="window.dlDenoisingModule?.resetMaskParameters()"
+            <button class="btn secondary" data-action="resetMaskParameters"
                     ${this.isRegenerating ? 'disabled' : ''}>
               Reset to Defaults
             </button>
-            <button class="btn primary" onclick="window.dlDenoisingModule?.regenerateMask()"
+            <button class="btn primary" data-action="regenerateMask"
                     ${this.isRegenerating ? 'disabled' : ''}>
               ${this.isRegenerating ? '<span class="spinner small"></span> Regenerating...' : 'Regenerate Mask'}
             </button>
@@ -127,8 +127,9 @@ class MaskParameterPanel {
 
   /**
    * Update a single parameter (internal state update only)
-   * Note: Does NOT call onParameterChange to avoid recursion, since HTML
-   * slider events already call updateMaskParameter directly.
+   * Note: Does NOT call onParameterChange to avoid recursion, since the
+   * module's delegated input/change listener (data-mask-param) already
+   * calls updateMaskParameter directly.
    * @param {string} name - Parameter name
    * @param {*} value - Parameter value
    */

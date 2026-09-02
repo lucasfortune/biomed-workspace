@@ -17,16 +17,12 @@ class UIStateHandler {
    * Show training ready state (reset UI to initial state)
    */
   showTrainingReady() {
-    const startSection = document.getElementById('startTrainingSection');
     const maskApprovalSection = document.getElementById('maskApprovalSection');
     const trainSection = document.getElementById('trainSection');
-    const startBtn = document.getElementById('startTrainingBtn');
-    const cancelBtn = document.getElementById('cancelTrainingBtn');
 
-    // Show start button, hide cancel button and training sections
-    if (startSection) startSection.style.display = 'block';
-    if (startBtn) startBtn.style.display = 'inline-flex';
-    if (cancelBtn) cancelBtn.style.display = 'none';
+    // Nav row: Start enabled, Cancel hidden, Next disabled
+    this.setJobButtons('idle');
+
     if (maskApprovalSection) maskApprovalSection.style.display = 'none';
     if (trainSection) trainSection.style.display = 'none';
 
@@ -57,15 +53,11 @@ class UIStateHandler {
    * Show training in progress state
    */
   async showTrainingInProgress() {
-    const startSection = document.getElementById('startTrainingSection');
     const maskApprovalSection = document.getElementById('maskApprovalSection');
     const trainSection = document.getElementById('trainSection');
-    const startBtn = document.getElementById('startTrainingBtn');
-    const cancelBtn = document.getElementById('cancelTrainingBtn');
 
-    // Show cancel button, hide start button
-    if (startBtn) startBtn.style.display = 'none';
-    if (cancelBtn) cancelBtn.style.display = 'inline-block';
+    // Nav row: Start hidden, Cancel shown, Next still disabled
+    this.setJobButtons('running');
 
     // The mask/route section only exists for autoStructN2V; the training
     // section is shared by both methods.
@@ -113,18 +105,38 @@ class UIStateHandler {
       statusText.style.fontWeight = '600';
     }
 
-    // Show download buttons in progress section
-    const downloadButtons = document.getElementById('trainDownloadButtons');
-    if (downloadButtons) {
-      downloadButtons.style.display = 'flex';
+    // Show the success card with the result actions
+    const successSection = document.getElementById('trainSuccessSection');
+    if (successSection) {
+      successSection.style.display = 'block';
     }
 
     // Store results for download
     this.module.trainingResult = data;
 
-    // Enable next button
+    // Nav row: Start stays hidden, Cancel hidden, Next enabled
+    this.setJobButtons('finished');
+  }
+
+  /**
+   * Drive the nav-row job buttons so exactly one primary action is offered.
+   * @param {'idle'|'running'|'finished'} state
+   */
+  setJobButtons(state) {
+    const startBtn = document.getElementById('startTrainingBtn');
+    const cancelBtn = document.getElementById('cancelTrainingBtn');
     const nextBtn = document.getElementById('step3Next');
-    if (nextBtn) nextBtn.disabled = false;
+
+    if (startBtn) {
+      startBtn.style.display = state === 'idle' ? 'inline-flex' : 'none';
+      startBtn.disabled = false;
+    }
+    if (cancelBtn) {
+      cancelBtn.style.display = state === 'running' ? 'inline-flex' : 'none';
+    }
+    if (nextBtn) {
+      nextBtn.disabled = state !== 'finished';
+    }
   }
 
   /**
@@ -161,9 +173,9 @@ class UIStateHandler {
     const bestValLoss = document.getElementById(`${prefix}BestValLoss`);
     if (bestValLoss) bestValLoss.textContent = '--';
 
-    // Hide download buttons
-    const downloadButtons = document.getElementById(`${prefix}DownloadButtons`);
-    if (downloadButtons) downloadButtons.style.display = 'none';
+    // Hide the success card
+    const successSection = document.getElementById(`${prefix}SuccessSection`);
+    if (successSection) successSection.style.display = 'none';
 
     // Reset stage status badge if exists
     const stageStatus = document.getElementById(`${prefix}StageStatus`);

@@ -512,6 +512,18 @@
   font-weight: 500;
 }
 
+/* List mode (FileSelector `mode: 'list'`): dropdown + Add button in one row */
+.file-select-row {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+}
+
+.file-select-row .file-dropdown {
+  flex: 1;
+  min-width: 0;
+}
+
 .file-dropdown {
   width: 100%;
   padding: 10px 12px;
@@ -1001,6 +1013,37 @@
   margin-top: var(--module-spacing-xxl);
   padding-top: var(--module-spacing-md);
   border-top: 1px solid var(--module-border);
+}
+
+/* Right slot holding more than one button (job button + Next, or Start +
+   Cancel swapped in while a job runs) */
+.navigation-buttons .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+}
+
+/* ============================================
+   JOB PROGRESS BAR
+   One track + fill for long-running jobs (stitch, preprocess, mesh, DL
+   inference, ...). `.progress-bar` is reserved for the step-nav track
+   rendered by BaseModule.renderStepNav, so the fill is .job-progress-fill.
+   ============================================ */
+
+.progress-bar-container {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--module-border);
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.job-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--module-primary);
+  border-radius: inherit;
+  transition: width 0.3s ease;
 }
 
 /* ============================================

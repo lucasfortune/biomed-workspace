@@ -47,6 +47,9 @@ class VisualizationModule extends BaseModule {
     // STEP CONDITION FLAGS
     // =========================================================================
 
+    // Delegated handler for the re-rendered class control panels
+    this._onControlEvent = this._onControlEvent.bind(this);
+
     this.dataValidated = false;      // Step 1 complete -> can access Step 2
     this.visualizationReady = false; // Step 2 initialized
 
@@ -196,6 +199,7 @@ class VisualizationModule extends BaseModule {
           <!-- =============================================================== -->
           <div id="step2" class="step-content">
             <div class="step-inner viz-step-2">
+              <h3>3D Viewer</h3>
               <div class="viz-layout">
                 <!-- Left: 3D Viewer -->
                 <div class="viz-viewer-section">
@@ -338,8 +342,6 @@ class VisualizationModule extends BaseModule {
     // =========================================================================
 
     window.vizModule = this;
-    window.nextStep = () => this.nextStep();
-    window.previousStep = () => this.previousStep();
 
     // =========================================================================
     // Check for Preselected File (from MeshModule)
@@ -807,11 +809,44 @@ class VisualizationModule extends BaseModule {
   }
 
   /**
+   * Delegated change/input handler for the class + original-data control
+   * panels (data-action / data-class-id attributes set in renderClassControls)
+   * @param {Event} event
+   */
+  _onControlEvent(event) {
+    const el = event.target;
+    const action = el?.dataset?.action;
+    if (!action) return;
+    const isCheckbox = el.type === 'checkbox';
+    // checkboxes report on change, sliders on input
+    if (isCheckbox && event.type !== 'change') return;
+    if (!isCheckbox && event.type !== 'input') return;
+    const classId = el.dataset.classId != null ? parseInt(el.dataset.classId, 10) : null;
+    switch (action) {
+      case 'toggle-original': this.toggleOriginalDataVisibility(el.checked); break;
+      case 'original-opacity': this.setOriginalDataOpacityValue(el.value / 100); break;
+      case 'original-range': this.updateOriginalDataSliceRange(); break;
+      case 'toggle-class': this.toggleClassVisibility(classId, el.checked); break;
+      case 'class-opacity': this.setClassOpacity(classId, el.value / 100); break;
+      case 'class-range': this.updateSliceRange(classId); break;
+      default: break;
+    }
+  }
+
+  /**
    * Render class control panels
    */
   renderClassControls() {
     const controlsPanel = document.getElementById('classControlPanels');
     if (!controlsPanel) return;
+
+    // The panels are re-rendered via innerHTML, so their controls are wired
+    // once through delegation on the (persistent) container element.
+    if (controlsPanel.dataset.vizBound !== '1') {
+      controlsPanel.dataset.vizBound = '1';
+      controlsPanel.addEventListener('change', this._onControlEvent);
+      controlsPanel.addEventListener('input', this._onControlEvent);
+    }
 
     if (!this.availableClasses || this.availableClasses.length === 0) {
       controlsPanel.innerHTML = '<p class="controls-placeholder">No class data available</p>';
@@ -833,7 +868,7 @@ class VisualizationModule extends BaseModule {
               <input type="checkbox"
                      id="originalDataVisible"
                      class="class-checkbox"
-                     onchange="vizModule.toggleOriginalDataVisibility(this.checked)">
+                     data-action="toggle-original">
               <label for="originalDataVisible" class="class-label" style="color: #888">
                 Original Data
               </label>
@@ -844,7 +879,7 @@ class VisualizationModule extends BaseModule {
                      id="originalDataOpacity"
                      class="class-opacity-slider"
                      min="5" max="100" value="30"
-                     oninput="vizModule.setOriginalDataOpacityValue(this.value / 100)">
+                     data-action="original-opacity">
               <span id="originalDataOpacityValue" class="class-opacity-value">30%</span>
             </div>
             ${numSlices > 1 ? `
@@ -857,12 +892,12 @@ class VisualizationModule extends BaseModule {
                        id="rangeMinOriginal"
                        class="dual-range-input"
                        min="0" max="${numSlices - 1}" value="0"
-                       oninput="vizModule.updateOriginalDataSliceRange()">
+                       data-action="original-range">
                 <input type="range"
                        id="rangeMaxOriginal"
                        class="dual-range-input"
                        min="0" max="${numSlices - 1}" value="${numSlices - 1}"
-                       oninput="vizModule.updateOriginalDataSliceRange()">
+                       data-action="original-range">
               </div>
               <span id="rangeValueOriginal" class="class-range-value">0-100%</span>
             </div>
@@ -882,7 +917,7 @@ class VisualizationModule extends BaseModule {
                      id="classVisible${classId}"
                      class="class-checkbox"
                      checked
-                     onchange="vizModule.toggleClassVisibility(${classId}, this.checked)">
+                     data-action="toggle-class" data-class-id="${classId}">
               <label for="classVisible${classId}" class="class-label" style="color: ${colorCss}">
                 Class ${classId}
               </label>
@@ -893,7 +928,7 @@ class VisualizationModule extends BaseModule {
                      id="classOpacity${classId}"
                      class="class-opacity-slider"
                      min="10" max="100" value="80"
-                     oninput="vizModule.setClassOpacity(${classId}, this.value / 100)">
+                     data-action="class-opacity" data-class-id="${classId}">
               <span id="classOpacityValue${classId}" class="class-opacity-value">80%</span>
             </div>
             ${isSliceBased ? `
@@ -906,12 +941,12 @@ class VisualizationModule extends BaseModule {
                        id="rangeMin${classId}"
                        class="dual-range-input"
                        min="0" max="${sliceCount - 1}" value="0"
-                       oninput="vizModule.updateSliceRange(${classId})">
+                       data-action="class-range" data-class-id="${classId}">
                 <input type="range"
                        id="rangeMax${classId}"
                        class="dual-range-input"
                        min="0" max="${sliceCount - 1}" value="${sliceCount - 1}"
-                       oninput="vizModule.updateSliceRange(${classId})">
+                       data-action="class-range" data-class-id="${classId}">
               </div>
               <span id="rangeValue${classId}" class="class-range-value">0-100%</span>
             </div>
@@ -1936,7 +1971,7 @@ class VisualizationModule extends BaseModule {
     this.originalDataMetadata = null;
 
     // Clean up global references (use try-catch for non-configurable properties)
-    const globalsToClean = ['vizModule', 'nextStep', 'previousStep'];
+    const globalsToClean = ['vizModule'];
     for (const name of globalsToClean) {
       try {
         delete window[name];

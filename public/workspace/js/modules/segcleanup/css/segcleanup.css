@@ -62,21 +62,6 @@
   margin-right: 8px;
 }
 
-.segcleanup-module .progress-bar-container {
-  height: 10px;
-  border-radius: 5px;
-  background: var(--module-border, rgba(0, 0, 0, 0.1));
-  overflow: hidden;
-  margin: 10px 0;
-}
-
-/* Scoped: the step nav also renders a .progress-bar div */
-.segcleanup-module .progress-bar-container .progress-bar {
-  height: 100%;
-  background: var(--module-primary);
-  transition: width 0.3s ease;
-}
-
 .segcleanup-module .detail-row {
   margin-bottom: 4px;
   font-size: 0.88rem;

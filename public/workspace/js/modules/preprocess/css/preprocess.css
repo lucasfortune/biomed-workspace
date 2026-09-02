@@ -47,23 +47,6 @@
   font-weight: 500;
 }
 
-.preprocess-module .progress-bar-container {
-  height: 10px;
-  border-radius: 5px;
-  background: var(--module-border, rgba(0, 0, 0, 0.1));
-  overflow: hidden;
-  margin: 10px 0;
-}
-
-/* Scoped to the container: the step nav ALSO renders a .progress-bar div
-   at the top of the module, which a bare .progress-bar rule would restyle
-   into a giant filled block. */
-.preprocess-module .progress-bar-container .progress-bar {
-  height: 100%;
-  background: var(--module-primary);
-  transition: width 0.3s ease;
-}
-
 .preprocess-module .detail-row {
   margin-bottom: 4px;
   font-size: 0.88rem;

@@ -269,24 +269,6 @@
 }
 
 /* ============================================
-   ACTION SECTION
-   ============================================ */
-
-.filter-denoising-module .action-section {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-xl);
-  text-align: center;
-  margin-bottom: var(--module-spacing-lg);
-}
-
-.filter-denoising-module .btn-large {
-  padding: var(--module-spacing-md) var(--module-spacing-xl);
-  font-size: var(--module-font-size-md);
-}
-
-/* ============================================
    PROGRESS SECTION
    ============================================ */
 
@@ -306,28 +288,10 @@
 }
 
 /* ============================================
-   RESULTS SECTION
-   ============================================ */
-
-.filter-denoising-module .results-section {
-  margin-bottom: var(--module-spacing-lg);
-}
-
-.filter-denoising-module .result-actions {
-  display: flex;
-  gap: var(--module-spacing-md);
-  margin-top: var(--module-spacing-lg);
-}
-
-/* ============================================
    RESPONSIVE
    ============================================ */
 
 @media (max-width: 768px) {
-  .filter-denoising-module .result-actions {
-    flex-direction: column;
-  }
-
   .filter-denoising-module .slider-input {
     flex-direction: column;
     align-items: stretch;

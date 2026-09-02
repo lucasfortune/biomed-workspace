@@ -145,7 +145,8 @@ class ImageViewerModule extends BaseModule {
       icon: '🖼️',
       helpIconHtml: this.renderHelpIcon('imageviewer.step1.image-stack'),
       fileType: 'image_stack',
-      showTestData: false,
+      showTestData: true,
+      testDataKind: 'raw',
       showRecentResults: true,
       acceptAllTiff: true,
       onSelect: this.onFileSelect,
@@ -249,7 +250,7 @@ class ImageViewerModule extends BaseModule {
    */
   render() {
     this.container.innerHTML = `
-      <div class="imageviewer-module">
+      <div class="imageviewer-module module-container">
         ${this.renderHeader()}
 
         <!-- Step Navigation (rendered by StepNavigator) -->
@@ -276,33 +277,35 @@ class ImageViewerModule extends BaseModule {
    */
   renderStep1() {
     return `
-      <h2>Step 1: Image Selection</h2>
-      <p>Select a TIFF image stack to view. Choose from recent results or upload a new file.</p>
+      <div class="step-inner">
+        <h3>Select Image Stack</h3>
+        <p class="step-description">Select a TIFF image stack to view. Choose from recent results or upload a new file.</p>
 
-      <!-- FileSelector will be inserted here -->
-      <div id="imageSelectorContainer"></div>
+        <!-- FileSelector will be inserted here -->
+        <div id="imageSelectorContainer"></div>
 
-      <!-- Validation Result (rendered by ValidationDisplay) -->
-      ${ValidationDisplay.renderContainer('validationResult')}
+        <!-- Validation Result (rendered by ValidationDisplay) -->
+        ${ValidationDisplay.renderContainer('validationResult')}
 
-      <!-- Comparison list: add several stacks to view them side by side -->
-      <div class="comparison-section">
-        <div class="comparison-header">
-          <h4>Compare stacks <span class="comparison-hint">(optional)</span></h4>
-          <button class="btn small" id="addToComparisonBtn" disabled>+ Add selected to comparison</button>
+        <!-- Comparison list: add several stacks to view them side by side -->
+        <div class="comparison-section">
+          <div class="comparison-header">
+            <h4>Compare stacks <span class="comparison-hint">(optional)</span></h4>
+            <button class="btn small" id="addToComparisonBtn" disabled>+ Add selected to comparison</button>
+          </div>
+          <ul class="comparison-list" id="comparisonList"></ul>
+          <p class="field-hint">
+            Add two to four stacks to view them side by side with a shared
+            slice slider, zoom and pan. Leave the list empty to view the
+            selected stack on its own.
+          </p>
         </div>
-        <ul class="comparison-list" id="comparisonList"></ul>
-        <p class="field-hint">
-          Add two to four stacks to view them side by side with a shared
-          slice slider, zoom and pan. Leave the list empty to view the
-          selected stack on its own.
-        </p>
-      </div>
 
-      <!-- Navigation Buttons -->
-      <div class="navigation-buttons">
-        <div></div>
-        <button class="btn" id="step1Next" disabled>Next: View Image</button>
+        <!-- Navigation Buttons -->
+        <div class="navigation-buttons">
+          <div></div>
+          <button class="btn" id="step1Next" disabled>Next: View Image</button>
+        </div>
       </div>
     `;
   }
@@ -312,33 +315,38 @@ class ImageViewerModule extends BaseModule {
    */
   renderStep2() {
     return `
-      <div class="image-viewer-container">
-        <!-- View Mode Toggle -->
-        <div class="viewer-toolbar">
-          <button class="btn secondary" id="backToStep1">
-            <span class="back-arrow">←</span> Change File
-          </button>
-          <div class="view-mode-toggle">
-            <button class="mode-btn active" id="galleryModeBtn" title="Gallery View">
-              <span>Gallery</span>
-            </button>
-            <button class="mode-btn" id="iconModeBtn" title="Thumbnail Grid">
-              <span>Thumbnails</span>
-            </button>
+      <div class="step-inner wide">
+        <h3>View Image</h3>
+        <div class="image-viewer-container">
+          <!-- View Mode Toggle -->
+          <div class="viewer-toolbar">
+            <div class="view-mode-toggle">
+              <button class="mode-btn active" id="galleryModeBtn" title="Gallery View">
+                <span>Gallery</span>
+              </button>
+              <button class="mode-btn" id="iconModeBtn" title="Thumbnail Grid">
+                <span>Thumbnails</span>
+              </button>
+            </div>
+            <div class="file-info" id="fileInfoDisplay">
+              <span class="filename">--</span>
+              <span class="slice-count">-- slices</span>
+            </div>
+            ${this.renderHelpIcon('imageviewer.step2.ui-controls')}
           </div>
-          <div class="file-info" id="fileInfoDisplay">
-            <span class="filename">--</span>
-            <span class="slice-count">-- slices</span>
+
+          <!-- View Container -->
+          <div class="view-container" id="viewContainer">
+            <!-- Gallery or Icon view will be rendered here -->
+            <div class="view-placeholder">
+              <p>Select a file to view</p>
+            </div>
           </div>
-          ${this.renderHelpIcon('imageviewer.step2.ui-controls')}
         </div>
 
-        <!-- View Container -->
-        <div class="view-container" id="viewContainer">
-          <!-- Gallery or Icon view will be rendered here -->
-          <div class="view-placeholder">
-            <p>Select a file to view</p>
-          </div>
+        <div class="navigation-buttons">
+          <button class="btn secondary" id="backToStep1">Back</button>
+          <div></div>
         </div>
       </div>
     `;
@@ -351,13 +359,10 @@ class ImageViewerModule extends BaseModule {
     console.log(`[ImageViewerModule] File selected:`, fileInfo);
     this.selectedFile = fileInfo;
 
-    if (fileInfo && !fileInfo.isTestData) {
-      // Validate the file
+    if (fileInfo) {
+      // The test stack is copied into the workspace by the FileSelector, so
+      // it arrives here as a regular workspace file - no special casing.
       await this.validateTiffFile(fileInfo.id || fileInfo.path);
-    } else if (fileInfo?.isTestData) {
-      // Test data selected (shouldn't happen as showTestData=false)
-      this.validationDisplay.showInfo('Test Data', 'Test data selected');
-      this.navigationButtons.setNextEnabled(true);
     }
   }
 
@@ -480,7 +485,7 @@ class ImageViewerModule extends BaseModule {
         <span class="comparison-order">${i + 1}</span>
         <span class="comparison-name">${f.name}</span>
         <span class="comparison-dims">${f.width}&times;${f.height}, ${f.sliceCount} slices</span>
-        <button class="btn tiny" onclick="window.imageViewerModule?.removeFromComparison(${i})">&times;</button>
+        <button class="btn tiny" data-action="remove" data-index="${i}">&times;</button>
       </li>
     `).join('') || '';
   }
@@ -517,6 +522,18 @@ class ImageViewerModule extends BaseModule {
     // Comparison list
     document.getElementById('addToComparisonBtn')
       ?.addEventListener('click', () => this.addToComparison());
+
+    // Comparison list items are re-rendered via innerHTML, so the remove
+    // buttons are handled by one delegated listener on the stable list.
+    const comparisonList = document.getElementById('comparisonList');
+    if (comparisonList) {
+      comparisonList.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-action="remove"]');
+        if (!button || !comparisonList.contains(button)) return;
+        const index = parseInt(button.dataset.index, 10);
+        if (!Number.isNaN(index)) this.removeFromComparison(index);
+      });
+    }
   }
 
   /**

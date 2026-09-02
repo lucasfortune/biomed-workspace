@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-03 (Step Chrome, Hub and Module Behaviour — One Nav Row, One Result Card, One Reset Rule)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-03 | [Step Chrome, Hub and Module Behaviour — One Nav Row, One Result Card, One Reset Rule](2026-09-03_step_chrome.md) | 🔧 Refactor | ~3 hrs | ✅ Complete |
+
 ### 2026-09-02 (Shared Slice-Viewer Chrome — One Header, Slider Strip, Footer and Toolbar for the Five Viewers)
 
 | Date | Session | Type | Duration | Status |
