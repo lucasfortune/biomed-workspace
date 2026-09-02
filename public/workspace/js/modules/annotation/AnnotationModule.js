@@ -39,7 +39,7 @@ const isFinishedAnnotation = (f) =>
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-import { StepNavigator, FileSelector, ValidationDisplay }
+import { StepNavigator, FileSelector, ValidationDisplay, SliceViewerChrome }
   from '/workspace/js/core/components/index.js';
 import AnnotationAPI from './AnnotationAPI.js';
 import AnnotationCanvas from './utils/AnnotationCanvas.js';
@@ -103,7 +103,6 @@ class AnnotationModule extends BaseModule {
     this.currentSlice = 0;
     this.totalSlices = 1;
     this.sliceNavToken = 0;  // serializes concurrent slice navigations (latest-wins)
-    this.sliderScrubbing = false;  // true while user is actively dragging the slice slider
 
     // Dirty state tracking
     this.isDirty = false;
@@ -150,6 +149,20 @@ class AnnotationModule extends BaseModule {
   // ===========================================================================
 
   render() {
+    // Shared slice-viewer chrome (header nav + zoom, canvas host, slider
+    // strip, footer); the module keeps AnnotationCanvas + BrushEngine
+    this.chrome = new SliceViewerChrome({
+      slices: this.totalSlices || 1,
+      slice: this.currentSlice || 0,
+      footerLeft: 'X: -- Y: --',
+      footerRight: '-- × --',
+      isActive: () => this.currentStep === 2,
+      onSliceChange: (i) => this.goToSlice(i),
+      onZoomIn: () => this.canvas?.zoomIn(),
+      onZoomOut: () => this.canvas?.zoomOut(),
+      onZoomFit: () => this.canvas?.zoomToFit(),
+      onZoomReset: () => this.canvas?.resetZoom()
+    });
     this.container.innerHTML = `
       <div class="annotation-module module-container">
         <!-- Header with back button -->
@@ -209,65 +222,14 @@ class AnnotationModule extends BaseModule {
               </div>
 
               <!-- Main Content Area (Canvas + Toolbar side by side) -->
-              <div class="annotation-main">
-                <!-- Canvas Wrapper -->
-                <div class="canvas-wrapper">
-                  <!-- Controls Bar -->
-                  <div class="canvas-controls">
-                    <!-- Slice Navigation -->
-                    <div class="control-group">
-                      <label>Slice:</label>
-                      <div class="slice-nav">
-                        <button id="prevSlice" class="btn-icon" title="Previous slice (←)">◀</button>
-                        <span id="sliceIndicator" class="slice-indicator">1 / 1</span>
-                        <button id="nextSlice" class="btn-icon" title="Next slice (→)">▶</button>
-                      </div>
-                    </div>
-
-                    <!-- Zoom Controls -->
-                    <div class="control-group">
-                      <label>Zoom:</label>
-                      <div class="zoom-controls">
-                        <button id="zoomOut" class="btn-icon" title="Zoom out (-)">−</button>
-                        <span id="zoomIndicator" class="zoom-indicator">100%</span>
-                        <button id="zoomIn" class="btn-icon" title="Zoom in (+)">+</button>
-                        <button id="zoomFit" class="btn-icon" title="Fit to view">⊡</button>
-                        <button id="zoomReset" class="btn-icon" title="Reset to 100%">1:1</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Canvas Area -->
-                  <div id="canvasArea" class="canvas-area">
-                    <div id="canvasLoading" class="canvas-loading" style="display: none;">
-                      <div class="spinner"></div>
-                      <span>Loading slice...</span>
-                    </div>
-                  </div>
-
-                  <!-- Slice Slider -->
-                  <div class="slice-slider-container">
-                    <input type="range"
-                           id="sliceSlider"
-                           class="slice-slider range-slider"
-                           min="0"
-                           max="0"
-                           value="0"
-                           title="Drag to change slice" />
-                  </div>
-
-                  <!-- Status Bar -->
-                  <div class="canvas-status">
-                    <span id="coordsDisplay" class="status-item">X: -- Y: --</span>
-                    <span id="dimensionsDisplay" class="status-item">-- × --</span>
-                  </div>
-                </div>
+              <div class="sv-main">
+                ${this.chrome.render()}
 
                 <!-- Toolbar -->
-                <div id="toolbar" class="annotation-toolbar">
+                <div id="toolbar" class="sv-toolbar">
                   <!-- Tools Section -->
-                  <div class="toolbar-section">
-                    <div class="toolbar-section-header">
+                  <div class="sv-section">
+                    <div class="sv-section-header">
                       <h4>Tools</h4>
                       ${this.renderHelpIcon('annotation.step2.tools')}
                     </div>
@@ -284,8 +246,8 @@ class AnnotationModule extends BaseModule {
                   </div>
 
                   <!-- Brush Size Section -->
-                  <div class="toolbar-section">
-                    <div class="toolbar-section-header">
+                  <div class="sv-section">
+                    <div class="sv-section-header">
                       <h4>Brush Size</h4>
                       ${this.renderHelpIcon('annotation.step2.brush-size')}
                     </div>
@@ -297,8 +259,8 @@ class AnnotationModule extends BaseModule {
                   </div>
 
                   <!-- History Section -->
-                  <div class="toolbar-section">
-                    <div class="toolbar-section-header">
+                  <div class="sv-section">
+                    <div class="sv-section-header">
                       <h4>History</h4>
                       ${this.renderHelpIcon('annotation.step2.history')}
                     </div>
@@ -323,7 +285,7 @@ class AnnotationModule extends BaseModule {
                   </div>
 
                   <!-- Classes Section -->
-                  <div class="toolbar-section classes-section">
+                  <div class="sv-section classes-section">
                     <div class="classes-header">
                       <h4>Classes</h4>
                       ${this.renderHelpIcon('annotation.step2.classes')}
@@ -496,44 +458,8 @@ class AnnotationModule extends BaseModule {
     // Canvas Controls
     // =========================================================================
 
-    // Slice navigation
-    const prevSlice = this.container.querySelector('#prevSlice');
-    const nextSlice = this.container.querySelector('#nextSlice');
-
-    if (prevSlice) {
-      prevSlice.addEventListener('click', () => this.goToSlice(this.currentSlice - 1));
-    }
-    if (nextSlice) {
-      nextSlice.addEventListener('click', () => this.goToSlice(this.currentSlice + 1));
-    }
-
-    const sliceSlider = this.container.querySelector('#sliceSlider');
-    if (sliceSlider) {
-      sliceSlider.addEventListener('input', (e) => this.goToSlice(parseInt(e.target.value, 10)));
-      // While the user is dragging, don't let a completing load snap the thumb
-      // back to the just-loaded slice — only re-sync the value once released.
-      sliceSlider.addEventListener('pointerdown', () => { this.sliderScrubbing = true; });
-      sliceSlider.addEventListener('change', () => { this.sliderScrubbing = false; });
-    }
-
-    // Zoom controls
-    const zoomIn = this.container.querySelector('#zoomIn');
-    const zoomOut = this.container.querySelector('#zoomOut');
-    const zoomFit = this.container.querySelector('#zoomFit');
-    const zoomReset = this.container.querySelector('#zoomReset');
-
-    if (zoomIn) {
-      zoomIn.addEventListener('click', () => this.canvas?.zoomIn());
-    }
-    if (zoomOut) {
-      zoomOut.addEventListener('click', () => this.canvas?.zoomOut());
-    }
-    if (zoomFit) {
-      zoomFit.addEventListener('click', () => this.canvas?.zoomToFit());
-    }
-    if (zoomReset) {
-      zoomReset.addEventListener('click', () => this.canvas?.resetZoom());
-    }
+    // Shared viewer chrome: slice nav / slider / zoom buttons / ←→ keys
+    this.chrome.mount(this.container.querySelector('#step2'));
 
     // Keyboard shortcuts for slice navigation and tools
     this.keydownHandler = (e) => {
@@ -557,11 +483,8 @@ class AnnotationModule extends BaseModule {
         return;
       }
 
-      if (e.key === 'ArrowLeft') {
-        this.goToSlice(this.currentSlice - 1);
-      } else if (e.key === 'ArrowRight') {
-        this.goToSlice(this.currentSlice + 1);
-      } else if (e.key === 'b' || e.key === 'B') {
+      // ←/→ slice navigation is handled by SliceViewerChrome
+      if (e.key === 'b' || e.key === 'B') {
         this.setTool('brush');
       } else if (e.key === 'e' || e.key === 'E') {
         this.setTool('eraser');
@@ -682,7 +605,7 @@ class AnnotationModule extends BaseModule {
    * Initialize the annotation canvas
    */
   async initializeCanvas() {
-    const canvasArea = this.container.querySelector('#canvasArea');
+    const canvasArea = this.chrome?.area;
     if (!canvasArea) {
       console.error('[AnnotationModule] Canvas area not found');
       return;
@@ -861,36 +784,15 @@ class AnnotationModule extends BaseModule {
    * Update slice indicator text
    */
   updateSliceIndicator() {
-    const indicator = this.container.querySelector('#sliceIndicator');
-    if (indicator) {
-      indicator.textContent = `${this.currentSlice + 1} / ${this.totalSlices}`;
-    }
+    this.chrome?.setSlice(this.currentSlice, this.totalSlices);
   }
 
   /**
    * Update slice navigation control states (prev/next buttons + slider)
    */
   updateSliceButtons() {
-    const prevBtn = this.container.querySelector('#prevSlice');
-    const nextBtn = this.container.querySelector('#nextSlice');
-
-    if (prevBtn) {
-      prevBtn.disabled = this.currentSlice <= 0;
-    }
-    if (nextBtn) {
-      nextBtn.disabled = this.currentSlice >= this.totalSlices - 1;
-    }
-
-    // Keep the slice slider in sync with the current slice and stack size.
-    // Single-slice stacks have nothing to scrub, so the slider is disabled.
-    const slider = this.container.querySelector('#sliceSlider');
-    if (slider) {
-      slider.max = Math.max(0, this.totalSlices - 1);
-      if (!this.sliderScrubbing) {
-        slider.value = this.currentSlice;
-      }
-      slider.disabled = this.totalSlices <= 1;
-    }
+    // Prev/next buttons, number field and slider all live in the chrome
+    this.chrome?.setSlice(this.currentSlice, this.totalSlices);
   }
 
   /**
@@ -898,10 +800,7 @@ class AnnotationModule extends BaseModule {
    * @param {number} zoom - Current zoom level
    */
   updateZoomIndicator(zoom) {
-    const indicator = this.container.querySelector('#zoomIndicator');
-    if (indicator) {
-      indicator.textContent = `${Math.round(zoom * 100)}%`;
-    }
+    this.chrome?.setZoom(zoom);
   }
 
   /**
@@ -909,14 +808,9 @@ class AnnotationModule extends BaseModule {
    * @param {object} coords - Coordinate info from canvas
    */
   updateCoordsDisplay(coords) {
-    const display = this.container.querySelector('#coordsDisplay');
-    if (display) {
-      if (coords.inBounds) {
-        display.textContent = `X: ${Math.floor(coords.source.x)} Y: ${Math.floor(coords.source.y)}`;
-      } else {
-        display.textContent = 'X: -- Y: --';
-      }
-    }
+    this.chrome?.setFooter(coords.inBounds
+      ? `X: ${Math.floor(coords.source.x)} Y: ${Math.floor(coords.source.y)}`
+      : 'X: -- Y: --');
   }
 
   /**
@@ -925,10 +819,7 @@ class AnnotationModule extends BaseModule {
    * @param {number} height - Image height
    */
   updateDimensionsDisplay(width, height) {
-    const display = this.container.querySelector('#dimensionsDisplay');
-    if (display) {
-      display.textContent = `${width} × ${height}`;
-    }
+    this.chrome?.setFooter(undefined, `${width} × ${height}`);
   }
 
   /**
@@ -936,10 +827,7 @@ class AnnotationModule extends BaseModule {
    * @param {boolean} show - Whether to show loading
    */
   showCanvasLoading(show) {
-    const loading = this.container.querySelector('#canvasLoading');
-    if (loading) {
-      loading.style.display = show ? 'flex' : 'none';
-    }
+    this.chrome?.setStatus(show ? 'Loading slice…' : null);
   }
 
   // ===========================================================================
@@ -2049,11 +1937,12 @@ class AnnotationModule extends BaseModule {
     // Stop autosave interval
     this.stopAutosaveInterval();
 
-    // Remove keyboard event listener
+    // Remove keyboard event listeners (module shortcuts + chrome ←/→)
     if (this.keydownHandler) {
       document.removeEventListener('keydown', this.keydownHandler);
       this.keydownHandler = null;
     }
+    this.chrome?.destroy();
 
     // Remove beforeunload handler
     if (this.beforeUnloadHandler) {
@@ -2094,7 +1983,6 @@ class AnnotationModule extends BaseModule {
     this.currentAnnotationId = null;
     this.currentSlice = 0;
     this.totalSlices = 1;
-    this.sliderScrubbing = false;
     this.isDirty = false;
 
     await super.deactivate();

@@ -9,12 +9,11 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import {
-  StepNavigator,
-  NavigationButtons,
-  ValidationDisplay,
-  FileSelector
-} from '/workspace/js/core/components/index.js';
+import { StepNavigator, NavigationButtons, ValidationDisplay, FileSelector, SliceViewerChrome } from '/workspace/js/core/components/index.js';
+
+// Gallery zoom limits (shared slice-viewer semantics, tracker B5)
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 10;
 
 class ImageViewerModule extends BaseModule {
   constructor(stateManager) {
@@ -52,11 +51,15 @@ class ImageViewerModule extends BaseModule {
     // Slice prefetch bookkeeping (browser-cached via Cache-Control)
     this._prefetched = new Set();
 
-    // Zoom/pan state for gallery view
+    // Zoom/pan state for gallery view (shared slice-viewer semantics:
+    // 0.1–10, wheel anchored at the cursor, left / middle drag pans)
     this.zoomLevel = 1;
-    this.panOffset = { x: 0, y: 0 };
+    this.panOffset = { x: 0, y: 0 };   // screen px, applied before the scale
     this.isDragging = false;
     this.dragStart = { x: 0, y: 0 };
+
+    // Shared viewer chrome (created per gallery render)
+    this.chrome = null;
 
     // Components
     this.stepNavigator = null;
@@ -712,59 +715,45 @@ class ImageViewerModule extends BaseModule {
     if (!container) return;
 
     const sliceCount = this.tiffInfo?.sliceCount || 1;
+    const info = this.tiffInfo;
+    this.mountChrome(container, sliceCount, info
+      ? `${this.selectedFile.name} · ${info.width} × ${info.height} px · ${sliceCount} slices`
+      : this.selectedFile?.name || '');
 
-    container.innerHTML = `
-      <div class="gallery-view">
-        <!-- Image Display -->
-        <div class="gallery-image-wrapper" id="imageWrapper">
-          <img id="galleryImage" src="" alt="Slice" style="display: none;" />
-          <div class="image-loading" id="imageLoading">
-            <div class="spinner"></div>
-            <span>Loading slice...</span>
-          </div>
-        </div>
-
-        <!-- Controls -->
-        <div class="gallery-controls">
-          <div class="slice-navigation">
-            <button class="nav-btn" id="prevSliceBtn" ${this.currentSlice <= 0 ? 'disabled' : ''}>
-              ◀ Previous
-            </button>
-            <div class="slice-indicator">
-              <span id="currentSliceNum">${this.currentSlice + 1}</span>
-              <span>/</span>
-              <span id="totalSlicesNum">${sliceCount}</span>
-            </div>
-            <button class="nav-btn" id="nextSliceBtn" ${this.currentSlice >= sliceCount - 1 ? 'disabled' : ''}>
-              Next ▶
-            </button>
-          </div>
-
-          <div class="zoom-controls">
-            <button class="zoom-btn" id="zoomOutBtn">−</button>
-            <span class="zoom-level" id="zoomLevel">${Math.round(this.zoomLevel * 100)}%</span>
-            <button class="zoom-btn" id="zoomInBtn">+</button>
-            <button class="zoom-btn" id="zoomResetBtn">Reset</button>
-          </div>
-        </div>
-
-        <!-- Slice Slider -->
-        <div class="slice-slider-container">
-          <input type="range"
-                 id="sliceSlider"
-                 min="0"
-                 max="${sliceCount - 1}"
-                 value="${this.currentSlice}"
-                 class="slice-slider range-slider" />
-        </div>
+    this.chrome.area.innerHTML = `
+      <div class="gallery-image-wrapper" id="imageWrapper">
+        <img id="galleryImage" src="" alt="Slice" draggable="false" style="display: none;" />
       </div>
     `;
 
-    // Setup gallery event listeners
+    // Pan / wheel on the image wrapper
     this.setupGalleryEventListeners();
 
     // Load current slice
     this.loadSlice(this.currentSlice);
+  }
+
+  /**
+   * Create + mount the shared slice-viewer chrome inside the view container
+   * (header nav + zoom, canvas host, slider strip, footer)
+   */
+  mountChrome(container, sliceCount, footerLeft) {
+    this.chrome?.destroy();
+    this.chrome = new SliceViewerChrome({
+      slices: sliceCount,
+      slice: this.currentSlice,
+      footerLeft,
+      footerRight: 'drag = pan · wheel = zoom · ←/→ = slice',
+      isActive: () => this.currentStep === 2 && this.viewMode === 'gallery',
+      onSliceChange: (i) => this.goToSlice(i),
+      onZoomIn: () => this.zoomIn(),
+      onZoomOut: () => this.zoomOut(),
+      onZoomFit: () => this.resetZoom(),
+      onZoomReset: () => this.zoomActual()
+    });
+    container.innerHTML = this.chrome.render();
+    this.chrome.mount(container);
+    this.chrome.setZoom(this.zoomLevel);
   }
 
   /**
@@ -778,51 +767,20 @@ class ImageViewerModule extends BaseModule {
     const sliceCount = this.comparisonMaxSlices();
     const n = this.comparisonFiles.length;
 
-    container.innerHTML = `
-      <div class="gallery-view comparison-view">
-        <div class="comparison-grid panes-${n}" id="comparisonGrid">
-          ${this.comparisonFiles.map((f, i) => `
-            <div class="comparison-pane" data-pane="${i}">
-              <div class="comparison-pane-label" title="${f.name}">${f.name}</div>
-              <div class="comparison-pane-image">
-                <img data-pane-img="${i}" alt="" draggable="false" />
-                <div class="pane-end-badge" data-pane-end="${i}" style="display: none;">end of stack</div>
-              </div>
+    this.mountChrome(container, sliceCount,
+      `Comparing ${n} stacks · ${sliceCount} slices (longest)`);
+
+    this.chrome.area.innerHTML = `
+      <div class="comparison-grid panes-${n}" id="comparisonGrid">
+        ${this.comparisonFiles.map((f, i) => `
+          <div class="comparison-pane" data-pane="${i}">
+            <div class="comparison-pane-label" title="${f.name}">${f.name}</div>
+            <div class="comparison-pane-image">
+              <img data-pane-img="${i}" alt="" draggable="false" />
+              <div class="pane-end-badge" data-pane-end="${i}" style="display: none;">end of stack</div>
             </div>
-          `).join('')}
-        </div>
-
-        <div class="gallery-controls">
-          <div class="slice-navigation">
-            <button class="nav-btn" id="prevSliceBtn" ${this.currentSlice <= 0 ? 'disabled' : ''}>
-              ◀ Previous
-            </button>
-            <div class="slice-indicator">
-              <span id="currentSliceNum">${this.currentSlice + 1}</span>
-              <span>/</span>
-              <span id="totalSlicesNum">${sliceCount}</span>
-            </div>
-            <button class="nav-btn" id="nextSliceBtn" ${this.currentSlice >= sliceCount - 1 ? 'disabled' : ''}>
-              Next ▶
-            </button>
           </div>
-
-          <div class="zoom-controls">
-            <button class="zoom-btn" id="zoomOutBtn">−</button>
-            <span class="zoom-level" id="zoomLevel">${Math.round(this.zoomLevel * 100)}%</span>
-            <button class="zoom-btn" id="zoomInBtn">+</button>
-            <button class="zoom-btn" id="zoomResetBtn">Reset</button>
-          </div>
-        </div>
-
-        <div class="slice-slider-container">
-          <input type="range"
-                 id="sliceSlider"
-                 min="0"
-                 max="${sliceCount - 1}"
-                 value="${this.currentSlice}"
-                 class="slice-slider range-slider" />
-        </div>
+        `).join('')}
       </div>
     `;
 
@@ -854,31 +812,15 @@ class ImageViewerModule extends BaseModule {
    *   pan/wheel events (the comparison grid in comparison mode)
    */
   setupGalleryEventListeners(panSurfaceId = 'imageWrapper') {
-    // Slice navigation
-    document.getElementById('prevSliceBtn')?.addEventListener('click', () => this.previousSlice());
-    document.getElementById('nextSliceBtn')?.addEventListener('click', () => this.nextSlice());
-
-    // Slice slider
-    const slider = document.getElementById('sliceSlider');
-    if (slider) {
-      slider.addEventListener('input', (e) => {
-        this.goToSlice(parseInt(e.target.value));
-      });
-    }
-
-    // Zoom controls
-    document.getElementById('zoomInBtn')?.addEventListener('click', () => this.zoomIn());
-    document.getElementById('zoomOutBtn')?.addEventListener('click', () => this.zoomOut());
-    document.getElementById('zoomResetBtn')?.addEventListener('click', () => this.resetZoom());
-
-    // Pan handlers
-    const imageWrapper = document.getElementById(panSurfaceId);
-    if (imageWrapper) {
-      imageWrapper.addEventListener('mousedown', (e) => this.startPan(e));
-      imageWrapper.addEventListener('mousemove', (e) => this.doPan(e));
-      imageWrapper.addEventListener('mouseup', () => this.endPan());
-      imageWrapper.addEventListener('mouseleave', () => this.endPan());
-      imageWrapper.addEventListener('wheel', (e) => this.handleWheel(e));
+    // Slice nav, slider and zoom buttons are wired by SliceViewerChrome.
+    // Pan (left / middle / Space + drag) and wheel zoom on the image surface:
+    const surface = document.getElementById(panSurfaceId);
+    if (surface) {
+      surface.addEventListener('pointerdown', (e) => this.startPan(e, surface));
+      surface.addEventListener('pointermove', (e) => this.doPan(e));
+      surface.addEventListener('pointerup', () => this.endPan());
+      surface.addEventListener('pointercancel', () => this.endPan());
+      surface.addEventListener('wheel', (e) => this.handleWheel(e, surface), { passive: false });
     }
   }
 
@@ -889,9 +831,8 @@ class ImageViewerModule extends BaseModule {
     if (!this.selectedFile) return;
 
     const img = document.getElementById('galleryImage');
-    const loading = document.getElementById('imageLoading');
 
-    if (loading) loading.style.display = 'flex';
+    this.chrome?.setStatus('Loading slice…');
     if (img) img.style.display = 'none';
 
     try {
@@ -912,21 +853,17 @@ class ImageViewerModule extends BaseModule {
           img.style.display = 'block';
           this.applyZoomPan();
         }
-        if (loading) loading.style.display = 'none';
+        this.chrome?.setStatus(null);
         this.prefetchNeighbors(sliceIndex);
       };
       newImg.onerror = () => {
-        if (loading) {
-          loading.innerHTML = '<span class="error">Failed to load slice</span>';
-        }
+        this.chrome?.setStatus('Failed to load slice', true);
       };
       newImg.src = url;
 
     } catch (error) {
       console.error('[ImageViewerModule] Error loading slice:', error);
-      if (loading) {
-        loading.innerHTML = '<span class="error">Failed to load slice</span>';
-      }
+      this.chrome?.setStatus('Failed to load slice', true);
     }
   }
 
@@ -939,16 +876,8 @@ class ImageViewerModule extends BaseModule {
       : (this.tiffInfo?.sliceCount || 1) - 1;
     this.currentSlice = Math.max(0, Math.min(index, maxSlice));
 
-    // Update UI
-    const currentNum = document.getElementById('currentSliceNum');
-    const slider = document.getElementById('sliceSlider');
-    const prevBtn = document.getElementById('prevSliceBtn');
-    const nextBtn = document.getElementById('nextSliceBtn');
-
-    if (currentNum) currentNum.textContent = this.currentSlice + 1;
-    if (slider) slider.value = this.currentSlice;
-    if (prevBtn) prevBtn.disabled = this.currentSlice <= 0;
-    if (nextBtn) nextBtn.disabled = this.currentSlice >= maxSlice;
+    // Readout, slider and prev/next live in the chrome
+    this.chrome?.setSlice(this.currentSlice, maxSlice + 1);
 
     // Load the slice(s)
     if (this.comparing) {
@@ -982,17 +911,50 @@ class ImageViewerModule extends BaseModule {
   /**
    * Zoom in
    */
-  zoomIn() {
-    this.zoomLevel = Math.min(4, this.zoomLevel * 1.25);
-    this.updateZoomDisplay();
-    this.applyZoomPan();
+  zoomIn(anchor = null) {
+    this.setZoom(this.zoomLevel * 1.25, anchor);
   }
 
   /**
    * Zoom out
    */
-  zoomOut() {
-    this.zoomLevel = Math.max(0.25, this.zoomLevel / 1.25);
+  zoomOut(anchor = null) {
+    this.setZoom(this.zoomLevel / 1.25, anchor);
+  }
+
+  /**
+   * Set the zoom (clamped to ZOOM_MIN..ZOOM_MAX). `anchor` is a point in
+   * screen px relative to the surface centre that stays fixed (the cursor
+   * for wheel zoom); without it the view zooms about its centre.
+   */
+  setZoom(level, anchor = null) {
+    const target = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level));
+    if (target === this.zoomLevel) return;
+    const f = target / this.zoomLevel;
+    if (anchor) {
+      this.panOffset = {
+        x: anchor.x - (anchor.x - this.panOffset.x) * f,
+        y: anchor.y - (anchor.y - this.panOffset.y) * f
+      };
+    } else {
+      this.panOffset = { x: this.panOffset.x * f, y: this.panOffset.y * f };
+    }
+    this.zoomLevel = target;
+    this.updateZoomDisplay();
+    this.applyZoomPan();
+  }
+
+  /**
+   * 1:1 — one image pixel per screen pixel, centred. The served slice may
+   * be a downsampled preview; 1:1 refers to that image.
+   */
+  zoomActual() {
+    const img = document.getElementById('galleryImage')
+      || document.querySelector('[data-pane-img="0"]');
+    if (!img || !img.naturalWidth || !img.clientWidth) return;
+    this.panOffset = { x: 0, y: 0 };
+    this.zoomLevel = 1;
+    this.setZoom(img.naturalWidth / img.clientWidth);
     this.updateZoomDisplay();
     this.applyZoomPan();
   }
@@ -1011,10 +973,7 @@ class ImageViewerModule extends BaseModule {
    * Update zoom level display
    */
   updateZoomDisplay() {
-    const zoomDisplay = document.getElementById('zoomLevel');
-    if (zoomDisplay) {
-      zoomDisplay.textContent = `${Math.round(this.zoomLevel * 100)}%`;
-    }
+    this.chrome?.setZoom(this.zoomLevel);
   }
 
   /**
@@ -1022,7 +981,8 @@ class ImageViewerModule extends BaseModule {
    * the same transform keeps the views in sync)
    */
   applyZoomPan() {
-    const transform = `scale(${this.zoomLevel}) translate(${this.panOffset.x}px, ${this.panOffset.y}px)`;
+    // translate first (screen px), then scale about the element centre
+    const transform = `translate(${this.panOffset.x}px, ${this.panOffset.y}px) scale(${this.zoomLevel})`;
     const img = document.getElementById('galleryImage');
     if (img) img.style.transform = transform;
     document.querySelectorAll('[data-pane-img]').forEach(pimg => {
@@ -1033,12 +993,13 @@ class ImageViewerModule extends BaseModule {
   /**
    * Start panning
    */
-  startPan(e) {
-    if (this.zoomLevel > 1) {
-      this.isDragging = true;
-      this.dragStart = { x: e.clientX - this.panOffset.x, y: e.clientY - this.panOffset.y };
-      e.preventDefault();
-    }
+  startPan(e, surface) {
+    // Left or middle drag pans (shared viewer semantics)
+    if (e.button !== 0 && e.button !== 1) return;
+    this.isDragging = true;
+    this.dragStart = { x: e.clientX - this.panOffset.x, y: e.clientY - this.panOffset.y };
+    surface?.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
   }
 
   /**
@@ -1064,12 +1025,18 @@ class ImageViewerModule extends BaseModule {
   /**
    * Handle mouse wheel for zooming
    */
-  handleWheel(e) {
+  handleWheel(e, surface) {
     e.preventDefault();
+    // Anchor at the cursor, measured from the surface centre
+    const rect = surface.getBoundingClientRect();
+    const anchor = {
+      x: e.clientX - (rect.left + rect.width / 2),
+      y: e.clientY - (rect.top + rect.height / 2)
+    };
     if (e.deltaY < 0) {
-      this.zoomIn();
+      this.zoomIn(anchor);
     } else {
-      this.zoomOut();
+      this.zoomOut(anchor);
     }
   }
 
@@ -1272,6 +1239,9 @@ class ImageViewerModule extends BaseModule {
 
     // Clear global reference
     window.imageViewerModule = null;
+
+    this.chrome?.destroy();
+    this.chrome = null;
 
     // Reset module state to defaults
     this.selectedFile = null;

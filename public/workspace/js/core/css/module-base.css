@@ -11,6 +11,9 @@
  * @import url('/workspace/js/core/css/module-base.css');
  */
 
+/* Shared slice-viewer chrome (.sv-*), used by the five slice viewers */
+@import url('/workspace/js/core/css/slice-viewer.css');
+
 /* ============================================
    CSS CUSTOM PROPERTIES (Design Tokens)
    ============================================ */

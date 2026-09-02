@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-02 (Shared Slice-Viewer Chrome — One Header, Slider Strip, Footer and Toolbar for the Five Viewers)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-02 | [Shared Slice-Viewer Chrome — One Header, Slider Strip, Footer and Toolbar for the Five Viewers](2026-09-02_slice_viewer_chrome.md) | 🔧 Refactor | ~2.5 hrs | ✅ Complete |
+
 ### 2026-09-02 (Critical Bugs — Annotation Resume, Patch Size, MRC Upload, DL Viewer/Validation, Segcleanup Save)
 
 | Date | Session | Type | Duration | Status |

@@ -20,11 +20,15 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator } from '/workspace/js/core/components/index.js';
+import { StepNavigator, SliceViewerChrome } from '/workspace/js/core/components/index.js';
 
 const TIFF_INFO_URL = '/api/denoising/dl/tiff-info';
 const SLICE_URL = (idx, filePath) =>
   `/api/denoising/dl/slice/${idx}?path=${encodeURIComponent(filePath)}&size=full`;
+
+// Align-viewer zoom limits (shared slice-viewer semantics, tracker B5)
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 10;
 
 // Footprint overlap fraction above which a junction counts as a
 // z-continuation (duplicated sections trimmed) instead of a mosaic.
@@ -49,6 +53,7 @@ class StitchingModule extends BaseModule {
     this.resetState();
 
     this._onKeyDown = this._onKeyDown.bind(this);
+    this._onKeyUp = this._onKeyUp.bind(this);
   }
 
   resetState() {
@@ -77,7 +82,8 @@ class StitchingModule extends BaseModule {
       fixedScale: 1, movingScale: 1,
       zoom: 1, panX: 0, panY: 0,
       opacity: 0.5, flicker: null, flickerShow: 0,
-      dragging: false, panning: false, lastX: 0, lastY: 0
+      dragging: false, panning: false, lastX: 0, lastY: 0,
+      spaceDown: false
     };
 
     this.stitchId = null;
@@ -166,6 +172,24 @@ class StitchingModule extends BaseModule {
   }
 
   renderStep2() {
+    this.chrome = new SliceViewerChrome({
+      showPrevNext: false,
+      showSlider: false,
+      keyboard: false,   // arrows nudge the moving slice (see _onKeyDown)
+      headerExtra: `
+        <div class="sv-group">
+          <label>Overlay:</label>
+          <input type="range" class="range-slider" id="overlayOpacity" min="0" max="100" value="50" title="Moving slice opacity">
+          <label class="checkbox-inline" title="Rapidly alternate the two slices">
+            <input type="checkbox" id="flickerToggle"> flicker
+          </label>
+        </div>`,
+      footerRight: 'drag = move slice · middle-drag, Shift+drag or Space+drag = pan · arrows = nudge 1 px (Shift: 10) · wheel = zoom',
+      onZoomIn: () => this.zoomBy(1.25),
+      onZoomOut: () => this.zoomBy(0.8),
+      onZoomFit: () => this.zoomFit(),
+      onZoomReset: () => this.zoomActual()
+    });
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
@@ -176,51 +200,26 @@ class StitchingModule extends BaseModule {
             magenta, moving slice green; aligned structure turns gray.
           </p>
 
-          <div class="stitch-main">
-            <div class="stitch-viewer-wrap">
-              <div class="stitch-viewer-controls">
-                <div class="control-group">
-                  <label>Zoom:</label>
-                  <div class="zoom-controls">
-                    <button id="zoomOutBtn" class="btn-icon" title="Zoom out">&minus;</button>
-                    <button id="zoomInBtn" class="btn-icon" title="Zoom in">+</button>
-                    <button id="zoomFitBtn" class="btn-icon" title="Fit to view">&#8865;</button>
-                  </div>
-                </div>
-                <div class="control-group">
-                  <label>Overlay:</label>
-                  <input type="range" class="range-slider" id="overlayOpacity" min="0" max="100" value="50" title="Moving slice opacity">
-                  <label class="checkbox-inline" title="Rapidly alternate the two slices">
-                    <input type="checkbox" id="flickerToggle"> flicker
-                  </label>
-                </div>
-              </div>
-              <div class="overlay-viewer-area">
-                <canvas id="overlayCanvas" tabindex="0"></canvas>
-                <div class="viewer-status" id="viewerStatus">Loading slices...</div>
-              </div>
-              <div class="stitch-viewer-footer">
-                <span class="align-score" id="alignScore"></span>
-                <span class="field-hint">drag = move slice &middot; middle-drag or Shift+drag = move both (pan) &middot; arrows = nudge 1 px (Shift: 10) &middot; wheel = zoom</span>
-              </div>
-            </div>
+          <div class="sv-main">
+            ${this.chrome.render()}
 
-            <div class="stitch-toolbar">
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Junction</div>
+            <div class="sv-toolbar">
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Junction</h4></div>
                 <div class="junction-nav" id="junctionNav"></div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Fixed slice <span class="stack-label" id="fixedStackName"></span></div>
-                <div class="slice-picker">
-                  <input type="range" class="range-slider" id="fixedSliceRange" min="0" value="0">
-                  <input type="number" id="fixedSliceNum" min="0" value="0">
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Fixed slice <span class="stack-label" id="fixedStackName"></span></h4></div>
+                <div class="sv-row">
+                  <input type="range" class="range-slider" id="fixedSliceRange" min="0" value="0" title="Fixed slice">
+                  <input type="number" id="fixedSliceNum" min="1" value="1" title="Fixed slice (1-based)">
                 </div>
               </div>
 
-              <div class="toolbar-section dominance-section">
-                <div class="toolbar-section-title">Overlapping sections keep
+              <div class="sv-section dominance-section">
+                <div class="sv-section-header">
+                  <h4>Overlapping sections keep</h4>
                   ${this.renderInfoTip('Where the two stacks cover the same z positions (re-imaged sections), only the dominant stack contributes slices. Ignored for side-by-side mosaics.')}
                 </div>
                 <div class="dominance-toggle">
@@ -233,16 +232,16 @@ class StitchingModule extends BaseModule {
                 </div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Moving slice <span class="stack-label" id="movingStackName"></span></div>
-                <div class="slice-picker">
-                  <input type="range" class="range-slider" id="movingSliceRange" min="0" value="0">
-                  <input type="number" id="movingSliceNum" min="0" value="0">
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Moving slice <span class="stack-label" id="movingStackName"></span></h4></div>
+                <div class="sv-row">
+                  <input type="range" class="range-slider" id="movingSliceRange" min="0" value="0" title="Moving slice">
+                  <input type="number" id="movingSliceNum" min="1" value="1" title="Moving slice (1-based)">
                 </div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Transform</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Transform</h4></div>
                 <div class="transform-row">
                   <span>dx <input type="number" id="junctionDx" step="1" value="0"></span>
                   <span>dy <input type="number" id="junctionDy" step="1" value="0"></span>
@@ -380,12 +379,15 @@ class StitchingModule extends BaseModule {
 
     window.stitchingModule = this;
     document.addEventListener('keydown', this._onKeyDown);
+    document.addEventListener('keyup', this._onKeyUp);
 
     await this.loadWorkspaceFiles();
   }
 
   async deactivate() {
     document.removeEventListener('keydown', this._onKeyDown);
+    document.removeEventListener('keyup', this._onKeyUp);
+    this.chrome?.destroy();
     if (this.viewer.flicker) clearInterval(this.viewer.flicker);
     if (this.socket && this.stitchId) {
       this.socket.emit('leave-stitching', this.stitchId);
@@ -669,13 +671,25 @@ class StitchingModule extends BaseModule {
   setupAlignControls() {
     const bind = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
 
+    // Shared viewer chrome (zoom set, overlay controls, status, footer);
+    // the overlay canvas lives in its canvas host
+    this.chrome.mount(document.getElementById('step2'));
+    const overlayCanvas = document.createElement('canvas');
+    overlayCanvas.id = 'overlayCanvas';
+    overlayCanvas.tabIndex = 0;
+    this.chrome.area.appendChild(overlayCanvas);
+
+    // Slider is 0-based, number field 1-based (decision 4); junction slices stay 0-based
     const syncSlice = (which) => {
       const range = document.getElementById(`${which}SliceRange`);
       const num = document.getElementById(`${which}SliceNum`);
       return (e) => {
-        const v = parseInt(e.target.value, 10) || 0;
+        const stack = this.stacks[which === 'fixed' ? this.currentJunction - 1 : this.currentJunction];
+        const max = (stack?.slices || 1) - 1;
+        const raw = parseInt(e.target.value, 10);
+        const v = Math.max(0, Math.min(max, (isNaN(raw) ? 0 : raw) - (e.target === num ? 1 : 0)));
         if (range) range.value = v;
-        if (num) num.value = v;
+        if (num) num.value = v + 1;
         const j = this.junctions[this.currentJunction];
         if (j) {
           j[`${which}Slice`] = v;
@@ -704,17 +718,14 @@ class StitchingModule extends BaseModule {
       this.drawOverlay();
     });
     bind('flickerToggle', 'change', (e) => this.toggleFlicker(e.target.checked));
-    bind('zoomInBtn', 'click', () => this.zoomBy(1.25));
-    bind('zoomOutBtn', 'click', () => this.zoomBy(0.8));
-    bind('zoomFitBtn', 'click', () => this.zoomFit());
 
     const canvas = document.getElementById('overlayCanvas');
     if (canvas) {
       canvas.addEventListener('pointerdown', (e) => {
-        // Left drag moves the moving slice; middle-button drag (or
-        // Shift+left) pans the VIEW, i.e. moves both slices together to
+        // Left drag moves the moving slice; middle-button drag, Shift+left
+        // or Space+left pans the VIEW, i.e. moves both slices together to
         // inspect a different area at the current zoom.
-        const pan = e.button === 1 || e.shiftKey;
+        const pan = e.button === 1 || e.shiftKey || this.viewer.spaceDown;
         if (e.button !== 0 && e.button !== 1) return;
         e.preventDefault();  // middle button would otherwise start autoscroll
         canvas.setPointerCapture(e.pointerId);
@@ -746,7 +757,11 @@ class StitchingModule extends BaseModule {
       canvas.addEventListener('pointercancel', up);
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
-        this.zoomBy(e.deltaY < 0 ? 1.1 : 0.9);
+        // Anchor the zoom at the cursor (canvas bitmap coordinates)
+        const rect = canvas.getBoundingClientRect();
+        const cx = (e.clientX - rect.left) * canvas.width / rect.width;
+        const cy = (e.clientY - rect.top) * canvas.height / rect.height;
+        this.zoomBy(e.deltaY < 0 ? 1.1 : 0.9, cx, cy);
       }, { passive: false });
     }
   }
@@ -766,6 +781,16 @@ class StitchingModule extends BaseModule {
   _onKeyDown(e) {
     if (this.currentStep !== 2) return;
     if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    if (e.code === 'Space') {
+      // Space+drag pans (AnnotationCanvas semantics); block page scroll
+      if (!this.viewer.spaceDown) {
+        this.viewer.spaceDown = true;
+        const canvas = document.getElementById('overlayCanvas');
+        if (canvas) canvas.style.cursor = 'grab';
+      }
+      e.preventDefault();
+      return;
+    }
     const j = this.junctions[this.currentJunction];
     if (!j) return;
     const step = e.shiftKey ? 10 : 1;
@@ -781,6 +806,13 @@ class StitchingModule extends BaseModule {
       this.setScore(null);
       this.drawOverlay();
     }
+  }
+
+  _onKeyUp(e) {
+    if (e.code !== 'Space' || !this.viewer.spaceDown) return;
+    this.viewer.spaceDown = false;
+    const canvas = document.getElementById('overlayCanvas');
+    if (canvas) canvas.style.cursor = '';
   }
 
   setTransform(partial) {
@@ -812,7 +844,8 @@ class StitchingModule extends BaseModule {
     const setup = (which, stack, value) => {
       const range = document.getElementById(`${which}SliceRange`);
       const numEl = document.getElementById(`${which}SliceNum`);
-      [range, numEl].forEach(el => { if (el) { el.max = stack.slices - 1; el.value = value; } });
+      if (range) { range.max = stack.slices - 1; range.value = value; }
+      if (numEl) { numEl.max = stack.slices; numEl.value = value + 1; }
     };
     setup('fixed', fixed, j.fixedSlice);
     setup('moving', moving, j.movingSlice);
@@ -827,8 +860,7 @@ class StitchingModule extends BaseModule {
     const j = this.junctions[i];
     const fixed = this.stacks[i - 1];
     const moving = this.stacks[i];
-    const status = document.getElementById('viewerStatus');
-    if (status) { status.style.display = 'block'; status.textContent = 'Loading slices...'; }
+    this.chrome.setStatus('Loading slices…');
 
     const load = (src) => new Promise((resolve, reject) => {
       const img = new Image();
@@ -847,10 +879,10 @@ class StitchingModule extends BaseModule {
       v.movingImg = this.tintImage(mi, [0, 255, 0]);
       v.fixedScale = fixed.width / fi.width;
       v.movingScale = moving.width / mi.width;
-      if (status) status.style.display = 'none';
+      this.chrome.setStatus(null);
       this.zoomFit();
     } catch (e) {
-      if (status) status.textContent = 'Could not load slice previews';
+      this.chrome.setStatus('Could not load slice previews', true);
     }
   }
 
@@ -874,19 +906,42 @@ class StitchingModule extends BaseModule {
     canvas.width = wrap.clientWidth;
     canvas.height = Math.max(420, wrap.clientHeight || 0, Math.round(wrap.clientWidth * 0.6));
     v.zoom = Math.min(canvas.width / v.fixedImg.width, canvas.height / v.fixedImg.height) * 0.95;
+    v.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.zoom));
     v.panX = (canvas.width - v.fixedImg.width * v.zoom) / 2;
     v.panY = (canvas.height - v.fixedImg.height * v.zoom) / 2;
+    this.chrome?.setZoom(v.zoom);
     this.drawOverlay();
   }
 
-  zoomBy(factor) {
+  /** 1:1 — one preview pixel per canvas pixel, centred */
+  zoomActual() {
+    const canvas = document.getElementById('overlayCanvas');
+    const v = this.viewer;
+    if (!canvas || !v.fixedImg) return;
+    v.zoom = 1;
+    v.panX = (canvas.width - v.fixedImg.width) / 2;
+    v.panY = (canvas.height - v.fixedImg.height) / 2;
+    this.chrome?.setZoom(v.zoom);
+    this.drawOverlay();
+  }
+
+  /**
+   * Multiply the zoom, keeping the canvas point (cx, cy) fixed
+   * (defaults to the centre). Clamped to ZOOM_MIN..ZOOM_MAX.
+   */
+  zoomBy(factor, cx = null, cy = null) {
     const canvas = document.getElementById('overlayCanvas');
     const v = this.viewer;
     if (!canvas) return;
-    const cx = canvas.width / 2, cy = canvas.height / 2;
-    v.panX = cx - (cx - v.panX) * factor;
-    v.panY = cy - (cy - v.panY) * factor;
-    v.zoom *= factor;
+    const target = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.zoom * factor));
+    const f = target / v.zoom;
+    if (f === 1) return;
+    if (cx == null) cx = canvas.width / 2;
+    if (cy == null) cy = canvas.height / 2;
+    v.panX = cx - (cx - v.panX) * f;
+    v.panY = cy - (cy - v.panY) * f;
+    v.zoom = target;
+    this.chrome?.setZoom(v.zoom);
     this.drawOverlay();
   }
 
@@ -909,8 +964,7 @@ class StitchingModule extends BaseModule {
     const j = this.junctions[this.currentJunction];
     if (!canvas || !v.fixedImg || !v.movingImg || !j) return;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);   // --module-viewer-bg shows through
     ctx.imageSmoothingEnabled = true;
 
     const flickering = !!v.flicker;
@@ -947,11 +1001,9 @@ class StitchingModule extends BaseModule {
   setScore(score) {
     const j = this.junctions[this.currentJunction];
     if (j) j.score = score;
-    const el = document.getElementById('alignScore');
-    if (el) {
-      el.textContent = score == null ? '' : `overlap correlation: ${score.toFixed(3)}`;
-      el.className = 'align-score ' + (score == null ? '' : score > 0.5 ? 'good' : 'poor');
-    }
+    this.chrome?.setFooter(
+      score == null ? '' : `overlap correlation: ${score.toFixed(3)}`, undefined,
+      score == null ? '' : score > 0.5 ? 'good' : 'poor');
   }
 
   async autoAlign() {

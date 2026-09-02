@@ -1,0 +1,451 @@
+/**
+ * Shared slice-viewer chrome (consolidation Phase 2, tracker B5/B2).
+ *
+ * One look for the five slice viewers (Image Viewer, Annotation edit,
+ * Preprocessing adjust, Stitching align, Segmentation Cleanup edit):
+ *
+ *   .sv-main            canvas column + toolbar side by side
+ *     .sv-wrap          bordered card: header / area / slider strip / footer
+ *       .sv-header      grey chrome band: slice nav, zoom set, module extras
+ *       .sv-area        the canvas box, --module-viewer-bg
+ *         .sv-canvas-host the module's canvas goes here (chrome.area)
+ *         .sv-status    dimmed overlay + spinner (.is-error for failures)
+ *       .sv-slider-strip full-width slice slider under the canvas
+ *       .sv-footer      12 px monospace readouts / hints
+ *     .sv-toolbar       260 px column of .sv-section cards (h4 + help slot)
+ *
+ * Markup for the header / strip / footer comes from
+ * core/components/SliceViewerChrome.js; modules only fill .sv-area and
+ * the toolbar. Imported once from module-base.css. Both themes via tokens.
+ */
+
+/* ============================================
+   LAYOUT: viewer + toolbar
+   ============================================ */
+
+.sv-main {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: var(--module-spacing-md);
+  min-height: 0;
+  align-items: stretch;
+}
+
+.sv-wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
+  overflow: hidden;
+}
+
+/* ============================================
+   HEADER (slice nav, zoom, extras)
+   ============================================ */
+
+.sv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--module-spacing-sm) var(--module-spacing-md);
+  padding: var(--module-spacing-sm) var(--module-spacing-md);
+  background: var(--module-chrome-bg);
+  border-bottom: 1px solid var(--module-border);
+  flex-shrink: 0;
+}
+
+.sv-header-left,
+.sv-header-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--module-spacing-sm) var(--module-spacing-md);
+}
+
+.sv-group {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+}
+
+.sv-group > label {
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+  white-space: nowrap;
+}
+
+/* Slice navigation: ◀ [n] / N ▶ (1-based) */
+.sv-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+}
+
+.sv-nav-readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 80px;
+  justify-content: center;
+  font-family: monospace;
+  font-size: var(--module-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--module-text-primary);
+}
+
+/* Specific enough to beat module-wide `.x-module input[type="number"]` rules */
+.sv-header .sv-nav-readout input.sv-nav-num {
+  width: 4.5ch;
+  padding: 2px 4px;
+  margin: 0;
+  text-align: right;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--module-radius-sm);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.sv-header .sv-nav-readout input.sv-nav-num::-webkit-outer-spin-button,
+.sv-header .sv-nav-readout input.sv-nav-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sv-header .sv-nav-readout input.sv-nav-num:hover {
+  border-color: var(--module-border);
+}
+
+.sv-header .sv-nav-readout input.sv-nav-num:focus {
+  outline: none;
+  border-color: var(--module-primary);
+  background: var(--module-card-bg);
+}
+
+.sv-header .sv-nav-readout input.sv-nav-num:disabled {
+  border-color: transparent;
+  background: transparent;
+  opacity: 1;
+}
+
+/* Zoom: − % + ⊡ 1:1 */
+.sv-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+}
+
+.sv-zoom-readout {
+  min-width: 50px;
+  text-align: center;
+  font-family: monospace;
+  font-size: var(--module-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--module-text-primary);
+}
+
+/* Header checkboxes / small ranges that modules add via headerExtra */
+.sv-header .checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+  white-space: nowrap;
+}
+
+.sv-header input[type="range"].range-slider {
+  width: 110px;
+  margin: 0;
+}
+
+/* ============================================
+   CANVAS AREA + STATUS OVERLAY
+   ============================================ */
+
+.sv-area {
+  flex: 1;
+  min-height: 300px;
+  position: relative;
+  background: var(--module-viewer-bg);
+  overflow: hidden;
+}
+
+.sv-canvas-host {
+  position: absolute;
+  inset: 0;
+}
+
+.sv-canvas-host > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sv-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--module-spacing-sm);
+  background: color-mix(in srgb, var(--module-viewer-bg) 90%, transparent);
+  color: #d0d0d8;
+  font-size: var(--module-font-size-sm);
+  text-align: center;
+  padding: var(--module-spacing-md);
+  z-index: 10;
+}
+
+.sv-status[hidden] {
+  display: none;
+}
+
+.sv-status .sv-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--module-primary);
+  border-radius: 50%;
+  animation: sv-spin 0.8s linear infinite;
+}
+
+.sv-status.is-error {
+  color: #ff8a80;
+}
+
+.sv-status.is-error .sv-spinner {
+  display: none;
+}
+
+@keyframes sv-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-status .sv-spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* ============================================
+   SLIDER STRIP + FOOTER
+   ============================================ */
+
+.sv-slider-strip {
+  padding: var(--module-spacing-sm) var(--module-spacing-md);
+  background: var(--module-chrome-bg);
+  border-top: 1px solid var(--module-border);
+  flex-shrink: 0;
+}
+
+.sv-slider {
+  display: block;
+  width: 100%;
+  margin: 0;
+}
+
+.sv-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--module-spacing-md);
+  min-height: 28px;
+  padding: var(--module-spacing-xs) var(--module-spacing-md);
+  background: var(--module-chrome-bg);
+  border-top: 1px solid var(--module-border);
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--module-text-secondary);
+  flex-shrink: 0;
+}
+
+.sv-footer-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sv-footer-item:last-child {
+  text-align: right;
+}
+
+.sv-footer-item.good { color: var(--module-secondary); }
+.sv-footer-item.poor { color: var(--module-error-text); }
+
+/* ============================================
+   TOOLBAR (right column of sections)
+   ============================================ */
+
+.sv-toolbar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--module-spacing-sm);
+  overflow-y: auto;
+  min-height: 0;
+  align-self: stretch;
+}
+
+.sv-section {
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  padding: var(--module-spacing-sm);
+  flex-shrink: 0;
+}
+
+.sv-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-xs);
+  margin-bottom: var(--module-spacing-xs);
+  padding-bottom: var(--module-spacing-xs);
+  border-bottom: 1px solid var(--module-border);
+}
+
+.sv-section-header h4 {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: var(--module-font-size-sm);
+  font-weight: 600;
+  color: var(--module-text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sv-section-header h4 .stack-label {
+  font-weight: 500;
+  color: var(--module-text-secondary);
+}
+
+.sv-section-header .help-icon,
+.sv-section-header .info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--module-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.sv-section-header .help-icon:hover {
+  color: var(--module-primary);
+}
+
+.sv-section-header .help-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.sv-section-header .info-tip {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--module-border-dark);
+  font-size: 0.7rem;
+  cursor: help;
+}
+
+.sv-section > .field-hint {
+  margin-top: var(--module-spacing-xs);
+}
+
+/* Rows inside a section: label · control · value */
+.sv-row {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--module-spacing-sm);
+  font-size: 0.85rem;
+}
+
+.sv-row:last-child {
+  margin-bottom: 0;
+}
+
+.sv-row > label {
+  font-size: 0.82rem;
+  color: var(--module-text-secondary);
+}
+
+.sv-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.sv-row .sv-row-value {
+  min-width: 34px;
+  text-align: right;
+  font-family: monospace;
+  font-size: 0.82rem;
+  color: var(--module-text-secondary);
+}
+
+.sv-main .sv-toolbar .sv-section input[type="number"],
+.sv-main .sv-toolbar .sv-section input[type="text"],
+.sv-main .sv-toolbar .sv-section select {
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+.sv-main .sv-toolbar .sv-section input[type="number"] {
+  width: 70px;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 1024px) {
+  .sv-main {
+    flex-direction: column;
+  }
+
+  .sv-toolbar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-y: visible;
+  }
+
+  .sv-section {
+    flex: 1;
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sv-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sv-header-left,
+  .sv-header-right {
+    justify-content: space-between;
+  }
+
+  .sv-wrap {
+    min-height: 400px;
+  }
+}

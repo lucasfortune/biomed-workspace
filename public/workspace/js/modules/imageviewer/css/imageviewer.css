@@ -276,13 +276,11 @@
   fill: currentColor;
 }
 
-/* View Container */
+/* View Container: the gallery renders the shared .sv-wrap card
+   (core/css/slice-viewer.css); the thumbnail grid brings its own card */
 .view-container {
   flex: 1;
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  overflow: hidden;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -296,24 +294,18 @@
 }
 
 /* ============================================
-   GALLERY VIEW
+   GALLERY VIEW (inside the shared slice-viewer chrome)
    ============================================ */
 
-.gallery-view {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
 .gallery-image-wrapper {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: var(--module-bg-tertiary);
-  position: relative;
   cursor: grab;
+  touch-action: none;
 }
 
 .gallery-image-wrapper:active {
@@ -324,111 +316,9 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  user-select: none;
   transition: transform 0.1s ease-out;
 }
-
-.image-loading {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  color: var(--module-text-secondary);
-}
-
-.image-loading .error {
-  color: var(--module-error-text);
-}
-
-/* Gallery Controls */
-.gallery-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px var(--module-spacing-md);
-  background: var(--module-bg);
-  border-top: 1px solid var(--module-border);
-}
-
-.slice-navigation {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.nav-btn {
-  padding: 8px 16px;
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border-dark);
-  color: var(--module-text-primary);
-  border-radius: var(--module-radius-sm);
-  cursor: pointer;
-  transition: var(--module-transition-fast);
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: var(--module-bg);
-  border-color: var(--module-primary);
-}
-
-.nav-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.slice-indicator {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 1.1rem;
-  color: var(--module-text-primary);
-}
-
-.slice-indicator #currentSliceNum {
-  color: var(--module-primary);
-  font-weight: bold;
-}
-
-/* Zoom Controls */
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.zoom-btn {
-  width: 36px;
-  height: 36px;
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border-dark);
-  color: var(--module-text-primary);
-  border-radius: var(--module-radius-sm);
-  cursor: pointer;
-  font-size: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--module-transition-fast);
-}
-
-.zoom-btn:hover {
-  background: var(--module-bg);
-  border-color: var(--module-primary);
-}
-
-.zoom-level {
-  min-width: 50px;
-  text-align: center;
-  color: var(--module-text-secondary);
-}
-
-/* Slice Slider */
-.slice-slider-container {
-  padding: 10px var(--module-spacing-md) 15px;
-  background: var(--module-bg);
-}
-
-/* .slice-slider is a .range-slider (module-base.css) */
 
 /* ============================================
    ICON GRID VIEW
@@ -438,6 +328,9 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--module-spacing-md);
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-lg);
 }
 
 .icon-grid {
@@ -510,11 +403,6 @@
 
   .viewer-toolbar {
     flex-wrap: wrap;
-  }
-
-  .gallery-controls {
-    flex-direction: column;
-    gap: 15px;
   }
 
   .icon-grid {
@@ -600,16 +488,15 @@
   white-space: nowrap;
 }
 
-/* Step 2: comparison gallery grid */
+/* Step 2: comparison gallery grid (fills the shared canvas host) */
 .comparison-grid {
+  position: absolute;
+  inset: 0;
   display: grid;
   gap: 8px;
-  flex: 1;
-  min-height: 0;
-  background: var(--module-bg-dark);
-  border-radius: 8px;
   padding: 8px;
   cursor: grab;
+  touch-action: none;
 }
 
 .comparison-grid:active {

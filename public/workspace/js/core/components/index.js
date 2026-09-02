@@ -29,6 +29,7 @@ export { default as LoadingOverlay } from './LoadingOverlay.js';
 
 // File Management
 export { default as FileSelector } from './FileSelector.js';
+export { default as SliceViewerChrome } from './SliceViewerChrome.js';
 
 /**
  * Component Registry

@@ -121,7 +121,7 @@ class AnnotationCanvas {
       height: 100%;
       overflow: hidden;
       position: relative;
-      background: #1a1a2e;
+      background: var(--module-viewer-bg, #1a1a2e);
       touch-action: none;
     `;
 

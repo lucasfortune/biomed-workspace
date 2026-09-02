@@ -18,7 +18,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator, FileSelector } from '/workspace/js/core/components/index.js';
+import { StepNavigator, FileSelector, SliceViewerChrome } from '/workspace/js/core/components/index.js';
 import AnnotationCanvas from '/workspace/js/modules/annotation/utils/AnnotationCanvas.js';
 import BrushEngine from '/workspace/js/modules/annotation/utils/BrushEngine.js';
 import HistoryManager from '/workspace/js/modules/annotation/utils/HistoryManager.js';
@@ -122,6 +122,20 @@ class SegcleanupModule extends BaseModule {
   }
 
   renderStep2() {
+    this.chrome = new SliceViewerChrome({
+      slices: this.file?.slices || 1,
+      slice: this.currentSlice,
+      showUndoRedo: true,
+      footerRight: 'left-drag = paint · right-drag / space = pan · wheel = zoom',
+      isActive: () => this.currentStep === 2 && !!this.canvas,
+      onSliceChange: (i) => this.goToEditSlice(i),
+      onZoomIn: () => this.canvas?.zoomIn(),
+      onZoomOut: () => this.canvas?.zoomOut(),
+      onZoomFit: () => this.canvas?.zoomToFit(),
+      onZoomReset: () => this.canvas?.resetZoom(),
+      onUndo: () => this.undo(),
+      onRedo: () => this.redo()
+    });
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
@@ -143,53 +157,33 @@ class SegcleanupModule extends BaseModule {
             </div>
           </div>
 
-          <div class="sc-main">
-            <div class="sc-viewer-wrap">
-              <div class="sc-viewer-controls">
-                <div class="control-group sc-slice-group">
-                  <label>Slice:</label>
-                  <input type="range" class="range-slider" id="scEditSliceRange" min="0" value="0">
-                  <input type="number" id="scEditSliceNum" min="0" value="0">
-                  <span class="sc-slice-total" id="scEditSliceTotal"></span>
-                </div>
-                <div class="control-group">
-                  <button class="btn-icon" id="scUndoBtn" title="Undo (this slice)">&#8630;</button>
-                  <button class="btn-icon" id="scRedoBtn" title="Redo (this slice)">&#8631;</button>
-                </div>
-              </div>
-              <div class="sc-canvas-area" id="scCanvasArea">
-                <div class="viewer-status" id="scEditStatus">Loading...</div>
-              </div>
-              <div class="sc-viewer-footer">
-                <span class="field-hint" id="scEditedInfo"></span>
-                <span class="field-hint">left-drag = paint &middot; right-drag / space = pan &middot; wheel = zoom</span>
-              </div>
-            </div>
+          <div class="sv-main">
+            ${this.chrome.render()}
 
-            <div class="sc-toolbar">
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Tool</div>
+            <div class="sv-toolbar">
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Tool</h4></div>
                 <div class="sc-tool-row">
                   <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">&#128396; Brush</button>
                   <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">&#9003; Eraser</button>
                   <button class="sc-tool-btn" data-tool="fill" title="Flood-fill the clicked region with the active class">&#127754; Fill</button>
                 </div>
-                <div class="sc-row">
+                <div class="sv-row">
                   <label>size</label>
                   <input type="range" class="range-slider" id="scBrushSize" min="1" max="100" value="10">
-                  <span id="scBrushSizeVal">10px</span>
+                  <span class="sv-row-value" id="scBrushSizeVal">10px</span>
                 </div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Active class</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Active class</h4></div>
                 <div id="scClassList"></div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Automated cleanup</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Automated cleanup</h4></div>
                 <div id="scClassOps"></div>
-                <div class="sc-row">
+                <div class="sv-row">
                   <label>fill holes</label>
                   <select id="scFillHoles">
                     <option value="off">off</option>
@@ -197,15 +191,15 @@ class SegcleanupModule extends BaseModule {
                     <option value="3d">3D</option>
                   </select>
                 </div>
-                <div class="sc-row">
+                <div class="sv-row">
                   <label>min size</label>
                   <input type="number" id="scMinSize" min="0" step="1" value="0">
                   <span class="field-hint-inline">voxels</span>
                 </div>
-                <div class="sc-row">
+                <div class="sv-row">
                   <label>smooth</label>
                   <input type="range" class="range-slider" id="scSmoothRadius" min="0" max="5" step="1" value="0">
-                  <span id="scSmoothVal">0</span>
+                  <span class="sv-row-value" id="scSmoothVal">0</span>
                 </div>
                 <button class="btn small primary" id="scApplyCleanupBtn">Apply cleanup</button>
                 <div class="sc-job-status" id="scCleanupStatus"></div>
@@ -213,8 +207,8 @@ class SegcleanupModule extends BaseModule {
                   unsaved paint edits) and reloads the editor.</p>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Output</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Output</h4></div>
                 <input type="text" id="scOutputName" value="cleaned" class="sc-name-input">
                 <div class="sc-job-status" id="scSaveStatus"></div>
               </div>
@@ -312,6 +306,7 @@ class SegcleanupModule extends BaseModule {
 
   async deactivate() {
     this.teardownEditor();
+    this.chrome?.destroy();   // document ←/→ listener; the markup goes with the container
     if (this.socket && this.jobId) {
       this.socket.emit('leave-segcleanup', this.jobId);
     }
@@ -449,17 +444,8 @@ class SegcleanupModule extends BaseModule {
   setupEditControls() {
     const bind = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
 
-    const onSlice = (e) => {
-      const v = Math.max(0, Math.min(this.file ? this.file.slices - 1 : 0,
-        parseInt(e.target.value, 10) || 0));
-      const r = document.getElementById('scEditSliceRange');
-      const n = document.getElementById('scEditSliceNum');
-      if (r) r.value = v;
-      if (n) n.value = v;
-      this.goToEditSlice(v);
-    };
-    bind('scEditSliceRange', 'input', onSlice);
-    bind('scEditSliceNum', 'change', onSlice);
+    // Shared viewer chrome: slice nav, zoom, undo/redo, status, footer
+    this.chrome.mount(document.getElementById('step2'));
 
     document.querySelectorAll('.sc-tool-btn').forEach(btn => {
       btn.addEventListener('click', () => this.setTool(btn.getAttribute('data-tool')));
@@ -470,9 +456,6 @@ class SegcleanupModule extends BaseModule {
       const val = document.getElementById('scBrushSizeVal');
       if (val) val.textContent = `${size}px`;
     });
-    bind('scUndoBtn', 'click', () => this.undo());
-    bind('scRedoBtn', 'click', () => this.redo());
-
     bind('scFillHoles', 'change', (e) => { this.ops.fillHoles = e.target.value; });
     bind('scMinSize', 'change', (e) => {
       this.ops.minSize = Math.max(0, parseInt(e.target.value, 10) || 0);
@@ -486,18 +469,11 @@ class SegcleanupModule extends BaseModule {
 
   async enterEditStep() {
     if (!this.file) return;
-    const setup = (id, value, max) => {
-      const el = document.getElementById(id);
-      if (el) { if (max != null) el.max = max; el.value = value; }
-    };
-    setup('scEditSliceRange', this.currentSlice, this.file.slices - 1);
-    setup('scEditSliceNum', this.currentSlice, this.file.slices - 1);
-    const total = document.getElementById('scEditSliceTotal');
-    if (total) total.textContent = `/ ${this.file.slices - 1}`;
+    this.chrome.setSlice(this.currentSlice, this.file.slices);
 
     if (!this.canvas) {
-      const area = document.getElementById('scCanvasArea');
-      this.canvas = new AnnotationCanvas(area);
+      this.canvas = new AnnotationCanvas(this.chrome.area);
+      this.canvas.onZoomChange = (zoom) => this.chrome.setZoom(zoom);
       this.brushEngine = new BrushEngine(this.canvas);
       this.historyManager = new HistoryManager();
       this.seedClasses(this.file.classes);
@@ -545,8 +521,8 @@ class SegcleanupModule extends BaseModule {
   async goToEditSlice(index) {
     if (!this.file || !this.canvas) return;
     this.currentSlice = index;
-    const status = document.getElementById('scEditStatus');
-    if (status) { status.style.display = 'block'; status.textContent = 'Loading slice...'; }
+    this.chrome.setSlice(index);
+    this.chrome.setStatus('Loading slice…');
     try {
       await this.canvas.loadSlice(this.editorImageFileId(), index);
       if (this.canvas.currentSlice !== index) return;  // superseded
@@ -558,9 +534,9 @@ class SegcleanupModule extends BaseModule {
       if (this.canvas.currentSlice !== index) return;
       this.brushEngine.renderAnnotations();
       this.updateHistoryButtons();
-      if (status) status.style.display = 'none';
+      this.chrome.setStatus(null);
     } catch (e) {
-      if (status) status.textContent = `Could not load slice: ${e.message}`;
+      this.chrome.setStatus(`Could not load slice: ${e.message}`, true);
     }
   }
 
@@ -687,22 +663,16 @@ class SegcleanupModule extends BaseModule {
 
   updateHistoryButtons() {
     const idx = this.canvas?.currentSlice ?? 0;
-    const undoBtn = document.getElementById('scUndoBtn');
-    const redoBtn = document.getElementById('scRedoBtn');
-    if (undoBtn) undoBtn.disabled = !this.historyManager?.canUndo(idx);
-    if (redoBtn) redoBtn.disabled = !this.historyManager?.canRedo(idx);
+    this.chrome?.setHistory(this.historyManager?.canUndo(idx), this.historyManager?.canRedo(idx));
   }
 
   updateEditedInfo() {
-    const el = document.getElementById('scEditedInfo');
-    if (el) {
-      const parts = [];
-      if (this.workingPath) parts.push('automated cleanup applied');
-      if (this.editedSlices.size) {
-        parts.push(`${this.editedSlices.size} slice${this.editedSlices.size > 1 ? 's' : ''} painted`);
-      }
-      el.textContent = parts.join(' · ') || 'No changes yet';
+    const parts = [];
+    if (this.workingPath) parts.push('automated cleanup applied');
+    if (this.editedSlices.size) {
+      parts.push(`${this.editedSlices.size} slice${this.editedSlices.size > 1 ? 's' : ''} painted`);
     }
+    this.chrome?.setFooter(parts.join(' · ') || 'No changes yet');
   }
 
   renderClassList() {

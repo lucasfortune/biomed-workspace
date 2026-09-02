@@ -97,162 +97,14 @@
   gap: var(--module-spacing-sm);
 }
 
-/* Canvas container placeholder */
-.annotation-module .canvas-container {
-  flex: 1;
-  min-height: 400px;
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  margin-bottom: var(--module-spacing-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Toolbar placeholder */
-.annotation-module .annotation-toolbar {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-md);
-  margin-bottom: var(--module-spacing-md);
-}
-
 /* ============================================
-   CANVAS WRAPPER (Step 2 Active Canvas)
+   CANVAS (Step 2) — the viewer chrome (.sv-*) comes from
+   core/css/slice-viewer.css; only annotation specifics remain
    ============================================ */
 
-.annotation-module .canvas-wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  overflow: hidden;
-}
-
-/* Canvas controls bar */
-.annotation-module .canvas-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--module-spacing-sm) var(--module-spacing-md);
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid var(--module-border);
-  flex-shrink: 0;
-}
-
-.annotation-module .control-group {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-sm);
-}
-
-.annotation-module .control-group label {
-  font-size: var(--module-font-size-sm);
-  color: var(--module-text-secondary);
-}
-
-/* Slice navigation */
-.annotation-module .slice-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-xs);
-}
-
-.annotation-module .slice-indicator {
-  min-width: 80px;
-  text-align: center;
-  font-size: var(--module-font-size-sm);
-  font-family: monospace;
-  color: var(--module-text-primary);
-}
-
-/* Zoom controls */
-.annotation-module .zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-xs);
-}
-
-.annotation-module .zoom-indicator {
-  min-width: 50px;
-  text-align: center;
-  font-size: var(--module-font-size-sm);
-  font-family: monospace;
-  color: var(--module-text-primary);
-}
-
-/* Canvas area */
-.annotation-module .canvas-area {
-  flex: 1;
-  min-height: 300px;
-  position: relative;
-  background: #1a1a2e;
+/* Painting cursor over the canvas host (AnnotationCanvas swaps it while panning) */
+.annotation-module .sv-canvas-host {
   cursor: crosshair;
-}
-
-/* Status bar */
-.annotation-module .canvas-status {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--module-spacing-xs) var(--module-spacing-md);
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid var(--module-border);
-  font-size: var(--module-font-size-xs);
-  color: var(--module-text-secondary);
-  flex-shrink: 0;
-}
-
-.annotation-module .status-item {
-  font-family: monospace;
-}
-
-/* Slice slider (below canvas) */
-.annotation-module .slice-slider-container {
-  padding: var(--module-spacing-sm) var(--module-spacing-md);
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid var(--module-border);
-  flex-shrink: 0;
-}
-
-/* .slice-slider is a .range-slider (module-base.css); nothing extra here */
-
-/* Loading overlay */
-.annotation-module .canvas-loading {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(26, 26, 46, 0.9);
-  z-index: 10;
-}
-
-.annotation-module .canvas-loading .spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--module-border);
-  border-top-color: var(--module-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.annotation-module .canvas-loading span {
-  margin-top: var(--module-spacing-sm);
-  color: var(--module-text-secondary);
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 /* ============================================
@@ -307,94 +159,9 @@
 }
 
 /* ============================================
-   MAIN CONTENT AREA (Canvas + Toolbar side by side)
+   TOOLBAR (Right side panel) — .sv-toolbar / .sv-section are shared
    ============================================ */
 
-.annotation-module .annotation-main {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  gap: var(--module-spacing-md);
-  min-height: 0;
-}
-
-/* Canvas wrapper takes most of the space */
-.annotation-module #step2 .canvas-wrapper {
-  flex: 1;
-  min-width: 0;
-  min-height: 500px;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Ensure status bar is always visible */
-.annotation-module #step2 .canvas-status {
-  flex-shrink: 0;
-  min-height: 28px;
-}
-
-/* Ensure controls bar is always visible */
-.annotation-module #step2 .canvas-controls {
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  gap: var(--module-spacing-sm);
-}
-
-/* Canvas area takes remaining space */
-.annotation-module #step2 .canvas-area {
-  flex: 1;
-  min-height: 300px;
-}
-
-/* ============================================
-   TOOLBAR (Right side panel)
-   ============================================ */
-
-.annotation-module #step2 .annotation-toolbar {
-  width: 220px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--module-spacing-sm);
-  overflow-y: auto;
-  padding: var(--module-spacing-sm);
-  margin-bottom: 0;
-}
-
-.annotation-module .toolbar-section {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-md);
-  padding: var(--module-spacing-sm);
-}
-
-.annotation-module .toolbar-section h4 {
-  margin: 0 0 var(--module-spacing-xs) 0;
-  font-size: var(--module-font-size-sm);
-  color: var(--module-text-primary);
-  font-weight: 600;
-  padding-bottom: var(--module-spacing-xs);
-  border-bottom: 1px solid var(--module-border);
-}
-
-/* Toolbar section header with help icon */
-.annotation-module .toolbar-section-header {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-xs);
-  margin-bottom: var(--module-spacing-xs);
-  padding-bottom: var(--module-spacing-xs);
-  border-bottom: 1px solid var(--module-border);
-}
-
-.annotation-module .toolbar-section-header h4 {
-  margin: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-  flex: 1;
-}
-
-.annotation-module .toolbar-section-header .help-icon,
 .annotation-module .classes-header .help-icon {
   display: flex;
   align-items: center;
@@ -404,25 +171,23 @@
   transition: color 0.2s ease;
 }
 
-.annotation-module .toolbar-section-header .help-icon:hover,
 .annotation-module .classes-header .help-icon:hover {
   color: var(--module-primary);
 }
 
-.annotation-module .toolbar-section-header .help-icon svg,
 .annotation-module .classes-header .help-icon svg {
   width: 16px;
   height: 16px;
   fill: currentColor;
 }
 
-.annotation-module .toolbar-section .placeholder-content {
+.annotation-module .sv-section .placeholder-content {
   padding: var(--module-spacing-sm);
   border: none;
   background: transparent;
 }
 
-.annotation-module .toolbar-section .placeholder-content p {
+.annotation-module .sv-section .placeholder-content p {
   font-size: var(--module-font-size-xs);
   margin: 0;
 }
@@ -736,44 +501,4 @@
    RESPONSIVE ADJUSTMENTS FOR STEP 2
    ============================================ */
 
-@media (max-width: 1024px) {
-  /* Stack toolbar below canvas on medium screens */
-  .annotation-module .annotation-main {
-    flex-direction: column;
-  }
-
-  .annotation-module #step2 .annotation-toolbar {
-    width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
-    overflow-y: visible;
-    max-height: none;
-  }
-
-  .annotation-module .toolbar-section {
-    flex: 1;
-    min-width: 150px;
-  }
-}
-
-@media (max-width: 768px) {
-  .annotation-module #step2 .canvas-controls {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--module-spacing-xs);
-  }
-
-  .annotation-module #step2 .control-group {
-    justify-content: space-between;
-  }
-
-  .annotation-module #step2 .canvas-status {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--module-spacing-xs);
-  }
-
-  .annotation-module #step2 .canvas-wrapper {
-    min-height: 400px;
-  }
-}
+/* Responsive stacking of viewer + toolbar: see core/css/slice-viewer.css */

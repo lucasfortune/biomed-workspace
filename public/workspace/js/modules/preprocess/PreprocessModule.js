@@ -16,7 +16,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
-import { StepNavigator, FileSelector } from '/workspace/js/core/components/index.js';
+import { StepNavigator, FileSelector, SliceViewerChrome } from '/workspace/js/core/components/index.js';
 
 class PreprocessModule extends BaseModule {
 
@@ -117,6 +117,17 @@ class PreprocessModule extends BaseModule {
   }
 
   renderStep2() {
+    this.chrome = new SliceViewerChrome({
+      slices: this.file?.slices || 1,
+      slice: this.currentSlice,
+      showZoom: false,
+      isActive: () => this.currentStep === 2 && !!this.file,
+      onSliceChange: (i) => {
+        this.currentSlice = i;
+        this.chrome.setSlice(i);
+        this.requestPreview();
+      }
+    });
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
@@ -127,30 +138,13 @@ class PreprocessModule extends BaseModule {
             are applied when the output is written.
           </p>
 
-          <div class="pp-main">
-            <div class="pp-viewer-wrap">
-              <div class="pp-viewer-controls">
-                <div class="control-group pp-slice-group">
-                  <label>Slice:</label>
-                  <input type="range" class="range-slider" id="ppSliceRange" min="0" value="0">
-                  <input type="number" id="ppSliceNum" min="0" value="0">
-                  <span class="pp-slice-total" id="ppSliceTotal"></span>
-                </div>
-              </div>
-              <div class="pp-viewer-area">
-                <canvas id="ppCanvas"></canvas>
-                <div class="viewer-status" id="ppViewerStatus">Loading preview...</div>
-              </div>
-              <div class="pp-viewer-footer">
-                <span id="ppImageInfo" class="field-hint"></span>
-                <span class="field-hint" id="ppCropHint"></span>
-              </div>
-            </div>
+          <div class="sv-main">
+            ${this.chrome.render()}
 
-            <div class="pp-toolbar">
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Crop</div>
-                <div class="pp-row">
+            <div class="sv-toolbar">
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Crop</h4></div>
+                <div class="sv-row">
                   <button class="btn small" id="ppCropDrawBtn">Draw on image</button>
                   <button class="btn small secondary" id="ppCropClearBtn">Clear</button>
                 </div>
@@ -162,20 +156,20 @@ class PreprocessModule extends BaseModule {
                 </div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Z range</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Z range</h4></div>
                 <div class="pp-grid2">
-                  <span>first <input type="number" id="ppZFrom" min="0" step="1"></span>
-                  <span>last <input type="number" id="ppZTo" min="0" step="1"></span>
+                  <span>first <input type="number" id="ppZFrom" min="1" step="1"></span>
+                  <span>last <input type="number" id="ppZTo" min="1" step="1"></span>
                 </div>
-                <p class="field-hint">Inclusive slice indices; leave untouched to keep the whole stack.</p>
+                <p class="field-hint">Inclusive slice numbers (1-based); leave untouched to keep the whole stack.</p>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Geometry</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Geometry</h4></div>
                 <label class="checkbox-inline"><input type="checkbox" id="ppFlipH"> flip horizontal</label>
                 <label class="checkbox-inline"><input type="checkbox" id="ppFlipV"> flip vertical</label>
-                <div class="pp-row">
+                <div class="sv-row">
                   <label>rotate</label>
                   <select id="ppRotate">
                     <option value="0">none</option>
@@ -184,7 +178,7 @@ class PreprocessModule extends BaseModule {
                     <option value="3">90&deg; ccw</option>
                   </select>
                 </div>
-                <div class="pp-row">
+                <div class="sv-row">
                   <label>downscale</label>
                   <select id="ppDownscale">
                     <option value="1">none</option>
@@ -195,30 +189,30 @@ class PreprocessModule extends BaseModule {
                 </div>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Intensity</div>
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Intensity</h4></div>
                 <canvas id="ppHistCanvas" width="258" height="90"></canvas>
                 <div class="pp-grid2">
                   <span>min <input type="number" id="ppWinLo" step="any"></span>
                   <span>max <input type="number" id="ppWinHi" step="any"></span>
                 </div>
-                <div class="pp-row">
+                <div class="sv-row">
                   <button class="btn small" id="ppAuto1Btn" title="Window at the 1% / 99% percentiles">Auto 1%</button>
                   <button class="btn small" id="ppAuto01Btn" title="Window at the 0.1% / 99.9% percentiles">Auto 0.1%</button>
                   <button class="btn small secondary" id="ppIntensityResetBtn">Reset</button>
                 </div>
-                <div class="pp-row">
+                <div class="sv-row">
                   <label>gamma</label>
                   <input type="range" class="range-slider" id="ppGamma" min="0.2" max="3" step="0.05" value="1">
-                  <span id="ppGammaVal">1.00</span>
+                  <span class="sv-row-value" id="ppGammaVal">1.00</span>
                 </div>
                 <label class="checkbox-inline"><input type="checkbox" id="ppInvert"> invert</label>
                 <p class="field-hint">Gamma &lt; 1 brightens dark regions.</p>
               </div>
 
-              <div class="toolbar-section">
-                <div class="toolbar-section-title">Output</div>
-                <div class="pp-row">
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Output</h4></div>
+                <div class="sv-row">
                   <label>data type</label>
                   <select id="ppOutDtype">
                     <option value="keep">keep</option>
@@ -375,6 +369,7 @@ class PreprocessModule extends BaseModule {
 
   async deactivate() {
     clearTimeout(this._previewTimer);
+    this.chrome?.destroy();
     if (this.viewer.imgUrl) URL.revokeObjectURL(this.viewer.imgUrl);
     if (this.socket && this.preprocessId) {
       this.socket.emit('leave-preprocess', this.preprocessId);
@@ -474,22 +469,16 @@ class PreprocessModule extends BaseModule {
       const el = document.getElementById(id);
       if (el) { if (max != null) el.max = max; el.value = value; }
     };
-    setup('ppSliceRange', this.currentSlice, this.file.slices - 1);
-    setup('ppSliceNum', this.currentSlice, this.file.slices - 1);
-    const total = document.getElementById('ppSliceTotal');
-    if (total) total.textContent = `/ ${this.file.slices - 1}`;
+    this.chrome.setSlice(this.currentSlice, this.file.slices);
 
     const [z0, z1] = this.ops.zRange || [0, this.file.slices];
-    setup('ppZFrom', z0, this.file.slices - 1);
-    setup('ppZTo', z1 - 1, this.file.slices - 1);
+    setup('ppZFrom', z0 + 1, this.file.slices);
+    setup('ppZTo', z1, this.file.slices);
 
     this.syncCropInputs();
     this.syncIntensityInputs();
-    const imageInfo = document.getElementById('ppImageInfo');
-    if (imageInfo) {
-      imageInfo.textContent =
-        `${this.file.name} - ${this.file.width}×${this.file.height}, ${this.file.dtype}`;
-    }
+    this.chrome.setFooter(
+      `${this.file.name} · ${this.file.width} × ${this.file.height} px · ${this.file.slices} slices · ${this.file.dtype}`);
     this.updateCropHint();
     this.requestPreview(true);
     this.drawHistogram();
@@ -498,19 +487,12 @@ class PreprocessModule extends BaseModule {
   setupAdjustControls() {
     const bind = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
 
-    // Slice navigation
-    const onSlice = (e) => {
-      const v = Math.max(0, Math.min(this.file ? this.file.slices - 1 : 0,
-        parseInt(e.target.value, 10) || 0));
-      this.currentSlice = v;
-      const r = document.getElementById('ppSliceRange');
-      const n = document.getElementById('ppSliceNum');
-      if (r) r.value = v;
-      if (n) n.value = v;
-      this.requestPreview();
-    };
-    bind('ppSliceRange', 'input', onSlice);
-    bind('ppSliceNum', 'change', onSlice);
+    // Shared viewer chrome (slice nav, status overlay, footer); the
+    // preview canvas lives in its canvas host
+    this.chrome.mount(document.getElementById('step2'));
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.id = 'ppCanvas';
+    this.chrome.area.appendChild(previewCanvas);
 
     // Crop
     bind('ppCropDrawBtn', 'click', () => this.toggleCropMode());
@@ -533,14 +515,15 @@ class PreprocessModule extends BaseModule {
     // Z range
     const onZ = () => {
       if (!this.file) return;
-      const from = parseInt(document.getElementById('ppZFrom')?.value, 10);
-      const to = parseInt(document.getElementById('ppZTo')?.value, 10);
+      // Inputs are 1-based (decision 4); ops.zRange stays [first, lastExclusive] 0-based
+      const from = parseInt(document.getElementById('ppZFrom')?.value, 10) - 1;
+      const to = parseInt(document.getElementById('ppZTo')?.value, 10) - 1;
       if (isNaN(from) || isNaN(to)) return;
       const z0 = Math.max(0, Math.min(from, this.file.slices - 1));
       const z1 = Math.max(z0 + 1, Math.min(to + 1, this.file.slices));
       this.ops.zRange = (z0 === 0 && z1 === this.file.slices) ? null : [z0, z1];
-      document.getElementById('ppZFrom').value = z0;
-      document.getElementById('ppZTo').value = z1 - 1;
+      document.getElementById('ppZFrom').value = z0 + 1;
+      document.getElementById('ppZTo').value = z1;
     };
     bind('ppZFrom', 'change', onZ);
     bind('ppZTo', 'change', onZ);
@@ -647,12 +630,9 @@ class PreprocessModule extends BaseModule {
   }
 
   updateCropHint() {
-    const hint = document.getElementById('ppCropHint');
-    if (hint) {
-      hint.textContent = this.viewer.cropMode
-        ? 'drag on the image to draw the crop rectangle'
-        : '';
-    }
+    this.chrome?.setFooter(undefined, this.viewer.cropMode
+      ? 'drag on the image to draw the crop rectangle'
+      : '');
   }
 
   canvasToImage(e) {
@@ -710,11 +690,7 @@ class PreprocessModule extends BaseModule {
   async loadPreview() {
     if (!this.file) return;
     const seq = ++this._previewSeq;
-    const status = document.getElementById('ppViewerStatus');
-    if (status && !this.viewer.img) {
-      status.style.display = 'block';
-      status.textContent = 'Loading preview...';
-    }
+    if (!this.viewer.img) this.chrome.setStatus('Loading preview…');
     try {
       const response = await fetch('/api/preprocess/preview', {
         method: 'POST',
@@ -750,14 +726,11 @@ class PreprocessModule extends BaseModule {
       if (this.viewer.imgUrl) URL.revokeObjectURL(this.viewer.imgUrl);
       this.viewer.img = img;
       this.viewer.imgUrl = url;
-      if (status) status.style.display = 'none';
+      this.chrome.setStatus(null);
       this.drawCanvas();
     } catch (e) {
       if (seq !== this._previewSeq) return;
-      if (status) {
-        status.style.display = 'block';
-        status.textContent = `Could not load preview: ${e.message}`;
-      }
+      this.chrome.setStatus(`Could not load preview: ${e.message}`, true);
     }
   }
 
@@ -771,8 +744,7 @@ class PreprocessModule extends BaseModule {
     canvas.height = Math.max(420, wrap.clientHeight || 0, Math.round(wrap.clientWidth * 0.6));
 
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);   // --module-viewer-bg shows through
 
     // Fit transform maps ORIGINAL image coords -> canvas (the preview JPEG
     // may be downsampled, so scale via the original width)
@@ -929,7 +901,7 @@ class PreprocessModule extends BaseModule {
     const items = [];
     const o = this.ops;
     if (o.crop) items.push(`Crop to ${o.crop.width}&times;${o.crop.height} at (${o.crop.x}, ${o.crop.y})`);
-    if (o.zRange) items.push(`Keep slices ${o.zRange[0]}&ndash;${o.zRange[1] - 1}`);
+    if (o.zRange) items.push(`Keep slices ${o.zRange[0] + 1}&ndash;${o.zRange[1]}`);
     if (o.flipH) items.push('Flip horizontal');
     if (o.flipV) items.push('Flip vertical');
     if (o.rotate90) items.push(`Rotate ${[null, '90&deg; cw', '180&deg;', '90&deg; ccw'][o.rotate90]}`);

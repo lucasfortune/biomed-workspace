@@ -95,8 +95,7 @@
   border-color: var(--module-primary);
 }
 
-.stitching-module .transform-row input[type="number"],
-.stitching-module .slice-picker input[type="number"] {
+.stitching-module .transform-row input[type="number"] {
   padding: 6px 8px;
 }
 
@@ -186,7 +185,8 @@
 }
 
 /* ============================================
-   STEP 2: viewer left (annotation-style), toolbar right
+   STEP 2: viewer left, toolbar right
+   Viewer chrome + toolbar sections come from core/css/slice-viewer.css
    ============================================ */
 
 /* The align step is a special case like the annotation module's editing
@@ -198,153 +198,13 @@
   width: 100%;
 }
 
-.stitch-main {
-  display: flex;
-  gap: 14px;
-  align-items: stretch;
-}
-
-@media (max-width: 950px) {
-  .stitch-main {
-    flex-direction: column;
-  }
-}
-
-.stitch-viewer-wrap {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--module-border, #d8d8d8);
-  border-radius: var(--module-radius-lg, 10px);
-  overflow: hidden;
-  background: var(--module-card-bg, #fff);
-}
-
-/* Viewer header (zoom + overlay controls) */
-.stitch-viewer-controls {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--module-border, #e0e0e0);
-}
-
-.stitch-viewer-controls .control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stitch-viewer-controls .control-group > label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--module-text-secondary, #666);
-}
-
-.stitch-viewer-controls .zoom-controls {
-  display: flex;
-  gap: 4px;
-}
-
-.overlay-viewer-area {
-  position: relative;
-  flex: 1;
-  min-height: 460px;
-  background: #111;
-}
-
 #overlayCanvas {
-  display: block;
-  width: 100%;
-  height: 100%;
   cursor: grab;
   outline: none;
 }
 
 #overlayCanvas:active {
   cursor: grabbing;
-}
-
-.viewer-status {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #ccc;
-  font-size: 0.9rem;
-}
-
-/* Viewer footer (score + hints) */
-.stitch-viewer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 12px;
-  border-top: 1px solid var(--module-border, #e0e0e0);
-  min-height: 30px;
-}
-
-.stitch-viewer-footer .field-hint {
-  margin: 0;
-}
-
-.align-score {
-  font-size: 0.82rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.align-score.good { color: var(--module-secondary); }
-.align-score.poor { color: #C0392B; }
-
-/* Right toolbar panel */
-.stitch-toolbar {
-  width: 290px;
-  flex-shrink: 0;
-  border: 1px solid var(--module-border, #d8d8d8);
-  border-radius: var(--module-radius-lg, 10px);
-  background: var(--module-card-bg, #fff);
-  padding: 12px;
-  align-self: flex-start;
-}
-
-@media (max-width: 950px) {
-  .stitch-toolbar {
-    width: auto;
-  }
-}
-
-.stitch-toolbar .toolbar-section {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--module-border, #ececec);
-}
-
-.stitch-toolbar .toolbar-section:first-child {
-  padding-top: 0;
-}
-
-.stitch-toolbar .toolbar-section:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.stitch-toolbar .toolbar-section-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--module-text-secondary, #666);
-  margin-bottom: 8px;
-}
-
-.stitch-toolbar .stack-label {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 500;
-  color: var(--module-text-primary, #222);
 }
 
 .info-tip {
@@ -390,21 +250,6 @@
 .junction-tab.done::before {
   content: "\2713 ";
   color: var(--module-secondary);
-}
-
-.slice-picker {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.slice-picker input[type="range"] {
-  flex: 1;
-  min-width: 0;
-}
-
-.slice-picker input[type="number"] {
-  width: 66px;
 }
 
 /* Dominance toggle */

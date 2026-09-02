@@ -106,12 +106,6 @@
   border-color: var(--module-primary);
 }
 
-.segcleanup-module .sc-toolbar input[type="number"],
-.segcleanup-module .sc-toolbar select,
-.segcleanup-module .sc-slice-group input[type="number"] {
-  padding: 6px 8px;
-}
-
 /* Step 1: selected file + class chips */
 .segcleanup-module .stack-item {
   display: flex;
@@ -168,186 +162,12 @@
 
 /* ============================================
    STEP 2: viewer left, toolbar right (wide)
+   Viewer chrome + toolbar sections come from core/css/slice-viewer.css
    ============================================ */
 
 .segcleanup-module #step2.step-content {
   max-width: 1500px;
   width: 100%;
-}
-
-.sc-main {
-  display: flex;
-  gap: 14px;
-  align-items: stretch;
-}
-
-@media (max-width: 950px) {
-  .sc-main {
-    flex-direction: column;
-  }
-}
-
-.sc-viewer-wrap {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--module-border, #d8d8d8);
-  border-radius: var(--module-radius-lg, 10px);
-  overflow: hidden;
-  background: var(--module-card-bg, #fff);
-}
-
-.sc-viewer-controls {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--module-border, #e0e0e0);
-}
-
-.sc-viewer-controls .control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sc-viewer-controls .control-group > label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--module-text-secondary, #666);
-}
-
-.sc-slice-group {
-  flex: 1;
-}
-
-.sc-slice-group input[type="range"] {
-  flex: 1;
-  min-width: 0;
-}
-
-.sc-slice-group input[type="number"] {
-  width: 70px;
-}
-
-.sc-slice-total {
-  font-size: 0.82rem;
-  color: var(--module-text-secondary, #777);
-  white-space: nowrap;
-}
-
-.sc-viewer-area {
-  position: relative;
-  flex: 1;
-  min-height: 460px;
-  background: #111;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-#scPreviewImg {
-  max-width: 100%;
-  max-height: 100%;
-  image-rendering: pixelated;
-}
-
-/* Manual editor: AnnotationCanvas builds its own viewport inside */
-.sc-canvas-area {
-  position: relative;
-  flex: 1;
-  min-height: 520px;
-}
-
-.segcleanup-module .viewer-status {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #ccc;
-  font-size: 0.9rem;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.sc-viewer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 12px;
-  border-top: 1px solid var(--module-border, #e0e0e0);
-  min-height: 30px;
-}
-
-.sc-viewer-footer .field-hint {
-  margin: 0;
-}
-
-/* Right toolbar */
-.sc-toolbar {
-  width: 290px;
-  flex-shrink: 0;
-  border: 1px solid var(--module-border, #d8d8d8);
-  border-radius: var(--module-radius-lg, 10px);
-  background: var(--module-card-bg, #fff);
-  padding: 12px;
-  align-self: flex-start;
-}
-
-@media (max-width: 950px) {
-  .sc-toolbar {
-    width: auto;
-  }
-}
-
-.sc-toolbar .toolbar-section {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--module-border, #ececec);
-}
-
-.sc-toolbar .toolbar-section:first-child {
-  padding-top: 0;
-}
-
-.sc-toolbar .toolbar-section:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.sc-toolbar .toolbar-section-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--module-text-secondary, #666);
-  margin-bottom: 8px;
-}
-
-.sc-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-  font-size: 0.85rem;
-}
-
-.sc-row > label {
-  font-size: 0.82rem;
-  color: var(--module-text-secondary, #666);
-}
-
-.sc-row input[type="range"] {
-  flex: 1;
-  min-width: 0;
-}
-
-.sc-row input[type="number"] {
-  width: 90px;
 }
 
 .segcleanup-module .checkbox-inline {
@@ -516,6 +336,6 @@
   white-space: nowrap;
 }
 
-.segcleanup-module .toolbar-section .btn.small {
+.segcleanup-module .sv-section .btn.small {
   margin-top: 4px;
 }
