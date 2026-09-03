@@ -237,18 +237,23 @@ Abstract base class that all workspace modules extend, providing:
 
 ##### Core UI Components (`core/components/`)
 
-Reusable components shared across modules:
-- **FileSelector.js** - File selection with validation and help integration
+Reusable components shared across modules, exported from `components/index.js`:
+- **StepNavigator.js** - Step-based workflow navigation (attaches to `BaseModule.renderStepNav()` markup)
+- **NavigationButtons.js** - Previous/Next row state (labels, enabled, visible)
+- **ValidationDisplay.js** - Validation feedback display, plus `renderContainer(id)` for its slot
+- **FileSelector.js** - File selection with uploads, built-in test data and help icons
+- **SliceViewerChrome.js** - Shared slice-viewer header / slider strip / footer
+
+Also in the same directory but **not** exported from the index - the help panel
+(loaded as `<script>` tags by `workspace/index.html`) and the resume dialog
+(dynamically imported by `workspace.js`):
 - **InfoPanel.js** - Help panel container with tabs
 - **InfoArticle.js** - Article rendering with markdown support
 - **InfoGlossary.js** - Terminology definitions
 - **InfoSearch.js** - Full-text search across articles
-- **LoadingOverlay.js** - Loading state display
-- **MetricCard.js** - Statistics display cards
-- **NavigationButtons.js** - Step navigation controls
-- **ProgressIndicator.js** - Progress bar component
-- **StepNavigator.js** - Step-based workflow navigation
-- **ValidationDisplay.js** - Validation feedback display
+- **ResumeDialog.js** - Resume-or-start-fresh prompt
+
+Shared icon set: **`core/icons.js`** - `icon(name)` returns inline SVG (ADR-005: never emoji).
 
 #### 1. State Management (`StateManager.js`)
 

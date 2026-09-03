@@ -1,24 +1,22 @@
 # Module Creation Guide
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-09-03
 **Estimated Time:** 1-2 hours for first module (using framework)
 **Difficulty:** Intermediate
 **Target Audience:** Developers adding new processing modules to the Workspace version
-**8 Modules Implemented:** Segmentation, DL Denoising, Filter Denoising, Annotation, Mesh, Visualization, Image Viewer, Template
 
 ---
 
-> **New: Module Framework Available!**
+> **Every module extends BaseModule.**
 >
-> We now have a **BaseModule framework** with reusable components that significantly
-> simplifies module creation. New modules should use this framework.
+> New modules are created by copying the template module, which already
+> implements every convention in the UI contract. Do not hand-roll a module
+> class - the framework owns the lifecycle, the step chrome, CSS loading and
+> the shared components.
 >
 > **Quick Links:**
-> - [Module Framework Documentation](MODULE_FRAMEWORK.md) - API reference and guides
-> - [Template Module](/public/workspace/js/modules/template/) - Copy and customize
->
-> The example below shows the traditional approach. For the recommended approach
-> using the framework, see the [Using the Framework](#using-the-framework) section.
+> - [Module Framework Documentation](MODULE_FRAMEWORK.md) - API reference
+> - [Template module + UI contract README](/public/workspace/js/modules/template/) - copy this
 
 ---
 
@@ -37,40 +35,39 @@
    - Update the class name and configuration
    - Implement your processing logic
 
-3. **Register in `registry.js`**
+3. **Register in `registry.js`** (see [Step 4](#step-4-register-module))
 
-4. **See the template's README** for the full checklist
+4. **See the template's README** - it is the UI contract, plus the full checklist
 
 ### Framework Benefits
 
-- **BaseModule** handles lifecycle, step navigation, CSS loading
-- **StepNavigator** component for consistent step UI
-- **FileSelector** component for file selection with test data support
-- **ValidationDisplay** component for success/error messages
-- **InfoPanel** component for context-sensitive help integration
-- **LoadingOverlay** component for processing states
-- **ProgressIndicator** component for long-running operations
-- **Shared CSS variables** for consistent styling (light/dark mode)
+- **BaseModule** handles lifecycle, step navigation, CSS load/unload, loading overlay
+- **StepNavigator** for the step indicator bar, gated by `canNavigate`
+- **NavigationButtons** for a Previous/Next row's state (optional)
+- **FileSelector** for file selection, uploads and built-in test data
+- **ValidationDisplay** for success/error/info/warning blocks
+- **SliceViewerChrome** for the shared slice-viewer frame
+- **`core/icons.js`** for the shared inline-SVG icon set
+- **Shared CSS tokens and baselines** for consistent styling (light/dark mode)
 
 For full documentation, see [Module Framework](MODULE_FRAMEWORK.md).
 
-### Available Core Components (11 total)
+### Available Core Components (5)
 
-Located in `/public/workspace/js/core/components/`:
+Exported from `/public/workspace/js/core/components/index.js`:
 
 | Component | Purpose |
 |-----------|---------|
-| FileSelector | File selection with validation and help icons |
-| InfoPanel | Help panel container with tabs |
-| InfoArticle | Article rendering with markdown |
-| InfoGlossary | Terminology definitions |
-| InfoSearch | Full-text help search |
-| LoadingOverlay | Loading state display |
-| MetricCard | Statistics display |
-| NavigationButtons | Step navigation controls |
-| ProgressIndicator | Progress bar |
-| StepNavigator | Step-based workflow |
-| ValidationDisplay | Validation feedback |
+| StepNavigator | Step-based workflow navigation (attaches to `renderStepNav()` markup) |
+| NavigationButtons | Previous/Next row state (labels, enabled, visible) |
+| ValidationDisplay | Validation feedback, plus `renderContainer(id)` for its slot |
+| FileSelector | File selection with uploads, test data and help icons |
+| SliceViewerChrome | Shared slice-viewer header / slider / footer |
+
+The help-panel components in the same directory (`InfoPanel`, `InfoArticle`,
+`InfoGlossary`, `InfoSearch`) are loaded as classic `<script>` tags by
+`workspace/index.html`, and `ResumeDialog` is dynamically imported by
+`workspace.js`; none of them are exported from the index.
 
 ---
 
@@ -142,24 +139,34 @@ Module Inactive (still in memory)
 
 ### Module Interface Contract
 
-Every module MUST implement:
+`ModuleLoader` needs `activate()` and `deactivate()` - and `BaseModule`
+provides both. A module therefore implements `render()` (required) and
+overrides `initialize()` and `deactivate()`:
+
 ```javascript
-class MyModule {
+import BaseModule from '/workspace/js/core/BaseModule.js';
+
+class MyModule extends BaseModule {
   constructor(stateManager) {
-    // Initialize with state manager
+    super(stateManager, { id: 'mymodule', name: 'My Module', cssPath: '...', steps: [...] });
   }
 
-  async activate() {
-    // Render UI, attach listeners, subscribe to state
-  }
+  render() { /* required: write the step markup into this.container */ }
+
+  async initialize() { /* create components, setupEventListeners() */ }
 
   async deactivate() {
-    // Clean up listeners, clear UI, unsubscribe
+    this.reset();                 // reset on leave - DOM still exists here
+    /* remove tracked listeners, disconnect sockets, delete window handle */
+    await super.deactivate();
   }
 }
 
 export default MyModule;
 ```
+
+`ModuleLoader` caches the instance between visits and calls `unloadCSS()`
+after `deactivate()`.
 
 See [Module Architecture](../architecture/MODULE_ARCHITECTURE.md) for complete details.
 
@@ -206,11 +213,11 @@ Let's create a **Deep Learning Denoising Module** as our working example.
 # Navigate to modules directory
 cd public/workspace/js/modules
 
-# Create module directory
-mkdir -p denoising
-
-# Create module file
-touch denoising/DenoisingModule.js
+# Copy the template - it already has the class, the CSS and the README
+cp -r template denoising
+cd denoising
+mv TemplateModule.js DenoisingModule.js
+mv css/template.css css/denoising.css
 ```
 
 ### Final Structure
@@ -218,11 +225,18 @@ touch denoising/DenoisingModule.js
 ```
 public/workspace/js/modules/
 ├── registry.js
+├── template/               # never edited in place - always copied
 ├── segmentation/
 │   └── SegmentationModule.js
-└── denoising/              # NEW
-    └── DenoisingModule.js  # NEW
+└── denoising/                  # NEW
+    ├── DenoisingModule.js      # NEW
+    ├── css/denoising.css       # NEW - @imports module-base.css
+    └── README.md               # NEW (optional)
 ```
+
+The two largest modules (`segmentation/` and `denoising-dl/`) keep their markup in
+`templates/Templates.js` and their logic in `handlers/*.js`; follow that split when a
+single module file becomes hard to navigate.
 
 ---
 
@@ -230,299 +244,266 @@ public/workspace/js/modules/
 
 ### Basic Module Template
 
-Open `denoising/DenoisingModule.js` and create the basic structure:
+Open `denoising/DenoisingModule.js`. The copied template already has the whole
+skeleton; the parts you actually rewrite are the config, `render()`, the
+component setup and the processing logic:
 
 ```javascript
+import BaseModule from '/workspace/js/core/BaseModule.js';
+import { StepNavigator, FileSelector, ValidationDisplay }
+  from '/workspace/js/core/components/index.js';
+
 /**
  * DenoisingModule - Remove noise from electron microscopy images
  */
-class DenoisingModule {
+class DenoisingModule extends BaseModule {
   constructor(stateManager) {
-    // Store state manager reference
-    this.state = stateManager;
+    super(stateManager, {
+      id: 'denoising',
+      name: 'Deep Learning Denoising',
+      cssPath: '/workspace/js/modules/denoising/css/denoising.css',
+      steps: [
+        { id: 'upload', name: 'Data Upload' },
+        { id: 'configure', name: 'Configure' },
+        { id: 'process', name: 'Process' }
+      ]
+    });
 
-    // UI container reference
-    this.container = null;
+    // Step condition flags (drive canNavigateToStep)
+    this.filesValidated = false;
+    this.configSaved = false;
 
-    // State subscriptions (for cleanup)
-    this.unsubscribers = [];
-
-    // Socket.IO connection (if needed)
+    // Module state - never assign to this.config, BaseModule owns it
+    this.uploadedFile = null;
+    this.processingConfig = null;
     this.socket = null;
 
-    // Module-specific properties
-    this.currentTask = null;
-
-    console.log('[DenoisingModule] Initialized');
+    // Tracked listeners so deactivate() can remove every one
+    this.eventListeners = [];
   }
 
-  /**
-   * Activate module - render UI and set up listeners
-   */
-  async activate() {
-    console.log('[DenoisingModule] Activating...');
-
-    // Get container
-    this.container = document.getElementById('module-view');
-    if (!this.container) {
-      throw new Error('Module container not found');
-    }
-
-    // Render UI
-    this.render();
-
-    // Attach event listeners
-    this.attachEventListeners();
-
-    // Subscribe to state changes
-    this.subscribeToState();
-
-    // Initialize module state
-    this.state.update('modules.denoising.currentTask', null);
-    this.state.update('modules.denoising.history', []);
-
-    console.log('[DenoisingModule] Activated');
+  /** Help icon that opens the info panel on a specific article */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 …"/></svg>
+    </span>`;
   }
 
-  /**
-   * Render module UI
-   */
   render() {
     this.container.innerHTML = `
-      <div class="module-header">
-        <button id="denoising-back-btn" class="btn-back">← Back to Hub</button>
-        <h2>🔊 Deep Learning Denoising</h2>
-        <p class="module-description">Remove noise from electron microscopy images</p>
-      </div>
+      <div class="denoising-module module-container">
+        ${this.renderHeader()}
+        ${this.renderStepNav()}
+        <div class="step-contents">
 
-      <div class="module-content">
-        <!-- File Upload Section -->
-        <section class="module-section">
-          <h3>1. Upload Noisy Images</h3>
-          <div class="upload-container">
-            <input type="file" id="denoising-file-input" accept=".tif,.tiff" />
-            <button id="denoising-upload-btn" class="btn-primary">Upload TIFF Stack</button>
+          <div id="step1" class="step-content active">
+            <div class="step-inner">
+              <h3>Upload Noisy Images</h3>
+              <p class="step-description">Select or upload the stack to denoise.</p>
+              <div id="fileSelectorContainer"></div>
+              ${ValidationDisplay.renderContainer('validationResult')}
+              <div class="navigation-buttons">
+                <div></div>
+                <button id="step1Next" class="btn" disabled>Next: Configure</button>
+              </div>
+            </div>
           </div>
-          <div id="denoising-file-info" class="file-info"></div>
-        </section>
 
-        <!-- Processing Section -->
-        <section class="module-section">
-          <h3>2. Configure Denoising</h3>
-          <div class="config-form">
-            <label>
-              Model Type:
-              <select id="denoising-model-select">
-                <option value="gaussian">Gaussian Denoising</option>
-                <option value="deep">Deep Learning (U-Net)</option>
-                <option value="nlm">Non-Local Means</option>
-              </select>
-            </label>
-            <label>
-              Noise Level:
-              <input type="range" id="denoising-noise-level" min="1" max="10" value="5" />
-              <span id="denoising-noise-value">5</span>
-            </label>
+          <div id="step2" class="step-content">
+            <div class="step-inner">
+              <h3>Configure Denoising</h3>
+              <div class="section-card">
+                <h4>Model</h4>
+                <div class="form-field">
+                  <label for="modelType">Model type</label>
+                  <select id="modelType">
+                    <option value="n2v">Noise2Void</option>
+                    <option value="autostructn2v">autoStructN2V</option>
+                  </select>
+                  <span class="field-hint">N2V is the safe default.</span>
+                </div>
+                <div class="form-field">
+                  <label for="epochs">Epochs</label>
+                  <input type="number" id="epochs" class="input-sm" value="30" min="1" max="500">
+                </div>
+              </div>
+              <div class="navigation-buttons">
+                <button id="step2Back" class="btn secondary">Back</button>
+                <button id="step2Next" class="btn">Next: Process</button>
+              </div>
+            </div>
           </div>
-          <button id="denoising-start-btn" class="btn-primary" disabled>Start Denoising</button>
-        </section>
 
-        <!-- Progress Section -->
-        <section class="module-section" id="denoising-progress-section" style="display:none;">
-          <h3>3. Processing...</h3>
-          <div class="progress-container">
-            <progress id="denoising-progress-bar" max="100" value="0"></progress>
-            <span id="denoising-progress-text">0%</span>
-          </div>
-          <div id="denoising-progress-details"></div>
-        </section>
+          <div id="step3" class="step-content">
+            <div class="step-inner">
+              <h3>Processing</h3>
 
-        <!-- Results Section -->
-        <section class="module-section" id="denoising-results-section" style="display:none;">
-          <h3>4. Results</h3>
-          <div class="results-container">
-            <div id="denoising-results-info"></div>
-            <button id="denoising-download-btn" class="btn-primary">Download Denoised Images</button>
-            <button id="denoising-reset-btn" class="btn-secondary">Process Another</button>
+              <div id="processingProgress" class="progress-section" style="display: none;">
+                <div class="progress-info">
+                  <span>Denoising...</span><span id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                  <div id="progressBar" class="job-progress-fill" style="width: 0%"></div>
+                </div>
+                <p id="progressStatus">Initializing...</p>
+              </div>
+
+              <div class="section-card success-card" id="processingResults" style="display: none;">
+                <div class="success-header">
+                  <span class="success-icon">&#10003;</span>
+                  <span class="success-title">Denoising Complete</span>
+                </div>
+                <div id="resultsDetails" class="validation-details"></div>
+                <div class="success-actions">
+                  <button class="btn primary" id="openViewerBtn">Open in Image Viewer</button>
+                  <button class="btn secondary" id="resetBtn">Start New Run</button>
+                </div>
+              </div>
+
+              <!-- The job button is the nav row's right slot: exactly one
+                   enabled red button on screen at a time -->
+              <div class="navigation-buttons">
+                <button id="step3Back" class="btn secondary">Back</button>
+                <button id="startProcessingBtn" class="btn primary">
+                  <span class="btn-glyph">&#9658;</span> Start Denoising
+                </button>
+              </div>
+            </div>
           </div>
-        </section>
+
+        </div>
       </div>
     `;
   }
 
-  /**
-   * Attach event listeners
-   */
-  attachEventListeners() {
-    // Back button
-    const backBtn = document.getElementById('denoising-back-btn');
-    backBtn.addEventListener('click', () => this.handleBack());
-
-    // File input
-    const fileInput = document.getElementById('denoising-file-input');
-    fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-
-    // Upload button
-    const uploadBtn = document.getElementById('denoising-upload-btn');
-    uploadBtn.addEventListener('click', () => this.handleUpload());
-
-    // Noise level slider
-    const noiseLevel = document.getElementById('denoising-noise-level');
-    noiseLevel.addEventListener('input', (e) => {
-      document.getElementById('denoising-noise-value').textContent = e.target.value;
+  async initialize() {
+    this.stepNavigator = new StepNavigator({
+      steps: this.config.steps,
+      currentStep: this.currentStep,
+      onStepClick: (stepNum) => this.goToStep(stepNum),
+      canNavigate: (stepNum) => this.canNavigateToStep(stepNum)
     });
+    this.stepNavigator.init(this.container);
 
-    // Start button
-    const startBtn = document.getElementById('denoising-start-btn');
-    startBtn.addEventListener('click', () => this.handleStart());
+    this.validationDisplay = new ValidationDisplay('validationResult');
 
-    // Download button (will be attached after results)
-    // Reset button (will be attached after results)
-  }
-
-  /**
-   * Subscribe to state changes
-   */
-  subscribeToState() {
-    // Subscribe to workspace files
-    const unsubFiles = this.state.subscribe('workspace.files', (files) => {
-      this.onWorkspaceFilesChange(files);
+    this.fileSelector = new FileSelector({
+      id: 'input_data',
+      fileType: 'uploads',
+      filterTags: ['raw'],
+      title: 'Noisy Images',
+      icon: 'image',                                              // core/icons.js name
+      helpIconHtml: this.renderHelpIcon('denoising.step1.input'),
+      showTestData: true,
+      testDataKind: 'denoising',   // no isTestData branch needed
+      stateManager: this.state,
+      onSelect: (file) => this.onFileSelected(file),
+      onUpload: (file, result) => this.onFileUploaded(file, result)
     });
-    this.unsubscribers.push(unsubFiles);
+    document.getElementById('fileSelectorContainer').innerHTML = this.fileSelector.render();
+    await this.fileSelector.init();
 
-    // Subscribe to module progress
-    const unsubProgress = this.state.subscribe('modules.denoising.progress', (progress) => {
-      this.onProgressUpdate(progress);
-    });
-    this.unsubscribers.push(unsubProgress);
+    this.setupEventListeners();
+    window.denoisingModule = this;   // debugging handle only
   }
 
-  /**
-   * Handle back to hub
-   */
-  handleBack() {
-    if (window.workspace && window.workspace.returnToHub) {
-      window.workspace.returnToHub();
-    }
+  setupEventListeners() {
+    const addListener = (element, event, handler) => {
+      if (element) {
+        element.addEventListener(event, handler);
+        this.eventListeners.push({ element, event, handler });
+      }
+    };
+
+    addListener(document.getElementById('backToHub'), 'click', () => window.workspace.returnToHub());
+    addListener(document.getElementById('step1Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step2Back'), 'click', () => this.previousStep());
+    addListener(document.getElementById('step2Next'), 'click', () => this.nextStep());
+    addListener(document.getElementById('step3Back'), 'click', () => this.previousStep());
+    addListener(document.getElementById('startProcessingBtn'), 'click', () => this.startProcessing());
+    addListener(document.getElementById('openViewerBtn'), 'click', () => this.openInImageViewer());
+    addListener(document.getElementById('resetBtn'), 'click', () => this.reset());
   }
 
-  /**
-   * Handle file selection
-   */
-  handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    // Display file info
-    const fileInfo = document.getElementById('denoising-file-info');
-    fileInfo.innerHTML = `
-      <p><strong>Selected:</strong> ${file.name}</p>
-      <p><strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
-    `;
-
-    // Store file reference
-    this.selectedFile = file;
-  }
-
-  /**
-   * Handle file upload
-   */
-  async handleUpload() {
-    if (!this.selectedFile) {
-      this.state.notify('error', 'Please select a file first');
+  onFileSelected(fileInfo) {
+    // The selector reports null when the user clears the dropdown
+    if (!fileInfo) {
+      this.uploadedFile = null;
+      this.filesValidated = false;
+      this.validationDisplay.hide();
+      document.getElementById('step1Next').disabled = true;
       return;
     }
+    this.uploadedFile = fileInfo;
+    this.validationDisplay.showSuccess('File Selected', [
+      { label: 'Name', value: fileInfo.name }
+    ]);
+    this.filesValidated = true;
+    document.getElementById('step1Next').disabled = false;
+  }
 
-    try {
-      this.state.update('ui.loading', true);
-
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', this.selectedFile);
-
-      // Upload via API
-      const response = await fetch('/api/denoising/upload', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.state.notify('success', 'File uploaded successfully', 3000);
-        this.uploadedFilePath = result.filePath;
-
-        // Enable start button
-        document.getElementById('denoising-start-btn').disabled = false;
-      } else {
-        throw new Error(result.error || 'Upload failed');
-      }
-
-    } catch (error) {
-      console.error('[DenoisingModule] Upload error:', error);
-      this.state.notify('error', `Upload failed: ${error.message}`, 5000);
-    } finally {
-      this.state.update('ui.loading', false);
+  /** Single source of truth for step gating - also feeds StepNavigator */
+  canNavigateToStep(stepNumber) {
+    switch (stepNumber) {
+      case 1: return true;
+      case 2: return this.filesValidated;
+      case 3: return this.configSaved;
+      default: return false;
     }
   }
 
-  /**
-   * Handle start denoising
-   */
-  async handleStart() {
-    if (!this.uploadedFilePath) {
-      this.state.notify('error', 'Please upload a file first');
-      return;
-    }
-
-    try {
-      this.state.update('ui.loading', true);
-
-      // Get configuration
-      const modelType = document.getElementById('denoising-model-select').value;
-      const noiseLevel = document.getElementById('denoising-noise-level').value;
-
-      // Start denoising
-      const response = await fetch('/api/denoising/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: this.uploadedFilePath,
-          modelType,
-          noiseLevel: parseInt(noiseLevel)
-        })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.currentTask = {
-          taskId: result.taskId,
-          startTime: Date.now()
-        };
-
-        // Show progress section
-        document.getElementById('denoising-progress-section').style.display = 'block';
-
-        // Set up Socket.IO for progress updates
-        this.setupSocketIO(result.taskId);
-
-        this.state.notify('info', 'Denoising started...', 3000);
-      } else {
-        throw new Error(result.error || 'Failed to start denoising');
-      }
-
-    } catch (error) {
-      console.error('[DenoisingModule] Start error:', error);
-      this.state.notify('error', `Failed to start: ${error.message}`, 5000);
-    } finally {
-      this.state.update('ui.loading', false);
-    }
+  goToStep(stepNumber) {
+    super.goToStep(stepNumber);
+    this.stepNavigator?.update(stepNumber);
   }
 
-  /**
-   * Set up Socket.IO for real-time progress
-   */
+  /** Hide the job button while the job runs and while the result card shows */
+  setJobButtonVisible(visible) {
+    const btn = document.getElementById('startProcessingBtn');
+    if (btn) btn.style.display = visible ? '' : 'none';
+  }
+
+  /** Back to the constructor defaults - called by "Start New Run" and deactivate() */
+  reset() {
+    this.filesValidated = false;
+    this.configSaved = false;
+    this.uploadedFile = null;
+    this.processingConfig = null;
+
+    const progress = document.getElementById('processingProgress');
+    if (progress) progress.style.display = 'none';
+    const results = document.getElementById('processingResults');
+    if (results) results.style.display = 'none';
+    this.setJobButtonVisible(true);
+
+    this.validationDisplay?.hide();
+    this.fileSelector?.clearSelection();
+    this.goToStep(1);
+  }
+
+  async deactivate() {
+    this.reset();                       // DOM still exists here
+    for (const { element, event, handler } of this.eventListeners) {
+      element.removeEventListener(event, handler);
+    }
+    this.eventListeners = [];
+    if (this.socket) { this.socket.disconnect(); this.socket = null; }
+    delete window.denoisingModule;
+    await super.deactivate();           // clears the container, resets the step
+  }
+}
+
+export default DenoisingModule;
+```
+
+See the [template README](/public/workspace/js/modules/template/README.md) for
+the full UI contract (step markup, job button placement, success card, progress
+bar, reset on leave, test data, and the styling rules) and
+[Module Framework](MODULE_FRAMEWORK.md) for the component options.
+
+### Socket.IO for real-time progress
+
+```javascript
   setupSocketIO(taskId) {
     if (this.socket) {
       this.socket.disconnect();
@@ -549,192 +530,67 @@ class DenoisingModule {
     });
   }
 
-  /**
-   * Handle progress update
-   */
-  onProgressUpdate(progress) {
-    if (!progress) return;
+  async startProcessing() {
+    // Hide the job button, show progress
+    this.setJobButtonVisible(false);
+    document.getElementById('processingProgress').style.display = 'block';
 
-    // Update progress bar
-    const progressBar = document.getElementById('denoising-progress-bar');
-    const progressText = document.getElementById('denoising-progress-text');
-    const progressDetails = document.getElementById('denoising-progress-details');
+    try {
+      const response = await fetch('/api/denoising/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: this.uploadedFile.path,
+          inputFileIds: [this.uploadedFile.id],   // lineage, see below
+          ...this.processingConfig
+        })
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Failed to start');
 
-    if (progressBar) {
-      progressBar.value = progress.percent || 0;
-      progressText.textContent = `${(progress.percent || 0).toFixed(1)}%`;
-    }
-
-    if (progressDetails) {
-      progressDetails.innerHTML = `
-        <p>Slice: ${progress.currentSlice || 0} / ${progress.totalSlices || 0}</p>
-        <p>Elapsed: ${this.formatDuration(Date.now() - this.currentTask.startTime)}</p>
-      `;
+      this.setupSocketIO(result.taskId);
+    } catch (error) {
+      this.state.notify('error', `Failed to start: ${error.message}`, 5000);
+      // Offer the job button again so the run can be retried
+      document.getElementById('processingProgress').style.display = 'none';
+      this.setJobButtonVisible(true);
     }
   }
 
-  /**
-   * Handle completion
-   */
+  updateProgress(percent, status) {
+    document.getElementById('progressBar').style.width = `${percent}%`;
+    document.getElementById('progressPercent').textContent = `${percent}%`;
+    document.getElementById('progressStatus').textContent = status;
+  }
+
   handleComplete(result) {
-    console.log('[DenoisingModule] Processing complete:', result);
+    // Hide progress, show the success card. The job button stays hidden
+    // until the user asks for another run ("Start New Run").
+    document.getElementById('processingProgress').style.display = 'none';
+    document.getElementById('processingResults').style.display = 'block';
+    this.setJobButtonVisible(false);
 
-    // Hide progress, show results
-    document.getElementById('denoising-progress-section').style.display = 'none';
-    document.getElementById('denoising-results-section').style.display = 'block';
-
-    // Display results
-    const resultsInfo = document.getElementById('denoising-results-info');
-    resultsInfo.innerHTML = `
-      <div class="success-message">
-        <h4>✓ Denoising Complete!</h4>
-        <p>Output: ${result.outputPath}</p>
-        <p>Processing time: ${this.formatDuration(result.duration)}</p>
-      </div>
+    document.getElementById('resultsDetails').innerHTML = `
+      <div class="detail-row"><span>Output:</span><span>${result.outputName}</span></div>
+      <div class="detail-row"><span>Duration:</span><span>${result.duration}</span></div>
     `;
 
-    // Attach download button listener
-    const downloadBtn = document.getElementById('denoising-download-btn');
-    downloadBtn.addEventListener('click', () => {
-      window.location.href = `/api/denoising/download/${result.taskId}`;
-    });
-
-    // Attach reset button listener
-    const resetBtn = document.getElementById('denoising-reset-btn');
-    resetBtn.addEventListener('click', () => this.reset());
-
-    // Update state
-    this.state.update('modules.denoising.currentTask', null);
-    this.state.update('modules.denoising.lastResult', result);
-
-    // Add to history
-    const history = this.state.get('modules.denoising.history') || [];
-    history.push({
-      timestamp: Date.now(),
-      result
-    });
-    this.state.update('modules.denoising.history', history);
-
-    // Notification
     this.state.notify('success', 'Denoising completed!', 5000);
-
-    // Disconnect socket
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    if (this.socket) { this.socket.disconnect(); this.socket = null; }
   }
 
-  /**
-   * Handle error
-   */
   handleError(error) {
-    console.error('[DenoisingModule] Error:', error);
-
     this.state.notify('error', `Processing failed: ${error.message}`, 5000);
-
-    // Hide progress section
-    document.getElementById('denoising-progress-section').style.display = 'none';
-
-    // Disconnect socket
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-
-    // Clear current task
-    this.currentTask = null;
-    this.state.update('modules.denoising.currentTask', null);
+    document.getElementById('processingProgress').style.display = 'none';
+    this.setJobButtonVisible(true);   // let the user retry
+    if (this.socket) { this.socket.disconnect(); this.socket = null; }
   }
-
-  /**
-   * Reset module to initial state
-   */
-  reset() {
-    // Hide results section
-    document.getElementById('denoising-results-section').style.display = 'none';
-
-    // Clear file input
-    document.getElementById('denoising-file-input').value = '';
-    document.getElementById('denoising-file-info').innerHTML = '';
-
-    // Reset form
-    document.getElementById('denoising-model-select').value = 'gaussian';
-    document.getElementById('denoising-noise-level').value = 5;
-    document.getElementById('denoising-noise-value').textContent = '5';
-
-    // Disable start button
-    document.getElementById('denoising-start-btn').disabled = true;
-
-    // Clear state
-    this.selectedFile = null;
-    this.uploadedFilePath = null;
-    this.currentTask = null;
-  }
-
-  /**
-   * Handle workspace files change
-   */
-  onWorkspaceFilesChange(files) {
-    // Could display available files for selection
-    console.log('[DenoisingModule] Workspace files updated:', files);
-  }
-
-  /**
-   * Format duration (ms to human readable)
-   */
-  formatDuration(ms) {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    if (minutes > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    }
-    return `${seconds}s`;
-  }
-
-  /**
-   * Deactivate module - clean up
-   */
-  async deactivate() {
-    console.log('[DenoisingModule] Deactivating...');
-
-    // Unsubscribe from state
-    this.unsubscribers.forEach(unsub => unsub());
-    this.unsubscribers = [];
-
-    // Disconnect socket
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-
-    // Clear UI
-    if (this.container) {
-      this.container.innerHTML = '';
-    }
-
-    // Clear references
-    this.selectedFile = null;
-    this.uploadedFilePath = null;
-    this.currentTask = null;
-
-    console.log('[DenoisingModule] Deactivated');
-  }
-
-  /**
-   * Optional cleanup (called on unload)
-   */
-  cleanup() {
-    console.log('[DenoisingModule] Cleanup');
-    // Release any additional resources
-  }
-}
-
-// Export module
-export default DenoisingModule;
 ```
+
+Note the result block is the shared `.section-card.success-card`, the progress
+bar is `.progress-bar-container` + `.job-progress-fill`, and the completion
+handler never re-attaches listeners: `#openViewerBtn` and `#resetBtn` are in
+the static markup and were wired once in `setupEventListeners()`.
 
 ---
 
@@ -742,32 +598,29 @@ export default DenoisingModule;
 
 ### Update Module Registry
 
-Open `public/workspace/js/modules/registry.js` and add your module:
+Open `public/workspace/js/modules/registry.js`. First add an inline SVG to the
+`moduleIcons` map at the top of the file, then add the entry:
 
 ```javascript
+const moduleIcons = {
+  // ...
+  denoising: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3z…"/></svg>`
+};
+
 const moduleRegistry = [
-  {
-    id: 'segmentation',
-    name: 'U-Net Segmentation',
-    description: 'Complete ML pipeline: Data Upload → Training → Inference → 3D Visualization',
-    icon: '🧩',
-    path: '/workspace/js/modules/segmentation/SegmentationModule.js',
-    inputs: ['image_stack', 'annotations'],
-    outputs: ['segmented_stack', 'trained_model', 'visualization'],
-    color: '#4A90E2',
-    status: 'available'
-  },
-  // ADD YOUR MODULE HERE
+  // Hub order follows the processing pipeline: view, prepare, denoise,
+  // annotate, segment, clean up, stitch, mesh, visualise.
+  // ...
   {
     id: 'denoising',
     name: 'Deep Learning Denoising',
-    description: 'Remove noise from electron microscopy images using advanced denoising algorithms',
-    icon: '🔊',
+    description: 'Remove noise from electron microscopy images with a trained model',
+    icon: moduleIcons.denoising,
     path: '/workspace/js/modules/denoising/DenoisingModule.js',
     inputs: ['image_stack'],
     outputs: ['denoised_stack'],
-    color: '#50C878',
-    status: 'available'  // Change from 'coming_soon' to 'available'
+    status: 'available',           // change from 'coming_soon' when ready
+    helpArticleId: 'denoising'
   },
   // ... other modules
 ];
@@ -779,19 +632,26 @@ const moduleRegistry = [
 |-------|-------------|----------|
 | `id` | Unique module identifier (lowercase, no spaces) | ✅ Yes |
 | `name` | Display name shown in UI | ✅ Yes |
-| `description` | Brief description (1-2 sentences) | No |
-| `icon` | Emoji icon for module card | No |
+| `description` | Brief description, at most 14 words | No |
+| `icon` | Inline SVG from the `moduleIcons` map - **never an emoji** (ADR-005) | No |
 | `path` | Absolute path to module file | ✅ Yes |
 | `inputs` | Array of input data types | No |
 | `outputs` | Array of output data types | No |
-| `color` | Hex color for module card | No |
 | `status` | 'available' or 'coming_soon' | No |
+| `helpArticleId` | Article the card's help icon opens | No |
+
+There is **no `color` field**: cards carry no per-module colour, because the
+hub uses the single PoP accent. Insert your entry at the point in the array
+where the module belongs in the processing pipeline.
 
 ---
 
 ## Step 5: Add Backend Endpoints (if needed)
 
-If your module needs server-side processing, add endpoints to `server.js`:
+If your module needs server-side processing, add a route file under
+`src/routes/` (a factory function returning a router) and register it in
+`src/app.js` - `server.js` is only the entry point. The sketch below shows the
+handler bodies; see [Adding New Routes](../../CLAUDE.md) for the file pattern.
 
 ```javascript
 // ============================================================================
@@ -1006,79 +866,57 @@ workspace.state.get('modules.denoising.active')
 
 ---
 
-## Step 7: Add Styling (Optional)
+## Step 7: Add Styling
 
-### Module-Specific Styles
-
-Add to `public/workspace/css/workspace.css`:
+Module styles go in the module's **own** stylesheet (`css/denoising.css`,
+named by `config.cssPath`) - never in `workspace.css`. `BaseModule.loadCSS()`
+loads it on activate and `ModuleLoader` calls `unloadCSS()` on deactivate.
 
 ```css
-/* Denoising Module Specific Styles */
-.module-section {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: #f9f9f9;
-  border-radius: 8px;
-}
+@import url('/workspace/js/core/css/module-base.css');
 
-.module-section h3 {
-  margin-top: 0;
-  color: #333;
-  border-bottom: 2px solid #50C878;
-  padding-bottom: 0.5rem;
-}
-
-.upload-container {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.config-form {
+/* Every selector starts with the module root class: the sheet is unloaded
+   when the module closes, so an unscoped rule leaks into other modules while
+   yours is open and then disappears again. */
+.denoising-module .preset-grid {
   display: grid;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--module-spacing-md);
 }
 
-.config-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+/* Respond to the module area's width, not the viewport: .step-contents is a
+   container query root named `module`. */
+@container module (max-width: 900px) {
+  .denoising-module .preset-grid { grid-template-columns: 1fr; }
 }
 
-.progress-container {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.progress-container progress {
-  flex: 1;
-  height: 30px;
-}
-
-.results-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.success-message {
-  padding: 1rem;
-  background: #d4edda;
-  border: 1px solid #c3e6cb;
-  border-radius: 4px;
-  color: #155724;
-}
-
-.file-info {
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background: #e9ecef;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
+/* Dark mode is free if you only use tokens; a literal hex is a bug. */
+[data-theme="dark"] .denoising-module .preset-grid { /* rarely needed */ }
 ```
+
+Rules of thumb:
+
+- **Tokens, never literals** - `--module-primary(-light)`, `--module-bg*`,
+  `--module-card-bg`, `--module-border(-dark)`, `--module-text-*`,
+  `--module-spacing-*`, `--module-font-size-*`, `--module-radius-*`,
+  `--module-shadow-*`, `--z-*`. The only allowed literals are neutral
+  `rgba(0, 0, 0, x)` shadows and scrims.
+- **Do not restyle the baselines** - `module-base.css` already sets
+  zero-specificity `:where(.module-container)` rules for `h4`, `.field-hint`,
+  `select`, `input[type=number|text|search]` and `input[type=checkbox|radio]`.
+  Add layout only (`flex: 1`, `min-width: 0`, `width: 100%`), and use
+  `class="input-sm"` for short numeric fields instead of a width rule.
+- **Reuse the shared classes** - `.btn` family, `.section-card` /
+  `.section-card.success-card`, `.progress-bar-container` +
+  `.job-progress-fill`, `.metric-card`, `.form-field`, `.range-slider`,
+  `.toggle-switch`. Never copy them into the module.
+- **Icons from `core/icons.js`** - `import { icon } from
+  '/workspace/js/core/icons.js'` and write `${icon('play')} Start`. No emoji.
+  `FileSelector` takes an icon name string. The only kept glyph entities are
+  `&#9658;` in a `.btn-glyph` job button and `&#10003;` in a `.success-icon`.
+
+See [Module Framework → Styling](MODULE_FRAMEWORK.md#styling) for the full
+token tables.
 
 ---
 
@@ -1209,21 +1047,40 @@ if (this.socket) {
 ### 2. Event Listeners
 
 **✅ DO:**
-- Attach listeners in `activate()` or `attachEventListeners()`
-- Remove listeners in `deactivate()`
-- Use named functions for easier removal:
+- Wire every button in `setupEventListeners()`, called from `initialize()`
+- Track each listener as you add it, so `deactivate()` can remove them all -
+  an arrow function is fine because you keep the reference:
 ```javascript
-this.handleUpload = this.handleUpload.bind(this);
-uploadBtn.addEventListener('click', this.handleUpload);
-// Later: uploadBtn.removeEventListener('click', this.handleUpload);
+const addListener = (element, event, handler) => {
+  if (element) {
+    element.addEventListener(event, handler);
+    this.eventListeners.push({ element, event, handler });
+  }
+};
+addListener(document.getElementById('startProcessingBtn'), 'click', () => this.startProcessing());
+
+// In deactivate():
+for (const { element, event, handler } of this.eventListeners) {
+  element.removeEventListener(event, handler);
+}
+this.eventListeners = [];
+```
+- Delegate from a stable parent for markup you rebuild with `innerHTML`, and
+  read `data-action` off the button:
+```javascript
+addListener(document.getElementById('resultsDetails'), 'click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (button?.dataset.action === 'open-viewer') this.openInImageViewer(button.dataset.fileId);
+});
 ```
 
 **❌ DON'T:**
-- Use anonymous functions (can't remove):
-```javascript
-uploadBtn.addEventListener('click', () => this.handleUpload());
-// Can't remove this later!
-```
+- Write `onclick="..."` into `render()` output
+- Expose `window.nextStep` / `window.startProcessing` free functions to make
+  inline handlers work. A single `window.myModule = this` debugging handle is
+  fine, as long as `deactivate()` deletes it.
+- Add a listener without pushing it onto `this.eventListeners` - the instance
+  is cached and re-rendered, so the next visit would stack a duplicate.
 
 ### 3. Error Handling
 
@@ -1253,16 +1110,31 @@ uploadBtn.addEventListener('click', () => this.handleUpload());
 ### 5. UI/UX
 
 **✅ DO:**
-- Show loading states
-- Disable buttons during processing
-- Show progress updates
-- Provide reset/clear functionality
-- Use semantic HTML
+- Put the primary long-running action in the nav row's right slot as
+  `<button class="btn primary"><span class="btn-glyph">&#9658;</span> Start …</button>`,
+  and hide it while the job runs and while the result card is shown - there
+  must be exactly one enabled red button on screen
+- Show progress with `.progress-bar-container` + `.job-progress-fill`
+- Announce the result in a `.section-card.success-card`, whose secondary
+  action is always labelled **Start New Run** (a "view the output" action is
+  **Open in Image Viewer**, or **Open in 3D Visualization** for meshes)
+- Offer the built-in test stack through `FileSelector`'s `testDataKind`
+- Show slice numbers 1-based (`n / N`), even though the APIs are 0-based
 
 **❌ DON'T:**
 - Block UI without feedback
 - Allow duplicate submissions
 - Leave UI in inconsistent state
+- Reintroduce `.validation-success` wrappers or `.result-actions` containers
+
+### 6. Reset on Leave
+
+`ModuleLoader` caches the module instance and `activate()` only re-renders, so
+anything left in an instance field is still there on the user's next visit.
+Put the fresh-state logic in a `reset()`, and call it from both "Start New Run"
+and `deactivate()` (before `super.deactivate()`, while the DOM still exists):
+clear the selected file, call `fileSelector.clearSelection()`, put config back
+to the constructor defaults, drop result/job ids, and return to step 1.
 
 ---
 
@@ -1440,6 +1312,8 @@ See these guides for more:
 
 ## Related Documentation
 
+- [Module Framework](MODULE_FRAMEWORK.md) - BaseModule and component API reference
+- [Template module README](/public/workspace/js/modules/template/README.md) - the UI contract
 - [Module Architecture](../architecture/MODULE_ARCHITECTURE.md) - Complete architecture
 - [Module System Reference](../reference/MODULE_SYSTEM.md) - ModuleLoader API
 - [State Architecture](../architecture/STATE_ARCHITECTURE.md) - State management
@@ -1453,6 +1327,6 @@ See these guides for more:
 
 ---
 
-**Last Updated:** 2025-11-27
-**Guide Version:** 1.0
-**Tested With:** Workspace Phase 2
+**Last Updated:** 2026-09-03
+**Guide Version:** 2.0
+**Tested With:** Workspace consolidation phase 5

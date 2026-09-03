@@ -95,7 +95,7 @@ class DLDenoisingAPI {
   }
 
   /**
-   * Continue training after mask approval (Stage 2)
+   * Continue training after mask approval (with the discovered mask)
    * @param {string} trainingId - Training session ID
    * @returns {Promise<Object>} Continue result
    */
@@ -109,7 +109,7 @@ class DLDenoisingAPI {
   }
 
   /**
-   * Skip Stage 2 training and finalize with N2V (Stage 1) results only
+   * Override the route: continue with plain N2V instead of the discovered mask
    * @param {string} trainingId - Training session ID
    * @returns {Promise<Object>} Skip result
    */

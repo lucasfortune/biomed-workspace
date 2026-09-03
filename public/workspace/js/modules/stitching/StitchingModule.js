@@ -517,7 +517,8 @@ class StitchingModule extends BaseModule {
   /** Data mode of a workspace file, from its metadata tags */
   fileMode(f) {
     const tags = f.tags || [];
-    if (tags.includes('segmentation')) return 'labels';
+    // Segmentation results and annotation masks are both label maps
+    if (tags.includes('segmentation') || tags.includes('annotation')) return 'labels';
     const isRawUpload = f.category === 'uploads' && tags.includes('raw');
     const isProcessed = f.category === 'results' && tags.includes('data');
     return (isRawUpload || isProcessed) ? 'grayscale' : null;
@@ -547,7 +548,7 @@ class StitchingModule extends BaseModule {
     if (this.mode) {
       badge.style.display = '';
       badge.textContent = this.mode === 'labels'
-        ? 'Mode: segmentations (label maps)'
+        ? 'Mode: label maps (segmentations, annotations)'
         : 'Mode: images (grayscale)';
     } else {
       badge.style.display = 'none';
@@ -567,7 +568,7 @@ class StitchingModule extends BaseModule {
     const mode = this.fileMode(file);
     if (this.mode && mode !== this.mode) {
       this.state.notify('error',
-        'Image stacks and segmentation results cannot be mixed in one stitch.');
+        'Image stacks and label maps (segmentations, annotations) cannot be mixed in one stitch.');
       return;
     }
 
@@ -1242,7 +1243,7 @@ class StitchingModule extends BaseModule {
             <td>${p.z_keep ? `${p.z_keep[0]}&ndash;${p.z_keep[1]}` : 'all'}</td>
           </tr>`).join('')}
       </table>
-      <p class="field-hint">Mode: ${mode === 'labels' ? 'segmentations (nearest-neighbor, hard seams)' : 'images (feathered seams)'}</p>
+      <p class="field-hint">Mode: ${mode === 'labels' ? 'label maps (nearest-neighbor, hard seams)' : 'images (feathered seams)'}</p>
     `;
     const intensityField = document.getElementById('intensityMatchField');
     if (intensityField) intensityField.style.display = mode === 'labels' ? 'none' : '';

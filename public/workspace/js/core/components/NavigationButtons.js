@@ -1,19 +1,26 @@
 /**
  * NavigationButtons Component
  *
- * Renders Previous/Next navigation buttons with configurable labels and states.
+ * Wires up a Previous/Next `.navigation-buttons` row that the module has
+ * already written into its own step markup (see the template module): the
+ * component finds the two buttons by id and manages their handlers, labels,
+ * enabled and visible state.
  *
  * Usage:
  * ```javascript
+ * // In render(), inside the step:
+ * // <div class="navigation-buttons">
+ * //   <button id="step2Back" class="btn secondary">Back</button>
+ * //   <button id="step2Next" class="btn">Next</button>
+ * // </div>
+ *
  * const navButtons = new NavigationButtons({
+ *   previousId: 'step2Back',
+ *   nextId: 'step2Next',
  *   onPrevious: () => module.previousStep(),
  *   onNext: () => module.nextStep(),
- *   previousLabel: 'Back',
- *   nextLabel: 'Continue',
  *   nextDisabled: true
  * });
- *
- * container.innerHTML = navButtons.render();
  * navButtons.init(container);
  *
  * // Later, enable the next button
@@ -26,14 +33,18 @@ class NavigationButtons {
    * @param {object} config - Configuration options
    * @param {Function} [config.onPrevious] - Callback for previous button click
    * @param {Function} [config.onNext] - Callback for next button click
-   * @param {string} [config.previousLabel='Previous'] - Previous button label
-   * @param {string} [config.nextLabel='Next'] - Next button label
-   * @param {boolean} [config.showPrevious=true] - Show previous button
-   * @param {boolean} [config.showNext=true] - Show next button
-   * @param {boolean} [config.previousDisabled=false] - Disable previous button
-   * @param {boolean} [config.nextDisabled=false] - Disable next button
-   * @param {string} [config.previousId] - Custom ID for previous button
-   * @param {string} [config.nextId] - Custom ID for next button
+   * @param {string} [config.previousLabel='Previous'] - Starting label (see setPreviousLabel)
+   * @param {string} [config.nextLabel='Next'] - Starting label (see setNextLabel)
+   * @param {boolean} [config.showPrevious=true] - Starting visibility (see setPreviousVisible)
+   * @param {boolean} [config.showNext=true] - Starting visibility (see setNextVisible)
+   * @param {boolean} [config.previousDisabled=false] - Starting disabled state (see setPreviousEnabled)
+   * @param {boolean} [config.nextDisabled=false] - Starting disabled state (see setNextEnabled)
+   * @param {string} [config.previousId='nav-btn-previous'] - ID of the previous button in the markup
+   * @param {string} [config.nextId='nav-btn-next'] - ID of the next button in the markup
+   *
+   * The label / visible / disabled options only seed the component's own
+   * bookkeeping - the initial markup is the module's, so set `disabled` and
+   * the labels there and use the setters to change them afterwards.
    */
   constructor(config = {}) {
     this.onPrevious = config.onPrevious || null;
@@ -50,33 +61,9 @@ class NavigationButtons {
   }
 
   /**
-   * Render the navigation buttons HTML
-   * @returns {string} HTML string
-   */
-  render() {
-    const previousHtml = this.showPrevious
-      ? `<button class="btn secondary" id="${this.previousId}" ${this.previousDisabled ? 'disabled' : ''}>
-           ${this.previousLabel}
-         </button>`
-      : '<div></div>';
-
-    const nextHtml = this.showNext
-      ? `<button class="btn" id="${this.nextId}" ${this.nextDisabled ? 'disabled' : ''}>
-           ${this.nextLabel}
-         </button>`
-      : '<div></div>';
-
-    return `
-      <div class="navigation-buttons" data-component="navigation-buttons">
-        ${previousHtml}
-        ${nextHtml}
-      </div>
-    `;
-  }
-
-  /**
-   * Initialize the component after rendering
-   * @param {HTMLElement} container - The container element
+   * Initialize the component: find the buttons in the module's markup and
+   * attach the handlers. Call after render() has put the step HTML in the DOM.
+   * @param {HTMLElement} container - The element containing the buttons
    */
   init(container) {
     this.container = container;

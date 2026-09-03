@@ -1892,43 +1892,13 @@
 /* Import Model Panels */
 
 /* Import Validation Display
-   Colours come from the shared .validation-* rules in module-base.css;
-   only the inline layout is module-specific. */
+   Rendered by the shared ValidationDisplay component (module-base.css);
+   only the loading state is module-specific. */
 
 .dl-denoising-module .validation-loading {
   color: var(--module-text-secondary);
   font-style: italic;
   font-size: var(--module-font-size-sm);
-}
-
-.dl-denoising-module .validation-success {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--module-spacing-sm);
-}
-
-.dl-denoising-module .validation-error,
-.dl-denoising-module .validation-warning {
-  display: flex;
-  align-items: center;
-  gap: var(--module-spacing-sm);
-}
-
-.dl-denoising-module .validation-icon {
-  font-weight: bold;
-}
-
-.dl-denoising-module .validation-text {
-  font-weight: 500;
-  font-size: var(--module-font-size-sm);
-}
-
-.dl-denoising-module .validation-success .validation-details {
-  color: var(--module-text-secondary);
-  font-size: var(--module-font-size-xs);
-  width: 100%;
-  margin-left: var(--module-spacing-lg);
 }
 
 /* ============================================

@@ -51,8 +51,11 @@ def apply_gaussian(stack, sigma, kernel_size):
     Args:
         stack: Input image stack (Z, Y, X)
         sigma: Gaussian sigma (blur strength)
-        kernel_size: Size of the filter window (not directly used by scipy,
-                    but kept for API consistency)
+        kernel_size: Width of the filter window in pixels (odd). Mapped to
+                    scipy's ``truncate`` so the kernel spans exactly
+                    kernel_size x kernel_size pixels; scipy renormalises the
+                    truncated weights, so a small window with a large sigma
+                    behaves like a box-limited Gaussian.
 
     Returns:
         Filtered stack with same dtype as input
@@ -60,10 +63,15 @@ def apply_gaussian(stack, sigma, kernel_size):
     original_dtype = stack.dtype
     result = np.zeros_like(stack, dtype=np.float64)
 
+    # scipy builds a kernel of 2 * int(truncate * sigma + 0.5) + 1 taps;
+    # solve for truncate so the window is exactly kernel_size wide
+    radius = max(1, (int(kernel_size) - 1) // 2)
+    truncate = radius / sigma if sigma > 0 else 4.0
+
     total_slices = stack.shape[0]
     for i in range(total_slices):
         emit_progress(i + 1, total_slices, f"Applying Gaussian filter to slice {i + 1}/{total_slices}")
-        result[i] = gaussian_filter(stack[i].astype(np.float64), sigma=sigma)
+        result[i] = gaussian_filter(stack[i].astype(np.float64), sigma=sigma, truncate=truncate)
 
     # Convert back to original dtype
     if np.issubdtype(original_dtype, np.integer):

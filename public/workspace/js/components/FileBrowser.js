@@ -22,14 +22,23 @@ class FileBrowser {
     this.allFiles = [];                // Cache all visible files for "Select All"
     this.batchToolbarVisible = false;  // Track toolbar visibility across renders
 
-    // Category keyword mapping for unified search
-    this.categoryKeywords = {
-      'raw_images': ['raw', 'image', 'images', 'training', 'input', 'inference', 'test', 'predict', 'prediction'],
-      'annotations': ['annotation', 'annotations', 'mask', 'masks', 'label', 'labels'],
-      'imported_models': ['model', 'models', 'imported', 'pth', 'weights', 'checkpoint'],
-      'segmentation_results': ['segmentation', 'segment', 'result', 'results', 'output'],
-      'denoised': ['denoise', 'denoised', 'denoising', 'clean', 'cleaned'],
-      'meshes': ['mesh', 'meshes', '3d', 'surface', 'reconstruction']
+    // Search synonyms per file tag. A query word matches a file when it is a
+    // substring of the filename, of one of the file's tags, or of a synonym
+    // listed for one of its tags.
+    this.tagKeywords = {
+      'raw': ['image', 'images', 'input', 'training', 'inference', 'grayscale'],
+      'annotation': ['annotations', 'mask', 'masks', 'label', 'labels'],
+      'segmentation': ['segment', 'segmented', 'result', 'results', 'prediction'],
+      'denoising': ['denoise', 'denoised', 'clean', 'cleaned', 'filtered'],
+      'mesh': ['meshes', '3d', 'surface', 'reconstruction'],
+      'weights': ['model', 'models', 'pth', 'checkpoint'],
+      'config': ['json', 'settings', 'parameters'],
+      'preprocess': ['preprocessed', 'preprocessing', 'crop', 'cropped', 'gamma'],
+      'stitching': ['stitch', 'stitched', 'composed'],
+      'segcleanup': ['cleanup', 'cleaned', 'quantification'],
+      'recipe': ['recipes', 'alignment'],
+      'report': ['reports', 'csv', 'quantification', 'metrics'],
+      'test-data': ['test', 'sample', 'demo']
     };
 
     // Create context menu instance
@@ -305,8 +314,8 @@ class FileBrowser {
         <div class="fb-search">
           <input type="text"
                  class="fb-search-input"
-                 placeholder="Search files by name or type..."
-                 title="Search by filename or category (raw, annotation, model, mesh, etc.)"
+                 placeholder="Search files by name or tag..."
+                 title="Search by filename or tag (raw, annotation, segmentation, denoising, mesh, weights, stitching, ...)"
                  value="${this.escapeHtml(this.searchQuery)}">
           ${this.searchQuery ? `
             <button class="fb-search-clear" title="Clear search">✕</button>
@@ -1542,8 +1551,8 @@ class FileBrowser {
   }
 
   /**
-   * Filter files based on search query - matches filename OR category
-   * Supports multi-word search (OR logic between words)
+   * Filter files based on search query - matches filename, category or tags
+   * (plus tag synonyms). Supports multi-word search (OR logic between words)
    * @param {Array} files - List of files
    * @returns {Array} Filtered files
    */
@@ -1556,27 +1565,26 @@ class FileBrowser {
     const queryWords = query.split(/\s+/); // Split by whitespace for multi-word search
 
     return files.filter(file => {
-      // Check if ANY word in query matches filename or category
+      // Check if ANY word in query matches filename, category or a tag
       return queryWords.some(word => {
         // Match 1: Filename (case-insensitive substring match)
         if (file.name.toLowerCase().includes(word)) {
           return true;
         }
 
-        // Match 2: Category value (direct partial match)
-        // e.g., "seg" matches "segmentation_results"
+        // Match 2: Category value (uploads / models / results)
         if (file.category && file.category.toLowerCase().includes(word)) {
           return true;
         }
 
-        // Match 3: Category keywords (mapped natural language terms)
-        // e.g., "model" matches imported_models, "mesh" matches meshes
-        if (file.category && this.categoryKeywords[file.category]) {
-          const keywords = this.categoryKeywords[file.category];
-          return keywords.some(keyword => keyword.toLowerCase().includes(word));
-        }
-
-        return false;
+        // Match 3: Tags and their synonyms
+        // e.g., "seg" matches the "segmentation" tag, "model" the "weights" tag
+        const tags = Array.isArray(file.tags) ? file.tags : [];
+        return tags.some(tag => {
+          const name = String(tag).toLowerCase();
+          if (name.includes(word)) return true;
+          return (this.tagKeywords[name] || []).some(keyword => keyword.includes(word));
+        });
       });
     });
   }

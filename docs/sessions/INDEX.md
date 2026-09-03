@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-03 (Remaining Code Items — Hand-offs, Validation Rules, Dead Code and Docs)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-03 | [Remaining Code Items — Hand-offs, Validation Rules, Dead Code and Docs](2026-09-03_code_items.md) | 🐛 Fix / 🔧 Refactor | ~2.5 hrs | ✅ Complete |
+
 ### 2026-09-03 (Palette, Dark Mode, Scoping, Typography and Icons — One Token Set, One Icon Set, No Leaks)
 
 | Date | Session | Type | Duration | Status |

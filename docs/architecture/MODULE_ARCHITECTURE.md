@@ -187,31 +187,48 @@ class MyModule extends BaseModule {
 
 **Directory:** `/public/workspace/js/core/components/`
 
+Exported from `components/index.js`:
+
 | Component | Purpose |
 |-----------|---------|
-| `FileSelector.js` | File selection with validation and help integration |
+| `StepNavigator.js` | Step-based workflow navigation |
+| `NavigationButtons.js` | Previous/Next row state |
+| `ValidationDisplay.js` | Validation feedback display |
+| `FileSelector.js` | File selection with uploads, test data and help icons |
+| `SliceViewerChrome.js` | Shared slice-viewer header / slider strip / footer |
+
+In the same directory but not exported from the index - the help panel is
+loaded as `<script>` tags by `workspace/index.html`, and `ResumeDialog` is
+dynamically imported by `workspace.js`:
+
+| Component | Purpose |
+|-----------|---------|
 | `InfoPanel.js` | Help panel container with tabs |
 | `InfoArticle.js` | Article rendering with markdown support |
 | `InfoGlossary.js` | Terminology definitions |
 | `InfoSearch.js` | Full-text search across help articles |
-| `LoadingOverlay.js` | Loading state display |
-| `MetricCard.js` | Statistics display cards |
-| `NavigationButtons.js` | Step navigation controls |
-| `ProgressIndicator.js` | Progress bar component |
-| `StepNavigator.js` | Step-based workflow navigation |
-| `ValidationDisplay.js` | Validation feedback display |
+| `ResumeDialog.js` | Resume-or-start-fresh prompt |
 
 **Usage:**
 ```javascript
-import { FileSelector } from '../../core/components/FileSelector.js';
+import { FileSelector } from '/workspace/js/core/components/index.js';
 
-// In module's activate()
+// In the module's initialize()
 this.fileSelector = new FileSelector({
-  container: this.container.querySelector('.file-select'),
-  onSelect: (file) => this.handleFileSelect(file),
-  fileTypes: ['tif', 'tiff'],
-  helpArticleId: 'segmentation-file-selection'
+  id: 'raw_images',
+  fileType: 'uploads',
+  filterTags: ['raw'],
+  title: 'Raw Images',
+  icon: 'image',                                                    // core/icons.js name
+  helpIconHtml: this.renderHelpIcon('segmentation.step1.raw-images'),
+  showTestData: true,
+  testDataKind: 'raw',
+  stateManager: this.state,
+  onSelect: (file) => this.handleFileSelect(file)
 });
+
+document.getElementById('fileSelectorContainer').innerHTML = this.fileSelector.render();
+await this.fileSelector.init();
 ```
 
 ---

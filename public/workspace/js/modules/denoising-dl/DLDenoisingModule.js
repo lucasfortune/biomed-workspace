@@ -1098,7 +1098,7 @@ class DLDenoisingModule extends BaseModule {
   }
 
   /**
-   * Approve current mask and continue to Stage 2
+   * Approve current mask and continue training with it
    * Delegated to MaskHandler
    */
   approveMask() {
@@ -1106,7 +1106,7 @@ class DLDenoisingModule extends BaseModule {
   }
 
   /**
-   * Skip Stage 2 and use N2V results
+   * Override the route and continue with plain N2V
    * Delegated to MaskHandler
    */
   skipStage2() {

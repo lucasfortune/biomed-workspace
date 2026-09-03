@@ -33,7 +33,7 @@ Controls the spread of the Gaussian weights and thus the amount of smoothing.
 
 Kernel Size
 
-The size of the filter window in pixels. Must be odd.
+The size of the window the Gaussian is evaluated in, in pixels (odd). The kernel is cut off at the window edge and renormalised, so a small window combined with a large sigma behaves like a box-limited blur; keep the window at least about four times sigma for an untruncated Gaussian.
 
 - 3x3: Minimal smoothing, fast
 

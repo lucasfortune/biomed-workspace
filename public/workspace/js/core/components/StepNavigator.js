@@ -1,26 +1,24 @@
 /**
  * StepNavigator Component
  *
- * Renders a step navigation bar with numbered step indicators and a progress bar.
- * Supports click navigation, active/completed/blocked states, and progress updates.
+ * Drives the step navigation bar that `BaseModule.renderStepNav()` writes into
+ * the module's markup: numbered `.step` indicators plus a `.progress-fill`
+ * bar. It handles click navigation (gated by `canNavigate`) and the
+ * active / completed / blocked states.
  *
  * Usage:
  * ```javascript
- * const stepNav = new StepNavigator({
- *   steps: [
- *     { id: 'upload', name: 'Data Upload' },
- *     { id: 'config', name: 'Configuration' },
- *     { id: 'process', name: 'Process' }
- *   ],
- *   currentStep: 1,
- *   onStepClick: (stepNumber) => module.goToStep(stepNumber)
+ * // render() already contains ${this.renderStepNav()}
+ * this.stepNavigator = new StepNavigator({
+ *   steps: this.config.steps,
+ *   currentStep: this.currentStep,
+ *   onStepClick: (stepNumber) => this.goToStep(stepNumber),
+ *   canNavigate: (stepNumber) => this.canNavigateToStep(stepNumber)
  * });
+ * this.stepNavigator.init(this.container);
  *
- * container.innerHTML = stepNav.render();
- * stepNav.init(container);
- *
- * // Later, update the current step
- * stepNav.update(2);
+ * // Later (from the module's goToStep override), move the indicator
+ * this.stepNavigator.update(2);
  * ```
  */
 class StepNavigator {
@@ -41,46 +39,9 @@ class StepNavigator {
   }
 
   /**
-   * Render the step navigator HTML
-   * Progress bar is above step indicators, each step has bottom border indicator
-   * @returns {string} HTML string
-   */
-  render() {
-    const stepsHtml = this.steps.map((step, index) => {
-      const stepNumber = index + 1;
-      const isActive = stepNumber === this.currentStep;
-      const isCompleted = stepNumber < this.currentStep;
-
-      let classes = 'step';
-      if (isActive) classes += ' active';
-      if (isCompleted) classes += ' completed';
-
-      return `
-        <div class="${classes}" data-step="${stepNumber}">
-          <div class="step-number">${stepNumber}</div>
-          <span>${step.name}</span>
-        </div>
-      `;
-    }).join('');
-
-    // Progress fills based on current step
-    const progressPercent = this.steps.length > 0
-      ? (this.currentStep / this.steps.length) * 100
-      : 0;
-
-    return `
-      <div class="progress-bar" data-component="step-navigator">
-        <div class="progress-fill" style="width: ${progressPercent}%"></div>
-      </div>
-      <div class="step-nav">
-        ${stepsHtml}
-      </div>
-    `;
-  }
-
-  /**
-   * Initialize the component after rendering
-   * @param {HTMLElement} container - The container element
+   * Initialize the component: bind the `.step` elements already in the DOM
+   * (from `BaseModule.renderStepNav()`) to the click handler.
+   * @param {HTMLElement} container - The element containing the `.step` nodes
    */
   init(container) {
     this.container = container;

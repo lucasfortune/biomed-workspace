@@ -272,7 +272,7 @@ class MaskHandler {
   }
 
   /**
-   * Approve current mask and continue to Stage 2
+   * Approve current mask and continue training with it
    */
   async approveMask() {
     console.log('[MaskHandler] Mask approved, starting training...');

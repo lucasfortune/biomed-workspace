@@ -60,19 +60,26 @@ Edit `YourModule.js`:
 
 Edit `/workspace/js/modules/registry.js`:
 
+Add an inline SVG to the `moduleIcons` map at the top of the file, then the
+entry itself:
+
 ```javascript
 {
   id: 'yourmodule',
   name: 'Your Module Name',
-  description: 'What your module does',
-  icon: '🔧',
+  description: 'What your module does',      // at most 14 words
+  icon: moduleIcons.yourmodule,              // inline SVG, not an emoji
   path: '/workspace/js/modules/yourmodule/YourModule.js',
   inputs: ['input_type'],
   outputs: ['output_type'],
-  color: '#4A90E2',
-  status: 'available'
+  status: 'available',                       // or 'coming_soon'
+  helpArticleId: 'yourmodule'                // opens the overview article
 }
 ```
+
+Cards carry **no** per-module `color`: the hub uses the single PoP accent.
+Hub order follows the processing pipeline, so insert the entry at the point
+where your module belongs in that pipeline.
 
 ### 5. Test Your Module
 
@@ -105,8 +112,57 @@ implements them - keep them when you copy it.
 ```
 
 Headings are `<h3>`; every step body sits in a `.step-inner` wrapper.
+`renderHeader()` and `renderStepNav()` come from `BaseModule`; the outer div
+carries the module root class **and** `module-container` (the class the shared
+`:where(.module-container)` form baselines hang off).
 
-### 2. The job button lives in the nav row
+Do not hand-write a container a component owns. The validation slot is
+`${ValidationDisplay.renderContainer('validationResult')}`, and the step nav
+markup only ever comes from `renderStepNav()`.
+
+`.step-contents` is the scroll container **and** the container-query root
+named `module` (see section 8).
+
+### 2. Step gating
+
+`canNavigateToStep(stepNumber)` is the single source of truth for which steps
+are reachable. Pass it to `StepNavigator` as `canNavigate` so a blocked step
+indicator is un-clickable and gets the `.blocked` class, and let
+`BaseModule.goToStep()` enforce it (it notifies with the step's
+`blockedMessage`):
+
+```javascript
+this.stepNavigator = new StepNavigator({
+  steps: this.config.steps,
+  currentStep: this.currentStep,
+  onStepClick: (stepNum) => this.goToStep(stepNum),
+  canNavigate: (stepNum) => this.canNavigateToStep(stepNum)
+});
+this.stepNavigator.init(this.container);
+```
+
+Your `goToStep()` override calls `super.goToStep(n)` and then
+`this.stepNavigator.update(n)` to move the indicator and progress bar.
+
+### 3. Help icons
+
+Any heading or label can carry a help icon that opens the info panel on a
+specific article. `renderHelpIcon(articleId)` returns the markup; components
+take it through their `helpIconHtml` option:
+
+```javascript
+this.fileSelector = new FileSelector({
+  title: 'Input Data',
+  helpIconHtml: this.renderHelpIcon('yourmodule.step1.input-data'),
+  // ...
+});
+```
+
+Article ids are `<moduleId>.<step>.<topic>` and the articles themselves live
+in `/public/workspace/content/modules/<moduleId>/`, indexed by
+`content/manifest.json`.
+
+### 4. The job button lives in the nav row
 
 The primary long-running action (Start Processing, Generate Mesh, Start
 Denoising, ...) is the right-hand button of the step's `.navigation-buttons`
@@ -126,7 +182,7 @@ There must be exactly one enabled red (`.btn.primary`) button on screen, so
 hide the job button while the job runs and while the result card is shown
 (`setJobButtonVisible(false)`), and bring it back on failure and on reset.
 
-### 3. Result block = success card
+### 5. Result block = success card
 
 ```html
 <div class="section-card success-card" id="processingResults" style="display: none;">
@@ -147,7 +203,7 @@ action is labelled **Open in Image Viewer** (or **Open in 3D Visualization**
 for meshes). Do not reintroduce `.validation-success` wrappers or
 `.result-actions` containers.
 
-### 4. Job progress bar
+### 6. Job progress bar
 
 ```html
 <div class="progress-bar-container">
@@ -157,7 +213,7 @@ for meshes). Do not reintroduce `.validation-success` wrappers or
 
 Both rules live in `module-base.css` - never copy them into module CSS.
 
-### 5. No inline handlers, no global free functions
+### 7. No inline handlers, no global free functions
 
 No `onclick="..."` in `render()`, and no `window.nextStep` / `window.startProcessing`
 style globals. Wire everything in `setupEventListeners()` with
@@ -175,20 +231,24 @@ setupEventListeners() {
 }
 ```
 
-For markup you re-render with `innerHTML` (e.g. a list of download buttons),
-delegate from the stable parent and read a `data-` attribute:
+For markup you re-render with `innerHTML` (e.g. a list of per-result buttons),
+the ids do not exist when `setupEventListeners()` runs. Delegate from the
+stable parent and read `data-action` off the button instead:
 
 ```javascript
-addListener(document.getElementById('downloadButtons'), 'click', (event) => {
-  const button = event.target.closest('[data-format]');
-  if (button) this.download(button.dataset.format);
+addListener(document.getElementById('resultsDetails'), 'click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  if (button.dataset.action === 'open-viewer') this.openInImageViewer(button.dataset.fileId);
 });
 ```
+
+One delegated listener survives every re-render.
 
 A `window.yourModule = this` debugging handle is fine, as long as
 `deactivate()` deletes it.
 
-### 6. Reset on leave
+### 8. Reset on leave
 
 `ModuleLoader` caches the module instance, and `BaseModule.activate()` calls
 `render()` + `initialize()` again - so instance fields survive between visits.
@@ -197,7 +257,7 @@ A `window.yourModule = this` debugging handle is fine, as long as
 `FileSelector` selection, put config back to the constructor defaults, drop
 result/job ids, and return to step 1.
 
-### 7. Test data
+### 9. Test data
 
 Raw image inputs always offer the built-in test stack; mask inputs do so only
 where a test mask exists. Ask the `FileSelector` for it - do not add an
@@ -215,7 +275,7 @@ The test option copies the stack into the workspace via
 `POST /api/workspace/test-data` and then reports it to `onSelect` exactly like
 a picked workspace file.
 
-### 8. Styling: tokens, baselines, icons, scoping
+### 10. Styling: tokens, baselines, icons, scoping
 
 - **Tokens, never literals.** Colours, spacing, radii, font sizes and shadows
   all come from `core/css/module-base.css`: `--module-primary` / `-light`
@@ -295,7 +355,10 @@ a picked workspace file.
 - [ ] Job button in the nav row's right slot, hidden while running / showing results
 - [ ] Result block is a `.section-card.success-card` with `Start New Run`
 - [ ] Progress bar uses `.progress-bar-container` + `.job-progress-fill`
-- [ ] No inline `onclick`, no `window.*` free functions
+- [ ] `StepNavigator` gets `canNavigate: (n) => this.canNavigateToStep(n)`
+- [ ] Validation slot via `ValidationDisplay.renderContainer(id)`, not hand-written
+- [ ] Help icons via `helpIconHtml` / `renderHelpIcon(articleId)` where a topic needs one
+- [ ] No inline `onclick`, no `window.*` free functions; `data-action` delegation for re-rendered markup
 - [ ] `deactivate()` calls `reset()` before `super.deactivate()`
 - [ ] Every selector in the module CSS starts with the module root class
 - [ ] No colour/spacing/radius literals - design tokens only

@@ -17,7 +17,7 @@ seeAlsoTags:
 
 # Search & Filter
 
-Find files quickly by searching filenames or category keywords.
+Find files quickly by searching filenames or tags.
 
 ## Search Box
 
@@ -29,21 +29,25 @@ Type in the search box above the file tree to filter files. Results update as yo
 
 Any part of the filename matches. 'sample' finds 'sample_001.tif', 'my_sample.tif', etc.
 
-## Category Keywords
+## Tags
 
-## Search using natural terms that map to categories
+Every file carries tags (shown in the file info panel). A search word matches when it is part of a tag or of one of its synonyms:
 
-- 'raw', 'image', 'training' → Raw Images
+- 'raw', 'image', 'input' → raw image stacks
 
-- 'annotation', 'mask', 'label' → Annotations
+- 'annotation', 'mask', 'label' → annotation masks
 
-- 'model', 'weights', 'pth' → Model Files
+- 'segmentation', 'segment', 'result' → segmentation results
 
-- 'mesh', '3d', 'surface' → Meshes
+- 'denoising', 'denoised', 'clean' → denoised stacks
 
-- 'denoise', 'clean' → Denoised results
+- 'mesh', '3d', 'surface' → meshes
 
-- 'segment', 'result' → Segmentation results
+- 'weights', 'model', 'pth' → model weights; 'config' → model configuration files
+
+- 'preprocess', 'stitching', 'segcleanup' → outputs of those modules; 'recipe' → stitching recipes; 'report', 'csv' → quantification reports
+
+- 'test' → the built-in test data
 
 ## Multi-Word Search
 

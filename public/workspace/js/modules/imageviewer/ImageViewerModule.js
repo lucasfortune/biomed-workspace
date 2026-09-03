@@ -213,10 +213,12 @@ class ImageViewerModule extends BaseModule {
 
     // Check for generic incoming file (for any module to use)
     const genericFile = this.state.get('workspace.viewerFile');
-    if (genericFile?.fileId) {
+    if (genericFile?.fileId || genericFile?.path) {
       console.log('[ImageViewerModule] Found incoming generic file:', genericFile);
+      // `fileId` may be null when the sender's output was not tracked;
+      // handleIncomingData() then resolves the workspace file by path
       this.selectedFile = {
-        id: genericFile.fileId,
+        id: genericFile.fileId || null,
         path: genericFile.path,
         name: genericFile.name || 'Image File',
         source: genericFile.source || 'workspace'
@@ -231,17 +233,55 @@ class ImageViewerModule extends BaseModule {
    * Handle incoming data - load info and go to step 2
    */
   async handleIncomingData() {
+    // The hand-off is consumed once, whatever happens next
+    this.clearIncomingData();
     try {
+      if (!this.selectedFile.id) {
+        const resolved = await this.resolveWorkspaceFile(this.selectedFile.path);
+        if (!resolved) {
+          const name = this.selectedFile.name;
+          this.selectedFile = null;
+          this.state.notify('warning',
+            `"${name}" is not registered in the workspace. Refresh the file browser and pick it from the list.`);
+          return;
+        }
+        this.selectedFile.id = resolved.id;
+        if (!this.selectedFile.name || this.selectedFile.name === 'Image File') {
+          this.selectedFile.name = resolved.name;
+        }
+      }
       await this.loadTiffInfo();
       this.goToStep(2);
-      // Clear all incoming data sources
-      this.state.update('modules.segmentation.inferenceResults', null);
-      this.state.update('modules.denoising-dl.viewerFile', null);
-      this.state.update('modules.denoising.viewerFile', null);
-      this.state.update('workspace.viewerFile', null);
     } catch (error) {
       console.error('[ImageViewerModule] Error handling incoming data:', error);
+      this.selectedFile = null;
       this.state.notify('error', 'Failed to load image file');
+    }
+  }
+
+  /** Forget every hand-off entry other modules may have left in state */
+  clearIncomingData() {
+    this.state.update('modules.segmentation.inferenceResults', null);
+    this.state.update('modules.denoising-dl.viewerFile', null);
+    this.state.update('modules.denoising.viewerFile', null);
+    this.state.update('workspace.viewerFile', null);
+  }
+
+  /**
+   * Look a workspace file up by its workspace-relative path (fallback for
+   * hand-offs that carry no file id).
+   * @returns {Promise<{id: string, name: string}|null>}
+   */
+  async resolveWorkspaceFile(relativePath) {
+    if (!relativePath) return null;
+    try {
+      const response = await fetch('/api/workspace/files');
+      const data = await response.json();
+      const files = data.success ? (data.files || []) : [];
+      return files.find(f => f.path === relativePath) || null;
+    } catch (error) {
+      console.warn('[ImageViewerModule] Could not resolve file by path:', error);
+      return null;
     }
   }
 

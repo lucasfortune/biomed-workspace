@@ -20,6 +20,8 @@
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, SliceViewerChrome } from '/workspace/js/core/components/index.js';
 import { icon } from '/workspace/js/core/icons.js';
+import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
+import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 import AnnotationCanvas from '/workspace/js/modules/annotation/utils/AnnotationCanvas.js';
 import BrushEngine from '/workspace/js/modules/annotation/utils/BrushEngine.js';
 import HistoryManager from '/workspace/js/modules/annotation/utils/HistoryManager.js';
@@ -301,6 +303,7 @@ class SegcleanupModule extends BaseModule {
     document.getElementById('scOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
     document.getElementById('scStartNewBtn')?.addEventListener('click', () => this.startNewRun());
     document.getElementById('scApplyCleanupBtn')?.addEventListener('click', () => this.applyCleanup());
+    this._initParamValidation();
     document.getElementById('scUpdateQuantBtn')?.addEventListener('click', () => this.runQuantify());
     document.getElementById('scSaveReportBtn')?.addEventListener('click', () => this.saveReport());
     this.setupEditControls();
@@ -314,7 +317,11 @@ class SegcleanupModule extends BaseModule {
     if (this.socket && this.jobId) {
       this.socket.emit('leave-segcleanup', this.jobId);
     }
-    // Leaving the module starts fresh next time (user preference)
+    // Leaving the module starts fresh next time (user preference); the
+    // server-side working copies and quantification dirs go with it
+    this.sweepJobDirs();
+    this.formValidationController?.destroy();
+    this.formValidationController = null;
     this.resetState();
     this.fileSelector = null;
     try { delete window.segcleanupModule; } catch (e) { window.segcleanupModule = undefined; }
@@ -330,6 +337,7 @@ class SegcleanupModule extends BaseModule {
     if (this.socket && this.jobId) {
       this.socket.emit('leave-segcleanup', this.jobId);
     }
+    this.sweepJobDirs();
     this.resetState();
 
     const banner = document.getElementById('scSavedBanner');
@@ -343,6 +351,11 @@ class SegcleanupModule extends BaseModule {
     if (next) next.disabled = true;
 
     this.goToStep(1);
+  }
+
+  /** Ask the server to drop this workspace's .segcleanup job dirs (fire and forget) */
+  sweepJobDirs() {
+    fetch('/api/segcleanup/sweep', { method: 'POST' }).catch(() => {});
   }
 
   teardownEditor() {
@@ -486,6 +499,8 @@ class SegcleanupModule extends BaseModule {
     });
     bind('scFillHoles', 'change', (e) => { this.ops.fillHoles = e.target.value; });
     bind('scMinSize', 'change', (e) => {
+      // An invalid entry keeps its message and leaves the op unchanged
+      if (this.formValidationController && !this.formValidationController.validateAll()) return;
       this.ops.minSize = Math.max(0, parseInt(e.target.value, 10) || 0);
     });
     bind('scSmoothRadius', 'input', (e) => {
@@ -784,8 +799,37 @@ class SegcleanupModule extends BaseModule {
     this.busy = busy;
     ['scApplyCleanupBtn', 'scUpdateQuantBtn', 'scSaveBtn', 'scSaveReportBtn'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.disabled = busy || (id === 'scSaveReportBtn' && !this.reportDir);
+      if (el) el.disabled = busy
+        || (id === 'scSaveReportBtn' && !this.reportDir)
+        || (id === 'scApplyCleanupBtn' && this.paramsValid === false);
     });
+  }
+
+  /**
+   * Field-level validation of the automated-cleanup parameters; Apply
+   * cleanup stays disabled while the minimum object size is not a whole
+   * number of voxels.
+   */
+  _initParamValidation() {
+    this.formValidationController?.destroy();
+    this.paramValidator = new ParameterValidator();
+    this.formValidationController = new FormValidationController(this.paramValidator, {
+      fieldSelector: '.form-field, .sv-row',
+      onValidationChange: (allValid) => {
+        this.paramsValid = allValid;
+        const btn = document.getElementById('scApplyCleanupBtn');
+        if (btn) btn.disabled = !allValid || this.busy;
+      }
+    });
+    const form = document.getElementById('step2');
+    if (form) this.formValidationController.attachTo(form);
+    this.formValidationController.addFieldRule('scMinSize', (value) => {
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 0
+        ? { valid: true, error: null }
+        : { valid: false, error: 'Min size must be a whole number of voxels (0 or more)' };
+    });
+    this.formValidationController.validateAll();
   }
 
   async applyCleanup() {
@@ -851,6 +895,7 @@ class SegcleanupModule extends BaseModule {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     set('scFillHoles', 'off');
     set('scMinSize', 0);
+    this.formValidationController?.validateAll();
     set('scSmoothRadius', 0);
     const val = document.getElementById('scSmoothVal');
     if (val) val.textContent = '0';

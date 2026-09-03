@@ -2,6 +2,10 @@ class FormValidationController {
   constructor(validator, options = {}) {
     this.validator = validator;
     this.onValidationChange = options.onValidationChange || (() => {});
+    // Selector of the element wrapping a field; it receives `.has-error`
+    // and the `.field-error` message (`.form-field` by default; toolbar
+    // rows pass `.sv-row`, ad-hoc groups `[data-field-group]`)
+    this.fieldSelector = options.fieldSelector || '.form-field';
     this.rules = new Map();
     this.errors = new Map();
     this.container = null;
@@ -66,7 +70,7 @@ class FormValidationController {
   }
 
   _getFormField(el) {
-    return el.closest('.form-field');
+    return el.closest(this.fieldSelector);
   }
 
   _getOrCreateErrorSpan(fieldId, el) {

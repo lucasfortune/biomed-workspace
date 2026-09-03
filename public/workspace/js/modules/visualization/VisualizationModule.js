@@ -180,7 +180,7 @@ class VisualizationModule extends BaseModule {
               <div id="fileSelectorContainer"></div>
 
               <!-- Validation Display -->
-              <div id="validationResult"></div>
+              ${ValidationDisplay.renderContainer('validationResult')}
 
               <!-- Original Data Info (shown when lineage found) -->
               <div id="originalDataInfo" class="original-data-info" style="display: none;"></div>

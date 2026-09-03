@@ -8,7 +8,8 @@
  * Features:
  * - Step 1: Data selection (recent results + workspace files)
  * - Step 2: Mesh generation with real-time progress
- * - Multiple output formats: Three.js JSON, OBJ, STL
+ * - Output formats: Three.js JSON (feeds the 3D viewer) and OBJ; other
+ *   formats come from the file browser's "Convert to..." action
  * - Navigation to 3D visualization module
  *
  * @module MeshModule
@@ -23,6 +24,8 @@ import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import MeshAPI from './MeshAPI.js';
 import { icon } from '/workspace/js/core/icons.js';
+import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
+import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 
 // =============================================================================
 // MODULE CLASS
@@ -139,7 +142,7 @@ class MeshModule extends BaseModule {
               <div id="fileSelectorContainer"></div>
 
               <!-- Validation Display (minimal confirmation) -->
-              <div id="validationResult"></div>
+              ${ValidationDisplay.renderContainer('validationResult')}
 
               <!-- Navigation Buttons -->
               <div class="navigation-buttons">
@@ -334,6 +337,7 @@ class MeshModule extends BaseModule {
     // =========================================================================
 
     this.setupEventListeners();
+    this._initParamValidation();
 
     // =========================================================================
     // Initialize Socket.IO
@@ -401,6 +405,26 @@ class MeshModule extends BaseModule {
   setJobButtonVisible(visible) {
     const btn = document.getElementById('startGenerationBtn');
     if (btn) btn.style.display = visible ? '' : 'none';
+  }
+
+  /**
+   * Field-level validation of the generation options; the job button stays
+   * disabled while the Z voxel scale is out of range.
+   */
+  _initParamValidation() {
+    this.formValidationController?.destroy();
+    this.paramValidator = new ParameterValidator();
+    this.formValidationController = new FormValidationController(this.paramValidator, {
+      onValidationChange: (allValid) => {
+        const btn = document.getElementById('startGenerationBtn');
+        if (btn) btn.disabled = !allValid;
+      }
+    });
+    const form = document.getElementById('step2');
+    if (form) this.formValidationController.attachTo(form);
+    this.formValidationController.addFieldRule('zAspectInput', (value) =>
+      this.paramValidator.validateRange(value, 0.05, 20, 'Z voxel scale'));
+    this.formValidationController.validateAll();
   }
 
   // ===========================================================================
@@ -964,6 +988,7 @@ class MeshModule extends BaseModule {
     // Reset UI
     const zAspectInput = document.getElementById('zAspectInput');
     if (zAspectInput) zAspectInput.value = 1;
+    this.formValidationController?.validateAll();
 
     const classSelect = document.getElementById('classSelection');
     if (classSelect) classSelect.innerHTML = '<option value="all" selected>All Classes</option>';
@@ -1124,6 +1149,8 @@ class MeshModule extends BaseModule {
     // re-rendered on the next visit, so anything left here would survive.
     // reset() runs while the DOM still exists (before super.deactivate()).
     this.reset();
+    this.formValidationController?.destroy();
+    this.formValidationController = null;
 
     // Stop elapsed time timer
     this.stopElapsedTimer();

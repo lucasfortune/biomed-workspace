@@ -6,6 +6,7 @@
  */
 
 import { icon } from '/workspace/js/core/icons.js';
+import ValidationDisplay from '/workspace/js/core/components/ValidationDisplay.js';
 
 class Templates {
   /**
@@ -77,7 +78,7 @@ class Templates {
                   <!-- FileSelector components will be inserted here -->
                   <div id="rawImagesSelectorContainer"></div>
                   <div id="annotationsSelectorContainer"></div>
-                  <div id="validationResult"></div>
+                  ${ValidationDisplay.renderContainer('validationResult')}
                 </div>
               </div>
             </div>

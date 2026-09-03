@@ -6,6 +6,7 @@
  */
 
 import { icon } from '/workspace/js/core/icons.js';
+import ValidationDisplay from '/workspace/js/core/components/ValidationDisplay.js';
 
 class Templates {
   /**
@@ -119,7 +120,7 @@ class Templates {
               <div class="workflow-body">
                 <div class="section-card-inner">
                   <div id="fileSelectorContainer"></div>
-                  <div id="validationResult"></div>
+                  ${ValidationDisplay.renderContainer('validationResult')}
                 </div>
               </div>
             </div>
@@ -365,9 +366,9 @@ class Templates {
     return `
       <div class="section-card-inner">
         <div id="importConfigSelector"></div>
-        <div id="importConfigValidation" class="validation-result"></div>
+        ${ValidationDisplay.renderContainer('importConfigValidation')}
         <div id="importStage1ModelSelector"></div>
-        <div id="importStage1Validation" class="validation-result"></div>
+        ${ValidationDisplay.renderContainer('importStage1Validation')}
       </div>
     `;
   }
@@ -380,11 +381,11 @@ class Templates {
     return `
       <div class="section-card-inner">
         <div id="importConfigSelector"></div>
-        <div id="importConfigValidation" class="validation-result"></div>
+        ${ValidationDisplay.renderContainer('importConfigValidation')}
         <div id="importStage1ModelSelector"></div>
-        <div id="importStage1Validation" class="validation-result"></div>
+        ${ValidationDisplay.renderContainer('importStage1Validation')}
         <div id="importStage2ModelSelector"></div>
-        <div id="importStage2Validation" class="validation-result"></div>
+        ${ValidationDisplay.renderContainer('importStage2Validation')}
       </div>
     `;
   }

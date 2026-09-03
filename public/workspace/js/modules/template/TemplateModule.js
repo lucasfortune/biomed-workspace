@@ -7,12 +7,15 @@
  * Features demonstrated:
  * - Extending BaseModule with step configuration
  * - Using StepNavigator, FileSelector, and ValidationDisplay components
- * - Conditional step navigation
+ * - Conditional step navigation: canNavigateToStep() feeding StepNavigator's
+ *   `canNavigate` option, so blocked steps cannot be clicked
  * - The shared step chrome: `.step-inner` wrappers, the job button in the
  *   nav row's right slot, and a `.section-card.success-card` result block
  * - Wiring every button with addEventListener (never inline onclick, never
- *   window.* free functions)
+ *   window.* free functions); delegated `data-action` for re-rendered markup
  * - Built-in test data through FileSelector's `testDataKind`
+ * - Context-sensitive help via `helpIconHtml` (see renderHelpIcon)
+ * - ValidationDisplay.renderContainer() for the validation slot
  * - State management integration
  * - Socket.IO for real-time updates
  * - Proper cleanup + reset-on-leave in deactivate()
@@ -111,6 +114,28 @@ class TemplateModule extends BaseModule {
   }
 
   // ===========================================================================
+  // HELP ICONS
+  // Any label can carry a help icon that opens the info panel on the matching
+  // article. Pass the markup to components through their `helpIconHtml`
+  // option, or drop it straight into render() next to a heading. Article ids
+  // are `<moduleId>.<step>.<topic>` and live under
+  // /workspace/content/modules/<moduleId>/.
+  // ===========================================================================
+
+  /**
+   * Render a help icon that opens the info panel with a specific article
+   * @param {string} articleId - The article ID to display
+   * @returns {string} HTML for the help icon
+   */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
+  // ===========================================================================
   // RENDER METHOD (Required)
   // Build the module's HTML structure
   // ===========================================================================
@@ -140,8 +165,8 @@ class TemplateModule extends BaseModule {
               <!-- File Selector will be rendered here -->
               <div id="fileSelectorContainer"></div>
 
-              <!-- Validation Display -->
-              <div id="validationResult"></div>
+              <!-- Validation Display: the component owns the container markup -->
+              ${ValidationDisplay.renderContainer('validationResult')}
 
               <!-- Navigation Buttons -->
               <div class="navigation-buttons">
@@ -290,7 +315,12 @@ class TemplateModule extends BaseModule {
         fileType: 'uploads',
         filterTags: ['raw'],
         title: 'Input Data',
+        // `icon` takes a name from core/icons.js - never an emoji
         icon: 'image',
+        // Help icon next to the picker heading (see renderHelpIcon above).
+        // Placeholder id: no content/modules/template/ directory exists, so
+        // point this at your own module's article once you copy the template.
+        helpIconHtml: this.renderHelpIcon('template.step1.input-data'),
         // Offer the built-in test stack. With testDataKind set, picking the
         // test option copies the stack into the workspace and then reports it
         // like any other workspace file - no isTestData branch needed here.
@@ -350,6 +380,19 @@ class TemplateModule extends BaseModule {
     // Result actions
     addListener(document.getElementById('downloadBtn'), 'click', () => this.downloadResults());
     addListener(document.getElementById('resetBtn'), 'click', () => this.reset());
+
+    // For markup you rebuild with innerHTML (a list of results, per-item
+    // buttons, ...) the ids do not exist yet at this point. Delegate from the
+    // stable parent instead and read the action off the button:
+    //
+    //   addListener(document.getElementById('resultsDetails'), 'click', (event) => {
+    //     const btn = event.target.closest('button[data-action]');
+    //     if (!btn) return;
+    //     if (btn.dataset.action === 'open-viewer') this.openInImageViewer(btn.dataset.fileId);
+    //   });
+    //
+    // One delegated listener survives every re-render - never write
+    // onclick="..." into the generated HTML.
   }
 
   /**

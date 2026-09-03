@@ -190,7 +190,7 @@ class AnnotationModule extends BaseModule {
               <div id="fileSelectorContainer"></div>
 
               <!-- Validation Display -->
-              <div id="validationResult"></div>
+              ${ValidationDisplay.renderContainer('validationResult')}
 
               <!-- Source image picker (only when an annotation has no known source) -->
               <div id="annotationSourcePicker" style="display: none;"></div>
@@ -861,11 +861,12 @@ class AnnotationModule extends BaseModule {
   setBrushSize(size) {
     if (!this.brushEngine) return;
 
-    this.brushEngine.setBrushSize(size);
-
-    // Update UI
+    // The slider range is the source of truth (the engine's own clamp is wider)
     const slider = this.container.querySelector('#brushSizeSlider');
     const value = this.container.querySelector('#brushSizeValue');
+    const min = slider ? parseInt(slider.min, 10) || 1 : 1;
+    const max = slider ? parseInt(slider.max, 10) || 50 : 50;
+    this.brushEngine.setBrushSize(Math.min(max, Math.max(min, size)));
 
     if (slider) slider.value = this.brushEngine.getBrushSize();
     if (value) value.textContent = `${this.brushEngine.getBrushSize()}px`;

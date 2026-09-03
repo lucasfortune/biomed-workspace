@@ -259,6 +259,22 @@ function createSegcleanupRoutes(dependencies) {
   }
 
   /**
+   * Remove this module's job dirs (work_* and quant_*) under the workspace's
+   * .segcleanup/ cache, keeping `keep` (absolute path) if given. The preview
+   * cache files in the same dir are left alone. Best effort.
+   */
+  async function sweepJobDirs(workspacePath, { keep = null, prefixes = ['work_', 'quant_'] } = {}) {
+    const root = path.join(workspacePath, '.segcleanup');
+    let entries = [];
+    try { entries = await fsp.readdir(root); } catch (e) { return; }
+    await Promise.all(entries
+      .filter(name => prefixes.some(p => name.startsWith(p)))
+      .map(name => path.join(root, name))
+      .filter(dir => dir !== keep)
+      .map(dir => fsp.rm(dir, { recursive: true, force: true }).catch(() => {})));
+  }
+
+  /**
    * Run the cleanup pipeline (incl. pending paint edits) into a NEW
    * WORKING COPY and quantify the result. The working copy lives under
    * the workspace's .segcleanup/ cache dir and is not tracked; the final
@@ -304,8 +320,9 @@ function createSegcleanupRoutes(dependencies) {
       runJob(['--mode', 'apply', '--config', configPath], roomName, (resultData, stderr) => {
         fsp.unlink(configPath).catch(() => {});
         if (resultData) {
-          // The previous working copy is superseded
+          // The previous working copy and any earlier quantification are superseded
           cleanupWorkingCopy(absolute);
+          sweepJobDirs(workspacePath, { prefixes: ['quant_'] });
           io.to(roomName).emit('segcleanup-complete', {
             success: true,
             jobId,
@@ -375,6 +392,8 @@ function createSegcleanupRoutes(dependencies) {
       runJob(['--mode', 'quantify', '--config', configPath], roomName, (resultData, stderr) => {
         fsp.unlink(configPath).catch(() => {});
         if (resultData) {
+          // Earlier quantifications are superseded by this one
+          sweepJobDirs(workspacePath, { keep: outputDir, prefixes: ['quant_'] });
           io.to(roomName).emit('segcleanup-complete', {
             success: true,
             jobId,
@@ -394,6 +413,22 @@ function createSegcleanupRoutes(dependencies) {
       res.json({ success: true, jobId });
     } catch (error) {
       if (logger) logger.error('[Segcleanup] Quantify error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Drop every working copy and quantification dir of this session's
+   * workspace (called when the module is left or an editing session is
+   * abandoned; saved outputs and reports are tracked copies elsewhere).
+   * POST /api/segcleanup/sweep
+   */
+  router.post('/sweep', requireAuth, async (req, res) => {
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(req.session.id);
+      await sweepJobDirs(workspacePath);
+      res.json({ success: true });
+    } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
   });

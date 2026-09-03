@@ -9,7 +9,7 @@
  * const selector = new FileSelector({
  *   id: 'training-data',
  *   title: 'Training Images',
- *   icon: '🖼️',
+ *   icon: 'image',                // name from core/icons.js
  *   fileType: 'raw_images',
  *   accept: '.tif,.tiff',
  *   showTestData: true,
@@ -39,7 +39,7 @@ class FileSelector {
    * @param {object} config - Configuration options
    * @param {string} [config.id] - Unique identifier
    * @param {string} [config.title='Select File'] - Display title
-   * @param {string} [config.icon='📁'] - Emoji icon
+   * @param {string} [config.icon='folder'] - Icon name from core/icons.js (raw SVG/HTML is also accepted)
    * @param {string} [config.helpIconHtml=''] - HTML for help icon (from renderHelpIcon)
    * @param {string} [config.fileType] - File type/category for filtering (raw, annotations, etc.)
    * @param {Array} [config.filterTags] - Tags files must have (e.g., ['inference'] for inference data)

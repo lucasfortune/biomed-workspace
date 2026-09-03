@@ -8,6 +8,8 @@
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
+import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
+import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 
 class FilterDenoisingModule extends BaseModule {
 
@@ -79,7 +81,7 @@ class FilterDenoisingModule extends BaseModule {
                 Select a TIFF stack to denoise, or use test data to try the module.
               </p>
               <div id="fileSelectorContainer"></div>
-              <div id="validationResult"></div>
+              ${ValidationDisplay.renderContainer('validationResult')}
               <div class="navigation-buttons">
                 <div></div>
                 <button id="step1Next" class="btn" disabled>Next: Configure</button>
@@ -139,7 +141,7 @@ class FilterDenoisingModule extends BaseModule {
                       <option value="9">9 x 9</option>
                       <option value="11">11 x 11</option>
                     </select>
-                    <span class="field-hint">Filter window size</span>
+                    <span class="field-hint">Window the Gaussian is evaluated in; a small window with a large sigma cuts off its tails</span>
                   </div>
                 </div>
 
@@ -314,6 +316,9 @@ class FilterDenoisingModule extends BaseModule {
       addListener(hValue, 'input', () => hSlider.value = hValue.value);
     }
 
+    // Typed parameter values are not bounded like the sliders
+    this._initParamValidation();
+
     // Start processing button
     addListener(document.getElementById('startProcessingBtn'), 'click', () => this.startProcessing());
 
@@ -339,6 +344,35 @@ class FilterDenoisingModule extends BaseModule {
 
     if (gaussianParams) gaussianParams.style.display = method === 'gaussian' ? 'block' : 'none';
     if (nlmParams) nlmParams.style.display = method === 'gaussian' ? 'none' : 'block';
+    // Only the visible method's fields count
+    this.formValidationController?.validateAll();
+  }
+
+  /**
+   * Field-level validation of the typed parameter values (the number inputs
+   * next to the sliders accept anything). Next stays disabled while a field
+   * of the selected method is out of range.
+   */
+  _initParamValidation() {
+    this.formValidationController?.destroy();
+    this.paramValidator = new ParameterValidator();
+    const step2Next = document.getElementById('step2Next');
+    this.formValidationController = new FormValidationController(this.paramValidator, {
+      onValidationChange: (allValid) => {
+        if (step2Next) step2Next.disabled = !allValid;
+      }
+    });
+    const form = document.getElementById('step2');
+    if (form) this.formValidationController.attachTo(form);
+
+    const ok = { valid: true, error: null };
+    this.formValidationController.addFieldRule('sigmaValue', (value) =>
+      this.selectedMethod === 'gaussian'
+        ? this.paramValidator.validateRange(value, 0.5, 5, 'Sigma') : ok);
+    this.formValidationController.addFieldRule('filterHValue', (value) =>
+      this.selectedMethod !== 'gaussian'
+        ? this.paramValidator.validateRange(value, 1, 30, 'Filter strength') : ok);
+    this.formValidationController.validateAll();
   }
 
   /**
@@ -633,6 +667,7 @@ class FilterDenoisingModule extends BaseModule {
     this.setFieldValue('sigma', 1.5);
     this.setFieldValue('sigmaValue', 1.5);
     this.setFieldValue('kernelSize', 5);
+    this.formValidationController?.validateAll();
     this.setFieldValue('filterH', 10);
     this.setFieldValue('filterHValue', 10);
     this.setFieldValue('templateWindow', 7);
@@ -674,6 +709,8 @@ class FilterDenoisingModule extends BaseModule {
     // leftover selection/config would still be here on the next visit.
     // reset() runs while the DOM still exists (before super.deactivate()).
     this.reset();
+    this.formValidationController?.destroy();
+    this.formValidationController = null;
 
     // Remove all event listeners
     for (const { element, event, handler } of this.eventListeners) {

@@ -2,7 +2,7 @@
  * MaskVisualization Component
  *
  * Renders the structural noise mask as a visual pixel grid.
- * Shows active pixels (those that will be masked during Stage 2 training).
+ * Shows active pixels (those that will be masked when training continues with this mask).
  * Supports both 2D masks (single slice) and 3D masks (triplet for 2.5D mode).
  */
 
@@ -60,7 +60,7 @@ class MaskVisualization {
     const modeLabel = this.is3D ? '2.5D Triplet Mask' : '2D Mask';
     const subtitle = this.is3D
       ? 'This 3-slice pattern represents structured noise across the Z-axis triplet. Each tab shows the mask for a different slice position.'
-      : 'This pattern represents the detected structured noise in your images. Active pixels (purple) will be masked during Stage 2 training.';
+      : 'This pattern represents the detected structured noise in your images. Active pixels (purple) will be masked when training continues with this mask.';
 
     return `
       <div class="mask-visualization" id="${this.containerId}">
@@ -183,7 +183,7 @@ class MaskVisualization {
           </p>
           <div class="warning-actions">
             <button class="btn secondary small" data-action="skipStage2">
-              Use N2V Results (Skip Stage 2)
+              Continue with plain N2V instead
             </button>
           </div>
         </div>

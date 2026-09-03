@@ -10,7 +10,7 @@
  * import { BaseModule } from '/workspace/js/core/index.js';
  *
  * // Import specific components
- * import { StepNavigator, MetricCard } from '/workspace/js/core/index.js';
+ * import { StepNavigator, FileSelector } from '/workspace/js/core/index.js';
  *
  * // Import everything
  * import * as Core from '/workspace/js/core/index.js';
@@ -20,16 +20,11 @@
 // Base class for all modules
 export { default as BaseModule } from './BaseModule.js';
 
-// UI Components
+// UI Components (the full set - see components/index.js)
 export {
   StepNavigator,
   NavigationButtons,
-  MetricCard,
   ValidationDisplay,
-  ProgressIndicator,
-  LoadingOverlay,
   FileSelector,
-  ComponentRegistry,
-  getComponent,
-  initGlobals
+  SliceViewerChrome
 } from './components/index.js';

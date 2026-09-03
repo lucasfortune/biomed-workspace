@@ -528,12 +528,12 @@ class BaseModule {
   // =============================================================================
 
   /**
-   * Render the common module header HTML
+   * Render the common module header HTML (back-to-hub button + title).
+   * Wire the `#backToHub` button in the module's setupEventListeners().
    * @param {string} [title] - Module title (defaults to config.name)
-   * @param {string} [subtitle] - Optional subtitle
    * @returns {string} HTML string
    */
-  renderHeader(title = null, subtitle = '') {
+  renderHeader(title = null) {
     const displayTitle = title || this.config.name;
     return `
       <div class="module-header">
@@ -579,45 +579,6 @@ class BaseModule {
       </div>
       <div class="step-nav">
         ${stepsHtml}
-      </div>
-    `;
-  }
-
-  /**
-   * Render navigation buttons HTML
-   * @param {object} options
-   * @param {boolean} [options.showPrevious=true] - Show previous button
-   * @param {boolean} [options.showNext=true] - Show next button
-   * @param {string} [options.previousLabel='Previous'] - Previous button label
-   * @param {string} [options.nextLabel='Next'] - Next button label
-   * @param {boolean} [options.nextDisabled=false] - Disable next button
-   * @param {string} [options.previousId] - Custom ID for previous button
-   * @param {string} [options.nextId] - Custom ID for next button
-   * @returns {string} HTML string
-   */
-  renderNavigationButtons(options = {}) {
-    const {
-      showPrevious = true,
-      showNext = true,
-      previousLabel = 'Previous',
-      nextLabel = 'Next',
-      nextDisabled = false,
-      previousId = '',
-      nextId = ''
-    } = options;
-
-    return `
-      <div class="navigation-buttons">
-        ${showPrevious ? `
-          <button class="btn secondary" ${previousId ? `id="${previousId}"` : ''}>
-            ${previousLabel}
-          </button>
-        ` : '<div></div>'}
-        ${showNext ? `
-          <button class="btn" ${nextId ? `id="${nextId}"` : ''} ${nextDisabled ? 'disabled' : ''}>
-            ${nextLabel}
-          </button>
-        ` : '<div></div>'}
       </div>
     `;
   }

@@ -17,6 +17,8 @@
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, SliceViewerChrome } from '/workspace/js/core/components/index.js';
+import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
+import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 
 class PreprocessModule extends BaseModule {
 
@@ -149,10 +151,10 @@ class PreprocessModule extends BaseModule {
                   <button class="btn small secondary" id="ppCropClearBtn">Clear</button>
                 </div>
                 <div class="pp-grid2">
-                  <span>x <input type="number" id="ppCropX" min="0" step="1"></span>
-                  <span>y <input type="number" id="ppCropY" min="0" step="1"></span>
-                  <span>w <input type="number" id="ppCropW" min="1" step="1"></span>
-                  <span>h <input type="number" id="ppCropH" min="1" step="1"></span>
+                  <span data-field-group>x <input type="number" id="ppCropX" min="0" step="1"></span>
+                  <span data-field-group>y <input type="number" id="ppCropY" min="0" step="1"></span>
+                  <span data-field-group>w <input type="number" id="ppCropW" min="1" step="1"></span>
+                  <span data-field-group>h <input type="number" id="ppCropH" min="1" step="1"></span>
                 </div>
               </div>
 
@@ -376,6 +378,9 @@ class PreprocessModule extends BaseModule {
       this.socket.emit('leave-preprocess', this.preprocessId);
     }
     // Leaving the module starts fresh next time (user preference)
+    this.formValidationController?.destroy();
+    this.formValidationController = null;
+    this.applyRunning = false;
     this.resetState();
     this.fileSelector = null;
     try { delete window.preprocessModule; } catch (e) { window.preprocessModule = undefined; }
@@ -507,11 +512,15 @@ class PreprocessModule extends BaseModule {
       const num = (id) => parseInt(document.getElementById(id)?.value, 10);
       const x = num('ppCropX'), y = num('ppCropY'), w = num('ppCropW'), h = num('ppCropH');
       if ([x, y, w, h].some(v => isNaN(v))) return;
+      // Out-of-range values stay in the field with their message; the crop
+      // keeps its previous value until the entry is fixed
+      if (this.formValidationController && !this.formValidationController.validateAll()) return;
       this.ops.crop = this.clampCrop({ x, y, width: w, height: h });
       this.syncCropInputs();
       this.drawCanvas();
     };
     ['ppCropX', 'ppCropY', 'ppCropW', 'ppCropH'].forEach(id => bind(id, 'change', onCropInput));
+    this._initParamValidation();
 
     // Z range
     const onZ = () => {
@@ -569,6 +578,40 @@ class PreprocessModule extends BaseModule {
 
     this.setupCanvasEvents();
     this.setupHistogramEvents();
+  }
+
+  /**
+   * Field-level validation of the typed crop rectangle against the stack
+   * size. Apply stays disabled while a field is out of range.
+   */
+  _initParamValidation() {
+    this.formValidationController?.destroy();
+    this.paramValidator = new ParameterValidator();
+    this.formValidationController = new FormValidationController(this.paramValidator, {
+      fieldSelector: '.form-field, [data-field-group]',
+      onValidationChange: (allValid) => {
+        const applyBtn = document.getElementById('ppApplyBtn');
+        if (applyBtn && !this.applyRunning) applyBtn.disabled = !allValid;
+      }
+    });
+    const form = document.getElementById('step2');
+    if (form) this.formValidationController.attachTo(form);
+
+    const typed = (id) => parseInt(document.getElementById(id)?.value, 10) || 0;
+    // Empty fields mean "no crop" and are fine; a typed value must be a
+    // whole number inside the stack
+    const rule = (label, min, max) => (value) => {
+      if (value === '' || value == null) return { valid: true, error: null };
+      const n = Number(value);
+      if (!Number.isInteger(n)) return { valid: false, error: `${label} must be a whole number` };
+      return max == null ? { valid: true, error: null }
+        : this.paramValidator.validateRange(n, min, max, label);
+    };
+    const W = () => this.file?.width, H = () => this.file?.height;
+    this.formValidationController.addFieldRule('ppCropX', (v) => rule('x', 0, W() != null ? W() - 1 : null)(v));
+    this.formValidationController.addFieldRule('ppCropY', (v) => rule('y', 0, H() != null ? H() - 1 : null)(v));
+    this.formValidationController.addFieldRule('ppCropW', (v) => rule('w', 1, W() != null ? W() - typed('ppCropX') : null)(v));
+    this.formValidationController.addFieldRule('ppCropH', (v) => rule('h', 1, H() != null ? H() - typed('ppCropY') : null)(v));
   }
 
   clampCrop(crop) {
@@ -965,6 +1008,7 @@ class PreprocessModule extends BaseModule {
     const applyBtn = document.getElementById('ppApplyBtn');
     if (progressSection) progressSection.style.display = 'block';
     if (successSection) successSection.style.display = 'none';
+    this.applyRunning = true;
     if (applyBtn) applyBtn.disabled = true;
     this.updateProgress(0, 'Starting...');
 
@@ -1008,8 +1052,9 @@ class PreprocessModule extends BaseModule {
       }
     });
     this.socket.on('preprocess-complete', (data) => {
+      this.applyRunning = false;
       const applyBtn = document.getElementById('ppApplyBtn');
-      if (applyBtn) applyBtn.disabled = false;
+      if (applyBtn) applyBtn.disabled = !(this.formValidationController?.isValid() ?? true);
       if (data.success) {
         this.result = data;
         this.showSuccess(data);

@@ -4,9 +4,8 @@
  * Handles file selection, upload, validation, and method selection.
  */
 
-import { FileSelector } from '/workspace/js/core/components/index.js';
+import { FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
 import Templates from '../templates/Templates.js';
-import { icon } from '/workspace/js/core/icons.js';
 
 class FileHandler {
   /**
@@ -443,13 +442,15 @@ class FileHandler {
    * Update config validation display
    */
   updateConfigValidationDisplay() {
-    const validationEl = document.getElementById('importConfigValidation');
-    if (!validationEl) return;
+    // The import section is re-rendered on method change, so the display
+    // is looked up fresh each time rather than cached
+    const display = new ValidationDisplay('importConfigValidation');
+    if (!display.getContainer()) return;
 
     const validation = this.importValidation.config;
 
     if (!validation.result) {
-      validationEl.innerHTML = '';
+      display.hide();
       return;
     }
 
@@ -457,24 +458,11 @@ class FileHandler {
       const configData = this.parsedConfig || {};
       const method = configData.method === 'autostructn2v' ? 'autoStructN2V' : 'N2V';
       const hasStage2 = configData.stage2 !== undefined;
-
-      validationEl.innerHTML = `
-        <div class="validation-success">
-          <span class="validation-icon">${icon('check')}</span>
-          <span class="validation-text">Valid ${method} configuration</span>
-          <span class="validation-details">
-            ${hasStage2 ? 'Two-stage pipeline' : 'Single-stage pipeline'}
-          </span>
-        </div>
-      `;
+      display.showSuccess(`Valid ${method} configuration`,
+        hasStage2 ? 'Two-stage pipeline' : 'Single-stage pipeline');
     } else {
       const errors = validation.result.errors || ['Config validation failed'];
-      validationEl.innerHTML = `
-        <div class="validation-error">
-          <span class="validation-icon">${icon('cross')}</span>
-          <span class="validation-text">${errors.join(', ')}</span>
-        </div>
-      `;
+      display.showError('Invalid configuration', errors.join(', '));
     }
   }
 
@@ -484,43 +472,27 @@ class FileHandler {
    */
   updateModelValidationDisplay(stage) {
     const stageCapitalized = stage.charAt(0).toUpperCase() + stage.slice(1);
-    const validationEl = document.getElementById(`import${stageCapitalized}Validation`);
-    if (!validationEl) return;
+    const display = new ValidationDisplay(`import${stageCapitalized}Validation`);
+    if (!display.getContainer()) return;
 
     const validation = this.importValidation[stage];
 
     if (!validation.result) {
       // Check if config is valid - if not, show hint
       if (!this.importValidation.config.valid && this.importFiles[`${stage}Model`]) {
-        validationEl.innerHTML = `
-          <div class="validation-warning">
-            <span class="validation-icon">${icon('warning')}</span>
-            <span class="validation-text">Select a valid config file first</span>
-          </div>
-        `;
+        display.showWarning('Select a valid config file first');
       } else {
-        validationEl.innerHTML = '';
+        display.hide();
       }
       return;
     }
 
     if (validation.valid) {
       const info = validation.result.modelInfo || {};
-      validationEl.innerHTML = `
-        <div class="validation-success">
-          <span class="validation-icon">${icon('check')}</span>
-          <span class="validation-text">Valid model file</span>
-          ${info.size ? `<span class="validation-details">Size: ${info.size}</span>` : ''}
-        </div>
-      `;
+      display.showSuccess('Valid model file', info.size ? `Size: ${info.size}` : null);
     } else {
       const errors = validation.result.errors || ['Model validation failed'];
-      validationEl.innerHTML = `
-        <div class="validation-error">
-          <span class="validation-icon">${icon('cross')}</span>
-          <span class="validation-text">${errors.join(', ')}</span>
-        </div>
-      `;
+      display.showError('Invalid model file', errors.join(', '));
     }
   }
 
