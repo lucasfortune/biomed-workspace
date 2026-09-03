@@ -23,19 +23,31 @@
    LAYOUT: viewer + toolbar
    ============================================ */
 
+/* Viewer height = the largest window that fits below the module chrome
+   (header, step bar, title, nav row): 100vh minus --sv-offset, never below
+   460px. Every viewer is the same height regardless of its toolbar, the
+   toolbar scrolls beside it, and the canvas keeps a "roughly square" width
+   cap (1.5 : 1) so wide screens don't turn it into a letterbox.
+   Modules whose chrome above the viewer is taller/shorter than the default
+   override --sv-offset on their root class. */
 .sv-main {
+  --sv-height: max(460px, calc(100vh - var(--sv-offset, 375px)));
   flex: 1;
   display: flex;
   flex-direction: row;
+  justify-content: center;
   gap: var(--module-spacing-md);
   min-height: 0;
   align-items: stretch;
 }
 
 .sv-wrap {
-  flex: 1;
+  --sv-height: max(460px, calc(100vh - var(--sv-offset, 375px)));
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  min-height: 500px;
+  height: var(--sv-height);
+  max-width: calc(var(--sv-height) * 1.5);
   display: flex;
   flex-direction: column;
   background: var(--module-card-bg);
@@ -289,6 +301,7 @@
    ============================================ */
 
 .sv-toolbar {
+  --sv-height: max(460px, calc(100vh - var(--sv-offset, 375px)));
   width: 260px;
   flex-shrink: 0;
   display: flex;
@@ -296,6 +309,7 @@
   gap: var(--module-spacing-sm);
   overflow-y: auto;
   min-height: 0;
+  max-height: var(--sv-height);
   align-self: stretch;
 }
 
@@ -424,8 +438,14 @@
     flex-direction: column;
   }
 
+  .sv-wrap {
+    flex: 0 0 auto; /* keep the viewport-based height when stacked above the toolbar */
+    max-width: none;
+  }
+
   .sv-toolbar {
     width: 100%;
+    max-height: none;
     flex-direction: row;
     flex-wrap: wrap;
     overflow-y: visible;

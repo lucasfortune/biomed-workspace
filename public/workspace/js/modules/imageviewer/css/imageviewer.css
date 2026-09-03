@@ -71,6 +71,11 @@
   flex-direction: column;
 }
 
+/* Toolbar row above the viewer adds ~30px to the chrome above .sv-wrap */
+.imageviewer-module {
+  --sv-offset: 405px;
+}
+
 /* The nav row under the viewer stays visible at the bottom */
 .imageviewer-module #step2 .navigation-buttons {
   flex-shrink: 0;
@@ -88,6 +93,11 @@
 .imageviewer-module .image-viewer-container {
   display: flex;
   flex-direction: column;
+}
+
+/* The width-capped viewer sits centred; the mode toolbar above keeps full width */
+.imageviewer-module .image-viewer-container .sv-wrap {
+  margin-inline: auto;
 }
 
 /* Toolbar */

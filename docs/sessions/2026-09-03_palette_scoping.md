@@ -78,6 +78,13 @@ Tracker B7, B9, B10, B13, B14, B16.
   the slice-viewer split (`.sv-main`), 3D Visualization, DL, segmentation and mesh layouts collapse
   on `@container module (max-width: …)` instead of viewport widths, so the 280 px sidebar no longer
   squeezes the editors; segmentation got its first responsive rules.
+- ✅ **Viewer size (follow-up from Lucas's review):** the slice-viewer row used to take the height of
+  its toolbar (so every viewer differed and the toolbar-less Image Viewer fell back to a 500 px
+  minimum, ~350 px of canvas). `.sv-wrap` / `.sv-toolbar` now take `--sv-height = max(460px,
+  100vh − --sv-offset)` (offset 375 px by default, 405 px in Image Viewer, 335 px in Annotation),
+  the toolbar scrolls beside the viewer, the wrap is capped at 1.5 : 1 and centred with its toolbar,
+  and the stacked (container ≤ 900 px) layout keeps the height. Annotation's and Image Viewer's
+  "fill the step" height chains are gone; Annotation's step area scrolls instead of clipping.
 - ✅ **Dead code:** `modules/segmentation/visualization/` (nine files, imported by nothing — the
   classic app has its own copy) and the matching 61 CSS rules; 48 dead DL rules (`.mode-toggle-*`,
   `.import-stage-panel`, `.loss-charts-*`, `.interim-mask-section`, …); the Image Viewer's old
@@ -151,7 +158,10 @@ section headers, by design), hints 12 px, selects on the border-dark token, chec
 `accent-color` red, primary buttons red, `.file-dropdown` chevron a gradient; `.sv-main` flips to a
 column when `.step-contents` is forced to 700 px and back; the annotation toggle is 36×20 with a red
 track. Re-shot after the last tweaks: hub I/O glyphs masked SVG, segmentation workflow caret 16 px,
-Image Viewer footer no longer clipped. Regressions: `scenario_p3.json` (hub order, step chrome, nav
+Image Viewer footer no longer clipped. Viewer size (`scenario_sv_geo.json`): all five viewers report
+the same viewport-based wrap height (525 px at 900 px viewport, 565 px in Annotation, 495 px in
+Image Viewer), nav rows end inside the viewport, the wrap keeps its height when the module area is
+forced to 700 px (stacked layout), Phase 2 probes re-run. Regressions: `scenario_p3.json` (hub order, step chrome, nav
 rows, success cards, test-data import, reset on leave, stitching list mode) and `scenario_p2b.json`
 (five viewers, readout / arrow key / zoom, both themes) unchanged. Only console errors: the starter
 template is not in the registry (expected). Test server, workspace, session and user removed.
