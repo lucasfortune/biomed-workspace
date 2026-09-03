@@ -21,6 +21,8 @@
  * validation.hide();
  * ```
  */
+import { icon as svgIcon } from '/workspace/js/core/icons.js';
+
 class ValidationDisplay {
   /**
    * Create a ValidationDisplay
@@ -56,10 +58,10 @@ class ValidationDisplay {
     }
 
     const icons = {
-      success: '&#10003;',
-      error: '&#10007;',
-      info: '&#8505;',
-      warning: '&#9888;'
+      success: svgIcon('check'),
+      error: svgIcon('cross'),
+      info: svgIcon('info'),
+      warning: svgIcon('warning')
     };
 
     const icon = icons[type] || '';

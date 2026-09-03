@@ -422,6 +422,7 @@ class BaseModule {
       if (id) link.id = id;
       link.rel = 'stylesheet';
       link.href = href;
+      link.dataset.moduleCss = this.config.id;
 
       link.onload = () => {
         console.log(`[${this.config.name}] CSS loaded: ${href}`);
@@ -435,6 +436,16 @@ class BaseModule {
 
       document.head.appendChild(link);
     });
+  }
+
+  /**
+   * Remove every stylesheet this module loaded through loadCSS().
+   * Called by ModuleLoader after deactivate(), so a module's unscoped
+   * rules cannot leak into the next module (tracker B10). The next
+   * activate() loads the sheet again (browser cache makes that cheap).
+   */
+  unloadCSS() {
+    document.querySelectorAll(`link[data-module-css="${this.config.id}"]`).forEach(link => link.remove());
   }
 
   /**

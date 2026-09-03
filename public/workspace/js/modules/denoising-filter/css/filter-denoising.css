@@ -56,7 +56,6 @@
 
 .filter-denoising-module .method-selector h4 {
   margin-bottom: var(--module-spacing-md);
-  color: var(--module-text-primary);
 }
 
 /* Section header with help icon */
@@ -104,12 +103,12 @@
 
 .filter-denoising-module .method-option:hover {
   border-color: var(--module-primary);
-  background: rgba(102, 126, 234, 0.05);
+  background: var(--module-primary-light);
 }
 
 .filter-denoising-module .method-option:has(input:checked) {
   border-color: var(--module-primary);
-  background: rgba(102, 126, 234, 0.1);
+  background: var(--module-primary-light);
 }
 
 .filter-denoising-module .method-option input[type="radio"] {
@@ -144,11 +143,6 @@
   margin-bottom: var(--module-spacing-lg);
 }
 
-.filter-denoising-module .params-section h4 {
-
-  color: var(--module-text-primary);
-}
-
 /* ============================================
    SLIDER + NUMBER INPUT COMBO (module-specific)
    ============================================ */
@@ -164,69 +158,23 @@
   min-width: 0;
 }
 
+/* Width comes from .input-sm in the markup; look/focus from module-base */
 .filter-denoising-module .slider-input input[type="number"] {
-  width: 80px;
-  padding: 8px 10px;
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-sm);
-  font-size: var(--module-font-size-sm);
   text-align: center;
-}
-
-.filter-denoising-module .slider-input input[type="number"]:focus {
-  outline: none;
-  border-color: var(--module-primary);
 }
 
 /* ============================================
    CONFIGURATION FORM
+   The .config-form card, the .form-field wrapper/label, .field-hint and the
+   select look + focus ring all come from module-base.css.
    ============================================ */
-
-.filter-denoising-module .config-form {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-lg);
-  margin-bottom: var(--module-spacing-lg);
-}
-
-.filter-denoising-module .form-field {
-  margin-bottom: var(--module-spacing-md);
-}
 
 .filter-denoising-module .form-field:last-child {
   margin-bottom: 0;
 }
 
-.filter-denoising-module .form-field label {
-  display: block;
-  margin-bottom: var(--module-spacing-xs);
-  font-weight: 500;
-  color: var(--module-text-primary);
-}
-
 .filter-denoising-module .form-field select {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-sm);
-  font-size: var(--module-font-size-sm);
-  transition: var(--module-transition-fast);
-  background: var(--module-bg);
-  color: var(--module-text-primary);
-}
-
-.filter-denoising-module .form-field select:focus {
-  outline: none;
-  border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.filter-denoising-module .field-hint {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--module-font-size-xs);
-  color: var(--module-text-secondary);
 }
 
 /* ============================================
@@ -244,7 +192,6 @@
 
 .filter-denoising-module .config-summary h4 {
   margin-bottom: var(--module-spacing-sm);
-  color: var(--module-text-primary);
 }
 
 .filter-denoising-module .detail-row {

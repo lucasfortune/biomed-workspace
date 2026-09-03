@@ -5,6 +5,8 @@
  * Extracted from DLDenoisingModule.js for better maintainability.
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class Templates {
   /**
    * Render a help icon with the given article ID
@@ -56,7 +58,7 @@ class Templates {
 
           <!-- GPU Status -->
           <div id="gpuStatus" class="gpu-status">
-            <span class="gpu-status-icon">&#8987;</span>
+            <span class="gpu-status-icon">${icon('hourglass')}</span>
             <span class="gpu-status-text">Checking GPU availability...</span>
           </div>
 
@@ -108,7 +110,7 @@ class Templates {
             <!-- Train from Scratch Section (collapsible) -->
             <div class="workflow-section" id="trainFromScratchSection">
               <div class="workflow-header" data-workflow="train">
-                <span class="workflow-icon">&#9654;</span>
+                <span class="workflow-icon">${icon('caretRight')}</span>
                 <div class="workflow-header-content">
                   <span class="workflow-title">Train from Scratch</span>
                   <span class="workflow-subtitle">Upload images to train a new denoising model</span>
@@ -125,7 +127,7 @@ class Templates {
             <!-- Import Previously Trained Section (collapsible) -->
             <div class="workflow-section" id="importModelSection">
               <div class="workflow-header" data-workflow="import">
-                <span class="workflow-icon">&#9654;</span>
+                <span class="workflow-icon">${icon('caretRight')}</span>
                 <div class="workflow-header-content">
                   <span class="workflow-title">Import Previously Trained Model</span>
                   <span class="workflow-subtitle">Use an existing model to process new images</span>
@@ -242,12 +244,12 @@ class Templates {
       <div id="maskApprovalSection" class="training-stage-section" style="display: none;">
         <div class="collapsible-section expanded" id="maskSection">
           <div class="collapsible-header" data-section="maskExtraction">
-            <span class="collapsible-icon">&#9660;</span>
+            <span class="collapsible-icon">${icon('caretDown')}</span>
             <h4>Noise Analysis & Mask</h4>
             <div class="auto-approve-toggle-container" id="autoApproveContainer">
-              <label class="auto-approve-toggle" title="Automatically approve the discovered mask and start training">
+              <label class="toggle-switch" title="Automatically approve the discovered mask and start training">
                 <input type="checkbox" id="autoApproveToggle" />
-                <span class="auto-approve-slider"></span>
+                <span class="toggle-slider"></span>
               </label>
               <span class="auto-approve-label">Auto-approve</span>
             </div>
@@ -283,7 +285,7 @@ class Templates {
       <div id="trainSection" class="training-stage-section" style="display: none;">
         <div class="collapsible-section expanded">
           <div class="collapsible-header" data-section="trainTraining">
-            <span class="collapsible-icon">&#9660;</span>
+            <span class="collapsible-icon">${icon('caretDown')}</span>
             <h4 id="trainSectionTitle">Model Training</h4>
             <span class="stage-status" id="trainStageStatus">Pending</span>
           </div>
@@ -344,7 +346,7 @@ class Templates {
       <!-- Training Success (hidden until training completes) -->
       <div id="trainSuccessSection" class="section-card success-card" style="display: none;">
         <div class="success-header">
-          <span class="success-icon">&#10003;</span>
+          <span class="success-icon">${icon('check')}</span>
           <span class="success-title">Denoising Complete!</span>
         </div>
         <div class="success-actions">
@@ -432,7 +434,7 @@ class Templates {
           <!-- Success Section (hidden initially) -->
           <div id="inferenceSuccessSection" class="section-card success-card" style="display: none;">
             <div class="success-header">
-              <span class="success-icon">✓</span>
+              <span class="success-icon">${icon('check')}</span>
               <span class="success-title">Processing Complete!</span>
             </div>
             <div id="inferenceResultInfo" class="result-info">

@@ -5,6 +5,8 @@
  * Extracted from SegmentationModule.js for better maintainability.
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class Templates {
   /**
    * Render a help icon with the given article ID
@@ -64,7 +66,7 @@ class Templates {
             <!-- Train from Scratch Section -->
             <div class="workflow-section" id="trainFromScratchSection">
               <div class="workflow-header" data-workflow="train">
-                <span class="workflow-icon">&#9654;</span>
+                <span class="workflow-icon">${icon('caretRight')}</span>
                 <div class="workflow-header-content">
                   <span class="workflow-title">Train from Scratch</span>
                   <span class="workflow-subtitle">Upload training images and annotations</span>
@@ -83,7 +85,7 @@ class Templates {
             <!-- Import Model Section -->
             <div class="workflow-section" id="importModelSection">
               <div class="workflow-header" data-workflow="import">
-                <span class="workflow-icon">&#9654;</span>
+                <span class="workflow-icon">${icon('caretRight')}</span>
                 <div class="workflow-header-content">
                   <span class="workflow-title">Use Pretrained Model</span>
                   <span class="workflow-subtitle">Import a previously trained model for inference</span>
@@ -223,7 +225,7 @@ class Templates {
             <!-- Training progress state: Hidden initially -->
             <div id="trainingProgressContent" style="display: none;">
               <div class="training-status-header">
-                <h4 id="trainingStatusText">Training started... Preparing data...</h4>
+                <h4 id="trainingStatusText" class="training-status-text">Training started... Preparing data...</h4>
                 <span class="stage-status training" id="trainingStageStatus">Training</span>
               </div>
               <div class="training-progress">

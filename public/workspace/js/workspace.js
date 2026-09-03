@@ -442,7 +442,6 @@ class Workspace {
 
     return `
       <div class="module-card ${module.status === 'coming_soon' ? 'coming-soon' : ''}"
-           style="--card-color: ${module.color}"
            data-module-id="${module.id}">
         ${helpIcon ? `<div class="module-card-help">${helpIcon}</div>` : ''}
         <div class="module-icon">${module.icon}</div>
@@ -487,7 +486,6 @@ class Workspace {
 
     return `
       <div class="module-card"
-           style="--card-color: ${module.color}"
            data-module-id="${module.id}">
         ${helpIcon ? `<div class="module-card-help">${helpIcon}</div>` : ''}
         <div class="module-icon">${module.icon}</div>

@@ -122,7 +122,7 @@
 .viz-module .threejs-container {
   flex: 1;
   width: 100%;
-  background: #1a1a2e;
+  background: var(--module-viewer-bg);
   border-radius: var(--module-radius-lg);
   overflow: hidden;
   position: relative;
@@ -178,13 +178,13 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(26, 26, 46, 0.9);
+  background: color-mix(in srgb, var(--module-viewer-bg) 90%, transparent);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--module-spacing-sm);
-  z-index: 50;
+  z-index: var(--z-raised, 10);
   backdrop-filter: blur(4px);
 }
 
@@ -458,7 +458,7 @@
   cursor: pointer;
   transition: var(--module-transition-fast);
   background: var(--module-gradient);
-  color: white;
+  color: var(--module-text-on-accent);
 }
 
 .viz-module .btn:hover:not(:disabled) {
@@ -486,7 +486,7 @@
    RESPONSIVE
    ============================================ */
 
-@media (max-width: 900px) {
+@container module (max-width: 800px) {
   .viz-module .viz-layout {
     flex-direction: column;
   }
@@ -571,19 +571,19 @@
   position: absolute;
   top: var(--module-spacing-md);
   right: var(--module-spacing-md);
-  background: rgba(30, 30, 46, 0.95);
+  background: color-mix(in srgb, var(--module-viewer-bg) 95%, transparent);
   color: var(--module-text-primary);
   border: 1px solid var(--module-border);
   padding: 8px 12px;
   border-radius: var(--module-radius-md);
   cursor: pointer;
   font-size: var(--module-font-size-sm);
-  z-index: 101;
+  z-index: calc(var(--z-raised, 10) + 2);
   backdrop-filter: blur(10px);
 }
 
 .viz-module .show-controls-btn:hover {
-  background: rgba(40, 40, 60, 0.95);
+  background: color-mix(in srgb, var(--module-viewer-bg) 85%, var(--module-text-on-accent));
   border-color: var(--module-primary);
 }
 
@@ -646,11 +646,11 @@
   right: var(--module-spacing-md);
   width: 260px;
   max-height: calc(100% - 100px);
-  background: rgba(30, 30, 46, 0.95);
+  background: color-mix(in srgb, var(--module-viewer-bg) 95%, transparent);
   backdrop-filter: blur(10px);
   border-radius: var(--module-radius-lg);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  z-index: 100;
+  z-index: calc(var(--z-raised, 10) + 1);
   overflow-y: auto;
 }
 
@@ -666,7 +666,7 @@
 
 /* Expanded mode - controls header needs white text on dark floating panel */
 .viz-module.expanded-mode .controls-header h4 {
-  color: #F8F9FA;
+  color: var(--module-text-on-accent);
 }
 
 /* Expanded mode - floating toolbar at bottom */
@@ -675,12 +675,12 @@
   bottom: var(--module-spacing-md);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(30, 30, 46, 0.95);
+  background: color-mix(in srgb, var(--module-viewer-bg) 95%, transparent);
   backdrop-filter: blur(10px);
   padding: var(--module-spacing-sm) var(--module-spacing-md);
   border-radius: var(--module-radius-lg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 100;
+  z-index: calc(var(--z-raised, 10) + 1);
 }
 
 /* Hide navigation buttons in expanded mode */

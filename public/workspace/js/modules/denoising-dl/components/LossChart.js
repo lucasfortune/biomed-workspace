@@ -5,6 +5,22 @@
  * Shows training and validation loss over epochs.
  */
 
+/**
+ * Read the current theme's chart colours from the module design tokens so the
+ * canvas follows light/dark mode. Falls back to the light-theme values when a
+ * token is missing (e.g. module-base.css not yet applied).
+ */
+function themeColors() {
+  const css = getComputedStyle(document.documentElement);
+  const token = (name, fallback) => (css.getPropertyValue(name) || '').trim() || fallback;
+  return {
+    train: token('--module-primary', '#EB1F17'),
+    validation: token('--module-info', '#17A2B8'),
+    grid: token('--module-border', '#DEE2E6'),
+    text: token('--module-text-secondary', '#6C757D')
+  };
+}
+
 class LossChart {
   /**
    * @param {Object} options - Configuration options
@@ -90,6 +106,7 @@ class LossChart {
     }
 
     const ctx = canvas.getContext('2d');
+    const colors = themeColors();
 
     this.chart = new Chart(ctx, {
       type: 'line',
@@ -99,8 +116,8 @@ class LossChart {
           {
             label: 'Train Loss',
             data: this.trainLoss,
-            borderColor: '#4A90E2',
-            backgroundColor: 'rgba(74, 144, 226, 0.1)',
+            borderColor: colors.train,
+            backgroundColor: colors.train,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -110,8 +127,8 @@ class LossChart {
           {
             label: 'Validation Loss',
             data: this.valLoss,
-            borderColor: '#E24A4A',
-            backgroundColor: 'rgba(226, 74, 74, 0.1)',
+            borderColor: colors.validation,
+            backgroundColor: colors.validation,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -146,13 +163,13 @@ class LossChart {
             title: {
               display: true,
               text: 'Epoch',
-              color: '#666'
+              color: colors.text
             },
             grid: {
-              color: 'rgba(0, 0, 0, 0.05)'
+              color: colors.grid
             },
             ticks: {
-              color: '#666',
+              color: colors.text,
               maxTicksLimit: 10
             }
           },
@@ -161,13 +178,13 @@ class LossChart {
             title: {
               display: true,
               text: 'Loss',
-              color: '#666'
+              color: colors.text
             },
             grid: {
-              color: 'rgba(0, 0, 0, 0.05)'
+              color: colors.grid
             },
             ticks: {
-              color: '#666',
+              color: colors.text,
               callback: function(value) {
                 return value.toFixed(4);
               }

@@ -22,6 +22,7 @@ import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import MeshAPI from './MeshAPI.js';
+import { icon } from '/workspace/js/core/icons.js';
 
 // =============================================================================
 // MODULE CLASS
@@ -290,7 +291,7 @@ class MeshModule extends BaseModule {
         fileType: 'uploads',  // New metadata system
         filterTags: ['annotation'],  // Show annotation uploads
         title: 'Segmentation Data',
-        icon: '🧩',
+        icon: 'tag',
         helpIconHtml: this.renderHelpIcon('mesh.step1.segmentation-data'),
         // Mesh input is a mask, and a built-in test mask exists: offer it.
         // The import lands as an `uploads` file tagged `annotation`, which
@@ -888,11 +889,10 @@ class MeshModule extends BaseModule {
     }
 
     if (downloadBtns && data.formats) {
-      const formatIcons = { json: '📊', obj: '📐', stl: '🖨️' };
       // Handled by the delegated click listener on #downloadButtons
       downloadBtns.innerHTML = data.formats.map(format => `
         <button class="btn secondary download-btn" data-format="${format}">
-          ${formatIcons[format] || '📁'} Download ${format.toUpperCase()}
+          ${icon('download')} Download ${format.toUpperCase()}
         </button>
       `).join('');
     }

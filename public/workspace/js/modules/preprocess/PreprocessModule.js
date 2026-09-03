@@ -312,7 +312,7 @@ class PreprocessModule extends BaseModule {
         fileType: 'uploads',
         filterTags: ['raw'],
         title: 'Image Stack',
-        icon: '🖼️',
+        icon: 'image',
         accept: '.tif,.tiff',
         showTestData: true,
         testDataKind: 'raw',

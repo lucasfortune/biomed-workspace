@@ -8,7 +8,10 @@
  * - Navigation to optional Step 4
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class ResultsDisplay {
+
   /**
    * @param {Object} options - Configuration options
    * @param {string} options.containerId - ID of container element
@@ -49,13 +52,13 @@ class ResultsDisplay {
     return `
       <div class="results-display section-card success-card" id="${this.containerId}">
         <div class="success-header">
-          <span class="success-icon">&#10003;</span>
+          <span class="success-icon">${icon('check')}</span>
           <span class="success-title">Denoising Complete!</span>
         </div>
         <p class="results-subtitle">Your images have been successfully denoised${branchLabel ? ` (${branchLabel})` : ''}.</p>
 
         <div class="results-info-box">
-          <span class="info-icon">&#9432;</span>
+          <span class="info-icon">${icon('info')}</span>
           <span class="info-text">
             Step 4 (Process Additional Images) is <strong>OPTIONAL</strong>.
             Your denoised results are ready below.
@@ -71,25 +74,25 @@ class ResultsDisplay {
           <div class="model-info">
             ${outputFiles.model ? `
               <div class="file-item">
-                <span class="file-icon">&#128190;</span>
+                <span class="file-icon">${icon('save')}</span>
                 <span class="file-name">${this._getFilename(outputFiles.model)}</span>
               </div>
             ` : ''}
             ${outputFiles.config ? `
               <div class="file-item">
-                <span class="file-icon">&#128196;</span>
+                <span class="file-icon">${icon('file')}</span>
                 <span class="file-name">${this._getFilename(outputFiles.config)}</span>
               </div>
             ` : ''}
             ${outputFiles.routed_mask ? `
               <div class="file-item">
-                <span class="file-icon">&#128200;</span>
+                <span class="file-icon">${icon('chart')}</span>
                 <span class="file-name">${this._getFilename(outputFiles.routed_mask)}</span>
               </div>
             ` : ''}
             ${outputFiles.route_decision ? `
               <div class="file-item">
-                <span class="file-icon">&#129517;</span>
+                <span class="file-icon">${icon('mesh')}</span>
                 <span class="file-name">${this._getFilename(outputFiles.route_decision)}</span>
               </div>
             ` : ''}
@@ -99,11 +102,11 @@ class ResultsDisplay {
         <!-- Action Buttons -->
         <div class="results-actions success-actions">
           <button class="btn secondary" data-action="downloadAllResults">
-            <span class="btn-glyph">&#128229;</span>
+            <span class="btn-glyph">${icon('download')}</span>
             Download All Results
           </button>
           <button class="btn" data-action="goToStep" data-step="4">
-            <span class="btn-glyph">&#10132;</span>
+            <span class="btn-glyph">${icon('arrowRight')}</span>
             Process Additional Images (Optional)
           </button>
         </div>
@@ -130,7 +133,7 @@ class ResultsDisplay {
         <div class="stack-info">
           <div class="stack-preview">
             <div class="preview-placeholder">
-              <span class="preview-icon">&#128247;</span>
+              <span class="preview-icon">${icon('camera')}</span>
               <span class="preview-text">TIFF Stack</span>
             </div>
           </div>
@@ -152,11 +155,11 @@ class ResultsDisplay {
 
         <div class="stack-actions">
           <button class="btn small" data-action="downloadResult">
-            <span class="btn-glyph">&#128229;</span>
+            <span class="btn-glyph">${icon('download')}</span>
             Download
           </button>
           <button class="btn small secondary" data-action="viewInViewer">
-            <span class="btn-glyph">&#128065;</span>
+            <span class="btn-glyph">${icon('eye')}</span>
             Open in Image Viewer
           </button>
         </div>

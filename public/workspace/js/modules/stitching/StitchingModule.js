@@ -21,6 +21,7 @@
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, SliceViewerChrome, FileSelector } from '/workspace/js/core/components/index.js';
+import { icon } from '/workspace/js/core/icons.js';
 
 const TIFF_INFO_URL = '/api/denoising/dl/tiff-info';
 const SLICE_URL = (idx, filePath) =>
@@ -219,10 +220,10 @@ class StitchingModule extends BaseModule {
                 </div>
                 <div class="dominance-toggle">
                   <button class="dominance-btn" id="dominantPrevBtn" title="Keep the upper (previous) stack's slices">
-                    &#9650; upper stack
+                    ${icon('up')} upper stack
                   </button>
                   <button class="dominance-btn" id="dominantThisBtn" title="Keep the lower (this) stack's slices">
-                    &#9660; lower stack
+                    ${icon('down')} lower stack
                   </button>
                 </div>
               </div>
@@ -238,11 +239,11 @@ class StitchingModule extends BaseModule {
               <div class="sv-section">
                 <div class="sv-section-header"><h4>Transform</h4></div>
                 <div class="transform-row">
-                  <span>dx <input type="number" id="junctionDx" step="1" value="0"></span>
-                  <span>dy <input type="number" id="junctionDy" step="1" value="0"></span>
+                  <span>dx <input type="number" class="input-sm" id="junctionDx" step="1" value="0"></span>
+                  <span>dy <input type="number" class="input-sm" id="junctionDy" step="1" value="0"></span>
                 </div>
                 <div class="transform-row">
-                  <span>rotation&deg; <input type="number" id="junctionRot" step="0.1" value="0"></span>
+                  <span>rotation&deg; <input type="number" class="input-sm" id="junctionRot" step="0.1" value="0"></span>
                 </div>
                 <div class="transform-row">
                   <button class="btn small primary" id="autoAlignBtn">Auto-align</button>
@@ -351,7 +352,7 @@ class StitchingModule extends BaseModule {
       this.stackSelector = new FileSelector({
         id: 'stitch_stacks',
         title: 'Stacks',
-        icon: '🧩',
+        icon: 'puzzle',
         helpIconHtml: '',
         mode: 'list',
         addLabel: 'Add',
@@ -374,7 +375,7 @@ class StitchingModule extends BaseModule {
       this.recipeSelector = new FileSelector({
         id: 'stitch_recipe',
         title: 'Recipe',
-        icon: '📜',
+        icon: 'file',
         helpIconHtml: '',
         mode: 'select',
         accept: '.json',
@@ -1351,7 +1352,7 @@ class StitchingModule extends BaseModule {
 
     const info = document.getElementById('stitchResultInfo');
     if (info) {
-      const warnings = (data.warnings || []).map(w => `<div class="stitch-warning">&#9888; ${w}</div>`).join('');
+      const warnings = (data.warnings || []).map(w => `<div class="stitch-warning">${icon('warning')} ${w}</div>`).join('');
       info.innerHTML = `
         <div class="detail-row"><span class="detail-label">Output:</span> <span class="detail-value">${data.outputPath}</span></div>
         <div class="detail-row"><span class="detail-label">Size:</span> <span class="detail-value">${data.width}&times;${data.height}, ${data.slices} slices (${data.dtype})</span></div>

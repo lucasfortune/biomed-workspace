@@ -103,7 +103,7 @@ class LoadingOverlay {
       align-items: center;
       justify-content: center;
       background: ${this.backdrop ? this.backdropColor : 'transparent'};
-      z-index: ${isFullScreen ? '10000' : '100'};
+      z-index: ${isFullScreen ? 'var(--z-modal, 10000)' : 'var(--z-module-overlay, 500)'};
       transition: opacity 0.2s ease;
     `;
 
@@ -114,8 +114,8 @@ class LoadingOverlay {
         <div class="loading-spinner" style="
           width: ${spinnerSize}px;
           height: ${spinnerSize}px;
-          border: 3px solid var(--module-border, #e1e4e8);
-          border-top-color: var(--module-primary, #667eea);
+          border: 3px solid var(--module-border, #DEE2E6);
+          border-top-color: var(--module-primary, #EB1F17);
           border-radius: 50%;
           animation: loading-spin 0.8s linear infinite;
         "></div>
@@ -126,7 +126,7 @@ class LoadingOverlay {
       <div class="loading-message" style="
         margin-top: 16px;
         font-size: 14px;
-        color: var(--module-text-secondary, #586069);
+        color: var(--module-text-secondary, #6C757D);
         text-align: center;
         max-width: 300px;
       ">${this.message}</div>

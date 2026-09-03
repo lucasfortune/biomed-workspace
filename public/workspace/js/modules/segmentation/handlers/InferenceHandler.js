@@ -325,18 +325,18 @@ class InferenceHandler {
 
     if (loadingDescription) {
       loadingDescription.innerHTML = `
-        <div id="inferenceProgressContainer" style="margin-top: 20px; text-align: center;">
-          <div style="margin-bottom: 15px; font-size: 16px;">
-            Slice <span id="currentSlice" style="font-weight: bold; color: #4CAF50;">0</span>
-            of <span id="totalSlices" style="font-weight: bold; color: #4CAF50;">...</span>
+        <div id="inferenceProgressContainer" class="segmentation-inference-loading">
+          <div class="inference-loading-count">
+            Slice <span id="currentSlice" class="inference-loading-value">0</span>
+            of <span id="totalSlices" class="inference-loading-value">...</span>
           </div>
-          <div style="background: #e0e0e0; height: 15px; border-radius: 8px; margin: 15px 0; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
-            <div id="inferenceProgressBar" style="background: linear-gradient(90deg, #4CAF50, #81C784); height: 100%; width: 0%; transition: width 0.3s ease; border-radius: 8px;"></div>
+          <div class="progress-bar-container">
+            <div id="inferenceProgressBar" class="job-progress-fill"></div>
           </div>
-          <div id="inferenceProgressPercent" style="font-size: 18px; font-weight: bold; color: #4CAF50;">0%</div>
-          <div style="margin-top: 15px; font-size: 14px; color: #666;">
+          <div id="inferenceProgressPercent" class="inference-loading-percent">0%</div>
+          <div class="inference-loading-hint">
             <div>Initializing segmentation process...</div>
-            <div style="margin-top: 5px; font-size: 12px; color: #999;">
+            <div class="inference-loading-subhint">
               Progress updates will appear once processing begins
             </div>
           </div>

@@ -41,6 +41,7 @@ const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g,
 
 import { StepNavigator, FileSelector, ValidationDisplay, SliceViewerChrome }
   from '/workspace/js/core/components/index.js';
+import { icon } from '/workspace/js/core/icons.js';
 import AnnotationAPI from './AnnotationAPI.js';
 import AnnotationCanvas from './utils/AnnotationCanvas.js';
 import BrushEngine from './utils/BrushEngine.js';
@@ -232,11 +233,11 @@ class AnnotationModule extends BaseModule {
                     </div>
                     <div class="tool-buttons">
                       <button id="toolBrush" class="tool-btn active" title="Brush (B)">
-                        <span class="tool-icon">🖌️</span>
+                        <span class="tool-icon">${icon('brush')}</span>
                         <span class="tool-label">Brush</span>
                       </button>
                       <button id="toolEraser" class="tool-btn" title="Eraser (E)">
-                        <span class="tool-icon">🧹</span>
+                        <span class="tool-icon">${icon('eraser')}</span>
                         <span class="tool-label">Eraser</span>
                       </button>
                     </div> 
@@ -263,11 +264,11 @@ class AnnotationModule extends BaseModule {
                     </div>
                     <div class="history-buttons">
                       <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)" disabled>
-                        <span class="tool-icon">↶</span>
+                        <span class="tool-icon">${icon('undo')}</span>
                         <span class="tool-label">Undo</span>
                       </button>
                       <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)" disabled>
-                        <span class="tool-icon">↷</span>
+                        <span class="tool-icon">${icon('redo')}</span>
                         <span class="tool-label">Redo</span>
                       </button>
                     </div>
@@ -352,7 +353,7 @@ class AnnotationModule extends BaseModule {
         fileType: 'uploads',  // New metadata system: uploads category
         filterTags: ['raw'],  // Filter to raw images only
         title: 'Source Image',
-        icon: '🖼️',
+        icon: 'image',
         helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
         accept: '.tif,.tiff',
         showTestData: true,
@@ -950,7 +951,7 @@ class AnnotationModule extends BaseModule {
         <span class="class-name">${cls.name}</span>
         <button class="class-visibility ${cls.visible ? 'is-visible' : 'is-hidden'}"
                 title="${cls.visible ? 'Hide class' : 'Show class'}" data-action="visibility">
-          ${cls.visible ? '👁️' : '👁️‍🗨️'}
+          ${cls.visible ? icon('eye') : icon('eyeOff')}
         </button>
         <button class="class-delete" title="Delete class" data-action="delete">×</button>
       </div>

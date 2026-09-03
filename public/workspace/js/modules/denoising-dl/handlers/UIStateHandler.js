@@ -101,8 +101,7 @@ class UIStateHandler {
     const statusText = document.getElementById('trainStatusText');
     if (statusText) {
       statusText.textContent = 'Training completed successfully!';
-      statusText.style.color = '#50C878';
-      statusText.style.fontWeight = '600';
+      statusText.classList.add('is-success');
     }
 
     // Show the success card with the result actions
@@ -159,8 +158,7 @@ class UIStateHandler {
     const statusText = document.getElementById(`${prefix}StatusText`);
     if (statusText) {
       statusText.textContent = 'Waiting to start...';
-      statusText.style.color = '';
-      statusText.style.fontWeight = '';
+      statusText.classList.remove('is-success');
     }
 
     // Reset metrics

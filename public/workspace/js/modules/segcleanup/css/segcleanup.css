@@ -27,29 +27,14 @@
 .segcleanup-module .step-contents {
   flex: 1;
   overflow-y: auto;
-  padding: var(--module-spacing-lg, 24px) var(--module-spacing-md, 16px) var(--module-spacing-md, 16px);
+  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
 }
 
-.segcleanup-module .field-hint {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--module-text-secondary, #777);
-  margin-top: 4px;
-}
+/* .field-hint, .form-field and its label come from module-base.css */
 
 .segcleanup-module .field-hint-inline {
-  font-size: 0.8rem;
-  color: var(--module-text-secondary, #777);
-}
-
-.segcleanup-module .form-field {
-  margin-bottom: 12px;
-}
-
-.segcleanup-module .form-field label {
-  display: inline-block;
-  margin-bottom: 4px;
-  font-weight: 500;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
 }
 
 .segcleanup-module .radio-option {
@@ -59,12 +44,12 @@
 }
 
 .segcleanup-module .radio-option input[type="radio"] {
-  margin-right: 8px;
+  margin-right: var(--module-spacing-xs);
 }
 
 .segcleanup-module .detail-row {
   margin-bottom: 4px;
-  font-size: 0.88rem;
+  font-size: var(--module-font-size-sm);
 }
 
 .segcleanup-module .detail-label {
@@ -72,33 +57,16 @@
   margin-right: 6px;
 }
 
-.segcleanup-module select,
-.segcleanup-module input[type="number"],
-.segcleanup-module input[type="text"] {
-  padding: 10px 12px;
-  border: 1px solid var(--module-border-dark, #c9c9c9);
-  border-radius: var(--module-radius-sm, 6px);
-  font-size: var(--module-font-size-sm, 0.9rem);
-  background: var(--module-card-bg, #fff);
-  color: var(--module-text-primary, #222);
-  transition: var(--module-transition-fast, all 0.15s ease);
-}
-
-.segcleanup-module select:focus,
-.segcleanup-module input[type="number"]:focus,
-.segcleanup-module input[type="text"]:focus {
-  outline: none;
-  border-color: var(--module-primary);
-}
+/* Selects and inputs (look + focus ring) come from the module-base baseline */
 
 /* Step 1: selected file + class chips */
 .segcleanup-module .stack-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px;
+  padding: var(--module-spacing-xs) 10px;
   border: 1px solid var(--module-border);
-  border-radius: 6px;
+  border-radius: var(--module-radius-sm);
   margin-bottom: 6px;
   background: var(--module-surface);
 }
@@ -112,32 +80,32 @@
 
 .segcleanup-module .stack-item .stack-dims {
   color: var(--module-text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.sc-class-chips {
+.segcleanup-module .sc-class-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 4px 0 8px;
+  margin: 4px 0 var(--module-spacing-xs);
 }
 
-.sc-class-chip {
+.segcleanup-module .sc-class-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border: 1px solid var(--module-border, #ddd);
-  border-radius: 12px;
-  font-size: 0.8rem;
-  background: var(--module-card-bg, #fff);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-xl);
+  font-size: var(--module-font-size-xs);
+  background: var(--module-card-bg);
 }
 
-.sc-chip-count {
-  color: var(--module-text-secondary, #888);
+.segcleanup-module .sc-chip-count {
+  color: var(--module-text-secondary);
 }
 
-.sc-color {
+.segcleanup-module .sc-color {
   display: inline-block;
   width: 12px;
   height: 12px;
@@ -160,106 +128,110 @@
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--module-font-size-xs);
 }
 
 /* Class merge rows (auto workflow) */
-.sc-class-row {
+.segcleanup-module .sc-class-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--module-spacing-xs);
   margin-bottom: 6px;
-  font-size: 0.85rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.sc-class-row .sc-class-label {
+.segcleanup-module .sc-class-row .sc-class-label {
   min-width: 1.5em;
   font-weight: 600;
 }
 
-.sc-class-row select {
+.segcleanup-module .sc-class-row select {
   flex: 1;
   min-width: 0;
 }
 
 /* Tool buttons + class list (manual workflow) */
-.sc-tool-row {
+.segcleanup-module .sc-tool-row {
   display: flex;
   gap: 6px;
 }
 
-.sc-tool-btn {
+.segcleanup-module .sc-tool-btn {
   flex: 1;
-  padding: 8px 4px;
-  border: 1px solid var(--module-border-dark, #c9c9c9);
-  border-radius: var(--module-radius-sm, 6px);
-  background: var(--module-card-bg, #fff);
-  color: var(--module-text-primary, #222);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: var(--module-spacing-xs) 4px;
+  border: 1px solid var(--module-border-dark);
+  border-radius: var(--module-radius-sm);
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--module-font-size-xs);
   white-space: nowrap;
 }
 
-.sc-tool-btn.active {
+.segcleanup-module .sc-tool-btn.active {
   border-color: var(--module-primary);
-  background: color-mix(in srgb, var(--module-primary) 12%, transparent);
+  background: var(--module-primary-light);
   font-weight: 600;
 }
 
-.sc-class-item {
+.segcleanup-module .sc-class-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--module-spacing-xs);
   width: 100%;
   text-align: left;
   padding: 6px 10px;
   margin-bottom: 4px;
-  border: 1px solid var(--module-border, #d0d0d0);
-  border-radius: var(--module-radius-sm, 6px);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
   background: transparent;
-  color: var(--module-text-primary, #222);
+  color: var(--module-text-primary);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.sc-class-item.active {
+.segcleanup-module .sc-class-item.active {
   border-color: var(--module-primary);
-  background: color-mix(in srgb, var(--module-primary) 10%, transparent);
+  background: var(--module-primary-light);
   font-weight: 600;
 }
 
 /* Step 3 */
-.sc-ops-list {
-  margin: 8px 0 0;
-  padding-left: 20px;
-  font-size: 0.88rem;
+.segcleanup-module .sc-ops-list {
+  margin: var(--module-spacing-xs) 0 0;
+  padding-left: var(--module-spacing-md);
+  font-size: var(--module-font-size-sm);
 }
 
-.sc-ops-list li {
+.segcleanup-module .sc-ops-list li {
   margin-bottom: 3px;
 }
 
-.sc-table-scroll {
+.segcleanup-module .sc-table-scroll {
   overflow-x: auto;
 }
 
-.sc-metrics-table {
+.segcleanup-module .sc-metrics-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: var(--module-font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.sc-metrics-table th,
-.sc-metrics-table td {
+.segcleanup-module .sc-metrics-table th,
+.segcleanup-module .sc-metrics-table td {
   text-align: left;
   padding: 6px 10px;
   border-bottom: 1px solid var(--module-border);
   white-space: nowrap;
 }
 
-.sc-metrics-table th {
-  font-size: 0.78rem;
+.segcleanup-module .sc-metrics-table th {
+  font-size: var(--module-font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--module-text-secondary);
@@ -269,9 +241,9 @@
    UNIFIED EDIT STEP (2026-08-27 revision)
    ============================================ */
 
-.sc-job-status {
+.segcleanup-module .sc-job-status {
   min-height: 1.1em;
-  font-size: 0.8rem;
+  font-size: var(--module-font-size-xs);
   color: var(--module-primary);
   margin-top: 6px;
 }
@@ -281,41 +253,42 @@
   box-sizing: border-box;
 }
 
-.sc-quant-card {
-  margin-top: 16px;
+.segcleanup-module .sc-quant-card {
+  margin-top: var(--module-spacing-sm);
 }
 
-.sc-quant-header {
+.segcleanup-module .sc-quant-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: var(--module-spacing-xs);
 }
 
-.sc-quant-header h4 {
+.segcleanup-module .sc-quant-header h4 {
   margin: 0;
 }
 
-.sc-quant-actions {
+.segcleanup-module .sc-quant-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--module-spacing-xs);
 }
 
-.sc-stale-badge {
-  font-size: 0.75rem;
+.segcleanup-module .sc-stale-badge {
+  font-size: var(--module-font-size-xs);
   font-weight: 600;
   padding: 2px 10px;
-  border-radius: 10px;
-  background: rgba(230, 126, 34, 0.15);
-  color: #B9770E;
+  border: 1px solid var(--module-warning-border);
+  border-radius: var(--module-radius-lg);
+  background: var(--module-warning-bg);
+  color: var(--module-warning-text);
   white-space: nowrap;
 }
 
-.sc-saved-name {
-  font-size: 0.88rem;
-  color: var(--module-text-secondary, #666);
+.segcleanup-module .sc-saved-name {
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

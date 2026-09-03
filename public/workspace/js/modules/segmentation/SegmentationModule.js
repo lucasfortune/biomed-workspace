@@ -437,6 +437,7 @@ class SegmentationModule extends BaseModule {
               const statusTextEl = document.getElementById('trainingStatusText');
               if (statusTextEl) {
                 statusTextEl.textContent = 'Training in progress...';
+                this.setTrainingStatusTone(null, statusTextEl);
               }
               this.state.notify('success', 'Reconnected to running training.');
             } else {
@@ -449,7 +450,7 @@ class SegmentationModule extends BaseModule {
               const statusTextEl = document.getElementById('trainingStatusText');
               if (statusTextEl) {
                 statusTextEl.textContent = 'Training session status unclear';
-                statusTextEl.style.color = '#f0ad4e';
+                this.setTrainingStatusTone('warning', statusTextEl);
               }
 
               TrainingSessionPersistence.clearAll();
@@ -551,6 +552,20 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
+   * Set the tone of the step-3 status line. The colour lives in CSS
+   * (.training-status-text.is-warning / .is-success); passing no tone
+   * clears both classes so the line falls back to the default colour.
+   * @param {'warning'|'success'|null} [tone]
+   * @param {HTMLElement} [el] - Defaults to #trainingStatusText
+   */
+  setTrainingStatusTone(tone = null, el = null) {
+    const target = el || document.getElementById('trainingStatusText');
+    if (!target) return;
+    target.classList.remove('is-warning', 'is-success');
+    if (tone) target.classList.add(`is-${tone}`);
+  }
+
+  /**
    * Apply one of the training UI states to step 3. Exactly one enabled red
    * action is visible at a time (Start is swapped for Cancel while a run is
    * active, and stays hidden once the run has succeeded).
@@ -595,7 +610,7 @@ class SegmentationModule extends BaseModule {
     const statusText = document.getElementById('trainingStatusText');
     if (statusText) {
       statusText.textContent = 'Training complete!';
-      statusText.style.color = '#50C878';
+      this.setTrainingStatusTone('success', statusText);
     }
 
     const progressFill = document.getElementById('trainingProgressFill');
@@ -907,6 +922,27 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
+   * Read the chart palette from the CSS design tokens on :root so the
+   * canvas-drawn charts follow the active (light/dark) theme.
+   * @returns {{trainLoss: string, valLoss: string, trainDice: string, valDice: string, grid: string, label: string}}
+   */
+  readChartPalette() {
+    const styles = getComputedStyle(document.documentElement);
+    const token = (name, fallback) => {
+      const value = styles.getPropertyValue(name).trim();
+      return value || fallback;
+    };
+    return {
+      trainLoss: token('--module-primary', '#EB1F17'),
+      valLoss: token('--module-info', '#17A2B8'),
+      trainDice: token('--module-success', '#1DA924'),
+      valDice: token('--module-text-secondary', '#6C757D'),
+      grid: token('--module-border', '#DEE2E6'),
+      label: token('--module-text-secondary', '#6C757D')
+    };
+  }
+
+  /**
    * Initialize Chart.js charts
    */
   initializeCharts() {
@@ -939,6 +975,16 @@ class SegmentationModule extends BaseModule {
 
     console.log('[SegmentationModule] Initializing charts');
 
+    // Chart.js draws on a canvas, so the palette is read from the design
+    // tokens once, at creation time (a theme switch after that keeps the
+    // colours of the running chart until it is re-created).
+    //   Training Loss  -> --module-primary        (red, the module accent)
+    //   Validation Loss-> --module-info           (teal, the "other" series)
+    //   Training Dice  -> --module-success        (green)
+    //   Validation Dice-> --module-text-secondary (grey, the muted partner)
+    //   grid           -> --module-border, labels -> --module-text-secondary
+    const palette = this.readChartPalette();
+
     // Loss chart
     this.lossChart = new Chart(lossCanvas.getContext('2d'), {
       type: 'line',
@@ -948,8 +994,8 @@ class SegmentationModule extends BaseModule {
           {
             label: 'Training Loss',
             data: [],
-            borderColor: '#FF6384',
-            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            borderColor: palette.trainLoss,
+            backgroundColor: palette.trainLoss,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -959,8 +1005,8 @@ class SegmentationModule extends BaseModule {
           {
             label: 'Validation Loss',
             data: [],
-            borderColor: '#36A2EB',
-            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+            borderColor: palette.valLoss,
+            backgroundColor: palette.valLoss,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -975,12 +1021,19 @@ class SegmentationModule extends BaseModule {
         plugins: {
           legend: {
             display: true,
-            position: 'top'
+            position: 'top',
+            labels: { color: palette.label }
           }
         },
         scales: {
+          x: {
+            grid: { color: palette.grid },
+            ticks: { color: palette.label }
+          },
           y: {
-            beginAtZero: true
+            beginAtZero: true,
+            grid: { color: palette.grid },
+            ticks: { color: palette.label }
           }
         }
       }
@@ -995,8 +1048,8 @@ class SegmentationModule extends BaseModule {
           {
             label: 'Training Dice',
             data: [],
-            borderColor: '#4BC0C0',
-            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+            borderColor: palette.trainDice,
+            backgroundColor: palette.trainDice,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -1006,8 +1059,8 @@ class SegmentationModule extends BaseModule {
           {
             label: 'Validation Dice',
             data: [],
-            borderColor: '#9966FF',
-            backgroundColor: 'rgba(153, 102, 255, 0.1)',
+            borderColor: palette.valDice,
+            backgroundColor: palette.valDice,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
@@ -1022,13 +1075,20 @@ class SegmentationModule extends BaseModule {
         plugins: {
           legend: {
             display: true,
-            position: 'top'
+            position: 'top',
+            labels: { color: palette.label }
           }
         },
         scales: {
+          x: {
+            grid: { color: palette.grid },
+            ticks: { color: palette.label }
+          },
           y: {
             beginAtZero: true,
-            max: 1
+            max: 1,
+            grid: { color: palette.grid },
+            ticks: { color: palette.label }
           }
         }
       }
@@ -1401,6 +1461,7 @@ class SegmentationModule extends BaseModule {
         if (progressFill) progressFill.style.width = '0%';
         document.getElementById('currentEpoch').textContent = '0';
         document.getElementById('trainingStatusText').textContent = 'Training cancelled';
+        this.setTrainingStatusTone(null);
 
         // Clear training ID
         this.currentTrainingId = null;
@@ -1705,6 +1766,7 @@ class SegmentationModule extends BaseModule {
     const trainingStatusText = document.getElementById('trainingStatusText');
     if (trainingStatusText) {
       trainingStatusText.textContent = 'Training started... Preparing data...';
+      this.setTrainingStatusTone(null, trainingStatusText);
     }
 
     // Disable Next button

@@ -1,6 +1,9 @@
 /**
  * ModuleLoader - Manages module registration, loading, and lifecycle
  */
+// Fallback card icon for modules registered without one (inline SVG, ADR-005)
+const DEFAULT_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>';
+
 class ModuleLoader {
   constructor(stateManager) {
     this.state = stateManager;
@@ -47,11 +50,10 @@ class ModuleLoader {
         id,
         name,
         description: description || '',
-        icon: icon || '📦',
+        icon: icon || DEFAULT_ICON,
         path: null, // Parent card has no path
         inputs: inputs || [],
         outputs: outputs || [],
-        color: color || '#4A90E2',
         status: 'multi-launch', // Special status for parent
         cardType: 'multi-launch',
         launchOptions,
@@ -68,11 +70,10 @@ class ModuleLoader {
           id: opt.id,
           name: `${name} - ${opt.label}`,
           description: opt.sublabel || '',
-          icon: icon || '📦',
+          icon: icon || DEFAULT_ICON,
           path: opt.path,
           inputs: inputs || [],
           outputs: outputs || [],
-          color: color || '#4A90E2',
           status: opt.status || 'available',
           loaded: false,
           instance: null,
@@ -96,11 +97,10 @@ class ModuleLoader {
       id,
       name,
       description: description || '',
-      icon: icon || '📦',
+      icon: icon || DEFAULT_ICON,
       path,
       inputs: inputs || [],
       outputs: outputs || [],
-      color: color || '#4A90E2',
       status: status || 'available',
       helpArticleId: helpArticleId || null,
       loaded: false,
@@ -210,6 +210,10 @@ class ModuleLoader {
       if (module.instance && typeof module.instance.deactivate === 'function') {
         await module.instance.deactivate();
       }
+      // Drop the module's stylesheets so nothing leaks into the next module
+      if (module.instance && typeof module.instance.unloadCSS === 'function') {
+        module.instance.unloadCSS();
+      }
 
       // Update state
       this.state.update(`modules.${module.id}.active`, false);
@@ -285,7 +289,6 @@ class ModuleLoader {
         icon: module.icon,
         inputs: module.inputs,
         outputs: module.outputs,
-        color: module.color,
         status: module.status,
         loaded: module.loaded,
         active: this.activeModule?.id === id,

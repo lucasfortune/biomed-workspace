@@ -142,7 +142,7 @@ class ImageViewerModule extends BaseModule {
     this.imageSelector = new FileSelector({
       id: 'image-selector',
       title: 'Image Stack',
-      icon: '🖼️',
+      icon: 'image',
       helpIconHtml: this.renderHelpIcon('imageviewer.step1.image-stack'),
       fileType: 'image_stack',
       showTestData: true,

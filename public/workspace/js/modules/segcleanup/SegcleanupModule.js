@@ -19,6 +19,7 @@
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, SliceViewerChrome } from '/workspace/js/core/components/index.js';
+import { icon } from '/workspace/js/core/icons.js';
 import AnnotationCanvas from '/workspace/js/modules/annotation/utils/AnnotationCanvas.js';
 import BrushEngine from '/workspace/js/modules/annotation/utils/BrushEngine.js';
 import HistoryManager from '/workspace/js/modules/annotation/utils/HistoryManager.js';
@@ -165,9 +166,9 @@ class SegcleanupModule extends BaseModule {
               <div class="sv-section">
                 <div class="sv-section-header"><h4>Tool</h4></div>
                 <div class="sc-tool-row">
-                  <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">&#128396; Brush</button>
-                  <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">&#9003; Eraser</button>
-                  <button class="sc-tool-btn" data-tool="fill" title="Flood-fill the clicked region with the active class">&#127754; Fill</button>
+                  <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">${icon('brush')} Brush</button>
+                  <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">${icon('eraser')} Eraser</button>
+                  <button class="sc-tool-btn" data-tool="fill" title="Flood-fill the clicked region with the active class">${icon('fill')} Fill</button>
                 </div>
                 <div class="sv-row">
                   <label>size</label>
@@ -266,7 +267,7 @@ class SegcleanupModule extends BaseModule {
         uploadCategory: 'annotations',
         filterTags: ['annotation'],
         title: 'Segmentation',
-        icon: '🧩',
+        icon: 'tag',
         accept: '.tif,.tiff',
         showTestData: true,
         testDataKind: 'annotations',

@@ -290,7 +290,7 @@ class TemplateModule extends BaseModule {
         fileType: 'uploads',
         filterTags: ['raw'],
         title: 'Input Data',
-        icon: '📁',
+        icon: 'image',
         // Offer the built-in test stack. With testDataKind set, picking the
         // test option copies the stack into the workspace and then reports it
         // like any other workspace file - no isTestData branch needed here.

@@ -6,6 +6,7 @@
  */
 
 import { FileSelector } from '/workspace/js/core/components/index.js';
+import { icon } from '/workspace/js/core/icons.js';
 import Templates from '../templates/Templates.js';
 import SegmentationAPI from '../SegmentationAPI.js';
 
@@ -53,7 +54,7 @@ class ImportHandler {
         fileType: 'models',
         filterTags: ['config', 'segmentation'],
         title: 'Training Configuration',
-        icon: '⚙️',
+        icon: 'settings',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.config-file'),
         showTestData: false,
         accept: '.json',
@@ -72,7 +73,7 @@ class ImportHandler {
         id: 'import_model',
         fileType: 'models',
         title: 'Model Weights',
-        icon: '🧠',
+        icon: 'model',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.model-file'),
         showTestData: false,
         accept: '.pth',
@@ -194,7 +195,7 @@ class ImportHandler {
     if (!container) return;
 
     if (state === 'loading') {
-      container.innerHTML = `<div class="import-validation-loading">⏳ Validating...</div>`;
+      container.innerHTML = `<div class="import-validation-loading">${icon('hourglass')} Validating...</div>`;
       return;
     }
 
@@ -205,9 +206,9 @@ class ImportHandler {
     }
 
     if (validation.valid) {
-      container.innerHTML = `<div class="import-validation-success">✓ Valid</div>`;
+      container.innerHTML = `<div class="import-validation-success">${icon('check')} Valid</div>`;
     } else if (validation.result?.errors) {
-      container.innerHTML = `<div class="import-validation-error">✗ ${validation.result.errors.join(', ')}</div>`;
+      container.innerHTML = `<div class="import-validation-error">${icon('cross')} ${validation.result.errors.join(', ')}</div>`;
     }
   }
 
@@ -227,8 +228,8 @@ class ImportHandler {
         const configInfo = this.module.importedModelConfig;
         overallContainer.innerHTML = `
           <div class="overall-import-validation success">
-            <strong>✓ Model Ready for Inference</strong>
-            <p style="margin: 8px 0 0 0; font-size: 13px; color: #28a745;">
+            <strong>${icon('check')} Model Ready for Inference</strong>
+            <p class="import-ready-details">
               Features: ${configInfo?.features || 'N/A'} | Layers: ${configInfo?.num_layers || 'N/A'} | Classes: ${configInfo?.num_classes || 'N/A'}
             </p>
           </div>
@@ -239,8 +240,8 @@ class ImportHandler {
         if (errors.length > 0) {
           overallContainer.innerHTML = `
             <div class="overall-import-validation error">
-              <strong>✗ Validation Failed</strong>
-              <p style="margin: 8px 0 0 0; font-size: 13px;">${errors.join(', ')}</p>
+              <strong>${icon('cross')} Validation Failed</strong>
+              <p class="import-error-details">${errors.join(', ')}</p>
             </div>
           `;
         } else {

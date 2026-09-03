@@ -8,6 +8,7 @@
 import Templates from '../templates/Templates.js';
 import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
 import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
+import { icon } from '/workspace/js/core/icons.js';
 
 class ConfigHandler {
   /**
@@ -318,7 +319,7 @@ class ConfigHandler {
         <div class="config-group collapsible-group">
           <div class="collapsible-header" data-toggle="${stage}_advanced_body">
             <h3>
-              <span class="collapsible-icon">&#9654;</span>
+              <span class="collapsible-icon">${icon('caretRight')}</span>
               Advanced Options
             </h3>
           </div>
@@ -396,7 +397,7 @@ class ConfigHandler {
         <div class="config-group collapsible-group">
           <div class="collapsible-header" data-toggle="maskExtractorBody">
             <h3>
-              <span class="collapsible-icon">&#9654;</span>
+              <span class="collapsible-icon">${icon('caretRight')}</span>
               Advanced Extractor Options
             </h3>
           </div>

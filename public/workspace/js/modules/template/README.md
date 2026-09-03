@@ -215,6 +215,46 @@ The test option copies the stack into the workspace via
 `POST /api/workspace/test-data` and then reports it to `onSelect` exactly like
 a picked workspace file.
 
+### 8. Styling: tokens, baselines, icons, scoping
+
+- **Tokens, never literals.** Colours, spacing, radii, font sizes and shadows
+  all come from `core/css/module-base.css`: `--module-primary` / `-light`
+  (accent + its 10 % tint for hover/focus/selection), `--module-secondary`,
+  `--module-success/-warning/-danger/-info` and their `-bg/-border/-text`
+  status trios, `--module-bg*` / `--module-card-bg` / `--module-surface`,
+  `--module-border(-dark)`, `--module-text-primary/-secondary/-muted`,
+  `--module-text-on-accent` (white on an accent or always-dark surface),
+  `--module-spacing-*`, `--module-font-size-*`, `--module-radius-*`,
+  `--module-shadow-*`, `--z-*`. A hex or `rgb()` in a module stylesheet is a
+  bug: it will not follow dark mode. The only allowed literals are neutral
+  `rgba(0, 0, 0, x)` shadows and scrims.
+- **Do not restyle the baselines.** `module-base.css` sets zero-specificity
+  `:where(.module-container)` rules for `h4`, `.field-hint`, `select`,
+  `input[type=number|text|search]` (padding, border, radius, focus ring) and
+  `input[type=checkbox|radio]` (accent colour, 16px). Only add layout on top -
+  `flex: 1`, `min-width: 0`, `width: 100%`. Short numeric fields (a slice
+  index, a pixel offset) get `class="input-sm"` in the markup instead of a
+  width rule. The shared `.btn` family, `.section-card` / `.success-card`,
+  `.progress-bar-container` + `.job-progress-fill`, `.metric-card`,
+  `.form-field`, `.range-slider` and `.toggle-switch`
+  (`<label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label>`)
+  are shared too - use them, never copy them into the module.
+- **Icons come from `core/icons.js`, not emoji.** `import { icon } from
+  '/workspace/js/core/icons.js'` and write `${icon('brush')} Brush`; the SVG
+  inherits `currentColor` and 1em. `FileSelector` takes a name string
+  (`icon: 'image'`). The only kept glyph entities are `&#9658;` in a
+  `.btn-glyph` job button and `&#10003;` in a `.success-icon`.
+- **Scope every selector under the module root class**
+  (`.template-module ...`, dark variants `[data-theme="dark"] .template-module ...`).
+  Module CSS is loaded on activate and *unloaded* on deactivate, so an
+  unscoped rule leaks into every other module while yours is open, then
+  vanishes - a class of bug that is very hard to spot.
+- **Prefer container queries to viewport queries.** `.step-contents` is a
+  container named `module`, so a two-column block that should collapse when
+  the sidebar is open uses
+  `@container module (max-width: 900px) { .template-module ... }`. Keep
+  `@media (max-width: 768px)` only for genuine phone-level tweaks.
+
 ---
 
 ## Customization Checklist
@@ -257,6 +297,10 @@ a picked workspace file.
 - [ ] Progress bar uses `.progress-bar-container` + `.job-progress-fill`
 - [ ] No inline `onclick`, no `window.*` free functions
 - [ ] `deactivate()` calls `reset()` before `super.deactivate()`
+- [ ] Every selector in the module CSS starts with the module root class
+- [ ] No colour/spacing/radius literals - design tokens only
+- [ ] Selects, inputs, `h4` and `.field-hint` left to the module-base baselines
+- [ ] Icons via `icon()` from `core/icons.js`, no emoji
 
 ### Backend Integration
 

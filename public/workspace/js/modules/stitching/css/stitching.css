@@ -27,29 +27,14 @@
 .stitching-module .step-contents {
   flex: 1;
   overflow-y: auto;
-  padding: var(--module-spacing-lg, 24px) var(--module-spacing-md, 16px) var(--module-spacing-md, 16px);
+  padding: var(--module-spacing-lg) var(--module-spacing-md) var(--module-spacing-md);
 }
 
-.stitching-module .field-hint {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--module-text-secondary, #777);
-  margin-top: 4px;
-}
-
-.stitching-module .form-field {
-  margin-bottom: 12px;
-}
-
-.stitching-module .form-field label {
-  display: inline-block;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
+/* .field-hint, .form-field and its label come from module-base.css */
 
 .stitching-module .detail-row {
   margin-bottom: 4px;
-  font-size: 0.88rem;
+  font-size: var(--module-font-size-sm);
 }
 
 .stitching-module .detail-label {
@@ -57,30 +42,8 @@
   margin-right: 6px;
 }
 
-/* Selects and inputs outside .form-field wrappers get the same look as the
-   base form controls (the stack picker, junction controls, sibling rows) */
-.stitching-module select,
-.stitching-module input[type="number"],
-.stitching-module input[type="text"] {
-  padding: 10px 12px;
-  border: 1px solid var(--module-border-dark, #c9c9c9);
-  border-radius: var(--module-radius-sm, 6px);
-  font-size: var(--module-font-size-sm, 0.9rem);
-  background: var(--module-card-bg, #fff);
-  color: var(--module-text-primary, #222);
-  transition: var(--module-transition-fast, all 0.15s ease);
-}
-
-.stitching-module select:focus,
-.stitching-module input[type="number"]:focus,
-.stitching-module input[type="text"]:focus {
-  outline: none;
-  border-color: var(--module-primary);
-}
-
-.stitching-module .transform-row input[type="number"] {
-  padding: 6px 8px;
-}
+/* Selects and inputs (look + focus ring) come from the module-base baseline;
+   the short transform fields carry .input-sm in the markup */
 
 .stitching-module .radio-option {
   display: block;
@@ -89,41 +52,41 @@
 }
 
 .stitching-module .radio-option input[type="radio"] {
-  margin-right: 8px;
+  margin-right: var(--module-spacing-xs);
 }
 
 /* Step 1: stack list */
-.stack-list {
+.stitching-module .stack-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.stack-item {
+.stitching-module .stack-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px;
+  padding: var(--module-spacing-xs) 10px;
   border: 1px solid var(--module-border);
-  border-radius: 6px;
+  border-radius: var(--module-radius-sm);
   margin-bottom: 6px;
   background: var(--module-surface);
 }
 
-.stack-item.empty {
+.stitching-module .stack-item.empty {
   color: var(--module-text-secondary);
   font-style: italic;
   border-style: dashed;
 }
 
-.stack-order {
+.stitching-module .stack-order {
   font-weight: 700;
   min-width: 1.4em;
   text-align: center;
-  color: var(--module-primary, #0FA3B1);
+  color: var(--module-primary);
 }
 
-.stack-item .stack-name {
+.stitching-module .stack-item .stack-name {
   font-weight: 500;
   flex: 1;
   overflow: hidden;
@@ -131,12 +94,12 @@
   white-space: nowrap;
 }
 
-.stack-item .stack-dims {
+.stitching-module .stack-item .stack-dims {
   color: var(--module-text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.stack-item-actions {
+.stitching-module .stack-item-actions {
   display: flex;
   gap: 4px;
 }
@@ -149,12 +112,12 @@
 }
 
 .stitching-module .mode-badge {
-  font-size: 0.78rem;
+  font-size: var(--module-font-size-xs);
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 12px;
-  background: var(--module-success-bg, #d4edda);
-  color: var(--module-success-text, #155724);
+  border-radius: var(--module-radius-xl);
+  background: var(--module-success-bg);
+  color: var(--module-success-text);
 }
 
 /* ============================================
@@ -171,159 +134,160 @@
   width: 100%;
 }
 
-#overlayCanvas {
+.stitching-module #overlayCanvas {
   cursor: grab;
   outline: none;
 }
 
-#overlayCanvas:active {
+.stitching-module #overlayCanvas:active {
   cursor: grabbing;
 }
 
-.info-tip {
+.stitching-module .info-tip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  border: 1px solid var(--module-border-dark, #bbb);
-  color: var(--module-text-secondary, #777);
+  border: 1px solid var(--module-border-dark);
+  color: var(--module-text-secondary);
   font-size: 0.7rem;
   cursor: help;
   margin-left: 4px;
 }
 
-.junction-nav {
+.stitching-module .junction-nav {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.junction-tab {
+.stitching-module .junction-tab {
   text-align: left;
   padding: 6px 10px;
-  border: 1px solid var(--module-border, #d0d0d0);
-  border-radius: var(--module-radius-sm, 6px);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
   background: transparent;
   cursor: pointer;
-  font-size: 0.82rem;
-  color: var(--module-text-primary, #222);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.junction-tab.active {
+.stitching-module .junction-tab.active {
   border-color: var(--module-primary);
-  background: color-mix(in srgb, var(--module-primary) 10%, transparent);
+  background: var(--module-primary-light);
   font-weight: 600;
 }
 
-.junction-tab.done::before {
+.stitching-module .junction-tab.done::before {
   content: "\2713 ";
   color: var(--module-secondary);
 }
 
 /* Dominance toggle */
-.dominance-toggle {
+.stitching-module .dominance-toggle {
   display: flex;
   gap: 6px;
 }
 
-.dominance-btn {
+.stitching-module .dominance-btn {
   flex: 1;
-  padding: 8px 6px;
-  border: 1px solid var(--module-border-dark, #c9c9c9);
-  border-radius: var(--module-radius-sm, 6px);
-  background: var(--module-card-bg, #fff);
-  color: var(--module-text-primary, #222);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: var(--module-spacing-xs) 6px;
+  border: 1px solid var(--module-border-dark);
+  border-radius: var(--module-radius-sm);
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--module-font-size-xs);
 }
 
-.dominance-btn.active {
+.stitching-module .dominance-btn.active {
   border-color: var(--module-primary);
-  background: color-mix(in srgb, var(--module-primary) 12%, transparent);
+  background: var(--module-primary-light);
   font-weight: 600;
 }
 
-.transform-row {
+.stitching-module .transform-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 6px;
-  font-size: 0.85rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.transform-row input[type="number"] {
-  width: 70px;
-}
-
-.checkbox-inline {
+.stitching-module .checkbox-inline {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--module-font-size-xs);
 }
 
-.rel-note {
-  font-size: 0.75rem;
-  color: var(--module-text-secondary, #777);
+.stitching-module .rel-note {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
   font-style: italic;
   white-space: nowrap;
 }
 
 /* Step 3 */
-.placement-table {
+.stitching-module .placement-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.placement-table th,
-.placement-table td {
+.stitching-module .placement-table th,
+.stitching-module .placement-table td {
   text-align: left;
   padding: 6px 10px;
   border-bottom: 1px solid var(--module-border);
 }
 
-.placement-table th {
-  font-size: 0.78rem;
+.stitching-module .placement-table th {
+  font-size: var(--module-font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--module-text-secondary);
 }
 
-.stitch-warning {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(230, 126, 34, 0.12);
-  color: #B9770E;
-  font-size: 0.85rem;
+.stitching-module .stitch-warning {
+  margin-top: var(--module-spacing-xs);
+  padding: var(--module-spacing-xs) 10px;
+  border: 1px solid var(--module-warning-border);
+  border-radius: var(--module-radius-sm);
+  background: var(--module-warning-bg);
+  color: var(--module-warning-text);
+  font-size: var(--module-font-size-sm);
 }
 
-.sibling-apply {
+.stitching-module .sibling-apply {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--module-border);
 }
 
-.sibling-row {
+.stitching-module .sibling-row {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 6px;
 }
 
-.sibling-row .stack-name {
+.stitching-module .sibling-row .stack-name {
   min-width: 180px;
-  font-size: 0.88rem;
+  font-size: var(--module-font-size-sm);
 }
 
-.sibling-row select {
+.stitching-module .sibling-row select {
   flex: 1;
 }

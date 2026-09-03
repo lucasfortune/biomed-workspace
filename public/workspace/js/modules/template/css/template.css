@@ -50,53 +50,18 @@
 
 /* ============================================
    CONFIGURATION FORM
+   The card, the field wrapper/label, the control look and its focus ring
+   all come from module-base.css (.config-form, .form-field, the :where()
+   input/select baseline). Only the full-width layout is module-specific.
    ============================================ */
-
-.template-module .config-form {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-lg);
-  margin-bottom: var(--module-spacing-lg);
-}
-
-.template-module .form-field {
-  margin-bottom: var(--module-spacing-md);
-}
 
 .template-module .form-field:last-child {
   margin-bottom: 0;
 }
 
-.template-module .form-field label {
-  display: block;
-  margin-bottom: var(--module-spacing-xs);
-  font-weight: 500;
-  color: var(--module-text-primary);
-}
-
 .template-module .form-field input[type="number"],
 .template-module .form-field select {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-sm);
-  font-size: var(--module-font-size-sm);
-  transition: var(--module-transition-fast);
-}
-
-.template-module .form-field input:focus,
-.template-module .form-field select:focus {
-  outline: none;
-  border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.template-module .field-hint {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--module-font-size-xs);
-  color: var(--module-text-secondary);
 }
 
 /* ============================================

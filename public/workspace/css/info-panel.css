@@ -15,7 +15,7 @@
   flex-direction: column;
   transition: width var(--transition-speed), transform var(--transition-speed);
   position: relative;
-  z-index: 100;
+  z-index: var(--z-chrome);
   overflow: hidden;
 }
 
@@ -121,7 +121,7 @@
 .ip-search-input:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(235, 31, 23, 0.1);
+  box-shadow: 0 0 0 2px var(--accent-primary-light);
 }
 
 .ip-search-clear {
@@ -158,7 +158,7 @@
   border-radius: 0 0 4px 4px;
   max-height: 300px;
   overflow-y: auto;
-  z-index: 10;
+  z-index: var(--z-raised);
   box-shadow: var(--shadow-md);
   display: none;
 }
@@ -541,7 +541,7 @@
     top: 0;
     bottom: 0;
     transform: translateX(100%);
-    z-index: 200;
+    z-index: var(--z-panel);
     box-shadow: var(--shadow-lg);
   }
 

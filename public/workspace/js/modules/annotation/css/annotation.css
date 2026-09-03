@@ -260,56 +260,7 @@
   border-top: 1px solid var(--module-border);
 }
 
-.annotation-module .toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 36px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.annotation-module .toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.annotation-module .toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--module-border);
-  transition: 0.2s;
-  border-radius: 20px;
-}
-
-.annotation-module .toggle-slider:before {
-  position: absolute;
-  content: "";
-  height: 14px;
-  width: 14px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: 0.2s;
-  border-radius: 50%;
-}
-
-.annotation-module .toggle-switch input:checked + .toggle-slider {
-  background-color: var(--module-primary);
-}
-
-.annotation-module .toggle-switch input:checked + .toggle-slider:before {
-  transform: translateX(16px);
-}
-
-.annotation-module .toggle-label {
-  font-size: 12px;
-  color: var(--module-text-secondary);
-}
+/* .toggle-switch / .toggle-slider / .toggle-label come from module-base.css */
 
 .annotation-module .autosave-status {
   font-size: 11px;
@@ -378,10 +329,10 @@
   align-items: center;
   justify-content: center;
   background: var(--module-primary);
-  color: white;
+  color: var(--module-text-on-accent);
   border: none;
   border-radius: var(--module-radius-sm);
-  font-size: 16px;
+  font-size: var(--module-font-size-md);
   font-weight: bold;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -424,7 +375,7 @@
 .annotation-module .class-color {
   width: 20px;
   height: 20px;
-  border: 2px solid white;
+  border: 2px solid var(--module-card-bg);
   border-radius: 4px;
   box-shadow: 0 0 0 1px var(--module-border);
   flex-shrink: 0;
@@ -433,7 +384,7 @@
 
 .annotation-module .class-item.active .class-color {
   box-shadow: 0 0 0 2px var(--module-primary);
-  border-color: white;
+  border-color: var(--module-card-bg);
 }
 
 .annotation-module .class-name {
@@ -456,7 +407,7 @@
   background: transparent;
   border: none;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--module-font-size-xs);
   cursor: pointer;
   opacity: 0.6;
   transition: all 0.15s ease;
@@ -482,7 +433,7 @@
 
 .annotation-module .class-delete {
   color: var(--module-error-text);
-  font-size: 14px;
+  font-size: var(--module-font-size-sm);
   font-weight: bold;
 }
 

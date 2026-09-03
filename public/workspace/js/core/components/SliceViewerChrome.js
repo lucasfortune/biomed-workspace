@@ -21,6 +21,8 @@
  *   box); update with setSlice / setZoom /
  *   setStatus / setFooter / setHistory; call destroy() on deactivate.
  */
+import { icon } from '/workspace/js/core/icons.js';
+
 class SliceViewerChrome {
   /**
    * @param {object} options
@@ -79,14 +81,14 @@ class SliceViewerChrome {
       <div class="sv-group">
         <label>Slice:</label>
         <div class="sv-nav">
-          <button type="button" class="btn-icon" data-sv="prev" title="Previous slice (←)">◀</button>
+          <button type="button" class="btn-icon" data-sv="prev" title="Previous slice (←)">${icon('prev')}</button>
           <span class="sv-nav-readout">
             <input type="number" class="sv-nav-num" data-sv="num" min="1" max="${this.slices}"
                    value="${this.slice + 1}" title="Go to slice" aria-label="Current slice">
             <span>/</span>
             <span data-sv="total">${this.slices}</span>
           </span>
-          <button type="button" class="btn-icon" data-sv="next" title="Next slice (→)">▶</button>
+          <button type="button" class="btn-icon" data-sv="next" title="Next slice (→)">${icon('next')}</button>
         </div>
       </div>` : '';
 
@@ -94,18 +96,18 @@ class SliceViewerChrome {
       <div class="sv-group">
         <label>Zoom:</label>
         <div class="sv-zoom">
-          <button type="button" class="btn-icon" data-sv="zoom-out" title="Zoom out">−</button>
+          <button type="button" class="btn-icon" data-sv="zoom-out" title="Zoom out">${icon('zoomOut')}</button>
           <span class="sv-zoom-readout" data-sv="zoom-readout">100%</span>
-          <button type="button" class="btn-icon" data-sv="zoom-in" title="Zoom in">+</button>
-          <button type="button" class="btn-icon" data-sv="zoom-fit" title="Fit to view">⊡</button>
-          <button type="button" class="btn-icon" data-sv="zoom-reset" title="Actual size (100%)">1:1</button>
+          <button type="button" class="btn-icon" data-sv="zoom-in" title="Zoom in">${icon('zoomIn')}</button>
+          <button type="button" class="btn-icon" data-sv="zoom-fit" title="Fit to view">${icon('zoomFit')}</button>
+          <button type="button" class="btn-icon" data-sv="zoom-reset" title="Actual size (100%)">${icon('zoomActual')}</button>
         </div>
       </div>` : '';
 
     const history = o.showUndoRedo ? `
       <div class="sv-group">
-        <button type="button" class="btn-icon" data-sv="undo" title="Undo (Ctrl+Z)" disabled>↶</button>
-        <button type="button" class="btn-icon" data-sv="redo" title="Redo (Ctrl+Y)" disabled>↷</button>
+        <button type="button" class="btn-icon" data-sv="undo" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button>
+        <button type="button" class="btn-icon" data-sv="redo" title="Redo (Ctrl+Y)" disabled>${icon('redo')}</button>
       </div>` : '';
 
     const strip = o.showSlider ? `

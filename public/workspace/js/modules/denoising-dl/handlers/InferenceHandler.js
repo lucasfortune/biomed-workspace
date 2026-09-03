@@ -54,7 +54,7 @@ class InferenceHandler {
         fileType: 'uploads',  // New metadata system: uploads category
         filterTags: ['raw'],  // Filter to raw images only
         title: 'Input Image Stack',
-        icon: '📁',
+        icon: 'folder',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step4.data'),
         showTestData: true,
         testDataOptions: [

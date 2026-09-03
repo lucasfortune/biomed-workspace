@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-03 (Palette, Dark Mode, Scoping, Typography and Icons — One Token Set, One Icon Set, No Leaks)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-03 | [Palette, Dark Mode, Scoping, Typography and Icons — One Token Set, One Icon Set, No Leaks](2026-09-03_palette_scoping.md) | 🔧 Refactor | ~3 hrs | ✅ Complete |
+
 ### 2026-09-03 (Step Chrome, Hub and Module Behaviour — One Nav Row, One Result Card, One Reset Rule)
 
 | Date | Session | Type | Duration | Status |

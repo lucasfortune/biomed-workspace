@@ -5,7 +5,10 @@
  * Includes a "Copy Stage 1 to Stage 2" button for convenience.
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class DualColumnConfig {
+
   /**
    * @param {Object} options
    * @param {string} options.id - Unique identifier
@@ -57,7 +60,7 @@ class DualColumnConfig {
 
         <div class="config-column-divider">
           <button type="button" class="copy-config-btn" id="${this.id}-copy-btn" title="Copy Stage 1 settings to Stage 2">
-            <span class="copy-icon">→</span>
+            <span class="copy-icon">${icon('arrowRight')}</span>
             <span class="copy-text">Copy to Stage 2</span>
           </button>
         </div>

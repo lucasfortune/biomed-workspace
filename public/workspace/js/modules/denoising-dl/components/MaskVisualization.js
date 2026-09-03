@@ -6,7 +6,10 @@
  * Supports both 2D masks (single slice) and 3D masks (triplet for 2.5D mode).
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class MaskVisualization {
+
   /**
    * @param {Object} options - Configuration options
    * @param {string} options.containerId - ID of container element
@@ -170,7 +173,7 @@ class MaskVisualization {
   _renderEmptyWarning() {
     return `
       <div class="mask-warning">
-        <div class="warning-icon">⚠️</div>
+        <div class="warning-icon">${icon('warning')}</div>
         <div class="warning-content">
           <h5>Low Structural Noise Detected</h5>
           <p>

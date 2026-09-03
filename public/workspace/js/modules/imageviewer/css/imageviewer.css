@@ -32,22 +32,6 @@
 }
 
 /* ============================================
-   HEADER (uses base styles with minor overrides)
-   ============================================ */
-
-.imageviewer-module .module-header h2 {
-  flex: 1;
-  text-align: center;
-  margin: 0;
-  font-size: 1.4rem;
-  color: white;
-}
-
-.imageviewer-module .header-spacer {
-  width: 100px;
-}
-
-/* ============================================
    STEP CONTENT CONTAINER
    ============================================ */
 
@@ -83,11 +67,8 @@
 .imageviewer-module #step2 .step-inner {
   max-width: 1500px;
   width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
 }
 
 /* The nav row under the viewer stays visible at the bottom */
@@ -96,166 +77,40 @@
   margin-top: var(--module-spacing-md);
 }
 
-/* ============================================
-   STEP 1: FILE SELECTION
-   ============================================ */
-
-.file-selection-container {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.file-selection-container h3 {
-  margin: 0 0 10px;
-  color: var(--module-primary);
-}
-
-.file-selection-container .step-description {
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-md);
-}
-
-.file-section {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-md);
-  margin-bottom: var(--module-spacing-md);
-  transition: var(--module-transition-fast);
-}
-
-.file-section:hover {
-  border-color: var(--module-primary);
-  box-shadow: var(--module-shadow-md);
-}
-
-.file-section h4 {
-  margin: 0 0 15px;
-  color: var(--module-text-primary);
-  font-size: 1rem;
-}
-
-.file-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 12px;
-}
-
-.file-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--module-bg);
-  border: 2px solid transparent;
-  border-radius: var(--module-radius-md);
-  cursor: pointer;
-  transition: var(--module-transition-fast);
-}
-
-.file-card:hover {
-  background: var(--module-card-bg);
-  border-color: var(--module-primary);
-}
-
-.file-card.selected {
-  background: rgba(102, 126, 234, 0.1);
-  border-color: var(--module-primary);
-}
-
-.file-icon {
-  font-size: 24px;
-}
-
-.file-details {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.file-name {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--module-text-primary);
-}
-
-.file-meta {
-  font-size: 0.85rem;
-  color: var(--module-text-secondary);
-}
-
-.file-select-indicator {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--module-primary);
-  font-weight: bold;
-}
-
-.file-card.selected .file-select-indicator {
-  background: var(--module-primary);
-  color: white;
-}
-
-.loading-placeholder,
-.empty-message,
-.error-message {
-  padding: var(--module-spacing-md);
-  text-align: center;
-  color: var(--module-text-secondary);
-}
-
-.error-message {
-  color: var(--module-error-text);
-}
-
-.step-actions {
-  padding: var(--module-spacing-md) 0;
-  display: flex;
-  justify-content: flex-end;
-}
+/* Step 1 uses the shared FileSelector; the old card picker is gone. */
 
 /* ============================================
    STEP 2: IMAGE VIEWER
    ============================================ */
 
-.image-viewer-container {
-  flex: 1;
-  min-height: 0;
+/* Grows with the viewer (min-height 500px on .sv-wrap); .step-contents scrolls
+   like in the other viewer modules, so the footer is never clipped. */
+.imageviewer-module .image-viewer-container {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 /* Toolbar */
-.viewer-toolbar {
+.imageviewer-module .viewer-toolbar {
   display: flex;
   align-items: center;
   gap: var(--module-spacing-md);
-  padding: 15px;
+  padding: var(--module-spacing-sm);
   background: var(--module-card-bg);
   border: 1px solid var(--module-border);
   border-radius: var(--module-radius-lg);
-  margin-bottom: 15px;
+  margin-bottom: var(--module-spacing-sm);
 }
 
-.view-mode-toggle {
+.imageviewer-module .view-mode-toggle {
   display: flex;
   background: var(--module-bg);
   border-radius: var(--module-radius-sm);
   overflow: hidden;
 }
 
-.mode-btn {
-  padding: 8px 16px;
+.imageviewer-module .mode-btn {
+  padding: var(--module-spacing-xs) var(--module-spacing-sm);
   background: transparent;
   border: none;
   color: var(--module-text-secondary);
@@ -263,31 +118,31 @@
   transition: var(--module-transition-fast);
 }
 
-.mode-btn.active {
+.imageviewer-module .mode-btn.active {
   background: var(--module-primary);
-  color: white;
+  color: var(--module-text-on-accent);
 }
 
-.mode-btn:hover:not(.active) {
+.imageviewer-module .mode-btn:hover:not(.active) {
   background: var(--module-border);
   color: var(--module-text-primary);
 }
 
-.file-info {
+.imageviewer-module .file-info {
   flex: 1;
   display: flex;
-  gap: 15px;
+  gap: var(--module-spacing-sm);
   justify-content: flex-end;
   color: var(--module-text-secondary);
 }
 
-.file-info .filename {
+.imageviewer-module .file-info .filename {
   color: var(--module-text-primary);
   font-weight: 500;
 }
 
 /* Help icon in viewer toolbar */
-.viewer-toolbar > .help-icon {
+.imageviewer-module .viewer-toolbar > .help-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -296,11 +151,11 @@
   transition: var(--module-transition-fast);
 }
 
-.viewer-toolbar > .help-icon:hover {
+.imageviewer-module .viewer-toolbar > .help-icon:hover {
   color: var(--module-primary);
 }
 
-.viewer-toolbar > .help-icon svg {
+.imageviewer-module .viewer-toolbar > .help-icon svg {
   width: 20px;
   height: 20px;
   fill: currentColor;
@@ -308,14 +163,14 @@
 
 /* View Container: the gallery renders the shared .sv-wrap card
    (core/css/slice-viewer.css); the thumbnail grid brings its own card */
-.view-container {
+.imageviewer-module .view-container {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-.view-placeholder {
+.imageviewer-module .view-placeholder {
   flex: 1;
   display: flex;
   align-items: center;
@@ -327,7 +182,7 @@
    GALLERY VIEW (inside the shared slice-viewer chrome)
    ============================================ */
 
-.gallery-image-wrapper {
+.imageviewer-module .gallery-image-wrapper {
   position: absolute;
   inset: 0;
   display: flex;
@@ -338,11 +193,11 @@
   touch-action: none;
 }
 
-.gallery-image-wrapper:active {
+.imageviewer-module .gallery-image-wrapper:active {
   cursor: grabbing;
 }
 
-#galleryImage {
+.imageviewer-module #galleryImage {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -354,7 +209,7 @@
    ICON GRID VIEW
    ============================================ */
 
-.icon-grid-view {
+.imageviewer-module .icon-grid-view {
   flex: 1;
   overflow-y: auto;
   padding: var(--module-spacing-md);
@@ -363,30 +218,29 @@
   border-radius: var(--module-radius-lg);
 }
 
-.icon-grid {
+.imageviewer-module .icon-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   gap: 12px;
 }
 
-.thumbnail-card {
+.imageviewer-module .thumbnail-card {
   aspect-ratio: 1;
   background: var(--module-bg);
-  border: 1px solid var(--module-border);
+  border: 2px solid transparent;
   border-radius: var(--module-radius-md);
   overflow: hidden;
   cursor: pointer;
   transition: var(--module-transition-fast);
-  border: 2px solid transparent;
 }
 
-.thumbnail-card:hover {
+.imageviewer-module .thumbnail-card:hover {
   transform: scale(1.05);
   border-color: var(--module-primary);
   box-shadow: var(--module-shadow-md);
 }
 
-.thumbnail-placeholder {
+.imageviewer-module .thumbnail-placeholder {
   width: 100%;
   height: 100%;
   display: flex;
@@ -395,13 +249,13 @@
   background: var(--module-bg);
 }
 
-.thumbnail-placeholder .slice-num {
+.imageviewer-module .thumbnail-placeholder .slice-num {
   color: var(--module-text-secondary);
-  font-size: 1.5rem;
+  font-size: var(--module-font-size-xl);
   font-weight: bold;
 }
 
-.thumbnail-img {
+.imageviewer-module .thumbnail-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -431,11 +285,11 @@
     flex-wrap: wrap;
   }
 
-  .viewer-toolbar {
+  .imageviewer-module .viewer-toolbar {
     flex-wrap: wrap;
   }
 
-  .icon-grid {
+  .imageviewer-module .icon-grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   }
 }
@@ -445,66 +299,58 @@
    ============================================ */
 
 /* Step 1: comparison list */
-.comparison-section {
-  margin: 16px 0;
-  padding: 14px 16px;
-  border: 1px solid var(--module-border, #d8d8d8);
-  border-radius: 8px;
+.imageviewer-module .comparison-section {
+  margin: var(--module-spacing-sm) 0;
+  padding: 14px var(--module-spacing-sm);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
   background: var(--module-surface);
 }
 
-.comparison-header {
+.imageviewer-module .comparison-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: var(--module-spacing-xs);
 }
 
-.comparison-header h4 {
+.imageviewer-module .comparison-header h4 {
   margin: 0;
-  font-size: 0.95rem;
 }
 
-.comparison-hint {
+.imageviewer-module .comparison-hint {
   font-weight: 400;
-  color: var(--module-text-secondary, #888);
-  font-size: 0.82rem;
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-xs);
 }
 
-.imageviewer-module .field-hint {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--module-text-secondary, #777);
-  margin-top: 4px;
-}
-
-.comparison-list {
+.imageviewer-module .comparison-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.comparison-item {
+.imageviewer-module .comparison-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 6px 10px;
   border: 1px solid var(--module-border);
-  border-radius: 6px;
+  border-radius: var(--module-radius-sm);
   margin-bottom: 6px;
-  background: var(--module-card-bg, #fff);
-  font-size: 0.88rem;
+  background: var(--module-card-bg);
+  font-size: var(--module-font-size-sm);
 }
 
-.comparison-order {
+.imageviewer-module .comparison-order {
   font-weight: 700;
   min-width: 1.4em;
   text-align: center;
   color: var(--module-primary);
 }
 
-.comparison-name {
+.imageviewer-module .comparison-name {
   font-weight: 500;
   flex: 1;
   overflow: hidden;
@@ -512,54 +358,56 @@
   white-space: nowrap;
 }
 
-.comparison-dims {
+.imageviewer-module .comparison-dims {
   color: var(--module-text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--module-font-size-xs);
   white-space: nowrap;
 }
 
-/* Step 2: comparison gallery grid (fills the shared canvas host) */
-.comparison-grid {
+/* Step 2: comparison gallery grid (fills the shared canvas host).
+   The host is always dark in both themes, so the pane chrome is mixed
+   from --module-text-on-accent (white) rather than the neutral tokens. */
+.imageviewer-module .comparison-grid {
   position: absolute;
   inset: 0;
   display: grid;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--module-spacing-xs);
+  padding: var(--module-spacing-xs);
   cursor: grab;
   touch-action: none;
 }
 
-.comparison-grid:active {
+.imageviewer-module .comparison-grid:active {
   cursor: grabbing;
 }
 
-.comparison-grid.panes-2 { grid-template-columns: 1fr 1fr; }
-.comparison-grid.panes-3,
-.comparison-grid.panes-4 { grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; }
+.imageviewer-module .comparison-grid.panes-2 { grid-template-columns: 1fr 1fr; }
+.imageviewer-module .comparison-grid.panes-3,
+.imageviewer-module .comparison-grid.panes-4 { grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; }
 
-.comparison-pane {
+.imageviewer-module .comparison-pane {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--module-text-on-accent) 15%, transparent);
+  border-radius: var(--module-radius-sm);
   overflow: hidden;
 }
 
-.comparison-pane-label {
+.imageviewer-module .comparison-pane-label {
   padding: 4px 10px;
-  font-size: 0.78rem;
+  font-size: var(--module-font-size-xs);
   font-weight: 600;
-  color: #ddd;
-  background: rgba(255, 255, 255, 0.07);
+  color: var(--module-text-on-accent);
+  background: color-mix(in srgb, var(--module-text-on-accent) 7%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.comparison-pane-image {
+.imageviewer-module .comparison-pane-image {
   position: relative;
   flex: 1;
   min-height: 220px;
@@ -569,57 +417,58 @@
   justify-content: center;
 }
 
-.comparison-pane-image img {
+.imageviewer-module .comparison-pane-image img {
   max-width: 100%;
   max-height: 100%;
   user-select: none;
   transition: transform 0.05s linear;
 }
 
-.pane-end-badge {
+.imageviewer-module .pane-end-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(230, 126, 34, 0.85);
-  color: #fff;
-  font-size: 0.72rem;
+  top: var(--module-spacing-xs);
+  right: var(--module-spacing-xs);
+  padding: 2px var(--module-spacing-xs);
+  border: 1px solid var(--module-warning-border);
+  border-radius: var(--module-radius-lg);
+  background: var(--module-warning-bg);
+  color: var(--module-warning-text);
+  font-size: var(--module-font-size-xs);
   font-weight: 600;
 }
 
 /* Step 2: comparison thumbnail table (one column per stack) */
-.comparison-icon-view {
+.imageviewer-module .comparison-icon-view {
   overflow: auto;
 }
 
-.comparison-thumb-table {
+.imageviewer-module .comparison-thumb-table {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px;
+  padding: var(--module-spacing-xs);
 }
 
-.comparison-thumb-row {
+.imageviewer-module .comparison-thumb-row {
   display: grid;
   gap: 6px;
   align-items: stretch;
 }
 
-.comparison-thumb-table.cols-2 .comparison-thumb-row { grid-template-columns: 44px 1fr 1fr; }
-.comparison-thumb-table.cols-3 .comparison-thumb-row { grid-template-columns: 44px 1fr 1fr 1fr; }
-.comparison-thumb-table.cols-4 .comparison-thumb-row { grid-template-columns: 44px 1fr 1fr 1fr 1fr; }
+.imageviewer-module .comparison-thumb-table.cols-2 .comparison-thumb-row { grid-template-columns: 44px 1fr 1fr; }
+.imageviewer-module .comparison-thumb-table.cols-3 .comparison-thumb-row { grid-template-columns: 44px 1fr 1fr 1fr; }
+.imageviewer-module .comparison-thumb-table.cols-4 .comparison-thumb-row { grid-template-columns: 44px 1fr 1fr 1fr 1fr; }
 
-.comparison-thumb-header {
+.imageviewer-module .comparison-thumb-header {
   position: sticky;
   top: 0;
-  z-index: 2;
-  background: var(--module-bg, #fff);
+  z-index: var(--z-raised, 10);
+  background: var(--module-bg);
   padding: 4px 0;
 }
 
-.comparison-thumb-title {
-  font-size: 0.8rem;
+.imageviewer-module .comparison-thumb-title {
+  font-size: var(--module-font-size-xs);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -627,20 +476,20 @@
   padding: 4px 6px;
 }
 
-.comparison-thumb-index {
+.imageviewer-module .comparison-thumb-index {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.78rem;
-  color: var(--module-text-secondary, #888);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
 }
 
-.comparison-thumb-cell.thumbnail-card {
+.imageviewer-module .comparison-thumb-cell.thumbnail-card {
   margin: 0;
 }
 
-.comparison-thumb-empty {
-  border: 1px dashed var(--module-border, #ddd);
-  border-radius: 6px;
+.imageviewer-module .comparison-thumb-empty {
+  border: 1px dashed var(--module-border);
+  border-radius: var(--module-radius-sm);
   opacity: 0.4;
 }

@@ -42,9 +42,10 @@ const moduleIcons = {
 const moduleRegistry = [
   // Hub order follows the processing pipeline (tracker B3): view, prepare,
   // denoise, annotate, segment, clean up, stitch, mesh, visualise.
-  // Descriptions are at most 14 words; colours come from the --card-* tokens
-  // in workspace.css; helpArticleId links the card's help icon to the module
-  // overview article (the three newest modules get theirs in Phase 7).
+  // Descriptions are at most 14 words. Cards carry no per-module colour: the
+  // hub uses the single PoP accent (decision 1). helpArticleId links the
+  // card's help icon to the module overview article (the three newest
+  // modules get theirs in Phase 7).
   {
     id: 'imageviewer',
     name: 'Image Viewer',
@@ -53,7 +54,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/imageviewer/ImageViewerModule.js',
     inputs: ['image_stack', 'segmented_stack'],
     outputs: [],
-    color: 'var(--card-imageviewer)',
     status: 'available',
     helpArticleId: 'imageviewer'
   },
@@ -65,7 +65,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/preprocess/PreprocessModule.js',
     inputs: ['image_stack'],
     outputs: ['image_stack'],
-    color: 'var(--card-preprocess)',
     status: 'available',
     helpArticleId: 'preprocess'
   },
@@ -76,7 +75,6 @@ const moduleRegistry = [
     icon: moduleIcons.denoising,
     inputs: ['image_stack'],
     outputs: ['denoised_stack'],
-    color: 'var(--card-denoising)',
     cardType: 'multi-launch',
     helpArticleId: 'denoising',
     launchOptions: [
@@ -106,7 +104,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/annotation/AnnotationModule.js',
     inputs: ['image_stack'],
     outputs: ['annotations'],
-    color: 'var(--card-annotation)',
     status: 'available',
     helpArticleId: 'annotation'
   },
@@ -118,7 +115,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/segmentation/SegmentationModule.js',
     inputs: ['image_stack', 'annotations'],
     outputs: ['segmented_stack', 'trained_model'],
-    color: 'var(--card-segmentation)',
     status: 'available',
     helpArticleId: 'segmentation'
   },
@@ -130,7 +126,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/segcleanup/SegcleanupModule.js',
     inputs: ['segmented_stack', 'annotations'],
     outputs: ['segmented_stack'],
-    color: 'var(--card-segcleanup)',
     status: 'available',
     helpArticleId: 'segcleanup'
   },
@@ -142,7 +137,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/stitching/StitchingModule.js',
     inputs: ['image_stack', 'segmented_stack'],
     outputs: ['image_stack', 'segmented_stack'],
-    color: 'var(--card-stitching)',
     status: 'available',
     helpArticleId: 'stitching'
   },
@@ -154,7 +148,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/mesh/MeshModule.js',
     inputs: ['segmented_stack', 'annotations'],
     outputs: ['mesh_file'],
-    color: 'var(--card-mesh)',
     status: 'available',
     helpArticleId: 'mesh'
   },
@@ -166,7 +159,6 @@ const moduleRegistry = [
     path: '/workspace/js/modules/visualization/VisualizationModule.js',
     inputs: ['mesh_file'],
     outputs: [],
-    color: 'var(--card-visualization)',
     status: 'available',
     helpArticleId: 'visualization'
   }

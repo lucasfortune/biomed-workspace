@@ -12,6 +12,7 @@
  */
 
 import BaseModule from '/workspace/js/core/BaseModule.js';
+import { icon } from '/workspace/js/core/icons.js';
 import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import DLDenoisingAPI from './DLDenoisingAPI.js';
@@ -172,7 +173,7 @@ class DLDenoisingModule extends BaseModule {
         fileType: 'uploads',  // New metadata system: uploads category
         filterTags: ['raw'],  // Filter to raw images only
         title: 'Input Image Stack',
-        icon: '📁',
+        icon: 'folder',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.input'),
         showTestData: true,
         testDataOptions: [
@@ -639,7 +640,7 @@ class DLDenoisingModule extends BaseModule {
       if (result.available) {
         statusEl.className = 'gpu-status available';
         statusEl.innerHTML = `
-          <span class="gpu-status-icon">✓</span>
+          <span class="gpu-status-icon">${icon('check')}</span>
           <span class="gpu-status-text">
             GPU Available: ${result.device_name || 'CUDA Device'}
             <span class="gpu-status-detail">${result.memory_total_formatted || ''} VRAM</span>
@@ -648,7 +649,7 @@ class DLDenoisingModule extends BaseModule {
       } else {
         statusEl.className = 'gpu-status unavailable';
         statusEl.innerHTML = `
-          <span class="gpu-status-icon">⚠️</span>
+          <span class="gpu-status-icon">${icon('warning')}</span>
           <span class="gpu-status-text">
             No GPU detected - Training will use CPU
             <span class="gpu-status-detail">This may be significantly slower (10-50x)</span>
@@ -659,7 +660,7 @@ class DLDenoisingModule extends BaseModule {
       console.error('[DLDenoisingModule] Error checking GPU:', error);
       statusEl.className = 'gpu-status unavailable';
       statusEl.innerHTML = `
-        <span class="gpu-status-icon">❓</span>
+        <span class="gpu-status-icon">${icon('info')}</span>
         <span class="gpu-status-text">Could not determine GPU status</span>
       `;
     }

@@ -6,6 +6,7 @@
 
 import { FileSelector } from '/workspace/js/core/components/index.js';
 import Templates from '../templates/Templates.js';
+import { icon } from '/workspace/js/core/icons.js';
 
 class FileHandler {
   /**
@@ -179,7 +180,7 @@ class FileHandler {
         fileType: 'models',
         filterTags: ['config', 'denoising'],
         title: 'Training Configuration',
-        icon: '⚙️',
+        icon: 'settings',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.config'),
         showTestData: false,
         accept: '.json',
@@ -201,7 +202,7 @@ class FileHandler {
         id: 'import_stage1_model',
         fileType: 'models',
         title: stage1Title,
-        icon: '🧠',
+        icon: 'model',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
         showTestData: false,
         accept: '.pth',
@@ -221,7 +222,7 @@ class FileHandler {
           id: 'import_stage2_model',
           fileType: 'models',
           title: 'Legacy Stage 2 Model (optional; old two-stage runs only)',
-          icon: '🧠',
+          icon: 'model',
           helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
           showTestData: false,
           accept: '.pth',
@@ -459,7 +460,7 @@ class FileHandler {
 
       validationEl.innerHTML = `
         <div class="validation-success">
-          <span class="validation-icon">✓</span>
+          <span class="validation-icon">${icon('check')}</span>
           <span class="validation-text">Valid ${method} configuration</span>
           <span class="validation-details">
             ${hasStage2 ? 'Two-stage pipeline' : 'Single-stage pipeline'}
@@ -470,7 +471,7 @@ class FileHandler {
       const errors = validation.result.errors || ['Config validation failed'];
       validationEl.innerHTML = `
         <div class="validation-error">
-          <span class="validation-icon">✗</span>
+          <span class="validation-icon">${icon('cross')}</span>
           <span class="validation-text">${errors.join(', ')}</span>
         </div>
       `;
@@ -493,7 +494,7 @@ class FileHandler {
       if (!this.importValidation.config.valid && this.importFiles[`${stage}Model`]) {
         validationEl.innerHTML = `
           <div class="validation-warning">
-            <span class="validation-icon">⚠</span>
+            <span class="validation-icon">${icon('warning')}</span>
             <span class="validation-text">Select a valid config file first</span>
           </div>
         `;
@@ -507,7 +508,7 @@ class FileHandler {
       const info = validation.result.modelInfo || {};
       validationEl.innerHTML = `
         <div class="validation-success">
-          <span class="validation-icon">✓</span>
+          <span class="validation-icon">${icon('check')}</span>
           <span class="validation-text">Valid model file</span>
           ${info.size ? `<span class="validation-details">Size: ${info.size}</span>` : ''}
         </div>
@@ -516,7 +517,7 @@ class FileHandler {
       const errors = validation.result.errors || ['Model validation failed'];
       validationEl.innerHTML = `
         <div class="validation-error">
-          <span class="validation-icon">✗</span>
+          <span class="validation-icon">${icon('cross')}</span>
           <span class="validation-text">${errors.join(', ')}</span>
         </div>
       `;

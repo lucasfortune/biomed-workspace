@@ -62,8 +62,6 @@
 
 .mesh-module .data-info-card h4 {
   margin: 0 0 var(--module-spacing-md) 0;
-  font-size: var(--module-font-size-md);
-  color: var(--module-text-primary);
 }
 
 .mesh-module .info-grid {
@@ -111,7 +109,7 @@
   max-height: 200px;
   border-radius: var(--module-radius-sm);
   object-fit: contain;
-  background: #000;
+  background: var(--module-bg-dark);
 }
 
 .mesh-module .preview-container span {
@@ -170,7 +168,7 @@
   max-height: 150px;
   border-radius: var(--module-radius-sm);
   object-fit: contain;
-  background: #000;
+  background: var(--module-bg-dark);
 }
 
 .mesh-module .summary-preview .preview-label {
@@ -208,8 +206,6 @@
 
 .mesh-module .generation-options h4 {
   margin: 0 0 var(--module-spacing-md) 0;
-  font-size: var(--module-font-size-md);
-  color: var(--module-text-primary);
 }
 
 /* Options header with help icon */
@@ -244,19 +240,10 @@
   fill: currentColor;
 }
 
-.mesh-module .form-field {
-  margin-bottom: var(--module-spacing-md);
-}
+/* .form-field and its label come from module-base.css */
 
 .mesh-module .form-field:last-of-type {
   margin-bottom: var(--module-spacing-lg);
-}
-
-.mesh-module .form-field > label {
-  display: block;
-  margin-bottom: var(--module-spacing-xs);
-  font-weight: 500;
-  color: var(--module-text-primary);
 }
 
 .mesh-module .checkbox-group {
@@ -274,27 +261,10 @@
   cursor: pointer;
 }
 
-.mesh-module .checkbox-group input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
+/* Checkbox look and the select look + focus ring come from module-base */
 
 .mesh-module .form-field select {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-sm);
-  font-size: var(--module-font-size-sm);
-  background: var(--module-bg);
-  color: var(--module-text-primary);
-  transition: var(--module-transition-fast);
-}
-
-.mesh-module .form-field select:focus {
-  outline: none;
-  border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 /* ============================================
@@ -332,10 +302,6 @@
   border-top-color: var(--module-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 .mesh-module .elapsed-time {
@@ -397,7 +363,9 @@
    RESPONSIVE
    ============================================ */
 
-@media (max-width: 768px) {
+/* Narrow module pane (the sidebar can be open): collapse the two-column
+   blocks. `module` is the container named on .step-contents in module-base. */
+@container module (max-width: 900px) {
   .mesh-module .info-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -414,7 +382,10 @@
     max-width: 100%;
     max-height: 200px;
   }
+}
 
+/* Phone-level: stack the download buttons */
+@media (max-width: 768px) {
   .mesh-module .download-buttons {
     flex-direction: column;
   }
@@ -426,7 +397,7 @@
 
 /* Format note (formats are fixed: JSON + OBJ; conversion via file browser) */
 .mesh-module .format-note {
-  font-size: 0.85rem;
-  color: var(--module-text-secondary, #777);
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
   margin: 0 0 14px;
 }

@@ -5,6 +5,22 @@
  * training loss visualization.
  */
 
+/**
+ * Read the current theme's chart colours from the module design tokens so the
+ * canvas follows light/dark mode. Falls back to the light-theme values when a
+ * token is missing (e.g. module-base.css not yet applied).
+ */
+function themeColors() {
+  const css = getComputedStyle(document.documentElement);
+  const token = (name, fallback) => (css.getPropertyValue(name) || '').trim() || fallback;
+  return {
+    train: token('--module-primary', '#EB1F17'),
+    validation: token('--module-info', '#17A2B8'),
+    grid: token('--module-border', '#DEE2E6'),
+    text: token('--module-text-secondary', '#6C757D')
+  };
+}
+
 class ChartHandler {
   /**
    * @param {DLDenoisingModule} module - Reference to the parent module
@@ -32,6 +48,9 @@ class ChartHandler {
       });
     }
 
+    // Colours are read from the theme tokens at creation time
+    const colors = themeColors();
+
     // Chart configuration factory
     const chartConfig = (canvasId) => ({
       type: 'line',
@@ -41,8 +60,8 @@ class ChartHandler {
           {
             label: 'Train Loss',
             data: [],
-            borderColor: '#4A90E2',
-            backgroundColor: 'rgba(74, 144, 226, 0.1)',
+            borderColor: colors.train,
+            backgroundColor: colors.train,
             borderWidth: 2,
             pointRadius: 0,
             tension: 0.1,
@@ -51,8 +70,8 @@ class ChartHandler {
           {
             label: 'Val Loss',
             data: [],
-            borderColor: '#E24A4A',
-            backgroundColor: 'rgba(226, 74, 74, 0.1)',
+            borderColor: colors.validation,
+            backgroundColor: colors.validation,
             borderWidth: 2,
             pointRadius: 0,
             tension: 0.1,
@@ -71,14 +90,15 @@ class ChartHandler {
         scales: {
           x: {
             display: true,
-            title: { display: true, text: 'Epoch', color: '#666' },
-            grid: { color: 'rgba(0, 0, 0, 0.05)' }
+            title: { display: true, text: 'Epoch', color: colors.text },
+            grid: { color: colors.grid },
+            ticks: { color: colors.text }
           },
           y: {
             display: true,
-            title: { display: true, text: 'Loss', color: '#666' },
-            grid: { color: 'rgba(0, 0, 0, 0.05)' },
-            ticks: { callback: (v) => v.toFixed(4) }
+            title: { display: true, text: 'Loss', color: colors.text },
+            grid: { color: colors.grid },
+            ticks: { color: colors.text, callback: (v) => v.toFixed(4) }
           }
         }
       }

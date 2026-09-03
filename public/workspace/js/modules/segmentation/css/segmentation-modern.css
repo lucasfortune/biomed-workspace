@@ -4,22 +4,15 @@
  *
  * This file imports the shared module-base.css and adds
  * segmentation-specific styles and overrides.
+ *
+ * Every rule is scoped to `.segmentation-module` (the module root) so the
+ * stylesheet can never leak into the workspace shell or another module.
+ * The one exception is `.segmentation-inference-loading`, a module-namespaced
+ * class used inside the body-level loading overlay (see InferenceHandler).
  */
 
 /* Import shared base styles */
 @import url('/workspace/js/core/css/module-base.css');
-
-/* ============================================
-   GLOBAL OVERRIDES
-   Reset styles from classic base.css
-   ============================================ */
-
-body {
-  padding: 0 !important;
-  margin: 0 !important;
-  background: var(--dark-bg) !important;
-  background-image: none !important;
-}
 
 /* Prevent generic container class conflicts */
 .segmentation-module .container {
@@ -45,12 +38,6 @@ body {
   font-family: var(--module-font-family);
   border: none;
   box-shadow: none;
-}
-
-/* Ensure no borders on module view container */
-#module-view {
-  border: none !important;
-  box-shadow: none !important;
 }
 
 /* ============================================
@@ -81,19 +68,27 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--module-spacing-sm);
   margin-bottom: var(--module-spacing-md);
 }
 
 .segmentation-module .training-status-header h4 {
   margin: 0;
-  color: var(--module-text-primary);
-  font-size: var(--module-font-size-md);
+}
+
+/* Training status tone (set from JS via .is-warning / .is-success) */
+.segmentation-module .training-status-text.is-warning {
+  color: var(--module-warning-text);
+}
+
+.segmentation-module .training-status-text.is-success {
+  color: var(--module-success-text);
 }
 
 /* Stage Status Badge */
 .segmentation-module .stage-status {
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--module-radius-xl);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -101,8 +96,8 @@ body {
 }
 
 .segmentation-module .stage-status.training {
-  background: rgba(74, 144, 226, 0.2);
-  color: #4A90E2;
+  background: var(--module-info-bg);
+  color: var(--module-info-text);
   animation: pulse 2s infinite;
 }
 
@@ -133,31 +128,9 @@ body {
   font-weight: 600;
 }
 
-/* Legacy training-action support */
-.training-action {
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-md);
-  padding: 32px;
-  text-align: center;
-  margin-bottom: var(--module-spacing-xl);
-}
-
-.training-action h3 {
-  margin: 0 0 12px 0;
-  color: var(--module-text-primary);
-  font-size: 20px;
-}
-
-.training-action p {
-  margin: 0 0 24px 0;
-  color: var(--module-text-secondary);
-  font-size: var(--module-font-size-sm);
-}
-
 /* Training progress epoch styling */
-.training-progress #currentEpoch,
-.training-progress #totalEpochs {
+.segmentation-module .training-progress #currentEpoch,
+.segmentation-module .training-progress #totalEpochs {
   color: var(--module-primary);
   font-weight: 700;
   font-size: var(--module-font-size-lg);
@@ -171,11 +144,6 @@ body {
   margin: var(--module-spacing-xl) 0;
 }
 
-.segmentation-module .metric-card {
-  border-radius: var(--module-radius-lg);
-  padding: var(--module-spacing-md);
-}
-
 .segmentation-module .metric-value {
   font-size: 2em;
   margin-bottom: var(--module-spacing-xs);
@@ -186,337 +154,27 @@ body {
   font-weight: 500;
 }
 
-/* ============================================
-   3D VISUALIZATION STYLES
-   ============================================ */
+/* Empty state shown in the 3D viewer when there is nothing to render */
 
-.visualization-container {
-  height: 600px;
-  border: 2px solid var(--module-border-dark);
-  border-radius: var(--module-radius-xl);
-  margin-bottom: var(--module-spacing-md);
-  position: relative;
-  overflow: hidden;
-  background: var(--module-bg);
-  box-shadow: var(--module-shadow-sm);
-}
-
-.viz-controls {
-  background: var(--module-card-bg);
-  padding: var(--module-spacing-md);
-  border-radius: var(--module-radius-lg);
-  border: 1px solid var(--module-border);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  margin-bottom: var(--module-spacing-md);
-}
-
-.viz-control-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--module-spacing-xs);
-  min-width: 200px;
-}
-
-.viz-control-group label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--module-text-primary);
-}
-
-.viz-loading {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  z-index: 10;
-}
-
-.viz-error {
-  padding: var(--module-spacing-md);
-  background: var(--module-error-bg);
-  border: 1px solid var(--module-error-border);
-  border-radius: var(--module-radius-md);
-  color: var(--module-error-text);
-  margin: var(--module-spacing-md);
-}
-
-/* Override class control panel hover to match module theme */
-.segmentation-module .class-control-panel {
-  border-radius: var(--module-radius-lg) !important;
-  border: 1px solid var(--module-border) !important;
-  transition: var(--module-transition-fast) !important;
-}
-
-.segmentation-module .class-control-panel:hover {
-  border-color: var(--module-primary) !important;
-  box-shadow: var(--module-shadow-lg) !important;
-}
+/* Slice-direction read-out under the 3D viewer controls */
 
 /* Override upload section hover */
-.segmentation-module .upload-section:hover {
-  border-color: var(--module-primary) !important;
-  background-color: var(--module-bg) !important;
-}
-
-.segmentation-module .upload-section.dragover {
-  border-color: var(--module-primary) !important;
-  background-color: var(--module-info-bg) !important;
-}
 
 /* Override config group borders */
 .segmentation-module .config-group h3 {
-  border-bottom-color: var(--module-primary) !important;
-}
-
-/* Override form field focus */
-.segmentation-module .form-field input:focus,
-.segmentation-module .form-field select:focus {
-  border-color: var(--module-primary) !important;
-  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.1) !important;
+  border-bottom-color: var(--module-primary);
 }
 
 /* Override validation info */
-.segmentation-module .validation-info {
-  background: var(--module-info-bg) !important;
-  border-color: var(--module-info-border) !important;
-}
 
-/* ============================================
-   3D VISUALIZATION CONTROL PANEL STYLES
-   ============================================ */
-
-.slider {
-  width: 150px;
-}
-
-.viz-controls-container {
-  background: var(--module-card-bg);
-  padding: var(--module-spacing-md);
-  border-radius: var(--module-radius-lg);
-  margin-top: var(--module-spacing-md);
-}
-
-.viz-controls-container h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: var(--module-text-primary);
-  font-size: 1.2em;
-}
-
-/* Controls header layout */
-.controls-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.controls-title {
-  margin: 0;
-  color: var(--module-text-primary);
-  font-size: 1.2em;
-}
-
-/* Reset button styling */
-.btn-reset {
-  background: var(--module-border-dark) !important;
-  color: var(--module-text-primary) !important;
-  border: none !important;
-  padding: 8px 16px !important;
-  border-radius: 5px !important;
-  font-size: 14px !important;
-  cursor: pointer !important;
-  transition: var(--module-transition-fast) !important;
-  margin: 0 !important;
-}
-
-.btn-reset:hover {
-  background: var(--module-border) !important;
-  transform: translateY(-1px) !important;
-}
-
-.btn-reset:active {
-  transform: translateY(0px) !important;
-}
-
-.class-control-panels {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.class-control-panel {
+/* Warning appended to a successful validation panel */
+.segmentation-module .validation-success .warning {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 18px;
-  background: var(--module-card-bg);
-  border: 1px solid var(--module-border);
-  border-radius: var(--module-radius-md);
-  box-shadow: var(--module-shadow-sm);
-  transition: border-color var(--module-transition-fast);
-}
-
-.class-control-panel:hover {
-  border-color: var(--module-primary);
-}
-
-.class-control-panel.disabled {
-  opacity: 0.6;
-  background: var(--module-bg);
-}
-
-.class-checkbox-section {
-  display: flex;
-  align-items: center;
-  min-width: 120px;
-}
-
-.class-checkbox {
-  margin-right: 10px;
-  scale: 1.3;
-}
-
-.class-label {
-  font-weight: 600;
-  font-size: 16px;
-  white-space: nowrap;
-}
-
-.class-opacity-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 180px;
-}
-
-.class-opacity-label {
-  font-size: 13px;
-  color: var(--module-text-secondary);
-  white-space: nowrap;
-  min-width: 50px;
-}
-
-.class-opacity-slider {
-  width: 100px;
-}
-
-.class-opacity-value {
-  font-size: 13px;
-  color: var(--module-text-primary);
-  min-width: 35px;
-  font-weight: 500;
-}
-
-/* Range Slider Styles */
-.class-range-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-grow: 1;
-}
-
-.class-range-label {
-  font-size: 13px;
-  color: var(--module-text-secondary);
-  white-space: nowrap;
-  min-width: 45px;
-}
-
-.class-range-sliders {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.class-range-slider {
-  width: 60px;
-}
-
-.class-range-value {
-  font-size: 12px;
-  color: var(--module-text-secondary);
-  min-width: 70px;
-  font-weight: 500;
-}
-
-/* Dual Handle Range Slider Styles */
-.dual-range-container {
-  position: relative;
-  width: 120px;
-  height: 20px;
-  margin: 0 8px;
-}
-
-.dual-range-track {
-  position: absolute;
-  width: 100%;
-  height: 4px;
-  background: var(--module-border);
-  border-radius: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.dual-range-fill {
-  position: absolute;
-  height: 4px;
-  background: var(--module-primary);
-  border-radius: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  transition: all 0.1s ease;
-}
-
-.dual-range-input {
-  position: absolute;
-  width: 100%;
-  height: 20px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  pointer-events: none;
-  top: 0;
-}
-
-.dual-range-input::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  background: var(--module-primary);
-  border: 2px solid white;
-  border-radius: 50%;
-  cursor: pointer;
-  pointer-events: all;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.dual-range-input::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: var(--module-primary);
-  border: 2px solid white;
-  border-radius: 50%;
-  cursor: pointer;
-  pointer-events: all;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  border: none;
-}
-
-.dual-range-input:focus {
-  outline: none;
-}
-
-.dual-range-input:focus::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.3);
-}
-
-.dual-range-input:focus::-moz-range-thumb {
-  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.3);
+  gap: 6px;
+  margin: var(--module-spacing-xs) 0 0 0;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-warning-text);
 }
 
 /* ============================================
@@ -529,7 +187,6 @@ body {
 
 .segmentation-module .workflow-selection-section > h4 {
   margin-bottom: var(--module-spacing-sm);
-  color: var(--module-text-primary);
   font-size: var(--module-font-size-lg);
 }
 
@@ -547,12 +204,12 @@ body {
   border-radius: var(--module-radius-lg);
   margin-bottom: var(--module-spacing-md);
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--module-transition-fast), box-shadow var(--module-transition-fast);
 }
 
 .segmentation-module .workflow-section.active {
   border-color: var(--module-primary);
-  box-shadow: 0 0 0 3px rgba(235, 31, 23, 0.15);
+  box-shadow: 0 0 0 3px var(--module-primary-light);
 }
 
 /* Workflow Header */
@@ -563,22 +220,24 @@ body {
   padding: var(--module-spacing-md);
   background: var(--module-bg);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background var(--module-transition-fast);
   user-select: none;
 }
 
 .segmentation-module .workflow-header:hover {
-  background: rgba(235, 31, 23, 0.08);
+  background: var(--module-primary-light);
 }
 
 .segmentation-module .workflow-section.active .workflow-header {
-  background: rgba(235, 31, 23, 0.1);
+  background: color-mix(in srgb, var(--module-primary) 16%, transparent);
 }
 
 .segmentation-module .workflow-icon {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--module-font-size-md);
   color: var(--module-text-secondary);
-  transition: transform 0.2s ease;
+  transition: transform var(--module-transition-fast);
   flex-shrink: 0;
 }
 
@@ -629,72 +288,9 @@ body {
   margin-bottom: 0;
 }
 
-.segmentation-module .file-upload-label {
-  display: flex;
-  align-items: center;
-  font-size: var(--module-font-size-sm);
-  font-weight: 500;
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-xs);
-}
-
-.segmentation-module .file-upload-label .help-icon {
-  margin-left: 6px;
-}
-
 /* ============================================
    IMPORT MODEL SECTION
    ============================================ */
-
-.segmentation-module .import-content {
-  padding: var(--module-spacing-md);
-}
-
-.segmentation-module .import-stage-panel {
-  background: var(--module-card-bg);
-  border: 1px dashed var(--module-border);
-  border-radius: var(--module-radius-md);
-  padding: var(--module-spacing-md);
-  margin-bottom: var(--module-spacing-md);
-}
-
-.segmentation-module .import-stage-panel:last-child {
-  margin-bottom: 0;
-}
-
-.segmentation-module .import-stage-panel h5 {
-  margin: 0 0 var(--module-spacing-sm);
-  color: var(--module-text-primary);
-  font-size: var(--module-font-size-sm);
-  font-weight: 600;
-}
-
-.segmentation-module .import-stage-panel .file-row {
-  display: flex;
-  gap: var(--module-spacing-md);
-  margin-bottom: var(--module-spacing-sm);
-}
-
-.segmentation-module .import-stage-panel .file-row:last-child {
-  margin-bottom: 0;
-}
-
-.segmentation-module .import-stage-panel .file-input-group {
-  flex: 1;
-}
-
-.segmentation-module .import-stage-panel .file-input-group label {
-  display: block;
-  font-size: var(--module-font-size-xs);
-  color: var(--module-text-secondary);
-  margin-bottom: 4px;
-}
-
-.segmentation-module .import-hint {
-  font-size: var(--module-font-size-sm);
-  color: var(--module-text-secondary);
-  margin-bottom: var(--module-spacing-md);
-}
 
 .segmentation-module .import-validation {
   margin-top: var(--module-spacing-md);
@@ -747,13 +343,32 @@ body {
 .segmentation-module .overall-import-validation.success {
   background: var(--module-success-bg);
   border: 1px solid var(--module-success-border);
+  color: var(--module-success-text);
 }
 
 .segmentation-module .overall-import-validation.error {
   background: var(--module-error-bg);
   border: 1px solid var(--module-error-border);
+  color: var(--module-error-text);
 }
 
+.segmentation-module .overall-import-validation strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Architecture summary under "Model Ready for Inference" */
+.segmentation-module .import-ready-details {
+  margin: var(--module-spacing-xs) 0 0 0;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-success);
+}
+
+.segmentation-module .import-error-details {
+  margin: var(--module-spacing-xs) 0 0 0;
+  font-size: var(--module-font-size-sm);
+}
 
 /* ============================================
    STEP 2: CONFIG GROUP HEADINGS
@@ -763,9 +378,6 @@ body {
 
 .segmentation-module .config-group h4 {
   margin: 0 0 var(--module-spacing-sm) 0;
-  font-size: var(--module-font-size-md);
-  color: var(--module-text-primary);
-  font-weight: 600;
   padding-bottom: var(--module-spacing-xs);
   border-bottom: 2px solid var(--module-border);
 }
@@ -791,6 +403,7 @@ body {
 .segmentation-module .inference-progress-row {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--module-spacing-sm);
   font-size: var(--module-font-size-sm);
   color: var(--module-text-secondary);
@@ -808,6 +421,101 @@ body {
   background: var(--module-error-bg);
   border-left: 3px solid var(--module-error-border);
   color: var(--module-error-text);
-  font-size: 13px;
+  font-size: var(--module-font-size-sm);
   line-height: 1.4;
+}
+
+/* ============================================
+   INFERENCE PROGRESS INSIDE THE LOADING OVERLAY
+   The overlay is appended to <body> (BaseModule.showLoading / classic
+   utils.js), i.e. outside .segmentation-module, so this fallback block
+   carries its own module-namespaced class instead.
+   ============================================ */
+
+.segmentation-inference-loading {
+  margin-top: var(--module-spacing-md);
+  text-align: center;
+  color: var(--module-text-primary);
+}
+
+.segmentation-inference-loading .inference-loading-count {
+  margin-bottom: var(--module-spacing-sm);
+  font-size: var(--module-font-size-md);
+}
+
+.segmentation-inference-loading .inference-loading-value {
+  font-weight: 700;
+  color: var(--module-primary);
+}
+
+.segmentation-inference-loading .inference-loading-percent {
+  font-size: var(--module-font-size-lg);
+  font-weight: 700;
+  color: var(--module-primary);
+}
+
+.segmentation-inference-loading .inference-loading-hint {
+  margin-top: var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+.segmentation-inference-loading .inference-loading-subhint {
+  margin-top: 5px;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-muted);
+}
+
+/* ============================================
+   RESPONSIVE
+   Container queries react to the module area's width (container name
+   `module`, declared on .step-contents in module-base.css), which already
+   excludes the workspace sidebar. module-base.css handles the viewport
+   breakpoint at 768px for .charts-container / .metrics-display.
+   ============================================ */
+
+@container module (max-width: 900px) {
+  .segmentation-module .charts-container {
+    grid-template-columns: 1fr;
+  }
+
+  .segmentation-module .metrics-display {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--module-spacing-sm);
+    margin: var(--module-spacing-md) 0;
+  }
+
+  .segmentation-module .metric-value {
+    font-size: 1.6em;
+  }
+}
+
+@container module (max-width: 800px) {
+  /* 3D viewer + its control panel stack instead of sitting side by side */
+
+  .segmentation-module .viz-controls,
+
+  .segmentation-module .dual-range-container,
+  .segmentation-module .class-opacity-slider,
+  .segmentation-module .class-range-slider,
+  .segmentation-module .slider {
+    width: 100%;
+    margin: 0;
+  }
+
+}
+
+@container module (max-width: 560px) {
+  .segmentation-module .metrics-display {
+    grid-template-columns: 1fr;
+  }
+
+  .segmentation-module .training-status-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .segmentation-module .navigation-buttons {
+    flex-wrap: wrap;
+  }
 }

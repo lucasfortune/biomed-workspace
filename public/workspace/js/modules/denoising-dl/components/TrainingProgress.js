@@ -8,7 +8,10 @@
  * - Time elapsed and remaining estimates
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class TrainingProgress {
+
   /**
    * @param {Object} options - Configuration options
    * @param {string} options.containerId - ID of container element
@@ -109,7 +112,7 @@ class TrainingProgress {
     let iconContent = '';
     switch (status) {
       case 'completed':
-        iconContent = '<span class="check-icon">&#10003;</span>';
+        iconContent = `<span class="check-icon">${icon('check')}</span>`;
         break;
       case 'training':
       case 'extracting':
@@ -120,10 +123,10 @@ class TrainingProgress {
         iconContent = '<span class="skip-icon">-</span>';
         break;
       case 'failed':
-        iconContent = '<span class="fail-icon">&#10005;</span>';
+        iconContent = `<span class="fail-icon">${icon('cross')}</span>`;
         break;
       default:
-        iconContent = '<span class="pending-icon">&#9711;</span>';
+        iconContent = `<span class="pending-icon">${icon('circle')}</span>`;
     }
 
     return `
@@ -273,7 +276,7 @@ class TrainingProgress {
   _renderCompletedProgress() {
     return `
       <div class="progress-completed">
-        <div class="completed-icon">&#10003;</div>
+        <div class="completed-icon">${icon('check')}</div>
         <p>Denoising completed successfully!</p>
         <p class="completed-detail">Your denoised images are ready for download below.</p>
       </div>

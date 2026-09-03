@@ -5,6 +5,8 @@
  * Used for organizing training configuration into logical groups.
  */
 
+import { icon } from '/workspace/js/core/icons.js';
+
 class CollapsibleSection {
   /**
    * @param {Object} options
@@ -46,7 +48,7 @@ class CollapsibleSection {
       <div class="collapsible-section ${this.expanded ? 'expanded' : ''}" id="${this.id}">
         <div class="collapsible-header" data-section="${this.id}">
           <div class="collapsible-title">
-            <span class="collapsible-icon">${this.expanded ? '▼' : '▶'}</span>
+            <span class="collapsible-icon">${icon('caretDown')}</span>
             <span class="collapsible-label">${this.title}</span>
           </div>
           ${this.getStatusBadge()}
@@ -123,12 +125,10 @@ class CollapsibleSection {
     const section = document.getElementById(this.id);
     if (!section) return;
 
-    const icon = section.querySelector('.collapsible-icon');
     const body = section.querySelector('.collapsible-body');
 
     if (this.expanded) {
       section.classList.add('expanded');
-      if (icon) icon.textContent = '▼';
       if (body) {
         body.style.display = 'block';
         // Trigger animation
@@ -138,7 +138,6 @@ class CollapsibleSection {
       }
     } else {
       section.classList.remove('expanded');
-      if (icon) icon.textContent = '▶';
       if (body) {
         body.style.maxHeight = '0';
         setTimeout(() => {

@@ -6,6 +6,7 @@
  */
 
 import { FileSelector, ValidationDisplay } from '/workspace/js/core/components/index.js';
+import { icon } from '/workspace/js/core/icons.js';
 import Templates from '../templates/Templates.js';
 
 class FileHandler {
@@ -30,7 +31,7 @@ class FileHandler {
       fileType: 'uploads',
       filterTags: ['raw'],
       title: 'Raw Images',
-      icon: '📁',
+      icon: 'image',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.raw-images'),
       showTestData: true,
       stateManager: this.module.state,
@@ -43,7 +44,7 @@ class FileHandler {
       fileType: 'uploads',
       filterTags: ['annotation'],
       title: 'Annotations',
-      icon: '🏷️',
+      icon: 'tag',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.annotations'),
       showTestData: true,
       stateManager: this.module.state,
@@ -56,7 +57,7 @@ class FileHandler {
       fileType: 'uploads',
       filterTags: ['raw'],
       title: 'Inference Data',
-      icon: '📁',
+      icon: 'image',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step4.inference-data'),
       showTestData: true,
       showRecentResults: true,
@@ -422,7 +423,7 @@ class FileHandler {
         if (container) {
           const warningDiv = document.createElement('p');
           warningDiv.className = 'warning';
-          warningDiv.innerHTML = `⚠️ ${validation.warnings}`;
+          warningDiv.innerHTML = `${icon('warning')} <span>${validation.warnings}</span>`;
           container.querySelector('.validation-success')?.appendChild(warningDiv);
         }
       }

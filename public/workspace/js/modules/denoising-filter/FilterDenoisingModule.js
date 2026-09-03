@@ -126,7 +126,7 @@ class FilterDenoisingModule extends BaseModule {
                     <label for="sigma">Sigma (\u03C3)</label>
                     <div class="slider-input">
                       <input type="range" class="range-slider" id="sigma" min="0.5" max="5" step="0.1" value="1.5">
-                      <input type="number" id="sigmaValue" min="0.5" max="5" step="0.1" value="1.5">
+                      <input type="number" class="input-sm" id="sigmaValue" min="0.5" max="5" step="0.1" value="1.5">
                     </div>
                     <span class="field-hint">Higher = more smoothing (range: 0.5-5.0)</span>
                   </div>
@@ -152,7 +152,7 @@ class FilterDenoisingModule extends BaseModule {
                     <label for="filterH">Filter Strength (h)</label>
                     <div class="slider-input">
                       <input type="range" class="range-slider" id="filterH" min="1" max="30" step="1" value="10">
-                      <input type="number" id="filterHValue" min="1" max="30" step="1" value="10">
+                      <input type="number" class="input-sm" id="filterHValue" min="1" max="30" step="1" value="10">
                     </div>
                     <span class="field-hint">Higher = more denoising, may blur details (range: 1-30)</span>
                   </div>
@@ -249,7 +249,7 @@ class FilterDenoisingModule extends BaseModule {
         fileType: 'uploads',  // New metadata system: uploads category
         filterTags: ['raw'],  // Filter to raw images only
         title: 'Input Image Stack',
-        icon: '\uD83D\uDCC1',
+        icon: 'image',
         helpIconHtml: this.renderHelpIcon('denoising-filter.step1.input'),
         showTestData: true,
         testDataOptions: [

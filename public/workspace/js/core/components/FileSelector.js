@@ -31,6 +31,8 @@
  * const file = selector.getSelectedFile();
  * ```
  */
+import { icon, hasIcon } from '/workspace/js/core/icons.js';
+
 class FileSelector {
   /**
    * Create a FileSelector
@@ -73,7 +75,9 @@ class FileSelector {
   constructor(config = {}) {
     this.id = config.id || `file-selector-${Date.now()}`;
     this.title = config.title || 'Select File';
-    this.icon = config.icon || '📁';
+    // `icon` may be an icon name from core/icons.js ('image', 'tag', 'model', …),
+    // ready-made SVG markup, or nothing (folder).
+    this.icon = hasIcon(config.icon) ? icon(config.icon) : (config.icon || icon('folder'));
     this.helpIconHtml = config.helpIconHtml || '';
     this.fileType = config.fileType || 'file';
     this.filterTags = config.filterTags || null;  // Tags files must have (e.g., ['raw'])
@@ -404,7 +408,7 @@ class FileSelector {
     if (!hasAnyFiles) {
       const helpOption = document.createElement('option');
       helpOption.value = '';
-      helpOption.textContent = '📤 No files available - upload one below';
+      helpOption.textContent = 'No files available – upload one below';
       helpOption.disabled = true;
       dropdown.appendChild(helpOption);
     }
@@ -830,11 +834,11 @@ class FileSelector {
 
     preview.innerHTML = `
       <div class="preview-item">
-        <strong>📄 ${data.name}</strong>
+        <strong>${icon('file')} ${data.name}</strong>
       </div>
       ${data.size ? `<div class="preview-item">Size: ${data.size}</div>` : ''}
       ${data.uploadDate ? `<div class="preview-item">Uploaded: ${data.uploadDate}</div>` : ''}
-      ${data.info ? `<div class="preview-item">ℹ️ ${data.info}</div>` : ''}
+      ${data.info ? `<div class="preview-item">${icon('info')} ${data.info}</div>` : ''}
     `;
 
     preview.style.display = 'block';

@@ -20,6 +20,7 @@
 import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
+import { icon } from '/workspace/js/core/icons.js';
 import VisualizationAPI from './VisualizationAPI.js';
 
 // =============================================================================
@@ -205,7 +206,7 @@ class VisualizationModule extends BaseModule {
                 <div class="viz-viewer-section">
                   <div id="threejsContainer" class="threejs-container">
                     <div class="viewer-placeholder">
-                      <span class="placeholder-icon">🔬</span>
+                      <span class="placeholder-icon">${icon('cube')}</span>
                       <span class="placeholder-text">Loading 3D viewer...</span>
                     </div>
                   </div>
@@ -233,7 +234,7 @@ class VisualizationModule extends BaseModule {
 
                 <!-- Show controls button (only visible when controls are hidden in expanded mode) -->
                 <button id="showControlsBtn" class="show-controls-btn">
-                  ⚙ Controls
+                  ${icon('settings')} Controls
                 </button>
               </div>
 
@@ -292,7 +293,7 @@ class VisualizationModule extends BaseModule {
         filterTags: ['mesh', 'data', 'json'],  // Filter to JSON mesh data files only
         excludeTags: ['info'],  // Exclude metadata/info files
         title: 'Mesh Data',
-        icon: '🔬',
+        icon: 'mesh',
         helpIconHtml: this.renderHelpIcon('visualization.step1.mesh-data'),
         accept: '.json',
         showTestData: false,
@@ -481,7 +482,7 @@ class VisualizationModule extends BaseModule {
           originalDataInfo.style.display = 'block';
           originalDataInfo.innerHTML = `
             <div class="info-card success">
-              <div class="info-icon">✓</div>
+              <div class="info-icon">${icon('check')}</div>
               <div class="info-content">
                 <strong>Original Data Available</strong>
                 <p>Source: ${this.originalDataFile.name}</p>
@@ -799,7 +800,7 @@ class VisualizationModule extends BaseModule {
       this.hideLoadingOverlay(); // Ensure overlay is hidden on error
       container.innerHTML = `
         <div class="viewer-placeholder error">
-          <span class="placeholder-icon">❌</span>
+          <span class="placeholder-icon">${icon('cross')}</span>
           <span class="placeholder-text">Failed to load mesh</span>
           <span class="placeholder-subtext">${error.message}</span>
         </div>
