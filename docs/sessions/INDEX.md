@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-04 (Help Content — Articles for the New Modules, Corrections for the Old Ones)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-04 | [Help Content — Articles for the New Modules, Corrections for the Old Ones](2026-09-04_help_content.md) | 📚 Docs | ~3 hrs | ✅ Complete |
+
 ### 2026-09-04 (Stitching Merge Junction — Average Duplicated Sections Instead of Trimming)
 
 | Date | Session | Type | Duration | Status |
