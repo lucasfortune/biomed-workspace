@@ -187,7 +187,6 @@ class MeshModule extends BaseModule {
                 <div class="form-field">
                   <label for="zAspectInput">
                     Z Voxel Scale
-                    ${this.renderHelpIcon('mesh.step2.output-options')}
                   </label>
                   <input type="number" id="zAspectInput" min="0.05" max="20" step="0.1" value="1">
                   <small class="field-hint">

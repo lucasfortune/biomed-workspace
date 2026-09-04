@@ -15,7 +15,6 @@ seeAlsoManual:
   - preprocess.step2.geometry
   - preprocess.step2.intensity
   - preprocess.step2.output
-  - preprocess.step3.apply
 seeAlsoTags:
   - preprocess
   - intensity

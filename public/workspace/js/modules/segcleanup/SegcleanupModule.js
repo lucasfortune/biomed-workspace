@@ -120,7 +120,7 @@ class SegcleanupModule extends BaseModule {
     return `
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Segmentation ${this.renderHelpIcon('segcleanup.step1.segmentation')}</h3>
+          <h3>Select Segmentation</h3>
           <p class="step-description">
             Pick a segmentation (or annotation mask) to edit and measure.
             All changes are saved as new files; the original is never
@@ -157,7 +157,7 @@ class SegcleanupModule extends BaseModule {
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
-          <h3>Edit &amp; Quantify ${this.renderHelpIcon('segcleanup.step2.painting')}</h3>
+          <h3>Edit &amp; Quantify</h3>
           <p class="step-description">
             Paint corrections directly, run automated cleanup on the whole
             stack, and measure the result. Left-drag paints, right-drag or

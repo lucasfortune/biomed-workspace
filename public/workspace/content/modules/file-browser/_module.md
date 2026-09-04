@@ -10,9 +10,13 @@ tags:
   - upload
   - download
 seeAlsoManual:
+  - file-browser.tree-navigation
+  - file-browser.categories
+  - file-browser.search
   - file-browser.upload
-  - file-browser.workspace-backup
+  - file-browser.file-operations
   - file-browser.batch-operations
+  - file-browser.workspace-backup
 seeAlsoTags:
   - workspace
   - files

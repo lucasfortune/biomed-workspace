@@ -120,13 +120,16 @@ class StitchingModule extends BaseModule {
     return `
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Stacks ${this.renderHelpIcon('stitching.step1.workflow')}</h3>
+          <h3>Select Stacks</h3>
           <p class="step-description">
             Start a new stitch, or reapply a saved recipe to sibling volumes
             (for example the segmentations of already-aligned stacks).
           </p>
 
           <div class="section-card">
+            <div class="section-title-row">
+              <h4>Workflow</h4>${this.renderHelpIcon('stitching.step1.workflow')}
+            </div>
             <label class="radio-option">
               <input type="radio" name="stitch-workflow" value="new" checked>
               <strong>New stitch</strong> - select stacks and align them
@@ -140,7 +143,7 @@ class StitchingModule extends BaseModule {
           <div class="section-card" id="newStitchSection">
             <div id="stitchStackSelectorContainer"></div>
             <div class="section-title-row">
-              <h4>Stacks (in order)</h4>${this.renderHelpIcon('stitching.step1.stacks')}
+              <h4>Stacks (in order)</h4>
               <span class="mode-badge" id="stitchModeBadge" style="display: none;"></span>
             </div>
             <ul class="stack-list" id="stitchStackList"></ul>
@@ -290,7 +293,7 @@ class StitchingModule extends BaseModule {
           </p>
 
           <div class="section-card">
-            <h4>Placement Summary ${this.renderHelpIcon('stitching.step3.compose')}</h4>
+            <h4>Placement Summary</h4>
             <div id="placementSummary"></div>
           </div>
 
@@ -387,7 +390,7 @@ class StitchingModule extends BaseModule {
         id: 'stitch_recipe',
         title: 'Recipe',
         icon: 'file',
-        helpIconHtml: this.renderHelpIcon('stitching.step1.workflow'),
+        helpIconHtml: this.renderHelpIcon('stitching.step1.recipe'),
         mode: 'select',
         accept: '.json',
         fileType: 'results',

@@ -309,7 +309,7 @@ class ConfigHandler {
             <label for="${stage}_early_stopping">Early Stopping${Templates.renderHelpIcon('denoising-dl.step2.early-stopping')}</label>
           </div>
           <div class="form-field">
-            <label for="${stage}_early_stopping_patience">Early Stopping Patience${Templates.renderHelpIcon('denoising-dl.step2.early-stopping')}</label>
+            <label for="${stage}_early_stopping_patience">Early Stopping Patience</label>
             <input type="number" id="${stage}_early_stopping_patience" data-param="early_stopping_patience"
                    value="${config.early_stopping_patience || 10}" min="5" max="50" step="5"
                    ${config.early_stopping === false ? 'disabled' : ''}>

@@ -950,9 +950,13 @@
       ],
       "path": "modules/file-browser/_module.md",
       "seeAlsoManual": [
+        "file-browser.tree-navigation",
+        "file-browser.categories",
+        "file-browser.search",
         "file-browser.upload",
-        "file-browser.workspace-backup",
-        "file-browser.batch-operations"
+        "file-browser.file-operations",
+        "file-browser.batch-operations",
+        "file-browser.workspace-backup"
       ],
       "seeAlsoTags": [
         "workspace",
@@ -1399,8 +1403,8 @@
     },
     "segmentation.step1": {
       "id": "segmentation.step1",
-      "title": "Data Upload (Step 1)",
-      "displayTitle": "Data Upload (Step 1)",
+      "title": "Training Data or Model",
+      "displayTitle": "Training Data or Model",
       "category": "process",
       "module": "segmentation",
       "tags": [
@@ -1800,8 +1804,7 @@
         "preprocess.step2.crop",
         "preprocess.step2.geometry",
         "preprocess.step2.intensity",
-        "preprocess.step2.output",
-        "preprocess.step3.apply"
+        "preprocess.step2.output"
       ],
       "seeAlsoTags": [
         "preprocess",
@@ -1902,47 +1905,25 @@
     },
     "preprocess.step2.output": {
       "id": "preprocess.step2.output",
-      "title": "Output Data Type",
-      "displayTitle": "Output Data Type",
+      "title": "Output",
+      "displayTitle": "Output",
       "category": "parameter",
       "module": "preprocess",
       "tags": [
         "preprocess",
         "dtype",
         "bit-depth",
-        "output"
+        "output",
+        "progress"
       ],
       "path": "modules/preprocess/step2-output.md",
       "seeAlsoManual": [
         "preprocess",
         "preprocess.step2.intensity",
-        "preprocess.step3.apply"
-      ],
-      "seeAlsoTags": [
-        "dtype",
-        "preprocess"
-      ]
-    },
-    "preprocess.step3.apply": {
-      "id": "preprocess.step3.apply",
-      "title": "Apply",
-      "displayTitle": "Apply",
-      "category": "process",
-      "module": "preprocess",
-      "tags": [
-        "preprocess",
-        "apply",
-        "output",
-        "progress"
-      ],
-      "path": "modules/preprocess/step3-apply.md",
-      "seeAlsoManual": [
-        "preprocess",
-        "preprocess.step2.output",
         "preprocess.step1.stack"
       ],
       "seeAlsoTags": [
-        "output",
+        "dtype",
         "preprocess"
       ]
     },
@@ -2010,6 +1991,29 @@
       "path": "modules/stitching/step1-workflow.md",
       "seeAlsoManual": [
         "stitching",
+        "stitching.step1.stacks",
+        "stitching.step1.recipe"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "recipe"
+      ]
+    },
+    "stitching.step1.recipe": {
+      "id": "stitching.step1.recipe",
+      "title": "Applying a Saved Recipe",
+      "displayTitle": "Applying a Saved Recipe",
+      "category": "data",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "recipe",
+        "reuse",
+        "placements"
+      ],
+      "path": "modules/stitching/step1-recipe.md",
+      "seeAlsoManual": [
+        "stitching.step1.workflow",
         "stitching.step1.stacks",
         "stitching.step3.compose"
       ],
@@ -2471,7 +2475,7 @@
       {
         "term": "Stitch Recipe",
         "definition": "The saved per-stack placements from a stitch; reusable on sibling volumes of the same geometry without re-aligning.",
-        "articleId": "stitching"
+        "articleId": "stitching.step1.recipe"
       },
       {
         "term": "Stack Stitching Module",
@@ -2492,10 +2496,6 @@
       {
         "term": "Data Augmentation (Segmentation)",
         "articleId": "segmentation.config.augmentation"
-      },
-      {
-        "term": "Data Upload (Step 1)",
-        "articleId": "segmentation.step1"
       },
       {
         "term": "Deep Learning Denoising",
@@ -2922,6 +2922,11 @@
     ],
     "T": [
       {
+        "term": "Tag",
+        "definition": "A keyword label attached to a workspace file (raw, annotation, segmentation, and so on) used for filtering and search alongside its category.",
+        "articleId": "file-browser.categories"
+      },
+      {
         "term": "Three.js",
         "definition": "A JavaScript 3D graphics library used for rendering and animating 3D content in web browsers",
         "articleId": "visualization"
@@ -2930,6 +2935,10 @@
         "term": "TIFF",
         "definition": "Tagged Image File Format - a flexible image format commonly used in microscopy for storing multi-page image stacks",
         "articleId": "imageviewer"
+      },
+      {
+        "term": "Training Data or Model",
+        "articleId": "segmentation.step1"
       },
       {
         "term": "Training Progress",
@@ -2943,11 +2952,6 @@
         "term": "Triplet (2.5D)",
         "definition": "Three consecutive slices from a stack (z-1, z, z+1) used as input by legacy 2.5D models; current trainings are 2D only",
         "articleId": "denoising-dl.step1.mode"
-      },
-      {
-        "term": "Tag",
-        "definition": "A keyword label attached to a workspace file (raw, annotation, segmentation, and so on) used for filtering and search alongside its category.",
-        "articleId": "file-browser.categories"
       }
     ],
     "V": [

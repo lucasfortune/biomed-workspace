@@ -220,7 +220,7 @@ class FileHandler {
           fileType: 'models',
           title: 'Legacy Stage 2 Model (optional; old two-stage runs only)',
           icon: 'model',
-          helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
+          helpIconHtml: '',
           accept: '.pth',
           stateManager: this.module.state,
           recentResults: this.filterRecentResultsForStage(recentResults, 'stage2', 'model'),

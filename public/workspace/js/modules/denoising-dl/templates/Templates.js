@@ -162,7 +162,7 @@ class Templates {
       <!-- Step 2: Configuration -->
       <div id="step2" class="step-content">
         <div class="step-inner">
-          <h3>Configure Training</h3>
+          <h3>Configure Training ${this.renderHelpIcon('denoising-dl.step2.overview')}</h3>
           <p class="step-description">
             Select a preset or customize training parameters.
             <span id="methodModeLabel"></span>
@@ -246,7 +246,7 @@ class Templates {
         <div class="collapsible-section expanded" id="maskSection">
           <div class="collapsible-header" data-section="maskExtraction">
             <span class="collapsible-icon">${icon('caretDown')}</span>
-            <h4>Noise Analysis & Mask</h4>
+            <h4>Noise Analysis & Mask ${this.renderHelpIcon('denoising-dl.routing-decision')}</h4>
             <div class="auto-approve-toggle-container" id="autoApproveContainer">
               <label class="toggle-switch" title="Automatically approve the discovered mask and start training">
                 <input type="checkbox" id="autoApproveToggle" />

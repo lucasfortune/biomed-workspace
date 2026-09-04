@@ -104,7 +104,7 @@ class PreprocessModule extends BaseModule {
     return `
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Stack ${this.renderHelpIcon('preprocess.step1.stack')}</h3>
+          <h3>Select Stack</h3>
           <p class="step-description">
             Pick the image stack to preprocess. The result is saved as a new
             file; the original is never modified.

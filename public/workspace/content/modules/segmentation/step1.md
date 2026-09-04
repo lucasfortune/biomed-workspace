@@ -1,6 +1,6 @@
 ---
 id: segmentation.step1
-title: Data Upload (Step 1)
+title: Training Data or Model
 category: process
 module: segmentation
 tags:
@@ -17,12 +17,22 @@ seeAlsoTags:
   - annotations
 ---
 
-# Data Upload (Step 1)
+# Training Data or Model
 
-Upload training images and annotations, or import a pretrained model to skip training.
+Step 1 is where you provide what the pipeline works from. Start by choosing a workflow, then fill in the inputs that workflow needs.
 
-In Step 1, you have two workflow options:
+## What This Step Does
 
-Train from Scratch: Upload your training images (TIFF stack) and corresponding annotation masks. The annotation masks should have the same dimensions as your training images, with each pixel value representing a class label (0 for background, 1+ for objects).
+- Pick a workflow — train a new model, or import one you already have; the "Choose Workflow" help explains how to decide
 
-Use Pretrained Model: Import a previously trained model (.pth file) along with its configuration (.json file) to skip directly to inference.
+- Provide the matching inputs for that workflow using the file selectors below the choice
+
+- Advance when the required inputs are in place: training continues to Step 2 (Configure), import jumps to Step 4 (Inference)
+
+## Inputs by Workflow
+
+- Train from scratch: raw training images and their annotation masks
+
+- Use a pretrained model: the model weights (.pth) and its configuration (.json)
+
+Each selector has its own help icon describing the file it expects and how to prepare it.
