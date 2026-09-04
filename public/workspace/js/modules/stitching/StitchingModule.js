@@ -9,10 +9,13 @@
  *
  * The junction relationship (continuation vs side-by-side) is INFERRED
  * from how the user positions the slices: large footprint overlap means
- * the stacks continue each other in z (duplicated sections are trimmed,
- * keeping the dominant stack's slices); small overlap means a mosaic
- * (all slices kept). The only per-junction choice is which stack is
- * dominant.
+ * the stacks continue each other in z; small overlap means a mosaic (all
+ * slices kept). The only per-junction choice is what happens to the
+ * duplicated sections of a continuation: keep the upper stack's slices,
+ * keep the lower stack's slices (the other side is trimmed via z_keep),
+ * or merge (both kept, averaged slice by slice — images only; label maps
+ * cannot average class IDs and fall back to precedence). Merge is written
+ * to the recipe as `z_merge: true` on the lower stack.
  *
  * The product is a stitch recipe (per-stack placements) that composes the
  * selected volumes AND can be reapplied to sibling volumes of the same
@@ -72,7 +75,8 @@ class StitchingModule extends BaseModule {
 
     // Junction i places stacks[i] (moving) against stacks[i-1] (fixed):
     // {fixedSlice, movingSlice, dx, dy, rotation, dominant, score}
-    // dominant: 'previous' | 'this' - whose slices win duplicated sections
+    // dominant: 'previous' | 'this' | 'merge' - what happens to duplicated
+    // sections (upper stack wins / lower stack wins / averaged)
     this.junctions = [];
     this.currentJunction = 1;
 
@@ -216,14 +220,17 @@ class StitchingModule extends BaseModule {
               <div class="sv-section dominance-section">
                 <div class="sv-section-header">
                   <h4>Overlapping sections keep</h4>
-                  ${this.renderInfoTip('Where the two stacks cover the same z positions (re-imaged sections), only the dominant stack contributes slices. Ignored for side-by-side mosaics.')}
+                  ${this.renderInfoTip('Where the two stacks cover the same z positions (re-imaged sections), keep one stack\'s slices or merge: both stacks keep their slices and each duplicated position is the average of the two images. Merge is for images only; label maps keep the upper stack. Ignored for side-by-side mosaics.')}
                 </div>
                 <div class="dominance-toggle">
                   <button class="dominance-btn" id="dominantPrevBtn" title="Keep the upper (previous) stack's slices">
-                    ${icon('up')} upper stack
+                    ${icon('up')} upper
                   </button>
                   <button class="dominance-btn" id="dominantThisBtn" title="Keep the lower (this) stack's slices">
-                    ${icon('down')} lower stack
+                    ${icon('down')} lower
+                  </button>
+                  <button class="dominance-btn" id="dominantMergeBtn" title="Keep both and average the duplicated sections (images only)">
+                    ${icon('merge')} merge
                   </button>
                 </div>
               </div>
@@ -772,6 +779,7 @@ class StitchingModule extends BaseModule {
 
     bind('dominantPrevBtn', 'click', () => this.setDominant('previous'));
     bind('dominantThisBtn', 'click', () => this.setDominant('this'));
+    bind('dominantMergeBtn', 'click', () => this.setDominant('merge'));
 
     const num = (e) => parseFloat(e.target.value) || 0;
     bind('junctionDx', 'change', (e) => { this.setTransform({ dx: num(e) }); });
@@ -836,7 +844,14 @@ class StitchingModule extends BaseModule {
 
   setDominant(which) {
     const j = this.junctions[this.currentJunction];
-    if (j) j.dominant = which;
+    if (!j) return;
+    if (which === 'merge' && this.mode === 'labels') {
+      // Class IDs cannot be averaged (decision 8); the button is disabled,
+      // this guards keyboard/programmatic calls
+      this.state.notify('warning', 'Label maps cannot be merged: duplicated sections keep one stack.', 5000);
+      return;
+    }
+    j.dominant = which;
     this.updateDominanceButtons();
   }
 
@@ -844,6 +859,15 @@ class StitchingModule extends BaseModule {
     const j = this.junctions[this.currentJunction];
     document.getElementById('dominantPrevBtn')?.classList.toggle('active', j?.dominant === 'previous');
     document.getElementById('dominantThisBtn')?.classList.toggle('active', j?.dominant === 'this');
+    const mergeBtn = document.getElementById('dominantMergeBtn');
+    if (mergeBtn) {
+      const labels = this.mode === 'labels';
+      mergeBtn.disabled = labels;
+      mergeBtn.classList.toggle('active', !labels && j?.dominant === 'merge');
+      mergeBtn.title = labels
+        ? 'Label maps cannot be averaged; duplicated sections keep one stack'
+        : 'Keep both and average the duplicated sections (images only)';
+    }
   }
 
   _onKeyDown(e) {
@@ -1137,8 +1161,9 @@ class StitchingModule extends BaseModule {
    *
    * The junction relationship is inferred from the footprint overlap: a
    * large overlap means the stacks continue each other in z (duplicated
-   * z-positions are trimmed, keeping the dominant stack's slices); a small
-   * overlap means a mosaic (all slices kept).
+   * z-positions are trimmed, keeping the dominant stack's slices, or kept
+   * on both sides and flagged `z_merge` for averaging); a small overlap
+   * means a mosaic (all slices kept).
    */
   buildPlacements() {
     const placements = [{
@@ -1169,18 +1194,24 @@ class StitchingModule extends BaseModule {
     }
 
     // z_keep: trim duplicated sections at continuation junctions, keeping
-    // the dominant stack's slices
+    // the dominant stack's slices; a merge junction keeps both ranges and
+    // flags the lower stack so the composer averages the duplicates
     const keeps = this.stacks.map((s) => [0, s.slices]);
+    const merges = this.stacks.map(() => false);
     const relationships = [null];
     let coveredEnd = placements[0].z_offset + this.stacks[0].slices;
     for (let i = 1; i < this.stacks.length; i++) {
       const j = this.junctions[i];
       const isContinuation = this.junctionOverlapFraction(i) >= CONTINUATION_OVERLAP;
-      relationships.push(isContinuation ? 'z' : 'xy');
       const z0 = placements[i].z_offset;
       const z1 = z0 + this.stacks[i].slices;
-      if (isContinuation && z0 < coveredEnd) {
-        if (j.dominant === 'previous') {
+      const duplicates = isContinuation && z0 < coveredEnd;
+      const merge = duplicates && j.dominant === 'merge' && this.mode !== 'labels';
+      relationships.push(isContinuation ? (merge ? 'merge' : 'z') : 'xy');
+      if (duplicates) {
+        if (merge) {
+          merges[i] = true;
+        } else if (j.dominant === 'previous' || j.dominant === 'merge') {
           keeps[i][0] = Math.min(this.stacks[i].slices, coveredEnd - z0);
         } else {
           const prevZ0 = placements[i - 1].z_offset;
@@ -1197,7 +1228,8 @@ class StitchingModule extends BaseModule {
       dx: placements[i].dx,
       dy: placements[i].dy,
       rotation_deg: placements[i].rotation_deg,
-      z_keep: keeps[i]
+      z_keep: keeps[i],
+      z_merge: merges[i]
     }));
   }
 
@@ -1221,12 +1253,20 @@ class StitchingModule extends BaseModule {
     this._lastPlacements = placements;
     this._composeMode = mode;
 
+    // Relationship column: inferred for a new stitch; a loaded recipe only
+    // carries the merge flag (its z ranges already encode any trimming)
     const relNote = (i) => {
-      if (!this._relationships || i === 0) return '';
-      return this._relationships[i] === 'z'
+      if (i === 0) return '';
+      if (!this._relationships) {
+        return placements[i].z_merge ? '<span class="rel-note">merged in z</span>' : '';
+      }
+      const rel = this._relationships[i];
+      if (rel === 'merge') return '<span class="rel-note">continues in z, merged</span>';
+      return rel === 'z'
         ? '<span class="rel-note">continues in z</span>'
         : '<span class="rel-note">side by side</span>';
     };
+    const mergedLabels = mode === 'labels' && placements.some(p => p.z_merge);
 
     el.innerHTML = `
       <table class="placement-table">
@@ -1244,6 +1284,7 @@ class StitchingModule extends BaseModule {
           </tr>`).join('')}
       </table>
       <p class="field-hint">Mode: ${mode === 'labels' ? 'label maps (nearest-neighbor, hard seams)' : 'images (feathered seams)'}</p>
+      ${mergedLabels ? '<p class="field-hint">Merged junctions apply to images only; for these label maps the duplicated sections keep the upper stack.</p>' : ''}
     `;
     const intensityField = document.getElementById('intensityMatchField');
     if (intensityField) intensityField.style.display = mode === 'labels' ? 'none' : '';
@@ -1358,6 +1399,7 @@ class StitchingModule extends BaseModule {
         <div class="detail-row"><span class="detail-label">Output:</span> <span class="detail-value">${data.outputPath}</span></div>
         <div class="detail-row"><span class="detail-label">Size:</span> <span class="detail-value">${data.width}&times;${data.height}, ${data.slices} slices (${data.dtype})</span></div>
         <div class="detail-row"><span class="detail-label">Recipe:</span> <span class="detail-value">${data.recipePath}</span></div>
+        ${data.mergedSlices > 0 ? `<div class="detail-row"><span class="detail-label">Merged:</span> <span class="detail-value">${data.mergedSlices} duplicated section${data.mergedSlices === 1 ? '' : 's'} averaged</span></div>` : ''}
         ${warnings}
       `;
     }

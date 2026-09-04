@@ -14,9 +14,15 @@ Composition rules by mode:
                 by stack order in xy overlap (hard seam by design), no
                 intensity matching, class-set consistency warning
 
-z-duplicate sections are resolved by TRIMMING (the recipe's z_keep ranges),
-never by blending: duplicated z-positions are two images of the same
-physical section and averaging them softens detail.
+z-duplicate sections (two stacks imaging the same physical sections) are
+resolved per junction by the recipe:
+    trim  - the default: the z_keep ranges drop the duplicates on one side,
+            averaging softens detail so it is never implicit
+    merge - a stack flagged z_merge keeps its full range; where it shares a
+            global z with another contributor the two slices are averaged
+            with equal weight (the xy feathering still applies at the
+            footprint edges). Grayscale only: labels mode ignores the flag
+            and keeps precedence (earlier stack wins), with a warning.
 
 Config JSON:
 {
@@ -31,7 +37,9 @@ Config JSON:
      "z_offset": int,               # global z of the stack's slice 0
      "dx": float, "dy": float,      # in-plane translation (px, global frame)
      "rotation_deg": float,         # about the slice center
-     "z_keep": [start, end]}        # kept slice range (end exclusive)
+     "z_keep": [start, end],        # kept slice range (end exclusive)
+     "z_merge": bool}               # optional: average duplicated z
+                                    # positions instead of trimming
   ]
 }
 
@@ -76,6 +84,7 @@ class PlacedStack:
         z_keep = spec.get('z_keep') or [0, self.n_slices]
         self.keep0 = max(0, int(z_keep[0]))
         self.keep1 = min(self.n_slices, int(z_keep[1]))
+        self.z_merge = bool(spec.get('z_merge', False))
 
         # Global z range covered by the kept slices
         self.g_z0 = self.z_offset + self.keep0
@@ -189,6 +198,11 @@ def run(config):
             warnings.append(f'dtype mismatch: {s.path} is {s.dtype}, '
                             f'reference is {ref_dtype}; casting to reference')
     if mode == 'labels':
+        merged = [s.path for s in stacks if s.z_merge]
+        if merged:
+            warnings.append('z_merge ignored in labels mode (class IDs cannot be '
+                            'averaged): duplicated sections keep the earlier stack '
+                            f'for {len(merged)} stack(s)')
         ref_classes = set(np.unique(stacks[0].read_slice(stacks[0].keep0)).tolist())
         for s in stacks[1:]:
             cls = set(np.unique(s.read_slice(s.keep0)).tolist())
@@ -227,6 +241,8 @@ def run(config):
     g_z1 = max(s.g_z1 for s in stacks)
     total_slices = g_z1 - g_z0
     z_gaps = 0
+    z_merged = 0            # output slices averaged from >1 contributor
+    z_unflagged_overlap = 0  # same, but no contributor asked for it
 
     fill_value = config.get('fill_value')
     if fill_value is None:
@@ -264,6 +280,15 @@ def run(config):
                     out[mask] = placed[mask]
                     claimed |= mask
             else:
+                # Several contributors at one z: a merge junction (z_merge)
+                # or overlapping z_keep ranges in a hand-edited recipe. The
+                # weighted accumulator averages them; on a shared footprint
+                # the weights cancel, so the result is the plain mean.
+                if len(contributors) > 1:
+                    if any(s.z_merge for s in contributors):
+                        z_merged += 1
+                    else:
+                        z_unflagged_overlap += 1
                 acc = np.zeros(canvas_shape, dtype=np.float32)
                 wsum = np.zeros(canvas_shape, dtype=np.float32)
                 for s in contributors:
@@ -302,6 +327,10 @@ def run(config):
     if z_gaps:
         warnings.append(f'{z_gaps} output slice(s) had no contributing stack '
                         '(z gap between placements) and were filled')
+    if z_unflagged_overlap:
+        warnings.append(f'{z_unflagged_overlap} output slice(s) were averaged from '
+                        'overlapping z_keep ranges although no stack is flagged '
+                        'z_merge (check the recipe)')
 
     for s in stacks:
         s.tif.close()
@@ -313,6 +342,7 @@ def run(config):
         'slices': total_slices,
         'mode': mode,
         'dtype': str(ref_dtype),
+        'mergedSlices': z_merged,
         'warnings': warnings,
     })
 

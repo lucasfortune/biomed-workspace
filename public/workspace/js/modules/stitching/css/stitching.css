@@ -215,6 +215,11 @@
   font-weight: 600;
 }
 
+.stitching-module .dominance-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .stitching-module .transform-row {
   display: flex;
   align-items: center;

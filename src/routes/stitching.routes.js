@@ -146,7 +146,7 @@ function createStitchingRoutes(dependencies) {
    * Body:
    *   - recipe: { mode, crop_to_common, intensity_match, fill_value,
    *               feather_px, stacks: [{ path (workspace-relative),
-   *               z_offset, dx, dy, rotation_deg, z_keep }] }
+   *               z_offset, dx, dy, rotation_deg, z_keep, z_merge }] }
    *   - outputName: optional basename for the output TIFF
    *
    * Async: returns { stitchId }; progress arrives in Socket.IO room
@@ -195,7 +195,8 @@ function createStitchingRoutes(dependencies) {
             dx: Number(s.dx || 0),
             dy: Number(s.dy || 0),
             rotation_deg: Number(s.rotation_deg || 0),
-            z_keep: s.z_keep || null
+            z_keep: s.z_keep || null,
+            z_merge: !!s.z_merge
           };
         })
       };
@@ -292,10 +293,12 @@ function createStitchingRoutes(dependencies) {
           io.to(roomName).emit('stitching-complete', {
             success: true,
             stitchId,
+            ...resultData,
+            // The workspace-relative paths win over the Python result's
+            // absolute output_path (the client shows and hands them on)
             outputPath: path.relative(workspacePath, outputPath),
             outputFileId,
             recipePath: path.relative(workspacePath, recipePath),
-            ...resultData,
             outputPathAbsolute: undefined
           });
 
