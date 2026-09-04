@@ -16,14 +16,22 @@ seeAlsoTags:
   - configuration
   - training
 parameterImpact: |
-  Generally improves results by reducing overfitting. Keep enabled unless you have a specific reason to disable.
+  Reduces overfitting on the N2V branch. The StructN2V branch keeps it off in every preset to avoid rotating directional noise.
 ---
 
 # Data Augmentation
 
-Apply random transformations to training patches to improve model generalization.
+Apply random transformations to training patches to improve generalization.
 
-Data augmentation artificially expands the training dataset by applying random transformations to image patches during training.
+Data augmentation artificially expands the training set by applying random transformations to patches during training. It is a checkbox under **Advanced Options**, and the presets set it differently for each branch.
+
+## Preset defaults
+
+- N2V branch: on in every preset
+
+- StructN2V branch: off in every preset
+
+The StructN2V branch keeps augmentation off on purpose: rotating or flipping a patch would rotate the directional noise structure too, breaking the alignment between the patch and its discovered structural mask.
 
 ## Transformations applied
 
@@ -37,16 +45,10 @@ Data augmentation artificially expands the training dataset by applying random t
 
 - Reduces overfitting on small datasets
 
-- Improves robustness to image orientation
+## Recommendations
 
-## When to enable
+- Leave augmentation on for the N2V branch
 
-- Most cases benefit from augmentation
-
-- Especially helpful with smaller training datasets
-
-## When to disable
-
-- If your images have a specific required orientation
+- Leave it off for the StructN2V branch, matching the presets
 
 Note: Augmentation does not affect the noise measurement or mask discovery in autoStructN2V, which happen on the raw stack before training.

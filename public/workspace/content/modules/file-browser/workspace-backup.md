@@ -43,6 +43,8 @@ Click the download icon (⬇️) next to the 'Workspace' header in the sidebar. 
 
 - Complete folder structure preserved
 
+The archive is named `workspace_<timestamp>.zip` (the timestamp is the download time). Cache directories are left out to keep it small — `.thumbnails`, `.slices`, `.mesh-previews`, `.preprocess`, and `.segcleanup` are all regenerated automatically after a restore.
+
 A confirmation dialog shows file count and estimated size. Large workspaces may take several minutes to prepare.
 
 ## Restore Workspace
@@ -54,6 +56,8 @@ A confirmation dialog shows file count and estimated size. Large workspaces may 
 3. Confirm the restore (warning: this replaces your current workspace)
 
 4. Wait for extraction to complete
+
+Restore progress runs through several phases, shown as it proceeds: uploading the ZIP, validating the archive (it must contain a metadata.json), clearing the existing workspace, extracting files, and updating metadata. Thumbnails are then regenerated in the background.
 
 ## Important Considerations
 

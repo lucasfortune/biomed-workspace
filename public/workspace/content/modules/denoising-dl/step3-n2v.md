@@ -11,7 +11,6 @@ tags:
 seeAlsoManual:
   - denoising-dl.step3.loss
   - denoising-dl.step3.best-val-loss
-  - denoising-dl.step2.masking-strategy
 seeAlsoTags:
   - n2v
   - training

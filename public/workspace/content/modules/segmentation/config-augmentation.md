@@ -23,6 +23,6 @@ parameterImpact: |
 
 Apply random transformations to training images to improve model robustness.
 
-Data augmentation applies random transformations (rotations, flips, brightness/contrast changes) to training patches during training. This artificially increases training data diversity and helps the model generalize better to new images.
+Data augmentation applies random transformations (horizontal and vertical flips, and 90° rotations) to training patches during training. This artificially increases training data diversity and helps the model generalize better to new images.
 
 Augmentation is especially useful when you have limited training data. The transformations are applied on-the-fly during training, so your original images are not modified.

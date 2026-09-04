@@ -28,7 +28,7 @@ The previous two-stage version of this module offered a 2.5D training mode that 
 
 Models trained in 2.5D by the old version can still be imported and used for inference:
 
-- Select the 2.5D option in the import workflow so slices are fed to the model as triplets
+- There is no 2.5D control to set. The mode is read from the imported config file: if it records a 2.5D model, slices are fed to the model as triplets automatically
 
 - The stack you process should have contiguous slices (at least 3)
 
@@ -36,6 +36,6 @@ Models trained in 2.5D by the old version can still be imported and used for inf
 
 ## Notes
 
-- The config file saved with a legacy model records whether it was trained in 2D or 2.5D
+- The config file saved with a legacy model records whether it was trained in 2D or 2.5D, and that is what determines how inference runs
 
 - Legacy two-stage imports need both stage model files; see the Model Weights File article

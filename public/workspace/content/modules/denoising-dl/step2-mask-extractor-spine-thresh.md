@@ -16,14 +16,20 @@ seeAlsoTags:
   - mask-extractor
   - autostructn2v
 parameterImpact: |
-  Statistical certainty (|z|) required for an ACF feature to enter the mask. Lower values are more sensitive but risk admitting noise; higher values keep only unambiguous features. Default 8.
+  Statistical certainty (|z|) required for an ACF feature to enter the mask. Lower is more sensitive but risks admitting noise; higher keeps only unambiguous features. Default 8.
 ---
 
-# Spine Threshold
+# Significance Threshold (|z|)
 
-The statistical certainty (|z| score) a noise-correlation feature needs before it enters the spine mask.
+The statistical certainty (|z| score) a noise-correlation feature needs before it enters the structural mask.
 
-The extractor measures the noise autocorrelation function (ACF) on many background tiles, so it can estimate not just the strength of each correlation but also its uncertainty. The Spine Threshold sets how many standard errors (|z|) a feature must stand above zero to be considered a real part of the noise structure.
+In the interface this control is labelled **Significance Threshold (|z|)**. The extractor measures the noise autocorrelation function (ACF) on many background tiles, so it can estimate not just the strength of each correlation but also its uncertainty. This threshold sets how many standard errors (|z|) a feature must stand above zero to count as real noise structure.
+
+## The control
+
+- A slider (Step 2) or field (mask review panel) with range 4 to 12, step 0.5
+
+- Default: 8
 
 ## Values
 
@@ -31,13 +37,13 @@ The extractor measures the noise autocorrelation function (ACF) on many backgrou
 
 - 8 (Default): Conservative; features must be unambiguous
 
-- 10-15: Very strict; only the strongest structure survives
+- 10-12: Very strict; only the strongest structure survives
 
 ## Relationship to the Correlation Floor
 
 The two thresholds answer different questions:
 
-- Spine Threshold: "Are we sure this correlation exists?" (certainty)
+- Significance Threshold (|z|): "Are we sure this correlation exists?" (certainty)
 
 - Correlation Floor: "Is this correlation big enough to matter?" (effect size)
 

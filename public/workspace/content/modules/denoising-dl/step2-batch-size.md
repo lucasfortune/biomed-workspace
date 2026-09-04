@@ -16,35 +16,45 @@ seeAlsoTags:
   - configuration
   - memory
 parameterImpact: |
-  Larger batches provide more stable training but require more memory. If training seems unstable (erratic loss), try larger batches.
+  Larger batches give more stable training but need more GPU memory. Reduce it if you hit memory errors.
 ---
 
 # Batch Size
 
 Number of patches processed together during each training step.
 
-Batch size controls how many patches are processed simultaneously before updating model weights.
+Batch size controls how many patches are processed simultaneously before the model weights are updated. The control differs between the two branches, because the StructN2V branch works on larger patches that consume more memory.
 
-## Smaller batches (1-4)
+## N2V branch
+
+- A dropdown with options 1, 2, 4, 8, 16, 32, 64, 128
+
+- Default: 128
+
+- The small 64×64 patches let many fit in memory at once
+
+## StructN2V branch
+
+- A numeric field accepting values from 1 to 256
+
+- Default: 24
+
+- The larger 128×128 patches need a smaller batch to fit in memory
+
+## Smaller batches
 
 - Use less GPU memory
 
-- Can lead to noisier training
+- Can lead to noisier training gradients
 
-- Necessary for limited GPU memory
-
-## Larger batches (8-32)
+## Larger batches
 
 - More stable training gradients
 
 - Require more GPU memory
 
-- Can train faster per epoch
-
 ## Recommendations
 
-- Start with 4-8 and adjust based on GPU memory
+- Keep the preset default (128 for N2V, 24 for StructN2V)
 
-- Reduce if you see memory errors
-
-- Larger batches work better with larger learning rates
+- Reduce it if you see out-of-memory errors, especially when running on CPU or a small GPU

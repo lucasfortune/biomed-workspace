@@ -42,7 +42,7 @@ Select multiple files to download or delete them together.
 
 ## Batch Download
 
-Selected files are packaged into a ZIP file preserving folder structure. Useful for:
+Selected files are packaged into a single flat ZIP — every file sits at the top level of the archive under its own filename, with no folder structure. Useful for:
 
 - Downloading multiple results at once
 

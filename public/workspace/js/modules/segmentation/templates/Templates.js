@@ -56,7 +56,7 @@ class Templates {
       <!-- Step 1: Data Upload / Model Import -->
       <div class="step-content active" id="step1">
         <div class="step-inner">
-          <h3>Training Data or Model</h3>
+          <h3>Training Data or Model ${this.renderHelpIcon('segmentation.step1')}</h3>
           <p class="step-description">Either upload training data to train a new model, or import a previously trained model.</p>
 
           <!-- Workflow Selection Section -->
@@ -117,7 +117,7 @@ class Templates {
       <!-- Step 2: Configuration -->
       <div class="step-content" id="step2">
         <div class="step-inner">
-          <h3>Training Configuration</h3>
+          <h3>Training Configuration ${this.renderHelpIcon('segmentation.step2')}</h3>
           <p class="step-description">Configure your model and training parameters.</p>
 
           <div class="config-form">

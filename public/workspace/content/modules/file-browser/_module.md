@@ -28,17 +28,15 @@ The File Browser provides complete control over your workspace files. Since this
 
 ## File Organization
 
-Files are organized into categories
+Every file belongs to one of three categories, refined by tags:
 
-- Raw Images: Source TIFF stacks for processing
+- uploads: source data you bring in — raw TIFF/MRC stacks (`raw` tag) and annotation masks (`annotation` tag)
 
-- Annotations: Training masks and labels
+- models: trained model weights (.pth) and configs (.json), tagged by method (segmentation or denoising)
 
-- Inference Data: Images for model inference
+- results: outputs from the processing modules — segmentation, denoising, meshes, preprocessing, stitching, and segmentation cleanup
 
-- Model Files: Trained model weights (.pth) and configs (.json)
-
-- Results: Outputs from segmentation, denoising, and mesh generation
+The category and tags drive search and the way files group in the tree. See the File Categories article for the full tag scheme.
 
 File Operations
 

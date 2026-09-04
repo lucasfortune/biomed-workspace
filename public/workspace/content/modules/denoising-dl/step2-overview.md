@@ -9,6 +9,7 @@ tags:
   - parameters
   - presets
 seeAlsoManual:
+  - denoising-dl.step2.epochs
   - denoising-dl.step2.patch-size
   - denoising-dl.step2.mask-extractor.bg-side
 seeAlsoTags:
@@ -18,28 +19,42 @@ seeAlsoTags:
 
 # Configuration Overview
 
-Configure training parameters using presets or customize individual settings.
+Configure training with a preset, then optionally adjust individual settings.
 
-The configuration step lets you control how the denoising model is trained. You can use presets for quick setup or customize individual parameters.
+The configuration step controls how the denoising model is trained. Pick a preset for a quick start, or open the advanced options to fine-tune.
 
 ## Presets
 
-- Fast: Quick training for testing, lower quality
+The preset dropdown offers three options, each carrying the same validated recipe and differing only in compute budget:
 
-- Balanced: Good trade-off for most use cases (recommended)
+- Fast: Quick preview: fewer epochs and fewer sampled patches. Same validated recipe, lower compute.
 
-- High Quality: Best results, longer training time
+- Balanced: The publication training budget. Recommended for most use cases.
+
+- High Quality: Extended training budget: more epochs and denser patch sampling. Longest runtime.
 
 ## Parameter Groups
 
-- Dataset Configuration: How training patches are extracted
+Each recipe form has two groups:
 
-- Model Architecture: Network size and complexity
+- Training Budget: number of epochs, patches per image, batch size, and early stopping. These are the compute knobs the presets change.
 
-- Training Parameters: Learning rate, epochs, early stopping
+- Advanced Options (collapsed by default): patch size, learning rate, mask percentage, and data augmentation. The network architecture itself is fixed to the published recipe and is no longer exposed; the defaults here are the validated values.
 
-- Advanced Options: Fine-tuning options for experienced users
+## N2V vs autoStructN2V
 
-## For autoStructN2V
+- For N2V, you configure a single recipe column.
 
-An additional Noise Mask Extractor section configures the automatic noise measurement. Background Side is the one required choice; the advanced knobs (Correlation Floor, Spine Threshold, Max Mask Pixels) control how the structural mask is discovered. You can adjust these again while reviewing the mask, since regenerating it only takes seconds.
+- For autoStructN2V, two recipe columns appear side by side — an **N2V branch** and a **StructN2V branch**. The noise measurement routes each run to exactly one branch and only that branch trains, but you configure both here so either outcome is ready.
+
+## Noise Measurement (autoStructN2V only)
+
+autoStructN2V adds a **Noise Measurement** section. Background side is the one required choice (light, dark, or off). The advanced extractor knobs — Correlation Floor, Significance Threshold (|z|), and Max Masked Pixels — control how the structural mask is discovered. You can also adjust these later while reviewing the mask, since regenerating it only takes seconds.
+
+## Real-Time Validation
+
+Fields are validated as you type. Patch-size options larger than your image are disabled, out-of-range values are flagged, and the Next button stays blocked until every field is valid.
+
+## After You Start
+
+Pressing Start on the next step trains the model. You can Cancel Training at any time, and if you leave and return while a run is in progress, a resume dialog offers to reconnect to it. Only one training can run at a time across the whole workspace.

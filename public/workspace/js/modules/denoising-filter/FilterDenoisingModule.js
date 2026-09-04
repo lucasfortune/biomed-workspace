@@ -193,7 +193,7 @@ class FilterDenoisingModule extends BaseModule {
           <!-- Step 3: Processing -->
           <div id="step3" class="step-content">
             <div class="step-inner">
-              <h3>Processing</h3>
+              <h3>Processing ${this.renderHelpIcon('denoising-filter.step3')}</h3>
 
               <div id="configSummary" class="config-summary"></div>
 

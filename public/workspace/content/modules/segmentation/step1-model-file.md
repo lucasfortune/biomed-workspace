@@ -32,7 +32,7 @@ The model weights file (.pth) contains the learned parameters of your trained U-
 
 ## Where to find it
 
-After training completes, the best-performing model is saved as 'best_model.pth' in your training results folder. This is the model checkpoint with the lowest validation loss during training.
+After training completes, the best-performing model is saved as 'best_model.pth' in your training results folder. This is the checkpoint from the epoch with the highest validation Dice score during training.
 
 ## Important Notes
 

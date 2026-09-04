@@ -4,6 +4,7 @@ title: Saving the Result
 category: process
 module: segcleanup
 tags:
+  - working-copy
   - segcleanup
   - save
   - output

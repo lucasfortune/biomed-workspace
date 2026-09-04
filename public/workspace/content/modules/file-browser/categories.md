@@ -7,9 +7,11 @@ tags:
   - file-browser
   - categories
   - organization
+  - tags
 seeAlsoManual:
   - file-browser
   - file-browser.search
+  - file-browser.tree-navigation
 seeAlsoTags:
   - categories
   - organization
@@ -17,40 +19,34 @@ seeAlsoTags:
 
 # File Categories
 
-Files are organized into categories that correspond to different stages of the image processing workflow.
+Every file belongs to one of three categories — **uploads**, **models**, or **results** — and each file also carries tags that describe what it is and which module produced it. The category and tags drive both the tree grouping and search.
 
-## Upload Categories
+## uploads
 
-Raw Images (uploads/raw)
+Data you bring into the workspace.
 
-Source TIFF image stacks — your original microscopy data. These are inputs for denoising, annotation, or direct segmentation.
+- Raw images (`raw` tag) — source TIFF/MRC stacks, stored under `uploads/raw`. These are the inputs for denoising, annotation, or segmentation. Data uploaded for inference is stored here too — there is no separate inference folder.
 
-Annotations (uploads/annotations)
+- Annotations (`annotation` tag) — training masks and labels, stored under `uploads/annotations`. They must match the dimensions of their raw images.
 
-Training masks and labels. Must match the dimensions of corresponding raw images. Used for training segmentation models.
+- Imported models are placed under `uploads/imported_models` when you upload external model files.
 
-Inference Data (uploads/inference_data)
+## models
 
-Images to process with trained models. Separate from training data to keep your workflow organized.
+Trained models produced by the training modules.
 
-Model Files (uploads/imported_models)
+- Each model carries a method tag (`segmentation`, `denoising`, or `unspecified`) plus a type tag (`weights`, `config`, or `info`).
 
-Previously trained models (.pth files) and their configuration files (.json). Import models to skip training and run inference directly.
+- Segmentation models live under `models/segmentation/<id>` and denoising models under `models/denoising/<id>`.
 
-## Result Categories
+## results
 
-Segmentation Results (results/segmentation)
+Outputs from the processing modules.
 
-Output from U-Net segmentation — labeled image stacks.
+- Each result carries a method tag (`segmentation`, `denoising`, `annotation`, or `mesh`) plus a type tag (`data`, `info`, or `wip`).
 
-Denoised (results/denoised)
-
-Output from denoising modules — cleaned image stacks.
-
-Meshes (results/meshes)
-
-Generated 3D surface meshes in various formats.
+- Results are stored per job under `results/segmentation/<id>`, `results/denoising/<id>`, `results/meshes/<id>`, `results/preprocess/<id>`, `results/stitching/<id>`, and `results/segcleanup/<id>`.
 
 ## Searching by Category
 
-Type category-related keywords in the search box (e.g., 'model', 'mesh', 'annotation') to filter files.
+Type a category name (`uploads`, `models`, `results`), a tag, or a tag synonym into the search box to filter files — for example `model`, `mesh`, or `annotation`. See the Search & Filter article for the full keyword list.

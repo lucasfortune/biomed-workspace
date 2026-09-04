@@ -14,16 +14,24 @@ seeAlsoTags:
   - configuration
   - n2v
 parameterImpact: |
-  Higher percentages provide more training signal per patch but may mask too much context. 10-15% is typical.
+  Sets how much blind-spot training signal each patch carries. The validated defaults are 1.5% (N2V) and 15% (StructN2V).
 ---
 
 # Mask Percentage
 
-Percentage of pixels masked during N2V training.
+Percentage of pixels masked during blind-spot training.
 
-N2V works by masking random pixels and training the network to predict them from surrounding pixels. This parameter controls what fraction of pixels are masked in each patch.
+Blind-spot training works by masking pixels and training the network to predict them from their surroundings. This parameter controls what fraction of pixels are masked in each patch. It lives under **Advanced Options**, and the default depends on which branch you are configuring.
 
-Lower percentage (5-10%):
+## The control
+
+- N2V branch: default 1.5%, range 0.5–30% (step 0.5)
+
+- StructN2V branch: default 15%, range 5–30% (step 1)
+
+The StructN2V branch masks a larger fraction because each masked pixel also blanks its correlated neighbours through the discovered structural mask, so more sites are needed to give a comparable training signal.
+
+## Lower percentage
 
 - Fewer masked pixels per patch
 
@@ -31,18 +39,16 @@ Lower percentage (5-10%):
 
 - May need more training iterations
 
-Higher percentage (15-25%):
+## Higher percentage
 
 - More masked pixels per training example
 
 - More training signal per patch
 
-- Risk of too many masked pixels near each other
+- Risk of masking too much context
 
 ## Recommendations
 
-- 10-15% works well for most images
+- Keep the branch default (1.5% for N2V, 15% for StructN2V)
 
-- Use lower values for images with fine details
-
-- Use higher values if training seems slow to converge
+- Adjust only if training seems slow to converge or the result looks over-smoothed

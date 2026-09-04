@@ -23,15 +23,15 @@ Control visibility, opacity, and slice range for each class in your mesh. Overla
 
 ## Class Controls
 
-## Each segmented class has its own control panel with
+Each segmented class has its own control panel:
 
 Visibility Toggle
 
-Show or hide individual classes to focus on specific structures. Useful when classes overlap or you want to examine one region in isolation.
+Show or hide individual classes to focus on specific structures. Classes start visible. Useful when classes overlap or you want to examine one region in isolation.
 
 Opacity Slider
 
-Adjust transparency from 10% to 100%. Lower values let you see through surfaces to underlying structures. Default is 80%.
+Adjust transparency from 10% to 100%. Default is 80%. Lower values let you see through surfaces to underlying structures.
 
 Slice Range (for slice-based meshes)
 
@@ -39,18 +39,26 @@ Limit the visible depth range using the dual-handle slider. This creates a clipp
 
 ## Original Data Overlay
 
-If lineage data is available, you can enable the original data overlay:
+If lineage data is available, an Original Data panel lets you overlay the source image on the mesh:
 
-- Toggle visibility to show/hide the overlay
+- The overlay starts hidden - tick its checkbox to show it
 
-- Adjust opacity to blend with the mesh
+- Opacity ranges from 5% to 100%, defaulting to 30% so it blends behind the mesh
 
-- Set slice range to show specific depth regions
+- A slice-range slider appears only when the source has more than one slice
+
+## Z Voxel Scale
+
+When the mesh was generated with a non-cubic Z voxel scale, that ratio is stored in the mesh metadata and applied automatically, so the model appears with the correct physical proportions.
 
 ## View Controls
 
-- Reset View: Returns camera and all controls to defaults
+- Reset View: Returns the camera and all controls to defaults
 
-- Expand: Enter full-screen mode for detailed examination
+- Expand: Enter full-screen mode for detailed examination (Escape exits)
 
-- Double-click canvas: Quick reset of view orientation
+- Hide controls: In expanded mode, collapse the control panel with the × button, and bring it back with the Controls button
+
+- Double-click canvas: Quick reset of the view orientation
+
+Your control settings - class visibility, opacity, slice ranges, and camera position - are remembered when you leave the viewer and return to it during the same session.

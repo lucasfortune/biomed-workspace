@@ -27,20 +27,32 @@ The Quick Annotation Tool provides a browser-based painting interface for creati
 
 - Multi-class support with color-coded labels
 
-- Brush and eraser tools with adjustable size
+- Brush and eraser tools with adjustable size (1-50 px)
 
-- Full undo/redo history for each slice
+- Per-slice undo/redo history (up to 20 steps per slice)
 
-- Autosave to prevent data loss
+- Slice navigation with buttons, a numeric field, a slider, and the arrow keys
 
-- Resume unfinished work or edit existing annotations
+- Zoom and pan (mouse wheel, on-screen buttons, or right/middle/Space drag)
+
+- Autosave every 2 minutes to prevent data loss
+
+- Resume unfinished work or edit an existing annotation
 
 ## Workflow
 
-1. Select Source Image: Choose a TIFF stack to annotate
+1. Select Source Image: Choose a TIFF stack to annotate, resume an unfinished annotation, or edit an existing one
 
-2. Annotate: Paint labels on each slice using the brush tool
+2. Annotate: Paint labels on each slice using the brush tool, moving through slices as you go
 
-3. Save: Create a final annotation file or save progress for later
+3. Save: Save progress to keep working later, or create a final annotation file
 
-The resulting annotation file can be used directly with the U-Net Segmentation module for training.
+## Saving Your Work
+
+Two separate actions save annotations, and both become available after your first stroke:
+
+- Save Progress: Writes a work-in-progress (WIP) file you can reopen later from the source selector. Autosave uses this same action.
+
+- Create Annotation: Writes the final multi-page annotation TIFF that the U-Net Segmentation module can train on. If no pixels have been painted, it asks you to confirm before creating an empty annotation.
+
+If you leave the module or close the tab with unsaved changes, the tool asks you to confirm first.

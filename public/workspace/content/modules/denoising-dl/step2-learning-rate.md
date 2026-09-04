@@ -16,14 +16,20 @@ seeAlsoTags:
   - training
   - optimization
 parameterImpact: |
-  Higher rates train faster but risk instability. Lower rates are more stable but slower. 1e-4 is a safe default.
+  Higher rates train faster but risk instability. Lower rates are more stable but slower. The validated default is 0.001.
 ---
 
 # Learning Rate
 
 Controls how quickly the model adapts during training.
 
-The learning rate determines the step size when updating model weights. This is one of the most important hyperparameters.
+The learning rate determines the step size when updating model weights. It lives under **Advanced Options** because the default is the validated publication value and rarely needs changing.
+
+## The control
+
+- A numeric field accepting values from 1e-6 to 0.01
+
+- Default: 0.001 (used by every preset and by both the N2V and StructN2V branches)
 
 ## Too high
 
@@ -37,18 +43,10 @@ The learning rate determines the step size when updating model weights. This is 
 
 - May get stuck in poor solutions
 
-## Available options
-
-- 1e-5: Very conservative, stable
-
-- 5e-5: Good for fine-tuning
-
-- 1e-4: Standard default, works well for most cases
-
-- 2e-4: Faster training, slightly less stable
-
 ## Recommendations
 
-- Start with 1e-4 (the default)
+- Keep the default of 0.001 for most data
 
-- Reduce to 1e-5 if training is unstable
+- Lower it (for example to 1e-4) if the loss curve is unstable
+
+- Values are typed directly, so any number in the 1e-6 to 0.01 range is accepted

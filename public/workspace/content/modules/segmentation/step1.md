@@ -11,7 +11,7 @@ tags:
   - annotations
 seeAlsoManual:
   - segmentation
-  - segmentation.training-data
+  - segmentation.step1.workflow-choice
 seeAlsoTags:
   - upload
   - annotations
@@ -23,6 +23,6 @@ Upload training images and annotations, or import a pretrained model to skip tra
 
 In Step 1, you have two workflow options:
 
-Train New Model: Upload your training images (TIFF stack) and corresponding annotation masks. The annotation masks should have the same dimensions as your training images, with each pixel value representing a class label (0 for background, 1+ for objects).
+Train from Scratch: Upload your training images (TIFF stack) and corresponding annotation masks. The annotation masks should have the same dimensions as your training images, with each pixel value representing a class label (0 for background, 1+ for objects).
 
 Use Pretrained Model: Import a previously trained model (.pth file) along with its configuration (.json file) to skip directly to inference.

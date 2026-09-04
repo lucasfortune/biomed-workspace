@@ -44,4 +44,4 @@ During training, the model checkpoint with the lowest validation loss is automat
 
 - This checkpoint denoises your images when training completes
 
-- If you download the model, you get this best checkpoint
+- This best checkpoint is the model saved to your workspace, ready to reuse on additional images

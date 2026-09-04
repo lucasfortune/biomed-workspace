@@ -16,39 +16,35 @@ seeAlsoTags:
   - training
   - duration
 parameterImpact: |
-  More epochs allow better convergence. With early stopping enabled, you can set a high value and training will stop when optimal.
+  More epochs allow better convergence. With early stopping enabled, a high value is safe — training stops once it stops improving.
 ---
 
 # Number of Epochs
 
 Maximum number of complete passes through the training data.
 
-An epoch is one complete pass through all training patches. More epochs give the model more opportunities to learn.
+An epoch is one complete pass through all sampled training patches. This field sits in the **Training Budget** group, accepts values from 10 to 500 (step 10), and is the main knob the presets change.
 
-## Fewer epochs (30-50)
+## Preset budgets
 
-- Faster training
+The epoch count set by each preset depends on which branch trains:
 
-- Good for quick experiments
+- Fast: 50 (N2V branch) / 50 (StructN2V branch)
 
-- May not fully converge
+- Balanced: 200 (N2V branch) / 100 (StructN2V branch)
 
-## More epochs (100-200)
+- High Quality: 400 (N2V branch) / 200 (StructN2V branch)
 
-- Better chance of convergence
-
-- Early stopping prevents wasted time
-
-- Recommended for final results
+Fewer epochs train faster but may not fully converge; more epochs give a better chance of convergence at the cost of runtime.
 
 ## Early Stopping
 
-When enabled, training automatically stops if validation loss doesn't improve for several epochs (set by patience). This prevents overtraining and saves time.
+When enabled, training stops automatically if the validation loss does not improve for several epochs (set by the patience value). This means you can set a high epoch count safely — training ends early once it converges.
 
 ## Recommendations
 
-- Use 100 epochs with early stopping enabled
+- Use the Balanced preset for most work
 
-- The model will stop early if it converges sooner
+- Switch to High Quality for final results, or Fast for quick tests
 
-- Use 50 epochs for quick tests
+- Leave early stopping on so the epoch count acts as a ceiling, not a fixed runtime

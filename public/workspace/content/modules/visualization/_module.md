@@ -31,17 +31,19 @@ The 3D Visualization module provides an interactive Three.js-based viewer for ex
 
 - Original data overlay (when lineage data is available)
 
-- Mouse controls for rotation, zoom, and pan
+- Mouse, keyboard, and touch controls for rotation, zoom, and pan
 
-- Expand mode for full-screen viewing
+- Expand mode for full-screen viewing, with a hideable controls panel
 
-- Reset view to return to default state
+- Reset view to return to the default state
 
 ## Mouse Controls
 
 - Left-click + drag: Rotate the mesh
 
-- Right-click + drag: Pan the view
+- Right-click + drag: Rotate the mesh
+
+- Ctrl/Cmd + drag: Pan the view
 
 - Scroll wheel: Zoom in/out
 
@@ -49,7 +51,19 @@ The 3D Visualization module provides an interactive Three.js-based viewer for ex
 
 ## Keyboard Controls
 
+- Arrow keys: Rotate the mesh
+
+- Ctrl/Cmd + arrow keys: Pan the view
+
+- R: Reset rotation and position
+
 - Escape: Exit expanded mode
+
+## Touch Controls
+
+- One finger: Rotate the mesh
+
+- Two fingers: Pinch to zoom and drag to pan
 
 ## Workflow
 

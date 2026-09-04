@@ -45,4 +45,4 @@ Legacy 2.5D pairs are also supported; see the Legacy 2.5D Models article.
 
 ## Where to find it
 
-Model files are downloaded automatically when training completes. The files are named to indicate their purpose.
+Nothing is downloaded during training. The model file is saved into your workspace when training completes and appears among your recent results and in the file selector. The files are named to indicate their purpose.

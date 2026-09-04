@@ -29,7 +29,7 @@ Inference data are the new images you want to segment. The model will apply what
 
 - Bit depth: Should match your training data (8-bit or 16-bit grayscale)
 
-- Size: Can be any dimensions — the model processes images in patches
+- Size: The smallest slice dimension must be between 32 and 4096 pixels, and divisible by 2 to the power of the model's number of layers (for example, 16 for a 4-layer model). Each slice is segmented whole rather than in patches, so dimensions that do not divide evenly will cause a shape mismatch.
 
 ## Best Practices
 
@@ -39,7 +39,7 @@ Inference data are the new images you want to segment. The model will apply what
 
 - Very different image characteristics (brightness, contrast, resolution) may reduce accuracy
 
-- You can run inference on images of any size — large images just take longer to process
+- The module runs a pre-flight check on your stack and shows a warning banner if the dimensions are not compatible with the model's depth
 
 ## Output
 

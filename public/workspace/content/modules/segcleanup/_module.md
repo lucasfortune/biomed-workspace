@@ -4,6 +4,7 @@ title: Segmentation Cleanup Module
 category: module
 module: segcleanup
 tags:
+  - working-copy
   - segcleanup
   - cleanup
   - quantification

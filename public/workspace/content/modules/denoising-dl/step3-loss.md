@@ -23,13 +23,15 @@ Loss measures how well the network predicts masked pixels — lower is better.
 
 ## The loss chart shows two curves
 
-Training Loss (typically red/orange)
+Train Loss (red)
 
 Error on the patches used for learning. Should decrease steadily as the model learns.
 
-Validation Loss (typically blue/green)
+Val Loss (teal/cyan)
 
 Error on held-out patches not used for training. Shows how well the model generalizes.
+
+The colors follow the module theme (train uses the primary red, validation uses the info teal) and adapt automatically to light and dark mode.
 
 ## What to look for
 

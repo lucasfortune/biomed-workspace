@@ -22,31 +22,37 @@ Navigate the hierarchical folder structure to find and manage your files.
 
 ## Folder Structure
 
-## Files are organized in a tree with these main branches
+## Files are organized in a tree with three top-level branches
 
 uploads/
 
-├── raw/           - Raw image stacks
+├── raw/             - Raw image stacks (TIFF/MRC)
 
-├── annotations/   - Training masks
+├── annotations/     - Training masks
 
-├── inference_data/ - Images for inference
-
-└── imported_models/ - External models
+└── imported_models/ - External models you upload
 
 models/
 
-├── segmentation/  - Trained segmentation models
+├── segmentation/<id>/ - Trained segmentation models
 
-└── denoising/     - Trained denoising models
+└── denoising/<id>/    - Trained denoising models
 
 results/
 
-├── segmentation/  - Segmentation outputs
+├── segmentation/<id>/ - Segmentation outputs
 
-├── denoised/      - Denoising outputs
+├── denoising/<id>/    - Denoising outputs
 
-└── meshes/        - Generated 3D meshes
+├── meshes/<id>/       - Generated 3D meshes
+
+├── preprocess/<id>/   - Preprocessing outputs
+
+├── stitching/<id>/    - Stitching outputs
+
+└── segcleanup/<id>/   - Segmentation cleanup outputs
+
+Subfolders and per-job `<id>` folders are created on demand as modules run, so you only see the ones that hold files.
 
 ## Expanding/Collapsing
 
@@ -72,4 +78,4 @@ Image files display a small preview thumbnail. If thumbnail generation fails, a 
 
 ## Empty Folders
 
-Folders with no files still appear in the tree to show the complete structure. They collapse to save space.
+Only the three top-level directories — uploads, models, and results — always appear. Their subfolders are created on demand the first time a file lands in them, so an empty branch will not clutter the tree.

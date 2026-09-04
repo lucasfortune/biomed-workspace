@@ -75,7 +75,9 @@
         "annotation",
         "brush",
         "eraser",
-        "tools"
+        "tools",
+        "navigation",
+        "zoom"
       ],
       "path": "modules/annotation/step2-tools.md",
       "seeAlsoManual": [
@@ -118,7 +120,8 @@
         "undo",
         "redo",
         "autosave",
-        "history"
+        "history",
+        "save"
       ],
       "path": "modules/annotation/step2-history.md",
       "seeAlsoManual": [
@@ -372,6 +375,7 @@
       ],
       "path": "modules/denoising-dl/step2-overview.md",
       "seeAlsoManual": [
+        "denoising-dl.step2.epochs",
         "denoising-dl.step2.patch-size",
         "denoising-dl.step2.mask-extractor.bg-side"
       ],
@@ -464,49 +468,6 @@
       "seeAlsoTags": [
         "configuration",
         "n2v"
-      ]
-    },
-    "denoising-dl.step2.features": {
-      "id": "denoising-dl.step2.features",
-      "title": "Number of Features",
-      "displayTitle": "Number of Features (DL Denoising)",
-      "category": "parameter",
-      "module": "denoising-dl",
-      "tags": [
-        "denoising",
-        "architecture",
-        "features",
-        "model"
-      ],
-      "path": "modules/denoising-dl/step2-features.md",
-      "seeAlsoManual": [
-        "denoising-dl.step2.num-layers"
-      ],
-      "seeAlsoTags": [
-        "architecture",
-        "model"
-      ]
-    },
-    "denoising-dl.step2.num-layers": {
-      "id": "denoising-dl.step2.num-layers",
-      "title": "Number of Layers",
-      "displayTitle": "Number of Layers (DL Denoising)",
-      "category": "parameter",
-      "module": "denoising-dl",
-      "tags": [
-        "denoising",
-        "architecture",
-        "layers",
-        "model"
-      ],
-      "path": "modules/denoising-dl/step2-num-layers.md",
-      "seeAlsoManual": [
-        "denoising-dl.step2.features",
-        "denoising-dl.step2.patch-size"
-      ],
-      "seeAlsoTags": [
-        "architecture",
-        "model"
       ]
     },
     "denoising-dl.step2.learning-rate": {
@@ -611,8 +572,7 @@
       "path": "modules/denoising-dl/step3-n2v.md",
       "seeAlsoManual": [
         "denoising-dl.step3.loss",
-        "denoising-dl.step3.best-val-loss",
-        "denoising-dl.step2.masking-strategy"
+        "denoising-dl.step3.best-val-loss"
       ],
       "seeAlsoTags": [
         "n2v",
@@ -750,74 +710,6 @@
       "seeAlsoTags": [
         "configuration",
         "training"
-      ]
-    },
-    "denoising-dl.step2.resize-conv": {
-      "id": "denoising-dl.step2.resize-conv",
-      "title": "Resize Convolution",
-      "displayTitle": "Resize Convolution",
-      "category": "parameter",
-      "module": "denoising-dl",
-      "tags": [
-        "denoising",
-        "architecture",
-        "upsampling",
-        "advanced"
-      ],
-      "path": "modules/denoising-dl/step2-resize-conv.md",
-      "seeAlsoManual": [
-        "denoising-dl.step2.upsampling-mode",
-        "denoising-dl.step2.features"
-      ],
-      "seeAlsoTags": [
-        "architecture",
-        "advanced"
-      ]
-    },
-    "denoising-dl.step2.upsampling-mode": {
-      "id": "denoising-dl.step2.upsampling-mode",
-      "title": "Upsampling Mode",
-      "displayTitle": "Upsampling Mode",
-      "category": "parameter",
-      "module": "denoising-dl",
-      "tags": [
-        "denoising",
-        "architecture",
-        "upsampling",
-        "interpolation",
-        "advanced"
-      ],
-      "path": "modules/denoising-dl/step2-upsampling-mode.md",
-      "seeAlsoManual": [
-        "denoising-dl.step2.resize-conv",
-        "denoising-dl.step2.features"
-      ],
-      "seeAlsoTags": [
-        "architecture",
-        "advanced"
-      ]
-    },
-    "denoising-dl.step2.masking-strategy": {
-      "id": "denoising-dl.step2.masking-strategy",
-      "title": "Masking Strategy",
-      "displayTitle": "Masking Strategy",
-      "category": "parameter",
-      "module": "denoising-dl",
-      "tags": [
-        "denoising",
-        "n2v",
-        "masking",
-        "blind-spot",
-        "advanced"
-      ],
-      "path": "modules/denoising-dl/step2-masking-strategy.md",
-      "seeAlsoManual": [
-        "denoising-dl.step2.mask-percentage",
-        "denoising-dl.step3.n2v"
-      ],
-      "seeAlsoTags": [
-        "n2v",
-        "advanced"
       ]
     },
     "denoising-dl.step2.mask-extractor.bg-side": {
@@ -1076,7 +968,8 @@
       "tags": [
         "file-browser",
         "upload",
-        "drag-drop"
+        "drag-drop",
+        "mrc"
       ],
       "path": "modules/file-browser/upload.md",
       "seeAlsoManual": [
@@ -1096,12 +989,14 @@
       "tags": [
         "file-browser",
         "categories",
-        "organization"
+        "organization",
+        "tags"
       ],
       "path": "modules/file-browser/categories.md",
       "seeAlsoManual": [
         "file-browser",
-        "file-browser.search"
+        "file-browser.search",
+        "file-browser.tree-navigation"
       ],
       "seeAlsoTags": [
         "categories",
@@ -1120,7 +1015,10 @@
         "rename",
         "delete",
         "duplicate",
-        "split"
+        "split",
+        "convert",
+        "voxel-size",
+        "json"
       ],
       "path": "modules/file-browser/file-operations.md",
       "seeAlsoManual": [
@@ -1232,7 +1130,8 @@
         "tiff",
         "visualization",
         "gallery",
-        "thumbnails"
+        "thumbnails",
+        "comparison"
       ],
       "path": "modules/imageviewer/_module.md",
       "seeAlsoManual": [
@@ -1254,7 +1153,8 @@
         "imageviewer",
         "upload",
         "tiff",
-        "file-selection"
+        "file-selection",
+        "comparison"
       ],
       "path": "modules/imageviewer/step1-image-stack.md",
       "seeAlsoManual": [
@@ -1277,7 +1177,8 @@
         "controls",
         "gallery",
         "thumbnails",
-        "zoom"
+        "zoom",
+        "comparison"
       ],
       "path": "modules/imageviewer/step2-ui-controls.md",
       "seeAlsoManual": [
@@ -1342,9 +1243,8 @@
       "module": "mesh",
       "tags": [
         "mesh",
-        "formats",
         "output",
-        "export",
+        "classes",
         "z-aspect",
         "voxel",
         "anisotropic"
@@ -1355,8 +1255,8 @@
         "mesh.step1.segmentation-data"
       ],
       "seeAlsoTags": [
-        "formats",
-        "export"
+        "export",
+        "3d"
       ]
     },
     "segmentation": {
@@ -1513,7 +1413,7 @@
       "path": "modules/segmentation/step1.md",
       "seeAlsoManual": [
         "segmentation",
-        "segmentation.training-data"
+        "segmentation.step1.workflow-choice"
       ],
       "seeAlsoTags": [
         "upload",
@@ -1534,7 +1434,8 @@
       ],
       "path": "modules/segmentation/config-patch-size.md",
       "seeAlsoManual": [
-        "segmentation.config.batch-size"
+        "segmentation.config.batch-size",
+        "segmentation.config.num-layers"
       ],
       "seeAlsoTags": [
         "training",
@@ -2241,6 +2142,7 @@
       "category": "module",
       "module": "segcleanup",
       "tags": [
+        "working-copy",
         "segcleanup",
         "cleanup",
         "quantification",
@@ -2366,6 +2268,7 @@
       "category": "process",
       "module": "segcleanup",
       "tags": [
+        "working-copy",
         "segcleanup",
         "save",
         "output",
@@ -2380,6 +2283,76 @@
       "seeAlsoTags": [
         "output",
         "process"
+      ]
+    },
+    "denoising-filter.step3": {
+      "id": "denoising-filter.step3",
+      "title": "Processing & Results",
+      "displayTitle": "Processing & Results",
+      "category": "process",
+      "module": "denoising-filter",
+      "tags": [
+        "denoising",
+        "processing",
+        "results",
+        "output"
+      ],
+      "path": "modules/denoising-filter/step3.md",
+      "seeAlsoManual": [
+        "denoising-filter.step2.methods",
+        "denoising-filter.step1.input"
+      ],
+      "seeAlsoTags": [
+        "denoising",
+        "output"
+      ]
+    },
+    "segmentation.step2": {
+      "id": "segmentation.step2",
+      "title": "Training Configuration",
+      "displayTitle": "Training Configuration",
+      "category": "process",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "configuration",
+        "training",
+        "parameters",
+        "workflow"
+      ],
+      "path": "modules/segmentation/step2.md",
+      "seeAlsoManual": [
+        "segmentation.config.patch-size",
+        "segmentation.config.num-layers",
+        "segmentation.step3"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "configuration"
+      ]
+    },
+    "workspace-basics": {
+      "id": "workspace-basics",
+      "title": "Workspace Basics",
+      "displayTitle": "Workspace Basics",
+      "category": "guide",
+      "module": null,
+      "tags": [
+        "workspace",
+        "hub",
+        "navigation",
+        "theme",
+        "sidebar",
+        "getting-started"
+      ],
+      "path": "workspace-basics.md",
+      "seeAlsoManual": [
+        "getting-started",
+        "file-browser"
+      ],
+      "seeAlsoTags": [
+        "workspace",
+        "navigation"
       ]
     }
   },
@@ -2415,12 +2388,22 @@
         "term": "Ground Truth",
         "definition": "Human-created labels that represent the correct answer, used to train and evaluate machine learning models",
         "articleId": "annotation"
+      },
+      {
+        "term": "glTF (GLB)",
+        "definition": "GL Transmission Format (binary .glb), a modern 3D mesh format exportable through file-browser conversion.",
+        "articleId": "mesh"
       }
     ],
     "Q": [
       {
         "term": "Quick Annotation Tool",
         "articleId": "annotation"
+      },
+      {
+        "term": "Quantification",
+        "definition": "Measuring segmented objects: voxel counts, physical volume, connected components, component sizes and surface area.",
+        "articleId": "segcleanup.step2.quantification"
       }
     ],
     "S": [
@@ -2487,6 +2470,21 @@
       {
         "term": "Surface Mesh Generation Module",
         "articleId": "mesh"
+      },
+      {
+        "term": "Stitch Recipe",
+        "definition": "The saved per-stack placements from a stitch; reusable on sibling volumes of the same geometry without re-aligning.",
+        "articleId": "stitching"
+      },
+      {
+        "term": "Stack Stitching Module",
+        "definition": "Joins several stacks into one volume through z-concatenation, z-overlap or xy mosaics using a saved placement recipe.",
+        "articleId": "stitching"
+      },
+      {
+        "term": "Segmentation Cleanup Module",
+        "definition": "Edits and measures a segmentation on a working copy: painting, automated cleanup and quantification, saving the result as a new file.",
+        "articleId": "segcleanup"
       }
     ],
     "D": [
@@ -2634,6 +2632,11 @@
         "term": "Workspace ZIP",
         "definition": "A compressed archive containing your entire workspace, used for backup and restore between sessions",
         "articleId": "file-browser"
+      },
+      {
+        "term": "Working Copy",
+        "definition": "A server-side editable copy of a segmentation used by the cleanup module; the original file is never modified.",
+        "articleId": "segcleanup"
       }
     ],
     "I": [
@@ -2689,10 +2692,6 @@
         "articleId": "denoising-dl.step2.mask-percentage"
       },
       {
-        "term": "Masking Strategy",
-        "articleId": "denoising-dl.step2.masking-strategy"
-      },
-      {
         "term": "Max Mask Pixels",
         "articleId": "denoising-dl.step2.mask-extractor.max-pixels"
       },
@@ -2720,6 +2719,16 @@
       {
         "term": "Model Weights File (Segmentation)",
         "articleId": "segmentation.step1.model-file"
+      },
+      {
+        "term": "MRC",
+        "definition": "A volume file format common in electron microscopy; importable as raw or annotation stacks and produced by format conversion.",
+        "articleId": "file-browser.upload"
+      },
+      {
+        "term": "Mosaic",
+        "definition": "Stacks that tile the same depth range side by side in x/y, joined into one wider volume by the stitching module.",
+        "articleId": "stitching"
       }
     ],
     "C": [
@@ -2772,6 +2781,16 @@
       {
         "term": "Process Additional Data",
         "articleId": "denoising-dl.step4.overview"
+      },
+      {
+        "term": "PLY",
+        "definition": "Polygon File Format, a mesh geometry format exportable through file-browser conversion.",
+        "articleId": "mesh"
+      },
+      {
+        "term": "Preprocessing Module",
+        "definition": "Prepares a grayscale stack for the pipeline: crop, z-trim, flip/rotate, downscale, intensity adjustment and bit-depth conversion.",
+        "articleId": "preprocess"
       }
     ],
     "N": [
@@ -2807,16 +2826,8 @@
         "articleId": "segmentation.config.num-epochs"
       },
       {
-        "term": "Number of Features (DL Denoising)",
-        "articleId": "denoising-dl.step2.features"
-      },
-      {
         "term": "Number of Features (Segmentation)",
         "articleId": "segmentation.config.num-features"
-      },
-      {
-        "term": "Number of Layers (DL Denoising)",
-        "articleId": "denoising-dl.step2.num-layers"
       },
       {
         "term": "Number of Layers (Segmentation)",
@@ -2835,11 +2846,6 @@
       {
         "term": "Legacy 2.5D Models",
         "articleId": "denoising-dl.step1.mode"
-      },
-      {
-        "term": "Lineage",
-        "definition": "The processing history of a file, tracking which source files were used to create it",
-        "articleId": "visualization"
       },
       {
         "term": "Loss Curves (DL Denoising)",
@@ -2862,10 +2868,6 @@
         "articleId": "segmentation.step1.raw-images"
       },
       {
-        "term": "Resize Convolution",
-        "articleId": "denoising-dl.step2.resize-conv"
-      },
-      {
         "term": "Routing Decision",
         "articleId": "denoising-dl.routing-decision"
       },
@@ -2886,10 +2888,6 @@
       {
         "term": "Uploading Files",
         "articleId": "file-browser.upload"
-      },
-      {
-        "term": "Upsampling Mode",
-        "articleId": "denoising-dl.step2.upsampling-mode"
       }
     ],
     "F": [
@@ -2918,6 +2916,11 @@
       {
         "term": "Filter-Based Denoising",
         "articleId": "denoising-filter"
+      },
+      {
+        "term": "Format Conversion",
+        "definition": "Converting a file to another format from the file browser’s Convert to… action (e.g. TIFF↔MRC, OBJ→STL/PLY/glTF).",
+        "articleId": "file-browser.file-operations"
       }
     ],
     "T": [
@@ -2943,6 +2946,11 @@
         "term": "Triplet (2.5D)",
         "definition": "Three consecutive slices from a stack (z-1, z, z+1) used as input by legacy 2.5D models; current trainings are 2D only",
         "articleId": "denoising-dl.step1.mode"
+      },
+      {
+        "term": "Tag",
+        "definition": "A keyword label attached to a workspace file (raw, annotation, segmentation, and so on) used for filtering and search alongside its category.",
+        "articleId": "file-browser.categories"
       }
     ],
     "V": [
@@ -2963,6 +2971,11 @@
       {
         "term": "Visualization Controls",
         "articleId": "visualization.step2.controls"
+      },
+      {
+        "term": "Voxel Size",
+        "definition": "The physical size of one voxel (x, y, z) with a unit; needed to convert voxel counts into physical volumes and surface areas.",
+        "articleId": "file-browser.file-operations"
       }
     ],
     "O": [
@@ -2993,6 +3006,11 @@
         "term": "Zoom",
         "definition": "Magnification level for viewing images - values above 100% show enlarged detail, below 100% shows a wider view",
         "articleId": "imageviewer"
+      },
+      {
+        "term": "Z-Concatenation",
+        "definition": "Joining stacks end to end along the z axis so they continue one another in depth.",
+        "articleId": "stitching"
       }
     ]
   },

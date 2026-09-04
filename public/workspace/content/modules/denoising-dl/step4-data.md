@@ -24,11 +24,17 @@ When processing additional images, the trained model applies what it learned abo
 
 ## File Requirements
 
+The file is validated the same way as the training input:
+
 - Format: Multi-page TIFF (.tif, .tiff)
 
-- Bit Depth: Should match training data (8-bit or 16-bit grayscale)
+- Bit Depth: 8-bit or 16-bit grayscale. Float32/float64 data is accepted with a warning and normalized before processing.
 
-- Size: Can be any dimensions — processed in patches
+- Minimum size: at least 64×64 pixels per slice
+
+- Minimum slices: at least 10 slices
+
+Within those limits the image is processed in patches, so larger stacks are fine.
 
 ## Critical Consideration
 

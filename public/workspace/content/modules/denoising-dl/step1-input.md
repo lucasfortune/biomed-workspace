@@ -26,15 +26,25 @@ Your input images are used both for training the denoising model and as the data
 
 ## File Requirements
 
+The file is validated when you select it, and must meet these limits:
+
 - Format: Multi-page TIFF (.tif, .tiff)
 
-- Bit Depth: 8-bit or 16-bit grayscale
+- Bit Depth: 8-bit or 16-bit grayscale. Float32/float64 data is accepted with a warning and normalized before training.
+
+- Minimum size: at least 64×64 pixels per slice
+
+- Minimum slices: at least 10 slices (needed to train)
 
 - Content: Images with noise to be removed
 
 For autoStructN2V:
 
 The noise measurement runs on background regions selected automatically from the raw stack, so your images should contain some background (resin, embedding medium, or empty areas). You tell the extractor which intensity side the background is on (see Background Side).
+
+## GPU Status
+
+A banner at the top of this step reports whether a GPU is available. If one is found it shows the device name and VRAM; if not, it warns that training will fall back to CPU, which can be significantly slower (roughly 10-50x). Training still runs on CPU — expect longer runtimes.
 
 ## Data Sources
 

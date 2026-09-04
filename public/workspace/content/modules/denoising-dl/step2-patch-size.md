@@ -15,24 +15,30 @@ seeAlsoTags:
   - configuration
   - patches
 parameterImpact: |
-  Larger patches capture more context but require more memory. For random noise, smaller patches (32-64) work well. For structured noise, try larger patches (64-128).
+  Larger patches capture more context but need more memory. The N2V branch defaults to 64, the StructN2V branch to 128.
 ---
 
 # Patch Size
 
-Size of image patches used for training the denoising network.
+Size of the square image patches used for training.
 
-During training, small square patches are extracted from your images. The patch size determines the dimensions of these regions.
+During training, small square patches are extracted from your images. This dropdown lives under **Advanced Options**, and its default and choices depend on the branch.
 
-## Smaller patches (32x32)
+## The control
+
+- N2V branch: default 64, options 32, 48, 64, 96, 128
+
+- StructN2V branch: default 128, options 32, 48, 64, 96, 128, 256
+
+The StructN2V branch defaults larger so the structural mask has enough spatial context around each pixel.
+
+## Smaller patches
 
 - Train faster with less memory
 
 - Good for fine-grained noise
 
-- May miss larger noise patterns
-
-## Larger patches (64-128)
+## Larger patches
 
 - Capture more context
 
@@ -40,10 +46,16 @@ During training, small square patches are extracted from your images. The patch 
 
 - Require more GPU memory
 
+## Validation
+
+The patch size is checked live against your image and the network geometry:
+
+- It cannot exceed the smaller image dimension. Options larger than your image are disabled automatically.
+
+- The extract size (patch size + 32 pixels of overlap-tile padding) must be divisible by 4. An invalid value is flagged and the Next button is blocked until it is corrected.
+
 ## Recommendations
 
-- Start with 32 or 64 for most images
+- Keep the branch default (64 for N2V, 128 for StructN2V)
 
-- Use larger patches if noise has visible structure spanning many pixels
-
-- Reduce if you encounter memory errors
+- Reduce it if you hit memory errors or your images are small

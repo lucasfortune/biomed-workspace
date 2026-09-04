@@ -32,16 +32,28 @@ Dmax measures how directional the noise correlation is. If Dmax is at or above t
 
 Structured masking only helps when the noise actually has directional structure. Applying a structural mask to unstructured noise removes useful context from the network without any benefit. When the router picks plain N2V, it has determined that your noise does not need the structured treatment. This is an informative result, not an error.
 
-## Mask Coverage (mask_rho2)
+## Mask leak coverage (Σρ²)
 
-For the StructN2V route, the decision card also reports mask_rho2: the sum of squared correlations over the mask's off-center positions. It estimates the fraction of the center pixel's noise variance that the mask covers. Higher values mean the mask plugs more of the correlated noise.
+For the StructN2V route, the decision card also reports **Mask leak coverage Σρ²**: the sum of squared correlations over the mask's off-center positions. It estimates the fraction of the center pixel's noise variance that the mask covers. Higher values mean the mask plugs more of the correlated noise.
+
+## The Mask Review Panel
+
+Alongside the decision card, the pause shows the discovered mask as a pixel grid:
+
+- Statistics: kernel size, active pixels, pattern type, and coverage percentage
+
+- A legend distinguishing active (masked) pixels, inactive pixels, and the center pixel
+
+- An extractor parameter panel with sliders for Background Side, Correlation Floor, Significance Threshold (|z|), and Max Masked Pixels, plus **Reset to Defaults** and **Regenerate Mask** buttons
+
+If the mask comes back with very few active pixels, a "Low Structural Noise Detected" warning appears with a shortcut to continue with plain N2V instead.
 
 ## Your Options at the Approval Pause
 
-- Approve: train the routed branch with the mask as shown
+- Approve & Train: train the routed branch with the mask as shown. When the route is already plain N2V, this button instead reads **Continue with N2V**.
 
-- Adjust and regenerate: change the extractor parameters (Background Side, Correlation Floor, Spine Threshold, Max Mask Pixels) and recompute the mask, which again takes only seconds
+- Adjust and regenerate: change the extractor parameters (Background Side, Correlation Floor, Significance Threshold (|z|), Max Masked Pixels) and recompute the mask and routing decision, which again takes only seconds
 
-- Force plain N2V: override the router and train with the 1x1 center mask instead
+- Use Plain N2V Instead: override the router and train with the 1x1 center mask instead (hidden when the route is already N2V)
 
-An auto-approve option is available if you want training to continue without the pause.
+An **Auto-approve** toggle lets training continue without the pause. It can only be set before the analysis runs — once the noise measurement completes, the toggle is disabled and you review the mask manually (unless auto-approve was already on).

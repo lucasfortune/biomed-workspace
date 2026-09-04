@@ -7,6 +7,7 @@ tags:
   - file-browser
   - upload
   - drag-drop
+  - mrc
 seeAlsoManual:
   - file-browser
   - file-browser.categories
@@ -20,7 +21,7 @@ Upload TIFF images, model files, or restore a workspace backup using the categor
 
 ## How to Upload
 
-1. Select a category from the dropdown (Raw Images, Annotations, etc.)
+1. Select a category from the dropdown: Raw Images, Annotations, Model Files, or Restore Workspace (ZIP)
 
 2. Click Upload or drag files onto the sidebar
 
@@ -28,17 +29,21 @@ Upload TIFF images, model files, or restore a workspace backup using the categor
 
 ## Supported File Types
 
-- Raw Images, Annotations, Inference Data: TIFF files (.tif, .tiff)
+- Raw Images, Annotations: TIFF stacks (.tif, .tiff) or MRC volumes (.mrc)
 
 - Model Files: PyTorch weights (.pth) and config files (.json)
 
-- Restore Workspace: ZIP files from previous workspace download
+- Restore Workspace: ZIP files from a previous workspace download
+
+## MRC Import
+
+MRC volumes (.mrc) are accepted wherever TIFF images are — pick Raw Images or Annotations and upload the .mrc file. It is imported alongside your TIFF stacks and can be worked with the same way (ADR-010).
 
 ## File Size Limits
 
 - Individual files: 200 MB maximum
 
-- Workspace ZIP: No strict limit (large files may take time)
+- Workspace ZIP: 5 GB maximum
 
 ## Drag and Drop
 

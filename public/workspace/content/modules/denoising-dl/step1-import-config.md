@@ -37,6 +37,6 @@ The configuration file (.json) contains all the settings used during training, i
 
 ## Where to find it
 
-Configuration files are saved automatically when training completes. Look in your downloads or workspace for files from previous training sessions.
+Nothing is downloaded during training. The config file is saved into your workspace when training completes and appears among your recent results and in the file selector, so pick it from there.
 
 Important: Using mismatched config and model files will cause errors. Always use files from the same training run.
