@@ -281,8 +281,6 @@ class SegcleanupModule extends BaseModule {
         helpIconHtml: this.renderHelpIcon('segcleanup.step1.segmentation'),
         icon: 'tag',
         accept: '.tif,.tiff',
-        showTestData: true,
-        testDataKind: 'annotations',
         showRecentResults: true,
         stateManager: this.state,
         onSelect: (file) => this.onFileSelected(file),

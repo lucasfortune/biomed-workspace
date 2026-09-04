@@ -188,7 +188,8 @@ class StitchingModule extends BaseModule {
       onZoomIn: () => this.zoomBy(1.25),
       onZoomOut: () => this.zoomBy(0.8),
       onZoomFit: () => this.zoomFit(),
-      onZoomReset: () => this.zoomActual()
+      onZoomReset: () => this.zoomActual(),
+      onResize: () => this.resizeCanvas()
     });
     return `
       <div id="step2" class="step-content">
@@ -372,8 +373,6 @@ class StitchingModule extends BaseModule {
         accept: '.tif,.tiff',
         acceptAllTiff: true,
         showRecentResults: true,
-        showTestData: true,
-        testDataKind: 'raw',
         stateManager: this.state,
         filterFiles: (files) => this.eligibleFiles(files),
         filterRecentResults: (files) => this.eligibleFiles(files),
@@ -395,7 +394,6 @@ class StitchingModule extends BaseModule {
         fileType: 'results',
         filterTags: ['recipe', 'stitching'],
         showUpload: false,
-        showTestData: false,
         stateManager: this.state,
         onSelect: (file) => file ? this.loadRecipe(file) : this.clearRecipe()
       });
@@ -1008,6 +1006,32 @@ class StitchingModule extends BaseModule {
     v.panX = (canvas.width - v.fixedImg.width * v.zoom) / 2;
     v.panY = (canvas.height - v.fixedImg.height * v.zoom) / 2;
     this.chrome?.setZoom(v.zoom);
+    this.drawOverlay();
+  }
+
+  /**
+   * Re-fit the canvas backing store to the current viewer box (on window /
+   * help-panel resize), preserving the zoom and keeping whatever image point
+   * was centred still centred. Without this the drawn slice is stretched to
+   * the new box until the next redraw.
+   */
+  resizeCanvas() {
+    const canvas = document.getElementById('overlayCanvas');
+    const v = this.viewer;
+    if (!canvas || !v.fixedImg) return;
+    const wrap = canvas.parentElement;
+    const newW = wrap.clientWidth;
+    const newH = Math.max(420, wrap.clientHeight || 0, Math.round(wrap.clientWidth * 0.6));
+    if (!newW || (newW === canvas.width && newH === canvas.height)) return;
+
+    // Image-space point currently at the canvas centre, so we can re-anchor it
+    const imgCx = (canvas.width / 2 - v.panX) / v.zoom;
+    const imgCy = (canvas.height / 2 - v.panY) / v.zoom;
+
+    canvas.width = newW;
+    canvas.height = newH;
+    v.panX = newW / 2 - imgCx * v.zoom;
+    v.panY = newH / 2 - imgCy * v.zoom;
     this.drawOverlay();
   }
 

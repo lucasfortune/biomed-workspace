@@ -44,6 +44,9 @@ class SliceViewerChrome {
    * @param {function} [options.onZoomReset]
    * @param {function} [options.onUndo]
    * @param {function} [options.onRedo]
+   * @param {function} [options.onResize] Called (coalesced to animation frames)
+   *   when the viewer box changes size, so the module can re-fit and redraw its
+   *   canvas. Without it a resize squashes the drawn slice until the next redraw.
    */
   constructor(options = {}) {
     this.options = {
@@ -68,6 +71,8 @@ class SliceViewerChrome {
     this.sliderScrubbing = false;
     this._onKeyDown = this._onKeyDown.bind(this);
     this._keysBound = false;
+    this._resizeObserver = null;
+    this._resizeRaf = 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -194,6 +199,25 @@ class SliceViewerChrome {
       this._keysBound = true;
     }
 
+    // Keep the module's canvas in sync with the viewer box: the canvas fills
+    // .sv-canvas-host via CSS, but its backing store (canvas.width/height) is
+    // only re-fit when the module redraws. Without this, shrinking the window
+    // (or opening the help panel) squashes the drawn slice horizontally until
+    // the next slice change. Watching the host (not the canvas) is loop-safe:
+    // the host size is independent of the canvas backing store.
+    if (typeof o.onResize === 'function' && this.el.area && typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => {
+        // Coalesce bursts into one redraw and stay clear of the
+        // "ResizeObserver loop completed" warning.
+        if (this._resizeRaf) return;
+        this._resizeRaf = requestAnimationFrame(() => {
+          this._resizeRaf = 0;
+          o.onResize();
+        });
+      });
+      this._resizeObserver.observe(this.el.area);
+    }
+
     this._sync();
     return this;
   }
@@ -203,6 +227,14 @@ class SliceViewerChrome {
     if (this._keysBound) {
       document.removeEventListener('keydown', this._onKeyDown);
       this._keysBound = false;
+    }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._resizeRaf) {
+      cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = 0;
     }
     this.root = null;
     this.el = {};

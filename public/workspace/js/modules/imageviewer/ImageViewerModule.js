@@ -145,8 +145,6 @@ class ImageViewerModule extends BaseModule {
       icon: 'image',
       helpIconHtml: this.renderHelpIcon('imageviewer.step1.image-stack'),
       fileType: 'image_stack',
-      showTestData: true,
-      testDataKind: 'raw',
       showRecentResults: true,
       acceptAllTiff: true,
       onSelect: this.onFileSelect,
@@ -400,8 +398,8 @@ class ImageViewerModule extends BaseModule {
     this.selectedFile = fileInfo;
 
     if (fileInfo) {
-      // The test stack is copied into the workspace by the FileSelector, so
-      // it arrives here as a regular workspace file - no special casing.
+      // Selected files (including the built-in sample) are regular workspace
+      // files - no special casing.
       await this.validateTiffFile(fileInfo.id || fileInfo.path);
     }
   }

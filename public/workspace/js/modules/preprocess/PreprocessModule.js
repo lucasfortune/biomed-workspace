@@ -137,7 +137,8 @@ class PreprocessModule extends BaseModule {
         this.currentSlice = i;
         this.chrome.setSlice(i);
         this.requestPreview();
-      }
+      },
+      onResize: () => this.drawCanvas()
     });
     return `
       <div id="step2" class="step-content">
@@ -326,8 +327,6 @@ class PreprocessModule extends BaseModule {
         helpIconHtml: this.renderHelpIcon('preprocess.step1.stack'),
         icon: 'image',
         accept: '.tif,.tiff',
-        showTestData: true,
-        testDataKind: 'raw',
         showRecentResults: true,
         stateManager: this.state,
         onSelect: (file) => this.onFileSelected(file),

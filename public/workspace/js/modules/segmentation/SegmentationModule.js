@@ -1490,11 +1490,6 @@ class SegmentationModule extends BaseModule {
 
       // Add data path (required)
       if (this.uploadedFiles.inference_data && this.uploadedFiles.inference_data.path) {
-        // Check if path is the placeholder 'test_data' which means loadTestInferenceData didn't complete
-        if (this.uploadedFiles.inference_data.path === 'test_data') {
-          console.warn('[SegmentationModule] Path is still "test_data" - loading not complete, retrying...');
-          await this.loadTestInferenceData();
-        }
         requestBody.data_path = this.uploadedFiles.inference_data.path;
         console.log('[SegmentationModule] Using data path:', requestBody.data_path);
       } else {

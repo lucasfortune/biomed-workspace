@@ -56,13 +56,6 @@ class InferenceHandler {
         title: 'Input Image Stack',
         icon: 'folder',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step4.data'),
-        showTestData: true,
-        testDataOptions: [
-          {
-            value: 'denoising_test_data',
-            label: 'Test Dataset - Denoising'
-          }
-        ],
         stateManager: this.module.state,
         onSelect: this.onInferenceInputSelected,
         onUpload: this.onInferenceInputUploaded
@@ -184,38 +177,6 @@ class InferenceHandler {
       return;
     }
 
-    // Handle test data
-    if (fileInfo.isTestData) {
-      try {
-        this.inferenceValidationDisplay.showLoading('Loading test data...');
-        const result = await this.module.api.loadTestData();
-
-        if (result.success && result.file) {
-          this.inferenceInputFile = {
-            id: result.file.id,
-            name: result.file.name,
-            path: result.file.path,
-            isTestData: true
-          };
-
-          // Refresh file browser
-          if (window.workspace?.fileBrowser) {
-            window.workspace.fileBrowser.refresh();
-          }
-
-          // Validate the file
-          await this.validateInferenceInput(result.file.path);
-        } else {
-          throw new Error(result.error || 'Failed to load test data');
-        }
-      } catch (error) {
-        console.error('[InferenceHandler] Error loading test data:', error);
-        this.inferenceValidationDisplay.showError('Error', error.message);
-        this.module.state.notify('error', `Failed to load test data: ${error.message}`);
-      }
-      return;
-    }
-
     // Regular file selection
     this.inferenceInputFile = fileInfo;
     await this.validateInferenceInput(fileInfo.path);
@@ -230,8 +191,7 @@ class InferenceHandler {
     this.inferenceInputFile = {
       id: uploadedFile.id,
       name: uploadedFile.name || file.name,
-      path: uploadedFile.path,
-      isTestData: false
+      path: uploadedFile.path
     };
 
     // Refresh file browser

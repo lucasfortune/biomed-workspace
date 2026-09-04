@@ -317,16 +317,11 @@ class WorkspaceAPI {
    * Upload training data
    * @param {File} rawImages - Raw images TIFF file
    * @param {File} annotations - Annotations TIFF file
-   * @param {boolean} isTestData - Whether using test data
    */
-  async uploadTrainingData(rawImages, annotations, isTestData = false) {
+  async uploadTrainingData(rawImages, annotations) {
     const formData = new FormData();
-
-    if (!isTestData) {
-      formData.append('raw_images', rawImages);
-      formData.append('annotations', annotations);
-    }
-    formData.append('isTestData', isTestData.toString());
+    formData.append('raw_images', rawImages);
+    formData.append('annotations', annotations);
 
     const response = await fetch(`${this.baseURL}/upload-data`, {
       method: 'POST',
@@ -368,15 +363,10 @@ class WorkspaceAPI {
   /**
    * Upload inference data
    * @param {File} inferenceData - Inference TIFF file
-   * @param {boolean} isTestData - Whether using test data
    */
-  async uploadInferenceData(inferenceData, isTestData = false) {
+  async uploadInferenceData(inferenceData) {
     const formData = new FormData();
-
-    if (!isTestData) {
-      formData.append('inference_data', inferenceData);
-    }
-    formData.append('isTestData', isTestData.toString());
+    formData.append('inference_data', inferenceData);
 
     const response = await fetch(`${this.baseURL}/upload-inference`, {
       method: 'POST',

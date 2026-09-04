@@ -296,11 +296,9 @@ class MeshModule extends BaseModule {
         title: 'Segmentation Data',
         icon: 'tag',
         helpIconHtml: this.renderHelpIcon('mesh.step1.segmentation-data'),
-        // Mesh input is a mask, and a built-in test mask exists: offer it.
-        // The import lands as an `uploads` file tagged `annotation`, which
-        // the filters below already accept.
-        showTestData: true,
-        testDataKind: 'annotations',
+        // Mesh input is a mask; segmentation results and annotation uploads
+        // (including the built-in sample) all carry the `annotation` tag the
+        // filters below accept.
         showRecentResults: true, // Show segmentation results in "Recent Results" section
         stateManager: this.state,
         onSelect: this.onFileSelected,

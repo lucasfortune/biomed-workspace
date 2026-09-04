@@ -202,8 +202,51 @@ class WorkspaceManager {
 
     this.saveMetadata(sessionId, metadata);
 
+    // Seed the built-in sample stack (a matched raw + annotation pair) so every
+    // new workspace can exercise the whole pipeline without an upload. They are
+    // registered exactly like uploads, so they appear in file selectors and the
+    // file browser as ordinary workspace files (no per-selector "test data").
+    this.seedSampleData(sessionId, workspacePath);
+
     console.log(`Workspace initialized for session: ${sessionId}`);
     return this.getWorkspaceInfo(sessionId);
+  }
+
+  /**
+   * Copy the built-in sample files into a freshly created workspace and register
+   * them in metadata. Best-effort: a missing source file is skipped with a
+   * warning rather than failing workspace creation. Thumbnails are generated
+   * lazily on first request (GET /api/workspace/thumbnail/:fileId).
+   * @param {string} sessionId - Session/workspace ID
+   * @param {string} workspacePath - Absolute path to the workspace directory
+   */
+  seedSampleData(sessionId, workspacePath) {
+    for (const spec of WorkspaceManager.SAMPLE_FILES) {
+      try {
+        const sourcePath = path.join(__dirname, 'test_data', spec.source);
+        if (!fs.existsSync(sourcePath)) {
+          console.warn(`[WorkspaceManager] Sample source missing, skipping: ${sourcePath}`);
+          continue;
+        }
+
+        const destDir = path.join(workspacePath, spec.subdir);
+        fs.mkdirSync(destDir, { recursive: true });
+        const destPath = path.join(destDir, spec.name);
+        fs.copyFileSync(sourcePath, destPath);
+
+        const stats = fs.statSync(destPath);
+        this.addFileToMetadata(sessionId, {
+          name: spec.name,
+          path: path.relative(workspacePath, destPath),
+          category: 'uploads',
+          tags: spec.tags,
+          size: stats.size,
+          folderId: null
+        });
+      } catch (error) {
+        console.error(`[WorkspaceManager] Failed to seed sample "${spec.name}":`, error.message);
+      }
+    }
   }
 
   /**
@@ -1222,5 +1265,26 @@ class WorkspaceManager {
     }
   }
 }
+
+/**
+ * Built-in sample files seeded into every new workspace (a matched raw +
+ * annotation pair from the same 23-slice stack, so segmentation training works
+ * out of the box and the annotation doubles as a segmentation mask for
+ * mesh/cleanup). Sources live in test_data/; copied to friendly names.
+ */
+WorkspaceManager.SAMPLE_FILES = [
+  {
+    source: 'trypB_testData_training.tif',
+    name: 'sample_raw.tif',
+    subdir: 'uploads/raw',
+    tags: ['raw', 'sample']
+  },
+  {
+    source: 'trypB_testData_annotations.tif',
+    name: 'sample_annotation.tif',
+    subdir: 'uploads/annotations',
+    tags: ['annotation', 'sample']
+  }
+];
 
 module.exports = WorkspaceManager;

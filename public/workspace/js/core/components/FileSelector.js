@@ -2,7 +2,7 @@
  * FileSelector Component
  *
  * Modern dropdown-based file selector with upload capability.
- * Supports test data, recent results, and workspace files with optional filtering.
+ * Supports recent results and workspace files with optional filtering.
  *
  * Usage:
  * ```javascript
@@ -12,16 +12,14 @@
  *   icon: 'image',                // name from core/icons.js
  *   fileType: 'raw_images',
  *   accept: '.tif,.tiff',
- *   showTestData: true,
- *   testDataKind: 'raw',          // the test option imports the built-in stack
  *   showRecentResults: false,
  *   onSelect: (file) => console.log('Selected:', file),
  *   onUpload: async (file) => { ... }
  * });
  *
  * // "Add to list" mode (e.g. the stitching stack list): the dropdown gets an
- * // Add button; choosing a file, uploading one or importing the test stack
- * // calls onAdd(file) and resets the dropdown instead of keeping a selection.
+ * // Add button; choosing a file or uploading one calls onAdd(file) and resets
+ * // the dropdown instead of keeping a selection.
  * const picker = new FileSelector({ id: 'stacks', mode: 'list', onAdd: (file) => list.push(file) });
  *
  * container.innerHTML = selector.render();
@@ -44,12 +42,6 @@ class FileSelector {
    * @param {string} [config.fileType] - File type/category for filtering (raw, annotations, etc.)
    * @param {Array} [config.filterTags] - Tags files must have (e.g., ['inference'] for inference data)
    * @param {string} [config.accept='.tif,.tiff'] - Accepted file extensions
-   * @param {boolean} [config.showTestData=true] - Show test data optgroup
-   * @param {string} [config.testDataKind] - 'raw' | 'inference' | 'denoising' | 'annotations'. When set,
-   *   choosing the test option POSTs /api/workspace/test-data, which copies the built-in stack into the
-   *   workspace, and the selector then behaves exactly as if that workspace file had been picked
-   *   (no `isTestData` branch needed in the module). Without it the legacy `{ isTestData: true }`
-   *   selection is passed to onSelect.
    * @param {'select'|'list'} [config.mode='select'] - 'list' adds an Add button next to the dropdown and
    *   reports files through onAdd instead of keeping a selection
    * @param {Function} [config.onAdd] - List mode: called with the file to add (file) => {}
@@ -59,7 +51,6 @@ class FileSelector {
    * @param {boolean} [config.acceptAllTiff=false] - Accept any TIFF regardless of category
    * @param {Array} [config.resultCategories] - Categories to show in Recent Results (default: segmentations, denoised, processed)
    * @param {Object} [config.resultCategoryLabels] - Labels for result categories (e.g., { meshes: 'Mesh' })
-   * @param {Array} [config.testDataOptions] - Custom test data options
    * @param {Function} [config.onSelect] - Callback when file is selected (file) => {}
    * @param {Function} [config.onUpload] - Callback when file is uploaded (file, uploadedInfo) => {}
    * @param {Function} [config.onValidate] - Callback for file validation (file) => Promise<boolean>
@@ -87,14 +78,11 @@ class FileSelector {
     // fileType, but can differ: e.g. list category 'uploads' while
     // uploading as 'annotations' so the server applies the annotation tag.
     this.uploadCategory = config.uploadCategory || config.fileType || 'file';
-    this.showTestData = config.showTestData !== false;
-    this.testDataKind = config.testDataKind || null;
     this.mode = config.mode === 'list' ? 'list' : 'select';
     this.addLabel = config.addLabel || 'Add';
     this.showUpload = config.showUpload !== false;
     this.showRecentResults = config.showRecentResults === true;
     this.acceptAllTiff = config.acceptAllTiff === true;
-    this.testDataOptions = config.testDataOptions || null;
     this.uploadEndpoint = config.uploadEndpoint || '/api/workspace/upload';
 
     // Configurable result categories (supports both new 'results' and legacy categories)
@@ -351,11 +339,6 @@ class FileSelector {
 
     dropdown.innerHTML = '<option value="">-- Select a file --</option>';
 
-    // Add test data option
-    if (this.showTestData) {
-      this.addTestDataOptions(dropdown);
-    }
-
     // Add external recent results (passed via config from API, e.g., training results)
     if (this.hasExternalRecentResults()) {
       this.addExternalRecentResultsOptions(dropdown);
@@ -439,53 +422,6 @@ class FileSelector {
   }
 
   /**
-   * Add test data options to dropdown
-   * @param {HTMLSelectElement} dropdown
-   */
-  addTestDataOptions(dropdown) {
-    const testDataGroup = document.createElement('optgroup');
-    testDataGroup.label = 'Test Data';
-
-    // Use custom test data options if provided
-    if (this.testDataOptions && this.testDataOptions.length > 0) {
-      this.testDataOptions.forEach(opt => {
-        const option = document.createElement('option');
-        option.value = opt.value || 'test_data';
-        option.textContent = opt.label;
-        option.dataset.testData = 'true';
-        if (opt.data) {
-          option.dataset.testInfo = JSON.stringify(opt.data);
-        }
-        testDataGroup.appendChild(option);
-      });
-    } else {
-      // Default test data based on fileType
-      const defaults = {
-        raw_images: 'Test Dataset - Training Images',
-        annotations: 'Test Dataset - Annotations',
-        inference_data: 'Test Dataset - Inference Images',
-        image_stack: 'Test Dataset - Image Stack'
-      };
-
-      const kindLabels = {
-        raw: 'Test image stack (trypB, training)',
-        inference: 'Test image stack (trypB, inference)',
-        denoising: 'Test image stack (trypB, denoising)',
-        annotations: 'Test annotation mask (trypB)'
-      };
-      const label = (this.testDataKind && kindLabels[this.testDataKind])
-        || defaults[this.fileType] || `Test Dataset - ${this.title}`;
-      const option = document.createElement('option');
-      option.value = 'test_data';
-      option.textContent = label;
-      option.dataset.testData = 'true';
-      testDataGroup.appendChild(option);
-    }
-
-    dropdown.appendChild(testDataGroup);
-  }
-
-  /**
    * Add recent results options to dropdown
    * @param {HTMLSelectElement} dropdown
    */
@@ -566,24 +502,6 @@ class FileSelector {
   }
 
   /**
-   * Copy the built-in test stack into the workspace (idempotent) and return
-   * its workspace file record.
-   * @returns {Promise<Object>}
-   */
-  async importTestData() {
-    const response = await fetch('/api/workspace/test-data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: this.testDataKind || 'raw' })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.success || !data.file) {
-      throw new Error(data.error || `Test data import failed (${response.status})`);
-    }
-    return data.file;
-  }
-
-  /**
    * Register a file that just entered the workspace (upload or test import)
    * in the cached listings so the dropdown can show and select it.
    * @param {Object} file
@@ -619,48 +537,7 @@ class FileSelector {
       return;
     }
 
-    if (selectedOption.dataset.testData && this.testDataKind) {
-      // Test data via the workspace import: becomes a regular workspace file
-      this.setAddEnabled(false);
-      this.showImporting();
-      try {
-        const file = await this.importTestData();
-        this.trackNewFile(file);
-        dropdown.value = file.path;
-        this.selectedFile = file;
-        this.showPreview({
-          name: file.name,
-          size: this.formatFileSize(file.size),
-          info: 'Built-in test dataset (copied into your workspace)'
-        });
-        if (window.workspace && typeof window.workspace.refreshWorkspace === 'function') {
-          window.workspace.refreshWorkspace();
-        }
-      } catch (error) {
-        console.error('[FileSelector] Test data import failed:', error);
-        this.notify('error', `Could not load test data: ${error.message}`);
-        this.clearSelection();
-        if (this.mode !== 'list' && this.onSelect) this.onSelect(null);
-        return;
-      }
-    } else if (selectedOption.dataset.testData) {
-      // Legacy test data selection (module handles isTestData itself)
-      const testInfo = selectedOption.dataset.testInfo
-        ? JSON.parse(selectedOption.dataset.testInfo)
-        : {};
-
-      this.selectedFile = {
-        path: selectedOption.value,
-        isTestData: true,
-        name: selectedOption.textContent,
-        ...testInfo
-      };
-
-      this.showPreview({
-        name: selectedOption.textContent,
-        info: 'Built-in test dataset for demonstration'
-      });
-    } else if (selectedOption.dataset.isExternalResult) {
+    if (selectedOption.dataset.isExternalResult) {
       // External result (e.g., from training API)
       const fileInfo = JSON.parse(selectedOption.dataset.fileInfo || '{}');
       this.selectedFile = {
@@ -775,7 +652,7 @@ class FileSelector {
 
       let errorMessage = error.message;
       if (errorMessage.includes('403') || errorMessage.includes('approval')) {
-        errorMessage = 'Account approval required. You can use test data while waiting.';
+        errorMessage = 'Account approval required to upload. You can use the built-in sample files while waiting.';
       }
 
       this.notify('error', `Upload failed: ${errorMessage}`);
@@ -871,22 +748,6 @@ class FileSelector {
   }
 
   /**
-   * Show test-data import state
-   */
-  showImporting() {
-    const preview = document.getElementById(`${this.id}-preview`);
-    if (preview) {
-      preview.innerHTML = `
-        <div class="preview-item uploading">
-          <span class="spinner-small"></span>
-          Preparing test data...
-        </div>
-      `;
-      preview.style.display = 'block';
-    }
-  }
-
-  /**
    * Hide uploading state
    */
   hideUploading() {
@@ -926,24 +787,14 @@ class FileSelector {
     this.selectedFile = fileInfo;
     const dropdown = document.getElementById(`${this.id}-select`);
 
-    if (fileInfo.isTestData) {
-      if (dropdown) {
-        dropdown.value = fileInfo.path || 'test_data';
-      }
-      this.showPreview({
-        name: fileInfo.name || 'Test Dataset',
-        info: 'Built-in test dataset for demonstration'
-      });
-    } else {
-      if (dropdown && fileInfo.path) {
-        dropdown.value = fileInfo.path;
-      }
-      this.showPreview({
-        name: fileInfo.name || 'Selected File',
-        size: fileInfo.size ? this.formatFileSize(fileInfo.size) : null,
-        info: fileInfo.metadata || null
-      });
+    if (dropdown && fileInfo.path) {
+      dropdown.value = fileInfo.path;
     }
+    this.showPreview({
+      name: fileInfo.name || 'Selected File',
+      size: fileInfo.size ? this.formatFileSize(fileInfo.size) : null,
+      info: fileInfo.metadata || null
+    });
   }
 
   /**

@@ -92,6 +92,8 @@ class VisualizationModule extends BaseModule {
 
     // Resize handler reference for cleanup
     this.handleResizeBound = null;
+    this.containerResizeObserver = null;
+    this._resizeRaf = 0;
 
     // Fullscreen state
     this.isFullscreen = false;
@@ -296,7 +298,6 @@ class VisualizationModule extends BaseModule {
         icon: 'mesh',
         helpIconHtml: this.renderHelpIcon('visualization.step1.mesh-data'),
         accept: '.json',
-        showTestData: false,
         showRecentResults: true,
         stateManager: this.state,
         onSelect: this.onFileSelected,
@@ -675,9 +676,22 @@ class VisualizationModule extends BaseModule {
       // Start render loop
       vizModule.startRenderLoop();
 
-      // Set up window resize handling
+      // Set up resize handling. A window 'resize' covers browser resizes, but
+      // the container can also change width without one - e.g. when the help
+      // panel opens beside the viewer - so also observe the container directly
+      // to keep the camera aspect and renderer size correct at all times.
       this.handleResizeBound = () => vizModule.handleResize(container);
       window.addEventListener('resize', this.handleResizeBound);
+      if (typeof ResizeObserver !== 'undefined') {
+        this.containerResizeObserver = new ResizeObserver(() => {
+          if (this._resizeRaf) return;
+          this._resizeRaf = requestAnimationFrame(() => {
+            this._resizeRaf = 0;
+            vizModule.handleResize(container);
+          });
+        });
+        this.containerResizeObserver.observe(container);
+      }
 
       // Load the actual mesh data
       if (this.selectedFile && (this.selectedFile.id || this.selectedFile.path)) {
@@ -1916,6 +1930,14 @@ class VisualizationModule extends BaseModule {
     if (this.handleResizeBound) {
       window.removeEventListener('resize', this.handleResizeBound);
       this.handleResizeBound = null;
+    }
+    if (this.containerResizeObserver) {
+      this.containerResizeObserver.disconnect();
+      this.containerResizeObserver = null;
+    }
+    if (this._resizeRaf) {
+      cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = 0;
     }
 
     // Clean up Three.js resources

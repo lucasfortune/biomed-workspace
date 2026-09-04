@@ -257,23 +257,13 @@ A `window.yourModule = this` debugging handle is fine, as long as
 `FileSelector` selection, put config back to the constructor defaults, drop
 result/job ids, and return to step 1.
 
-### 9. Test data
+### 9. Sample data
 
-Raw image inputs always offer the built-in test stack; mask inputs do so only
-where a test mask exists. Ask the `FileSelector` for it - do not add an
-`isTestData` branch:
-
-```javascript
-this.fileSelector = new FileSelector({
-  showTestData: true,
-  testDataKind: 'raw',   // 'raw' | 'inference' | 'denoising' | 'annotations'
-  // ...
-});
-```
-
-The test option copies the stack into the workspace via
-`POST /api/workspace/test-data` and then reports it to `onSelect` exactly like
-a picked workspace file.
+Every new workspace is seeded with a matched raw + annotation sample pair
+(`WorkspaceManager.SAMPLE_FILES`), tracked exactly like uploads. They show up in
+any `FileSelector` whose `fileType`/`filterTags` match (raw selectors get the
+raw sample, annotation selectors get the annotation sample) with no extra
+config - so there is nothing to enable and no `isTestData` branch to add.
 
 ### 10. Styling: tokens, baselines, icons, scoping
 
@@ -339,7 +329,7 @@ a picked workspace file.
 ### File Selection
 
 - [ ] Configure FileSelector options (fileType, title, etc.)
-- [ ] Offer test data via `showTestData` + `testDataKind` where one exists
+- [ ] (Samples are auto-seeded into the workspace - no FileSelector test-data config)
 - [ ] Implement `onFileSelected()` handler (including the `null` deselection case)
 - [ ] Implement `onFileUploaded()` handler
 

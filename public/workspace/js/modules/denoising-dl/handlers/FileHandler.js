@@ -181,7 +181,6 @@ class FileHandler {
         title: 'Training Configuration',
         icon: 'settings',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.config'),
-        showTestData: false,
         accept: '.json',
         stateManager: this.module.state,
         recentResults: this.filterRecentResultsForConfig(recentResults),
@@ -203,7 +202,6 @@ class FileHandler {
         title: stage1Title,
         icon: 'model',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
-        showTestData: false,
         accept: '.pth',
         stateManager: this.module.state,
         recentResults: this.filterRecentResultsForStage(recentResults, 'stage1', 'model'),
@@ -223,7 +221,6 @@ class FileHandler {
           title: 'Legacy Stage 2 Model (optional; old two-stage runs only)',
           icon: 'model',
           helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.import.model'),
-          showTestData: false,
           accept: '.pth',
           stateManager: this.module.state,
           recentResults: this.filterRecentResultsForStage(recentResults, 'stage2', 'model'),
@@ -540,39 +537,6 @@ class FileHandler {
       return;
     }
 
-    // Handle test data - load it via API endpoint
-    if (fileInfo.isTestData) {
-      try {
-        this.module.validationDisplay.showLoading('Loading test data...');
-
-        const result = await this.module.api.loadTestData();
-
-        if (result.success && result.file) {
-          this.module.uploadedFile = {
-            id: result.file.id,
-            name: result.file.name,
-            path: result.file.path,
-            isTestData: true
-          };
-
-          // Refresh workspace file browser
-          if (window.workspace?.fileBrowser) {
-            window.workspace.fileBrowser.refresh();
-          }
-
-          // Validate the test data file
-          await this.validateFile(result.file.path);
-        } else {
-          throw new Error(result.error || 'Failed to load test data');
-        }
-      } catch (error) {
-        console.error('[FileHandler] Error loading test data:', error);
-        this.module.validationDisplay.showError('Error', error.message);
-        this.module.state.notify('error', `Failed to load test data: ${error.message}`);
-      }
-      return;
-    }
-
     // Regular file selection - validate the file
     this.module.uploadedFile = fileInfo;
     await this.validateFile(fileInfo.path);
@@ -589,8 +553,7 @@ class FileHandler {
     this.module.uploadedFile = {
       id: uploadedFile.id,
       name: uploadedFile.name || file.name,
-      path: uploadedFile.path,
-      isTestData: false
+      path: uploadedFile.path
     };
 
     // Refresh workspace file browser

@@ -175,13 +175,6 @@ class DLDenoisingModule extends BaseModule {
         title: 'Input Image Stack',
         icon: 'folder',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step1.input'),
-        showTestData: true,
-        testDataOptions: [
-          {
-            value: 'denoising_test_data',
-            label: 'Test Dataset - Denoising'
-          }
-        ],
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded

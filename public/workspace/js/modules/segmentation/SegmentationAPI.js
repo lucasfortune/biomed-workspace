@@ -55,36 +55,24 @@ class SegmentationAPI {
 
   /**
    * Upload training data (raw images and annotations)
-   * @param {File|Object} rawImages - Raw image file or test data indicator
-   * @param {File|Object} annotations - Annotation file or test data indicator
-   * @param {boolean} isTestData - Whether using test data
+   * @param {File} rawImages - Raw image file
+   * @param {File} annotations - Annotation file
    */
-  async uploadTrainingData(rawImages, annotations, isTestData = false) {
+  async uploadTrainingData(rawImages, annotations) {
     const formData = new FormData();
-
-    if (isTestData) {
-      formData.append('isTestData', 'true');
-    } else {
-      formData.append('raw_images', rawImages);
-      formData.append('annotations', annotations);
-    }
+    formData.append('raw_images', rawImages);
+    formData.append('annotations', annotations);
 
     return this._postFormData('/upload-data', formData);
   }
 
   /**
    * Upload inference data
-   * @param {File|Object} inferenceData - Inference file or test data indicator
-   * @param {boolean} isTestData - Whether using test data
+   * @param {File} inferenceData - Inference file
    */
-  async uploadInferenceData(inferenceData, isTestData = false) {
+  async uploadInferenceData(inferenceData) {
     const formData = new FormData();
-
-    if (isTestData) {
-      formData.append('isTestData', 'true');
-    } else {
-      formData.append('inference_data', inferenceData);
-    }
+    formData.append('inference_data', inferenceData);
 
     return this._postFormData('/upload-inference', formData);
   }

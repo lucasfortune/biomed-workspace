@@ -14,7 +14,7 @@ class SessionTracker {
      * Map of training sessions
      * Key: trainingId
      * Value: { sessionId, username, fullName, status, startTime, endTime,
-     *          current_epoch, total_epochs, metrics, params, isTestData, error }
+     *          current_epoch, total_epochs, metrics, params, error }
      */
     this.trainingSessions = new Map();
 
@@ -66,7 +66,6 @@ class SessionTracker {
       total_epochs: data.total_epochs || 0,
       metrics: {},
       params: data.params || {},
-      isTestData: data.isTestData || false,
       error: null
     };
 

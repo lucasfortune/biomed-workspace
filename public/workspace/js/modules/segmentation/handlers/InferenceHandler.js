@@ -37,38 +37,18 @@ class InferenceHandler {
     try {
       let uploadResult;
 
-      // Check if we're using test data
-      if (uploadedFiles.inference_data.isTestData) {
-        console.log('[InferenceHandler] Using test data for inference');
+      // Handle regular uploaded files
+      const formData = new FormData();
+      formData.append('inference_data', uploadedFiles.inference_data);
 
-        // For test data, send a special request to handle server-side file copying
-        const testDataForm = new FormData();
-        testDataForm.append('isTestData', 'true');
+      const uploadResponse = await fetch('/upload-inference', {
+        method: 'POST',
+        body: formData
+      });
 
-        const uploadResponse = await fetch('/upload-inference', {
-          method: 'POST',
-          body: testDataForm
-        });
-
-        uploadResult = await uploadResponse.json();
-        if (!uploadResult.success) {
-          throw new Error(uploadResult.error);
-        }
-
-      } else {
-        // Handle regular uploaded files
-        const formData = new FormData();
-        formData.append('inference_data', uploadedFiles.inference_data);
-
-        const uploadResponse = await fetch('/upload-inference', {
-          method: 'POST',
-          body: formData
-        });
-
-        uploadResult = await uploadResponse.json();
-        if (!uploadResult.success) {
-          throw new Error(uploadResult.error);
-        }
+      uploadResult = await uploadResponse.json();
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error);
       }
 
       // Build inference request based on model type

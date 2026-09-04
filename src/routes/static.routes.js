@@ -77,21 +77,6 @@ function createStaticRoutes(dependencies) {
   // ===========================================================================
 
   /**
-   * Serve test data files
-   */
-  router.get('/test_data/:filename', requireAuth, (req, res) => {
-    // Sanitize filename to prevent path traversal attacks
-    const filename = path.basename(req.params.filename);
-    const filePath = path.join(__dirname, '../../test_data', filename);
-
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).send('Test file not found');
-    }
-  });
-
-  /**
    * Serve public static files
    */
   router.use(express.static(path.join(__dirname, '../../public')));

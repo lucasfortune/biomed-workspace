@@ -13,7 +13,8 @@
  *   nav row's right slot, and a `.section-card.success-card` result block
  * - Wiring every button with addEventListener (never inline onclick, never
  *   window.* free functions); delegated `data-action` for re-rendered markup
- * - Built-in test data through FileSelector's `testDataKind`
+ * - Built-in sample files: seeded into every workspace, so they appear in
+ *   FileSelector like any other file (no test-data config needed)
  * - Context-sensitive help via `helpIconHtml` (see renderHelpIcon)
  * - ValidationDisplay.renderContainer() for the validation slot
  * - State management integration
@@ -321,11 +322,8 @@ class TemplateModule extends BaseModule {
         // Placeholder id: no content/modules/template/ directory exists, so
         // point this at your own module's article once you copy the template.
         helpIconHtml: this.renderHelpIcon('template.step1.input-data'),
-        // Offer the built-in test stack. With testDataKind set, picking the
-        // test option copies the stack into the workspace and then reports it
-        // like any other workspace file - no isTestData branch needed here.
-        showTestData: true,
-        testDataKind: 'raw',
+        // Built-in sample files are seeded into every workspace, so they show
+        // up in this selector automatically alongside the user's own files.
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded
@@ -422,8 +420,8 @@ class TemplateModule extends BaseModule {
       return;
     }
 
-    // Test data arrives here as a regular workspace file (see testDataKind),
-    // so there is nothing special to branch on.
+    // Every selection (including the built-in samples) is a regular workspace
+    // file, so there is nothing special to branch on.
     this.uploadedFile = fileInfo;
 
     // Show validation

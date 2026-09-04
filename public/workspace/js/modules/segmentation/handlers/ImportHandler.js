@@ -56,7 +56,6 @@ class ImportHandler {
         title: 'Training Configuration',
         icon: 'settings',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.config-file'),
-        showTestData: false,
         accept: '.json',
         stateManager: this.module.state,
         recentResults: this.filterRecentResultsForConfig(recentResults),
@@ -75,7 +74,6 @@ class ImportHandler {
         title: 'Model Weights',
         icon: 'model',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.model-file'),
-        showTestData: false,
         accept: '.pth',
         stateManager: this.module.state,
         recentResults: this.filterRecentResultsForModel(recentResults),
@@ -109,7 +107,7 @@ class ImportHandler {
    */
   filterRecentResultsForConfig(results) {
     return results.map(r => ({
-      label: `Training ${r.trainingId.substring(0, 8)}... (${r.isTestData ? 'Test Data' : 'Custom'})`,
+      label: `Training ${r.trainingId.substring(0, 8)}...`,
       value: r.configPath,
       trainingId: r.trainingId
     }));
@@ -122,7 +120,7 @@ class ImportHandler {
    */
   filterRecentResultsForModel(results) {
     return results.map(r => ({
-      label: `Training ${r.trainingId.substring(0, 8)}... (${r.isTestData ? 'Test Data' : 'Custom'})`,
+      label: `Training ${r.trainingId.substring(0, 8)}...`,
       value: r.modelPath,
       trainingId: r.trainingId
     }));

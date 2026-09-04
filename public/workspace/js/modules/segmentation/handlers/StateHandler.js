@@ -189,8 +189,8 @@ class StateHandler {
       // Show validation success using ValidationDisplay component
       if (this.module.validationDisplay) {
         const details = [
-          { label: 'Raw Images', value: this.module.uploadedFiles.raw_images.isTestData ? 'Test Dataset' : 'Custom Upload' },
-          { label: 'Annotations', value: this.module.uploadedFiles.annotations.isTestData ? 'Test Dataset' : 'Custom Upload' },
+          { label: 'Raw Images', value: this.module.uploadedFiles.raw_images.name || 'Selected file' },
+          { label: 'Annotations', value: this.module.uploadedFiles.annotations.name || 'Selected file' },
           { label: 'Status', value: 'Files are ready. Click Next to configure training.' }
         ];
         this.module.validationDisplay.showSuccess('Files Loaded', details);

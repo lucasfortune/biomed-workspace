@@ -1,7 +1,7 @@
 /**
  * FileHandler.js - File Selection and Validation for Segmentation Module
  *
- * Handles file selection, upload, validation, and test data loading.
+ * Handles file selection, upload, and validation.
  * Extracted from SegmentationModule.js for better maintainability.
  */
 
@@ -33,7 +33,6 @@ class FileHandler {
       title: 'Raw Images',
       icon: 'image',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.raw-images'),
-      showTestData: true,
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('raw_images', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('raw_images', file, uploadedInfo)
@@ -46,7 +45,6 @@ class FileHandler {
       title: 'Annotations',
       icon: 'tag',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.annotations'),
-      showTestData: true,
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('annotations', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('annotations', file, uploadedInfo)
@@ -59,7 +57,6 @@ class FileHandler {
       title: 'Inference Data',
       icon: 'image',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step4.inference-data'),
-      showTestData: true,
       showRecentResults: true,
       resultTags: ['denoising', 'data'],
       stateManager: this.module.state,
@@ -103,20 +100,11 @@ class FileHandler {
 
     // Handle based on file type
     if (type === 'raw_images' || type === 'annotations') {
-      // Check if both are test data
-      const bothTestData =
-        this.module.uploadedFiles.raw_images?.isTestData &&
-        this.module.uploadedFiles.annotations?.isTestData;
-
-      if (bothTestData) {
-        await this.loadTestData();
-      } else if (this.module.uploadedFiles.raw_images && this.module.uploadedFiles.annotations) {
+      if (this.module.uploadedFiles.raw_images && this.module.uploadedFiles.annotations) {
         await this.validateUploadedFiles();
       }
     } else if (type === 'inference_data') {
-      if (fileInfo.isTestData) {
-        await this.loadTestInferenceData();
-      } else if (fileInfo) {
+      if (fileInfo) {
         const runInferenceBtn = document.getElementById('runInferenceBtn');
         if (runInferenceBtn) {
           runInferenceBtn.disabled = false;
@@ -172,51 +160,6 @@ class FileHandler {
     }
 
     return false;
-  }
-
-  /**
-   * Load test data (when both dropdowns select test data)
-   */
-  async loadTestData() {
-    console.log('[FileHandler] Loading test data...');
-
-    try {
-      this.module.state.update('ui.loading', true);
-
-      const formData = new FormData();
-      formData.append('isTestData', 'true');
-
-      const response = await fetch('/upload-data', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.module.uploadedFiles.raw_images = { path: result.raw_images_path, isTestData: true };
-        this.module.uploadedFiles.annotations = { path: result.annotations_path, isTestData: true };
-
-        this.displayValidationResults(result.validation);
-
-        this.module.filesValidated = true;
-        this.module.updateStep1NextButton();
-        this.module.stateHandler.saveState();
-
-        if (window.workspace?.fileBrowser) {
-          window.workspace.fileBrowser.refresh();
-        }
-
-        this.module.state.notify('success', 'Test data loaded and validated successfully');
-      } else {
-        throw new Error(result.error || 'Failed to load test data');
-      }
-    } catch (error) {
-      console.error('[FileHandler] Test data loading error:', error);
-      this.module.state.notify('error', `Failed to load test data: ${error.message}`);
-    } finally {
-      this.module.state.update('ui.loading', false);
-    }
   }
 
   /**
@@ -279,56 +222,6 @@ class FileHandler {
     }
   }
 
-  /**
-   * Load test inference data
-   */
-  async loadTestInferenceData() {
-    console.log('[FileHandler] Loading test inference data...');
-
-    try {
-      this.module.state.update('ui.loading', true);
-
-      const formData = new FormData();
-      formData.append('isTestData', 'true');
-
-      const response = await fetch('/upload-inference', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        const dataPath = result.inference_data_path || result.file_path;
-        this.module.uploadedFiles.inference_data = {
-          path: dataPath,
-          isTestData: true,
-          id: result.file_id || null
-        };
-
-        if (result.validation?.info?.slice_dimensions) {
-          const [h, w] = result.validation.info.slice_dimensions;
-          this.module.inferenceDimensions = { width: w, height: h };
-        }
-
-        const runInferenceBtn = document.getElementById('runInferenceBtn');
-        if (runInferenceBtn) {
-          runInferenceBtn.disabled = false;
-        }
-
-        this.module.stateHandler.saveState();
-        this.module.state.notify('success', 'Test inference data loaded successfully');
-        this.module._validateInferenceCompatibility();
-      } else {
-        throw new Error(result.error || 'Failed to load test inference data');
-      }
-    } catch (error) {
-      console.error('[FileHandler] Test inference loading error:', error);
-      this.module.state.notify('error', `Failed to load test inference data: ${error.message}`);
-    } finally {
-      this.module.state.update('ui.loading', false);
-    }
-  }
 
   /**
    * Validate inference file

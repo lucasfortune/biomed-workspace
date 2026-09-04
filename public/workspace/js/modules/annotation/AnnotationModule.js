@@ -356,8 +356,6 @@ class AnnotationModule extends BaseModule {
         icon: 'image',
         helpIconHtml: this.renderHelpIcon('annotation.step1.source-image'),
         accept: '.tif,.tiff',
-        showTestData: true,
-        testDataKind: 'raw',
         showRecentResults: true,
         stateManager: this.state,
         onSelect: this.onFileSelected,
@@ -1657,11 +1655,8 @@ class AnnotationModule extends BaseModule {
     this.validationDisplay.showLoading('Loading file information...');
 
     try {
-      // Determine scenario from the file's tags (or the test data flag)
-      if (file.isTestData) {
-        // Test data scenario - treat as new annotation
-        await this.handleNewAnnotation(file);
-      } else if (isUnfinishedAnnotation(file)) {
+      // Determine scenario from the file's tags
+      if (isUnfinishedAnnotation(file)) {
         // Resume unfinished annotation (saves keep updating the same WIP file)
         await this.handleResumeAnnotation(file);
       } else if (isFinishedAnnotation(file)) {
@@ -1685,29 +1680,6 @@ class AnnotationModule extends BaseModule {
    */
   async handleNewAnnotation(file) {
     console.log('[AnnotationModule] New annotation from:', file.name || file.path);
-
-    // For test data, we'll use placeholder info until we actually load it
-    if (file.isTestData) {
-      this.sourceFile = file;
-      this.tiffInfo = {
-        width: 512,
-        height: 512,
-        sliceCount: 64,
-        dtype: 'uint8'
-      };
-      this.isResuming = false;
-      this.sourceFileLoaded = true;
-
-      this.validationDisplay.showSuccess('Test Data Selected', [
-        { label: 'Source', value: file.name || 'Test Dataset' },
-        { label: 'Mode', value: 'New Annotation' },
-        { label: 'Note', value: 'Test data will be loaded when you proceed' }
-      ]);
-
-      const step1Next = document.getElementById('step1Next');
-      if (step1Next) step1Next.disabled = false;
-      return;
-    }
 
     // Fetch TIFF info for real files
     const fileId = file.id || file.path;

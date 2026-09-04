@@ -78,7 +78,7 @@ class FilterDenoisingModule extends BaseModule {
             <div class="step-inner">
               <h3>Select Image Data</h3>
               <p class="step-description">
-                Select a TIFF stack to denoise, or use test data to try the module.
+                Select a TIFF stack to denoise. A built-in sample file is included in every workspace.
               </p>
               <div id="fileSelectorContainer"></div>
               ${ValidationDisplay.renderContainer('validationResult')}
@@ -253,13 +253,6 @@ class FilterDenoisingModule extends BaseModule {
         title: 'Input Image Stack',
         icon: 'image',
         helpIconHtml: this.renderHelpIcon('denoising-filter.step1.input'),
-        showTestData: true,
-        testDataOptions: [
-          {
-            value: 'denoising_test_data',
-            label: 'Test Dataset - Denoising'
-          }
-        ],
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded
@@ -397,45 +390,6 @@ class FilterDenoisingModule extends BaseModule {
       return;
     }
 
-    // Handle test data - load it via API endpoint
-    if (fileInfo.isTestData) {
-      try {
-        this.validationDisplay.showLoading('Loading test data...');
-
-        const response = await fetch('/api/denoising/test-data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (result.success && result.file) {
-          this.uploadedFile = {
-            id: result.file.id,
-            name: result.file.name,
-            path: result.file.path,
-            isTestData: true
-          };
-
-          this.validationDisplay.showSuccess('Test Data Loaded', [
-            { label: 'Name', value: result.file.name },
-            { label: 'Type', value: 'Test Data (Denoising)' }
-          ]);
-
-          this.filesValidated = true;
-          const step1Next = document.getElementById('step1Next');
-          if (step1Next) step1Next.disabled = false;
-        } else {
-          throw new Error(result.error || 'Failed to load test data');
-        }
-      } catch (error) {
-        console.error('[FilterDenoisingModule] Error loading test data:', error);
-        this.validationDisplay.showError('Error', error.message);
-        this.state.notify('error', `Failed to load test data: ${error.message}`);
-      }
-      return;
-    }
-
     // Regular file selection
     this.uploadedFile = fileInfo;
 
@@ -456,8 +410,7 @@ class FilterDenoisingModule extends BaseModule {
     this.uploadedFile = {
       id: uploadedFile.id,
       name: uploadedFile.name || file.name,
-      path: uploadedFile.path,
-      isTestData: false
+      path: uploadedFile.path
     };
 
     this.validationDisplay.showSuccess('File Uploaded', [

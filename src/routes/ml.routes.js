@@ -91,14 +91,14 @@ function createMLRoutes(dependencies) {
       }
 
       const skipUpload = req.body.skipUpload === 'true';
-      const isTestData = req.body.isTestData === 'true';
 
-      // If NOT test data and NOT already uploaded, require approved status
-      if (!isTestData && !skipUpload && req.session.user.status !== 'active') {
+      // Uploading a new file requires approved status; the built-in sample files
+      // (already in the workspace) are selected via skipUpload and stay allowed.
+      if (!skipUpload && req.session.user.status !== 'active') {
         return res.status(403).json({
           error: 'Custom data upload requires account approval',
           status: req.session.user.status,
-          message: 'You can use test data while waiting for approval'
+          message: 'You can use the built-in sample files while waiting for approval'
         });
       }
 
@@ -141,64 +141,7 @@ function createMLRoutes(dependencies) {
           mimetype: 'image/tiff'
         };
       }
-      // Case 2: Test data request
-      else if (isTestData) {
-        if (logger) logger.debug('Processing test data request...');
-
-        const rawUploadDir = path.join(workspacePath, 'uploads', 'raw');
-        const annUploadDir = path.join(workspacePath, 'uploads', 'annotations');
-
-        if (!fs.existsSync(workspacePath)) {
-          workspaceManager.initializeWorkspace(sessionId);
-        }
-
-        if (!fs.existsSync(rawUploadDir)) fs.mkdirSync(rawUploadDir, { recursive: true });
-        if (!fs.existsSync(annUploadDir)) fs.mkdirSync(annUploadDir, { recursive: true });
-
-        const testFiles = {
-          raw_images: 'trypB_testData_training.tif',
-          annotations: 'trypB_testData_annotations.tif'
-        };
-
-        const rawSourcePath = path.join('test_data', testFiles.raw_images);
-        const annotationSourcePath = path.join('test_data', testFiles.annotations);
-
-        if (!fs.existsSync(rawSourcePath)) {
-          return res.status(400).json({
-            error: 'Test training images not found',
-            details: `Expected file: test_data/${testFiles.raw_images}`
-          });
-        }
-        if (!fs.existsSync(annotationSourcePath)) {
-          return res.status(400).json({
-            error: 'Test annotation images not found',
-            details: `Expected file: test_data/${testFiles.annotations}`
-          });
-        }
-
-        const rawDestPath = path.join(rawUploadDir, testFiles.raw_images);
-        const annotationDestPath = path.join(annUploadDir, testFiles.annotations);
-
-        fs.copyFileSync(rawSourcePath, rawDestPath);
-        fs.copyFileSync(annotationSourcePath, annotationDestPath);
-
-        rawFile = {
-          path: rawDestPath,
-          filename: testFiles.raw_images,
-          originalname: testFiles.raw_images,
-          size: fs.statSync(rawDestPath).size,
-          mimetype: 'image/tiff'
-        };
-
-        annotationFile = {
-          path: annotationDestPath,
-          filename: testFiles.annotations,
-          originalname: testFiles.annotations,
-          size: fs.statSync(annotationDestPath).size,
-          mimetype: 'image/tiff'
-        };
-      }
-      // Case 3: Regular file upload
+      // Case 2: Regular file upload
       else {
         if (!req.files.raw_images || !req.files.annotations) {
           return res.status(400).json({
@@ -223,8 +166,7 @@ function createMLRoutes(dependencies) {
       req.session.uploadedFiles = {
         raw_images: rawFile.path,
         annotations: annotationFile.path,
-        validation: validationResult,
-        isTestData: isTestData
+        validation: validationResult
       };
 
       // Track files in workspace metadata
@@ -232,15 +174,12 @@ function createMLRoutes(dependencies) {
 
       if (!skipUpload) {
         // New metadata system: uploads category with raw/annotation tags
-        const rawTags = isTestData ? ['raw', 'test-data'] : ['raw'];
-        const annTags = isTestData ? ['annotation', 'test-data'] : ['annotation'];
-
         const rawRelPath = path.relative(workspacePath, rawFile.path);
         rawFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: rawFile.filename || rawFile.originalname,
           path: rawRelPath,
           category: 'uploads',
-          tags: rawTags,
+          tags: ['raw'],
           size: rawFile.size,
           folderId: null
         });
@@ -250,7 +189,7 @@ function createMLRoutes(dependencies) {
           name: annotationFile.filename || annotationFile.originalname,
           path: annRelPath,
           category: 'uploads',
-          tags: annTags,
+          tags: ['annotation'],
           size: annotationFile.size,
           folderId: null
         });
@@ -258,7 +197,7 @@ function createMLRoutes(dependencies) {
         if (activityLogger) {
           activityLogger.logFileUpload(
             req.session.user.username,
-            isTestData ? 'test_data' : 'custom_data',
+            'custom_data',
             rawFile.filename || rawFile.originalname,
             rawFile.size
           );
@@ -272,20 +211,16 @@ function createMLRoutes(dependencies) {
         success: true,
         message: skipUpload
           ? 'Files validated successfully'
-          : (isTestData
-            ? 'Test dataset loaded and validated successfully'
-            : 'Files uploaded and validated successfully'),
+          : 'Files uploaded and validated successfully',
         validation: validationResult,
-        isTestData: isTestData,
         raw_images_path: rawFileEntry.path,
         annotations_path: annFileEntry.path
       });
 
     } catch (error) {
-      if (logger) logger.error('Upload/Test data error:', error);
+      if (logger) logger.error('Upload error:', error);
       res.status(500).json({
-        error: error.message,
-        isTestData: req.body.isTestData === 'true'
+        error: error.message
       });
     }
   });
@@ -340,15 +275,9 @@ function createMLRoutes(dependencies) {
         });
       }
 
-      const isUsingTestData = req.session.uploadedFiles?.isTestData;
-
-      if (!isUsingTestData && req.session.user.status !== 'active') {
-        return res.status(403).json({
-          error: 'Training with custom data requires account approval',
-          status: req.session.user.status,
-          message: 'You can train models with test data while waiting for approval'
-        });
-      }
+      // Custom uploads are gated at upload time; training runs on whatever is
+      // already in the workspace (custom uploads for approved users, or the
+      // built-in samples), so no separate approval gate is needed here.
 
       const sessionId = req.session.id;
       const trainingId = uuid.v4();
@@ -393,7 +322,6 @@ function createMLRoutes(dependencies) {
         current_epoch: 0,
         total_epochs: config.num_epochs,
         params: trainingParams,
-        isTestData: isUsingTestData,
         history: [] // Array of {epoch, train_loss, val_loss, train_dice, val_dice}
       });
 
@@ -499,13 +427,14 @@ function createMLRoutes(dependencies) {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
       const skipUpload = req.body.skipUpload === 'true';
-      const isTestData = req.body.isTestData === 'true';
 
-      if (!isTestData && !skipUpload && req.session.user.status !== 'active') {
+      // Uploading a new file requires approved status; existing workspace files
+      // (including the built-in samples) are selected via skipUpload.
+      if (!skipUpload && req.session.user.status !== 'active') {
         return res.status(403).json({
           error: 'Custom inference data upload requires account approval',
           status: req.session.user.status,
-          message: 'You can use test data while waiting for approval'
+          message: 'You can use the built-in sample files while waiting for approval'
         });
       }
 
@@ -536,40 +465,7 @@ function createMLRoutes(dependencies) {
           mimetype: 'image/tiff'
         };
       }
-      // Case 2: Test data
-      else if (isTestData) {
-        const inferenceUploadDir = path.join(workspacePath, 'uploads', 'raw');
-
-        if (!fs.existsSync(workspacePath)) {
-          workspaceManager.initializeWorkspace(sessionId);
-        }
-
-        if (!fs.existsSync(inferenceUploadDir)) {
-          fs.mkdirSync(inferenceUploadDir, { recursive: true });
-        }
-
-        const testInferenceFile = 'trypB_testData_inference.tif';
-        const sourceInferencePath = path.join('test_data', testInferenceFile);
-
-        if (!fs.existsSync(sourceInferencePath)) {
-          return res.status(400).json({
-            error: 'Test inference images not found',
-            details: `Expected file: test_data/${testInferenceFile}`
-          });
-        }
-
-        const destInferencePath = path.join(inferenceUploadDir, testInferenceFile);
-        fs.copyFileSync(sourceInferencePath, destInferencePath);
-
-        inferenceFile = {
-          path: destInferencePath,
-          filename: testInferenceFile,
-          originalname: testInferenceFile,
-          size: fs.statSync(destInferencePath).size,
-          mimetype: 'image/tiff'
-        };
-      }
-      // Case 3: Regular upload
+      // Case 2: Regular upload
       else {
         if (!req.file) {
           return res.status(400).json({ error: 'No file provided for inference' });
@@ -602,14 +498,13 @@ function createMLRoutes(dependencies) {
           inferenceFileEntry = { path: inferenceRelPath };
         }
       } else {
-        // New upload (test data or custom) - track in metadata
+        // New upload - track in metadata
         // New metadata system: uploads category with raw tag
-        const inferenceTags = isTestData ? ['raw', 'test-data'] : ['raw'];
         inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
           name: inferenceFile.filename || inferenceFile.originalname,
           path: inferenceRelPath,
           category: 'uploads',
-          tags: inferenceTags,
+          tags: ['raw'],
           size: inferenceFile.size,
           folderId: null
         });
@@ -619,21 +514,17 @@ function createMLRoutes(dependencies) {
         success: true,
         message: skipUpload
           ? 'Inference file validated successfully'
-          : (isTestData
-            ? 'Test inference data loaded successfully'
-            : 'Inference data uploaded successfully'),
+          : 'Inference data uploaded successfully',
         file_path: inferenceFile.path,
         inference_data_path: inferenceFileEntry ? inferenceFileEntry.path : inferenceRelPath,
         file_id: inferenceFileEntry ? inferenceFileEntry.id : null,
-        validation: validationResult,
-        isTestData: isTestData
+        validation: validationResult
       });
 
     } catch (error) {
       if (logger) logger.error('Inference upload error:', error);
       res.status(500).json({
-        error: error.message,
-        isTestData: req.body.isTestData === 'true'
+        error: error.message
       });
     }
   });
@@ -812,8 +703,7 @@ function createMLRoutes(dependencies) {
               completedAt: session.endTime || session.startTime,
               modelPath: path.relative(workspacePath, modelPath),
               configPath: path.relative(workspacePath, configPath),
-              config: configData,
-              isTestData: session.isTestData || false
+              config: configData
             });
           }
         }

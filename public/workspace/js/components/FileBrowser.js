@@ -38,7 +38,8 @@ class FileBrowser {
       'segcleanup': ['cleanup', 'cleaned', 'quantification'],
       'recipe': ['recipes', 'alignment'],
       'report': ['reports', 'csv', 'quantification', 'metrics'],
-      'test-data': ['test', 'sample', 'demo']
+      'test-data': ['test', 'sample', 'demo'],
+      'sample': ['sample', 'demo', 'example', 'built-in']
     };
 
     // Create context menu instance
@@ -2110,7 +2111,7 @@ class FileBrowser {
 
       let errorMsg = error.message;
       if (errorMsg.includes('403') || errorMsg.includes('approval')) {
-        errorMsg = 'Account approval required. You can use test data while waiting.';
+        errorMsg = 'Account approval required to upload. You can use the built-in sample files while waiting.';
       }
 
       this.state.notify('error', `Upload failed: ${errorMsg}`);

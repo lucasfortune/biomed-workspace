@@ -137,18 +137,6 @@ class DLDenoisingAPI {
   }
 
   /**
-   * Load test data for denoising
-   * @returns {Promise<Object>} Test data file info
-   */
-  async loadTestData() {
-    const response = await fetch('/api/denoising/test-data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    return response.json();
-  }
-
-  /**
    * Get recent training results for model import
    * @returns {Promise<Object>} Recent completed trainings with model paths
    */
