@@ -120,7 +120,7 @@ class StitchingModule extends BaseModule {
     return `
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Stacks</h3>
+          <h3>Select Stacks ${this.renderHelpIcon('stitching.step1.workflow')}</h3>
           <p class="step-description">
             Start a new stitch, or reapply a saved recipe to sibling volumes
             (for example the segmentations of already-aligned stacks).
@@ -140,7 +140,7 @@ class StitchingModule extends BaseModule {
           <div class="section-card" id="newStitchSection">
             <div id="stitchStackSelectorContainer"></div>
             <div class="section-title-row">
-              <h4>Stacks (in order)</h4>
+              <h4>Stacks (in order)</h4>${this.renderHelpIcon('stitching.step1.stacks')}
               <span class="mode-badge" id="stitchModeBadge" style="display: none;"></span>
             </div>
             <ul class="stack-list" id="stitchStackList"></ul>
@@ -193,7 +193,7 @@ class StitchingModule extends BaseModule {
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
-          <h3>Align Junctions</h3>
+          <h3>Align Junctions ${this.renderHelpIcon('stitching.step2.controls')}</h3>
           <p class="step-description">
             Pick the slice pair that shows the <strong>same physical
             section</strong> in both stacks, then align. Fixed slice is
@@ -205,7 +205,7 @@ class StitchingModule extends BaseModule {
 
             <div class="sv-toolbar">
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Junction</h4></div>
+                <div class="sv-section-header"><h4>Junction</h4>${this.renderHelpIcon('stitching.step2.slice-pair')}</div>
                 <div class="junction-nav" id="junctionNav"></div>
               </div>
 
@@ -220,7 +220,7 @@ class StitchingModule extends BaseModule {
               <div class="sv-section dominance-section">
                 <div class="sv-section-header">
                   <h4>Overlapping sections keep</h4>
-                  ${this.renderInfoTip('Where the two stacks cover the same z positions (re-imaged sections), keep one stack\'s slices or merge: both stacks keep their slices and each duplicated position is the average of the two images. Merge is for images only; label maps keep the upper stack. Ignored for side-by-side mosaics.')}
+                  ${this.renderHelpIcon('stitching.step2.dominance')}
                 </div>
                 <div class="dominance-toggle">
                   <button class="dominance-btn" id="dominantPrevBtn" title="Keep the upper (previous) stack's slices">
@@ -244,7 +244,7 @@ class StitchingModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Transform</h4></div>
+                <div class="sv-section-header"><h4>Transform</h4>${this.renderHelpIcon('stitching.step2.controls')}</div>
                 <div class="transform-row">
                   <span>dx <input type="number" class="input-sm" id="junctionDx" step="1" value="0"></span>
                   <span>dy <input type="number" class="input-sm" id="junctionDy" step="1" value="0"></span>
@@ -255,6 +255,7 @@ class StitchingModule extends BaseModule {
                 <div class="transform-row">
                   <button class="btn small primary" id="autoAlignBtn">Auto-align</button>
                   <button class="btn small secondary" id="resetAlignBtn">Reset</button>
+                  ${this.renderHelpIcon('stitching.step2.auto-align')}
                 </div>
               </div>
             </div>
@@ -269,22 +270,27 @@ class StitchingModule extends BaseModule {
     `;
   }
 
-  renderInfoTip(text) {
-    return `<span class="info-tip" title="${text}">?</span>`;
+  /** Help icon linking to an info-panel article (see workspace.js delegated handler). */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
   }
 
   renderStep3() {
     return `
       <div id="step3" class="step-content">
         <div class="step-inner">
-          <h3>Compose Stitched Volume</h3>
+          <h3>Compose Stitched Volume ${this.renderHelpIcon('stitching.step3.compose')}</h3>
           <p class="step-description">
             Review the placements and compose the output. The stitch recipe
             is saved alongside the result for later reuse.
           </p>
 
           <div class="section-card">
-            <h4>Placement Summary</h4>
+            <h4>Placement Summary ${this.renderHelpIcon('stitching.step3.compose')}</h4>
             <div id="placementSummary"></div>
           </div>
 
@@ -360,7 +366,7 @@ class StitchingModule extends BaseModule {
         id: 'stitch_stacks',
         title: 'Stacks',
         icon: 'puzzle',
-        helpIconHtml: '',
+        helpIconHtml: this.renderHelpIcon('stitching.step1.stacks'),
         mode: 'list',
         addLabel: 'Add',
         accept: '.tif,.tiff',
@@ -383,7 +389,7 @@ class StitchingModule extends BaseModule {
         id: 'stitch_recipe',
         title: 'Recipe',
         icon: 'file',
-        helpIconHtml: '',
+        helpIconHtml: this.renderHelpIcon('stitching.step1.workflow'),
         mode: 'select',
         accept: '.json',
         fileType: 'results',

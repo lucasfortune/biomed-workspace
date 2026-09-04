@@ -1879,6 +1879,508 @@
         "controls",
         "3d"
       ]
+    },
+    "preprocess": {
+      "id": "preprocess",
+      "title": "Preprocessing Module",
+      "displayTitle": "Preprocessing Module",
+      "category": "module",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "crop",
+        "downscale",
+        "intensity",
+        "lineage"
+      ],
+      "path": "modules/preprocess/_module.md",
+      "seeAlsoManual": [
+        "preprocess.step1.stack",
+        "preprocess.step2.crop",
+        "preprocess.step2.geometry",
+        "preprocess.step2.intensity",
+        "preprocess.step2.output",
+        "preprocess.step3.apply"
+      ],
+      "seeAlsoTags": [
+        "preprocess",
+        "intensity"
+      ]
+    },
+    "preprocess.step1.stack": {
+      "id": "preprocess.step1.stack",
+      "title": "Select Stack",
+      "displayTitle": "Select Stack",
+      "category": "data",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "input",
+        "grayscale"
+      ],
+      "path": "modules/preprocess/step1-stack.md",
+      "seeAlsoManual": [
+        "preprocess",
+        "preprocess.step2.crop"
+      ],
+      "seeAlsoTags": [
+        "input",
+        "preprocess"
+      ]
+    },
+    "preprocess.step2.crop": {
+      "id": "preprocess.step2.crop",
+      "title": "Crop and Z Range",
+      "displayTitle": "Crop and Z Range",
+      "category": "process",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "crop",
+        "z-range",
+        "lineage"
+      ],
+      "path": "modules/preprocess/step2-crop.md",
+      "seeAlsoManual": [
+        "preprocess",
+        "preprocess.step2.geometry",
+        "preprocess.step2.intensity"
+      ],
+      "seeAlsoTags": [
+        "crop",
+        "preprocess"
+      ]
+    },
+    "preprocess.step2.geometry": {
+      "id": "preprocess.step2.geometry",
+      "title": "Geometry",
+      "displayTitle": "Geometry",
+      "category": "process",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "flip",
+        "rotate",
+        "downscale",
+        "voxel-size"
+      ],
+      "path": "modules/preprocess/step2-geometry.md",
+      "seeAlsoManual": [
+        "preprocess",
+        "preprocess.step2.crop",
+        "preprocess.step2.intensity"
+      ],
+      "seeAlsoTags": [
+        "downscale",
+        "preprocess"
+      ]
+    },
+    "preprocess.step2.intensity": {
+      "id": "preprocess.step2.intensity",
+      "title": "Intensity",
+      "displayTitle": "Intensity",
+      "category": "process",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "intensity",
+        "histogram",
+        "gamma",
+        "contrast"
+      ],
+      "path": "modules/preprocess/step2-intensity.md",
+      "seeAlsoManual": [
+        "preprocess",
+        "preprocess.step2.geometry",
+        "preprocess.step2.output"
+      ],
+      "seeAlsoTags": [
+        "intensity",
+        "preprocess"
+      ]
+    },
+    "preprocess.step2.output": {
+      "id": "preprocess.step2.output",
+      "title": "Output Data Type",
+      "displayTitle": "Output Data Type",
+      "category": "parameter",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "dtype",
+        "bit-depth",
+        "output"
+      ],
+      "path": "modules/preprocess/step2-output.md",
+      "seeAlsoManual": [
+        "preprocess",
+        "preprocess.step2.intensity",
+        "preprocess.step3.apply"
+      ],
+      "seeAlsoTags": [
+        "dtype",
+        "preprocess"
+      ]
+    },
+    "preprocess.step3.apply": {
+      "id": "preprocess.step3.apply",
+      "title": "Apply",
+      "displayTitle": "Apply",
+      "category": "process",
+      "module": "preprocess",
+      "tags": [
+        "preprocess",
+        "apply",
+        "output",
+        "progress"
+      ],
+      "path": "modules/preprocess/step3-apply.md",
+      "seeAlsoManual": [
+        "preprocess",
+        "preprocess.step2.output",
+        "preprocess.step1.stack"
+      ],
+      "seeAlsoTags": [
+        "output",
+        "preprocess"
+      ]
+    },
+    "stitching": {
+      "id": "stitching",
+      "title": "Stack Stitching Module",
+      "displayTitle": "Stack Stitching Module",
+      "category": "module",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "alignment",
+        "mosaic",
+        "z-concatenation",
+        "recipe"
+      ],
+      "path": "modules/stitching/_module.md",
+      "seeAlsoManual": [
+        "stitching.step1.workflow",
+        "stitching.step1.stacks",
+        "stitching.step2.slice-pair",
+        "stitching.step2.dominance",
+        "stitching.step3.compose"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "alignment"
+      ]
+    },
+    "stitching.step1.stacks": {
+      "id": "stitching.step1.stacks",
+      "title": "Selecting and Ordering Stacks",
+      "displayTitle": "Selecting and Ordering Stacks",
+      "category": "data",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "input",
+        "ordering",
+        "data-mode"
+      ],
+      "path": "modules/stitching/step1-stacks.md",
+      "seeAlsoManual": [
+        "stitching",
+        "stitching.step1.workflow",
+        "stitching.step2.slice-pair"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "input"
+      ]
+    },
+    "stitching.step1.workflow": {
+      "id": "stitching.step1.workflow",
+      "title": "New Stitch or Saved Recipe",
+      "displayTitle": "New Stitch or Saved Recipe",
+      "category": "process",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "workflow",
+        "recipe",
+        "reuse"
+      ],
+      "path": "modules/stitching/step1-workflow.md",
+      "seeAlsoManual": [
+        "stitching",
+        "stitching.step1.stacks",
+        "stitching.step3.compose"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "recipe"
+      ]
+    },
+    "stitching.step2.auto-align": {
+      "id": "stitching.step2.auto-align",
+      "title": "Auto-Align and Confidence",
+      "displayTitle": "Auto-Align and Confidence",
+      "category": "feature",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "auto-align",
+        "phase-correlation",
+        "confidence"
+      ],
+      "path": "modules/stitching/step2-auto-align.md",
+      "seeAlsoManual": [
+        "stitching.step2.controls",
+        "stitching.step2.slice-pair"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "alignment"
+      ]
+    },
+    "stitching.step2.controls": {
+      "id": "stitching.step2.controls",
+      "title": "The Overlay Viewer",
+      "displayTitle": "The Overlay Viewer",
+      "category": "feature",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "alignment",
+        "viewer",
+        "overlay",
+        "controls"
+      ],
+      "path": "modules/stitching/step2-controls.md",
+      "seeAlsoManual": [
+        "stitching.step2.slice-pair",
+        "stitching.step2.auto-align",
+        "stitching.step2.dominance"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "alignment"
+      ]
+    },
+    "stitching.step2.dominance": {
+      "id": "stitching.step2.dominance",
+      "title": "Overlapping Sections Keep",
+      "displayTitle": "Overlapping Sections Keep",
+      "category": "parameter",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "z-overlap",
+        "merge",
+        "dominance",
+        "z_merge"
+      ],
+      "path": "modules/stitching/step2-dominance.md",
+      "seeAlsoManual": [
+        "stitching.step2.slice-pair",
+        "stitching.step2.controls",
+        "stitching.step3.compose"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "z-overlap"
+      ]
+    },
+    "stitching.step2.slice-pair": {
+      "id": "stitching.step2.slice-pair",
+      "title": "Choosing the Slice Pair",
+      "displayTitle": "Choosing the Slice Pair",
+      "category": "process",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "alignment",
+        "slice-pair",
+        "z-offset"
+      ],
+      "path": "modules/stitching/step2-slice-pair.md",
+      "seeAlsoManual": [
+        "stitching.step2.controls",
+        "stitching.step2.dominance",
+        "stitching.step3.compose"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "alignment"
+      ]
+    },
+    "stitching.step3.compose": {
+      "id": "stitching.step3.compose",
+      "title": "Composing the Volume",
+      "displayTitle": "Composing the Volume",
+      "category": "process",
+      "module": "stitching",
+      "tags": [
+        "stitching",
+        "compose",
+        "output",
+        "recipe",
+        "warnings"
+      ],
+      "path": "modules/stitching/step3-compose.md",
+      "seeAlsoManual": [
+        "stitching.step2.dominance",
+        "stitching.step1.workflow",
+        "stitching"
+      ],
+      "seeAlsoTags": [
+        "stitching",
+        "output"
+      ]
+    },
+    "segcleanup": {
+      "id": "segcleanup",
+      "title": "Segmentation Cleanup Module",
+      "displayTitle": "Segmentation Cleanup Module",
+      "category": "module",
+      "module": "segcleanup",
+      "tags": [
+        "segcleanup",
+        "cleanup",
+        "quantification",
+        "editing",
+        "segmentation"
+      ],
+      "path": "modules/segcleanup/_module.md",
+      "seeAlsoManual": [
+        "segcleanup.step1.segmentation",
+        "segcleanup.step2.painting",
+        "segcleanup.step2.cleanup-ops",
+        "segcleanup.step2.quantification",
+        "segcleanup.step2.save"
+      ],
+      "seeAlsoTags": [
+        "segmentation",
+        "cleanup"
+      ]
+    },
+    "segcleanup.step1.segmentation": {
+      "id": "segcleanup.step1.segmentation",
+      "title": "Selecting a Segmentation",
+      "displayTitle": "Selecting a Segmentation",
+      "category": "data",
+      "module": "segcleanup",
+      "tags": [
+        "segcleanup",
+        "input",
+        "segmentation",
+        "annotations",
+        "voxel-size"
+      ],
+      "path": "modules/segcleanup/step1-segmentation.md",
+      "seeAlsoManual": [
+        "segcleanup",
+        "segcleanup.step2.painting",
+        "segcleanup.step2.quantification"
+      ],
+      "seeAlsoTags": [
+        "input",
+        "segmentation"
+      ]
+    },
+    "segcleanup.step2.cleanup-ops": {
+      "id": "segcleanup.step2.cleanup-ops",
+      "title": "Automated Cleanup",
+      "displayTitle": "Automated Cleanup",
+      "category": "process",
+      "module": "segcleanup",
+      "tags": [
+        "segcleanup",
+        "cleanup",
+        "merge",
+        "fill-holes",
+        "components",
+        "smoothing"
+      ],
+      "path": "modules/segcleanup/step2-cleanup-ops.md",
+      "seeAlsoManual": [
+        "segcleanup",
+        "segcleanup.step2.painting",
+        "segcleanup.step2.quantification"
+      ],
+      "seeAlsoTags": [
+        "cleanup",
+        "process"
+      ]
+    },
+    "segcleanup.step2.painting": {
+      "id": "segcleanup.step2.painting",
+      "title": "Painting Corrections",
+      "displayTitle": "Painting Corrections",
+      "category": "feature",
+      "module": "segcleanup",
+      "tags": [
+        "segcleanup",
+        "painting",
+        "brush",
+        "eraser",
+        "flood-fill",
+        "undo"
+      ],
+      "path": "modules/segcleanup/step2-painting.md",
+      "seeAlsoManual": [
+        "segcleanup",
+        "segcleanup.step2.cleanup-ops",
+        "segcleanup.step2.save"
+      ],
+      "seeAlsoTags": [
+        "editing",
+        "brush"
+      ]
+    },
+    "segcleanup.step2.quantification": {
+      "id": "segcleanup.step2.quantification",
+      "title": "Quantification and Reports",
+      "displayTitle": "Quantification and Reports",
+      "category": "metric",
+      "module": "segcleanup",
+      "tags": [
+        "segcleanup",
+        "quantification",
+        "metrics",
+        "volume",
+        "surface-area",
+        "report"
+      ],
+      "path": "modules/segcleanup/step2-quantification.md",
+      "seeAlsoManual": [
+        "segcleanup",
+        "segcleanup.step1.segmentation",
+        "segcleanup.step2.cleanup-ops"
+      ],
+      "seeAlsoTags": [
+        "metric",
+        "quantification"
+      ]
+    },
+    "segcleanup.step2.save": {
+      "id": "segcleanup.step2.save",
+      "title": "Saving the Result",
+      "displayTitle": "Saving the Result",
+      "category": "process",
+      "module": "segcleanup",
+      "tags": [
+        "segcleanup",
+        "save",
+        "output",
+        "export"
+      ],
+      "path": "modules/segcleanup/step2-save.md",
+      "seeAlsoManual": [
+        "segcleanup",
+        "segcleanup.step2.cleanup-ops",
+        "segcleanup.step2.quantification"
+      ],
+      "seeAlsoTags": [
+        "output",
+        "process"
+      ]
     }
   },
   "glossary": {
@@ -2502,7 +3004,10 @@
     "file-browser",
     "imageviewer",
     "mesh",
+    "preprocess",
+    "segcleanup",
     "segmentation",
+    "stitching",
     "visualization"
   ]
 }

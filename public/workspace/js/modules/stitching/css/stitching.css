@@ -143,20 +143,6 @@
   cursor: grabbing;
 }
 
-.stitching-module .info-tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 1px solid var(--module-border-dark);
-  color: var(--module-text-secondary);
-  font-size: 0.7rem;
-  cursor: help;
-  margin-left: 4px;
-}
-
 .stitching-module .junction-nav {
   display: flex;
   flex-direction: column;

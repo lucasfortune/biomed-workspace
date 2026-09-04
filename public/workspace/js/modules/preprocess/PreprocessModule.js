@@ -89,11 +89,20 @@ class PreprocessModule extends BaseModule {
     `;
   }
 
+  /** Help icon linking to an info-panel article (see workspace.js delegated handler). */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
   renderStep1() {
     return `
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Stack</h3>
+          <h3>Select Stack ${this.renderHelpIcon('preprocess.step1.stack')}</h3>
           <p class="step-description">
             Pick the image stack to preprocess. The result is saved as a new
             file; the original is never modified.
@@ -145,7 +154,7 @@ class PreprocessModule extends BaseModule {
 
             <div class="sv-toolbar">
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Crop</h4></div>
+                <div class="sv-section-header"><h4>Crop</h4>${this.renderHelpIcon('preprocess.step2.crop')}</div>
                 <div class="sv-row">
                   <button class="btn small" id="ppCropDrawBtn">Draw on image</button>
                   <button class="btn small secondary" id="ppCropClearBtn">Clear</button>
@@ -159,7 +168,7 @@ class PreprocessModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Z range</h4></div>
+                <div class="sv-section-header"><h4>Z range</h4>${this.renderHelpIcon('preprocess.step2.crop')}</div>
                 <div class="pp-grid2">
                   <span>first <input type="number" id="ppZFrom" min="1" step="1"></span>
                   <span>last <input type="number" id="ppZTo" min="1" step="1"></span>
@@ -168,7 +177,7 @@ class PreprocessModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Geometry</h4></div>
+                <div class="sv-section-header"><h4>Geometry</h4>${this.renderHelpIcon('preprocess.step2.geometry')}</div>
                 <label class="checkbox-inline"><input type="checkbox" id="ppFlipH"> flip horizontal</label>
                 <label class="checkbox-inline"><input type="checkbox" id="ppFlipV"> flip vertical</label>
                 <div class="sv-row">
@@ -192,7 +201,7 @@ class PreprocessModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Intensity</h4></div>
+                <div class="sv-section-header"><h4>Intensity</h4>${this.renderHelpIcon('preprocess.step2.intensity')}</div>
                 <canvas id="ppHistCanvas" width="258" height="90"></canvas>
                 <div class="pp-grid2">
                   <span>min <input type="number" id="ppWinLo" step="any"></span>
@@ -213,7 +222,7 @@ class PreprocessModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Output</h4></div>
+                <div class="sv-section-header"><h4>Output</h4>${this.renderHelpIcon('preprocess.step2.output')}</div>
                 <div class="sv-row">
                   <label>data type</label>
                   <select id="ppOutDtype">
@@ -239,7 +248,7 @@ class PreprocessModule extends BaseModule {
     return `
       <div id="step3" class="step-content">
         <div class="step-inner">
-          <h3>Apply</h3>
+          <h3>Apply ${this.renderHelpIcon('preprocess.step3.apply')}</h3>
           <p class="step-description">
             Review the operations and write the preprocessed stack as a new
             workspace file.
@@ -314,6 +323,7 @@ class PreprocessModule extends BaseModule {
         fileType: 'uploads',
         filterTags: ['raw'],
         title: 'Image Stack',
+        helpIconHtml: this.renderHelpIcon('preprocess.step1.stack'),
         icon: 'image',
         accept: '.tif,.tiff',
         showTestData: true,

@@ -101,11 +101,20 @@ class SegcleanupModule extends BaseModule {
     `;
   }
 
+  /** Help icon linking to an info-panel article (see workspace.js delegated handler). */
+  renderHelpIcon(articleId) {
+    return `<span class="help-icon" data-info-id="${articleId}" title="Click for help">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+      </svg>
+    </span>`;
+  }
+
   renderStep1() {
     return `
       <div id="step1" class="step-content active">
         <div class="step-inner">
-          <h3>Select Segmentation</h3>
+          <h3>Select Segmentation ${this.renderHelpIcon('segcleanup.step1.segmentation')}</h3>
           <p class="step-description">
             Pick a segmentation (or annotation mask) to edit and measure.
             All changes are saved as new files; the original is never
@@ -142,7 +151,7 @@ class SegcleanupModule extends BaseModule {
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
-          <h3>Edit &amp; Quantify</h3>
+          <h3>Edit &amp; Quantify ${this.renderHelpIcon('segcleanup.step2.painting')}</h3>
           <p class="step-description">
             Paint corrections directly, run automated cleanup on the whole
             stack, and measure the result. Left-drag paints, right-drag or
@@ -166,7 +175,7 @@ class SegcleanupModule extends BaseModule {
 
             <div class="sv-toolbar">
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Tool</h4></div>
+                <div class="sv-section-header"><h4>Tool</h4>${this.renderHelpIcon('segcleanup.step2.painting')}</div>
                 <div class="sc-tool-row">
                   <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">${icon('brush')} Brush</button>
                   <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">${icon('eraser')} Eraser</button>
@@ -180,12 +189,12 @@ class SegcleanupModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Active class</h4></div>
+                <div class="sv-section-header"><h4>Active class</h4>${this.renderHelpIcon('segcleanup.step2.painting')}</div>
                 <div id="scClassList"></div>
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Automated cleanup</h4></div>
+                <div class="sv-section-header"><h4>Automated cleanup</h4>${this.renderHelpIcon('segcleanup.step2.cleanup-ops')}</div>
                 <div id="scClassOps"></div>
                 <div class="sv-row">
                   <label>fill holes</label>
@@ -212,7 +221,7 @@ class SegcleanupModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Output</h4></div>
+                <div class="sv-section-header"><h4>Output</h4>${this.renderHelpIcon('segcleanup.step2.save')}</div>
                 <input type="text" id="scOutputName" value="cleaned" class="sc-name-input">
                 <div class="sc-job-status" id="scSaveStatus"></div>
               </div>
@@ -221,7 +230,7 @@ class SegcleanupModule extends BaseModule {
 
           <div class="section-card sc-quant-card">
             <div class="sc-quant-header">
-              <h4>Quantification</h4>
+              <h4>Quantification ${this.renderHelpIcon('segcleanup.step2.quantification')}</h4>
               <div class="sc-quant-actions">
                 <span class="sc-stale-badge" id="scStaleBadge" style="display: none;">labels edited</span>
                 <button class="btn small" id="scUpdateQuantBtn" style="display: none;">Update</button>
@@ -269,6 +278,7 @@ class SegcleanupModule extends BaseModule {
         uploadCategory: 'annotations',
         filterTags: ['annotation'],
         title: 'Segmentation',
+        helpIconHtml: this.renderHelpIcon('segcleanup.step1.segmentation'),
         icon: 'tag',
         accept: '.tif,.tiff',
         showTestData: true,
