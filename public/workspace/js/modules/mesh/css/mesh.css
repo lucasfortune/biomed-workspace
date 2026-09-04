@@ -344,21 +344,6 @@
    RESULTS (the card itself is .section-card.success-card from module-base)
    ============================================ */
 
-.mesh-module .download-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--module-spacing-sm);
-  margin-top: var(--module-spacing-lg);
-}
-
-.mesh-module .download-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  font-size: var(--module-font-size-sm);
-}
-
 /* ============================================
    RESPONSIVE
    ============================================ */
@@ -381,17 +366,6 @@
   .mesh-module .summary-preview img {
     max-width: 100%;
     max-height: 200px;
-  }
-}
-
-/* Phone-level: stack the download buttons */
-@media (max-width: 768px) {
-  .mesh-module .download-buttons {
-    flex-direction: column;
-  }
-
-  .mesh-module .download-buttons .btn {
-    width: 100%;
   }
 }
 

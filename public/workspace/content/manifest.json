@@ -2020,12 +2020,13 @@
     },
     "stitching.step2.auto-align": {
       "id": "stitching.step2.auto-align",
-      "title": "Auto-Align and Confidence",
-      "displayTitle": "Auto-Align and Confidence",
+      "title": "Aligning a Junction",
+      "displayTitle": "Aligning a Junction",
       "category": "feature",
       "module": "stitching",
       "tags": [
         "stitching",
+        "alignment",
         "auto-align",
         "phase-correlation",
         "confidence"
@@ -2055,8 +2056,8 @@
       ],
       "path": "modules/stitching/step2-controls.md",
       "seeAlsoManual": [
-        "stitching.step2.slice-pair",
         "stitching.step2.auto-align",
+        "stitching.step2.slice-pair",
         "stitching.step2.dominance"
       ],
       "seeAlsoTags": [

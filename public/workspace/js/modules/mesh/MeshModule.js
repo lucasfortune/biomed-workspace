@@ -23,7 +23,6 @@ import BaseModule from '/workspace/js/core/BaseModule.js';
 import { StepNavigator, FileSelector, ValidationDisplay }
   from '/workspace/js/core/components/index.js';
 import MeshAPI from './MeshAPI.js';
-import { icon } from '/workspace/js/core/icons.js';
 import ParameterValidator from '/workspace/js/core/utils/ParameterValidator.js';
 import FormValidationController from '/workspace/js/core/utils/FormValidationController.js';
 
@@ -228,7 +227,7 @@ class MeshModule extends BaseModule {
 
                 <div id="resultsDetails" class="validation-details"></div>
 
-                <div class="download-buttons" id="downloadButtons"></div>
+                <p class="field-hint">The mesh is saved to your workspace. Download it any time from the file browser.</p>
 
                 <div class="success-actions">
                   <button class="btn primary" id="openVisualizationBtn">
@@ -386,13 +385,6 @@ class MeshModule extends BaseModule {
     // Result actions
     addListener(document.getElementById('openVisualizationBtn'), 'click', () => this.openInVisualization());
     addListener(document.getElementById('generateAnotherBtn'), 'click', () => this.reset());
-
-    // Download buttons are re-rendered after each run: delegate from the
-    // stable parent so the handler survives the innerHTML replacement
-    addListener(document.getElementById('downloadButtons'), 'click', (event) => {
-      const button = event.target.closest('[data-format]');
-      if (button) this.downloadMesh(button.dataset.format);
-    });
   }
 
   /**
@@ -869,7 +861,6 @@ class MeshModule extends BaseModule {
 
   showGenerationResults(data, elapsedTime = null) {
     const details = document.getElementById('resultsDetails');
-    const downloadBtns = document.getElementById('downloadButtons');
 
     // Format output directory to show relative path
     let outputDirDisplay = data.output_dir || 'N/A';
@@ -909,22 +900,6 @@ class MeshModule extends BaseModule {
         ` : ''}
       `;
     }
-
-    if (downloadBtns && data.formats) {
-      // Handled by the delegated click listener on #downloadButtons
-      downloadBtns.innerHTML = data.formats.map(format => `
-        <button class="btn secondary download-btn" data-format="${format}">
-          ${icon('download')} Download ${format.toUpperCase()}
-        </button>
-      `).join('');
-    }
-  }
-
-  downloadMesh(format) {
-    if (!this.currentMeshId) return;
-
-    const url = this.api.getDownloadUrl(this.currentMeshId, format);
-    window.open(url, '_blank');
   }
 
   // ===========================================================================
@@ -997,8 +972,6 @@ class MeshModule extends BaseModule {
     if (progress) progress.style.display = 'none';
     const results = document.getElementById('generationResults');
     if (results) results.style.display = 'none';
-    const downloadBtns = document.getElementById('downloadButtons');
-    if (downloadBtns) downloadBtns.innerHTML = '';
     this.setJobButtonVisible(true);
 
     // Reset progress UI

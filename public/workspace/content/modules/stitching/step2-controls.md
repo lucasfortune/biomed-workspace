@@ -10,8 +10,8 @@ tags:
   - overlay
   - controls
 seeAlsoManual:
-  - stitching.step2.slice-pair
   - stitching.step2.auto-align
+  - stitching.step2.slice-pair
   - stitching.step2.dominance
 seeAlsoTags:
   - stitching
@@ -30,16 +30,6 @@ The Align step shows the two slices of a junction superimposed so you can line t
 
 - Flicker: a checkbox that rapidly alternates the two slices (about three times a second) instead of blending them, which makes small misregistrations easier to spot
 
-## Moving the Slice
-
-- Drag with the left mouse button to move the moving slice over the fixed one
-
-- Arrow keys nudge the moving slice by 1 pixel; hold Shift to nudge by 10 pixels
-
-- The dx, dy, and rotation fields show the current transform and can be typed into directly
-
-- Any manual move clears the alignment confidence score, since it no longer reflects the current position
-
 ## Panning and Zoom
 
 - Pan the view (moving both slices together to inspect another area) with a middle-button drag, Shift plus left drag, or Space plus left drag
@@ -47,9 +37,3 @@ The Align step shows the two slices of a junction superimposed so you can line t
 - The mouse wheel zooms, anchored at the cursor; the zoom buttons offer zoom in, out, fit, and 1:1
 
 - Zoom is limited to a 0.1x to 10x range
-
-## Per-Junction Buttons
-
-- Auto-align: estimate the transform automatically (see the auto-align article)
-
-- Reset: clear dx, dy, and rotation back to zero and drop the confidence score

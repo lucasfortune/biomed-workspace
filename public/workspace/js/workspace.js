@@ -448,8 +448,8 @@ class Workspace {
         <h3>${module.name}</h3>
         <p>${module.description}</p>
         <div class="module-io">
-          <div class="inputs">Inputs: ${module.inputs.join(', ')}</div>
-          <div class="outputs">Outputs: ${module.outputs.join(', ')}</div>
+          ${module.inputs.length ? `<div class="inputs">Inputs: ${module.inputs.join(', ')}</div>` : ''}
+          ${module.outputs.length ? `<div class="outputs">Outputs: ${module.outputs.join(', ')}</div>` : ''}
         </div>
         ${module.status === 'coming_soon'
           ? '<div class="status-badge">Coming Soon</div>'
@@ -492,8 +492,8 @@ class Workspace {
         <h3>${module.name}</h3>
         <p>${module.description}</p>
         <div class="module-io">
-          <div class="inputs">Inputs: ${module.inputs.join(', ')}</div>
-          <div class="outputs">Outputs: ${module.outputs.join(', ')}</div>
+          ${module.inputs.length ? `<div class="inputs">Inputs: ${module.inputs.join(', ')}</div>` : ''}
+          ${module.outputs.length ? `<div class="outputs">Outputs: ${module.outputs.join(', ')}</div>` : ''}
         </div>
         <div class="module-buttons-dual">
           ${buttons}

@@ -1,10 +1,11 @@
 ---
 id: stitching.step2.auto-align
-title: Auto-Align and Confidence
+title: Aligning a Junction
 category: feature
 module: stitching
 tags:
   - stitching
+  - alignment
   - auto-align
   - phase-correlation
   - confidence
@@ -16,34 +17,28 @@ seeAlsoTags:
   - alignment
 ---
 
-# Auto-Align and Confidence
+# Aligning a Junction
 
-Auto-align estimates the in-plane translation between the two slices of the current junction for you, so you can start from a close fit rather than dragging from scratch.
+Line up the two slices of the current junction: move the green (moving) slice onto the magenta (fixed) one until shared structure turns gray.
 
-## How It Works
+## Moving the Slice
 
-- Auto-align uses phase correlation on the declared slice pair to find the dx and dy that place the moving slice onto the fixed one
+- Drag with the left mouse button to move the moving slice; arrow keys nudge by 1 pixel, Shift plus arrow by 10
 
-- For images it correlates the intensities; for label maps it correlates a boundary map extracted from the labels, since class IDs themselves carry no correlation meaning
+- The dx, dy, and rotation fields show the current transform and accept typed values
 
-- It runs coarse-to-fine: a downsampled pass first, then a refinement on full-resolution central windows
+- Any manual move clears the confidence score, since it no longer reflects the current position
 
-- It fills in dx and dy but does not estimate rotation; adjust rotation by hand if the slices are turned relative to each other
+## Auto Align and Confidence
 
-## The Confidence Score
+- Auto-align estimates dx and dy by phase correlation on the declared slice pair (a boundary map is used for label stacks); it runs coarse-to-fine but does not estimate rotation, so set that by hand
 
-- Each run returns a confidence score, the correlation of the overlap after the estimated shift, shown as "overlap correlation" in the viewer footer
+- Each run reports a confidence score (overlap correlation) in the viewer footer: above 0.5 is good, at or below is poor, and below 0.3 raises a warning
 
-- Above 0.5 the score is treated as good; at or below 0.5 it is flagged as poor
+- If confidence stays low, confirm the pair shows the same physical section, check for a large rotation, and fall back to manual alignment, using the flicker toggle to verify the fit
 
-- Below 0.3 a warning appears, prompting you to check the slice pair and adjust manually
+## Per-Junction Buttons
 
-- Any manual nudge, drag, rotation, or Reset clears the score, because it no longer describes the current position
+- Auto-align: estimate the transform automatically
 
-## If Confidence Is Low
-
-- Confirm the slice pair really shows the same physical section
-
-- Check for a large rotation, which auto-align does not correct
-
-- Fall back to manual alignment: drag, arrow-key nudges, and the flicker toggle to verify the fit
+- Reset: clear dx, dy, and rotation back to zero and drop the confidence score

@@ -123,16 +123,6 @@ class MeshAPI {
   }
 
   /**
-   * Get download URL for generated mesh
-   * @param {string} meshId - Mesh generation ID
-   * @param {string} format - File format ('json', 'obj', 'stl')
-   * @returns {string} Download URL
-   */
-  getDownloadUrl(meshId, format) {
-    return `${this.baseUrl}/api/mesh/download/${meshId}/${format}`;
-  }
-
-  /**
    * Delete a file from workspace (used for cleanup after failed validation)
    * @param {string} fileId - File ID to delete
    * @returns {Promise<{success: boolean}>}

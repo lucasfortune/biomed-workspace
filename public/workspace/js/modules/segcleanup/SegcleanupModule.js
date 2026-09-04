@@ -110,6 +110,12 @@ class SegcleanupModule extends BaseModule {
     </span>`;
   }
 
+  /** Default save name for the current file: `{original-filename}_clnd`. */
+  defaultOutputName() {
+    const base = (this.file?.name || '').replace(/\.tiff?$/i, '');
+    return base ? `${base}_clnd` : 'cleaned';
+  }
+
   renderStep1() {
     return `
       <div id="step1" class="step-content active">
@@ -175,7 +181,7 @@ class SegcleanupModule extends BaseModule {
 
             <div class="sv-toolbar">
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Tool</h4>${this.renderHelpIcon('segcleanup.step2.painting')}</div>
+                <div class="sv-section-header"><h4>Tool &amp; class</h4>${this.renderHelpIcon('segcleanup.step2.painting')}</div>
                 <div class="sc-tool-row">
                   <button class="sc-tool-btn active" data-tool="brush" title="Paint with the active class">${icon('brush')} Brush</button>
                   <button class="sc-tool-btn" data-tool="eraser" title="Erase to background">${icon('eraser')} Eraser</button>
@@ -186,10 +192,6 @@ class SegcleanupModule extends BaseModule {
                   <input type="range" class="range-slider" id="scBrushSize" min="1" max="100" value="10">
                   <span class="sv-row-value" id="scBrushSizeVal">10px</span>
                 </div>
-              </div>
-
-              <div class="sv-section">
-                <div class="sv-section-header"><h4>Active class</h4>${this.renderHelpIcon('segcleanup.step2.painting')}</div>
                 <div id="scClassList"></div>
               </div>
 
@@ -222,7 +224,7 @@ class SegcleanupModule extends BaseModule {
 
               <div class="sv-section">
                 <div class="sv-section-header"><h4>Output</h4>${this.renderHelpIcon('segcleanup.step2.save')}</div>
-                <input type="text" id="scOutputName" value="cleaned" class="sc-name-input">
+                <input type="text" id="scOutputName" value="" placeholder="cleaned" class="sc-name-input">
                 <div class="sc-job-status" id="scSaveStatus"></div>
               </div>
             </div>
@@ -424,6 +426,8 @@ class SegcleanupModule extends BaseModule {
       this.currentSlice = Math.floor(info.sliceCount / 2);
       await this.resolveUnderlay(file);
       this.renderSelectedFile();
+      const nameInput = document.getElementById('scOutputName');
+      if (nameInput) nameInput.value = this.defaultOutputName();
       if (next) next.disabled = false;
     } catch (e) {
       this.state.notify('error', `Could not select segmentation: ${e.message}`);
@@ -1044,7 +1048,7 @@ class SegcleanupModule extends BaseModule {
           width: this.file.width,
           height: this.file.height,
           edits,
-          outputName: document.getElementById('scOutputName')?.value || 'cleaned',
+          outputName: document.getElementById('scOutputName')?.value || this.defaultOutputName(),
           sourceFileId: this.file.id
         })
       });

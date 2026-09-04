@@ -245,7 +245,7 @@ class StitchingModule extends BaseModule {
               </div>
 
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Transform</h4>${this.renderHelpIcon('stitching.step2.controls')}</div>
+                <div class="sv-section-header"><h4>Transform</h4>${this.renderHelpIcon('stitching.step2.auto-align')}</div>
                 <div class="transform-row">
                   <span>dx <input type="number" class="input-sm" id="junctionDx" step="1" value="0"></span>
                   <span>dy <input type="number" class="input-sm" id="junctionDy" step="1" value="0"></span>
@@ -256,7 +256,6 @@ class StitchingModule extends BaseModule {
                 <div class="transform-row">
                   <button class="btn small primary" id="autoAlignBtn">Auto-align</button>
                   <button class="btn small secondary" id="resetAlignBtn">Reset</button>
-                  ${this.renderHelpIcon('stitching.step2.auto-align')}
                 </div>
               </div>
             </div>
