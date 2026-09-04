@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-04 (Phase 8 — Release 1.3.0)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-04 | [Phase 8 — Release 1.3.0](2026-09-04_release_1_3_0.md) | 🚀 Release | ~½ session | ✅ Complete |
+
 ### 2026-09-04 (Pre-Release Batch — Lucas's Fix Lists: General + Per-Module)
 
 | Date | Session | Type | Duration | Status |

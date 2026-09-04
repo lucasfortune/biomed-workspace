@@ -124,22 +124,33 @@ public/
     │   │   ├── ModuleLoader.js    # Module system
     │   │   ├── WorkspaceAPI.js    # API client
     │   │   ├── BaseModule.js      # Abstract base class for modules
-    │   │   └── components/        # Reusable UI components (11 files)
-    │   │       ├── FileSelector.js     # File selection with validation
-    │   │       ├── InfoPanel.js        # Help panel container
-    │   │       ├── InfoArticle.js      # Article rendering
-    │   │       ├── InfoGlossary.js     # Terminology definitions
-    │   │       ├── InfoSearch.js       # Full-text search
-    │   │       ├── StepNavigator.js    # Step navigation
-    │   │       └── ...                 # + 5 more components
+    │   │   ├── icons.js           # icon(name) → inline SVG (ADR-005)
+    │   │   ├── css/
+    │   │   │   ├── module-base.css     # Shared module styles + tokens
+    │   │   │   └── slice-viewer.css    # .sv-* viewer chrome (ADR-011)
+    │   │   └── components/        # Reusable UI components (10 + index.js)
+    │   │       ├── FileSelector.js       # File selection with validation
+    │   │       ├── SliceViewerChrome.js  # Shared slice viewer (ADR-011)
+    │   │       ├── StepNavigator.js      # Step navigation
+    │   │       ├── NavigationButtons.js  # Prev/Next nav-row state
+    │   │       ├── ValidationDisplay.js  # Validation feedback slot
+    │   │       ├── ResumeDialog.js       # Resume-or-start-fresh prompt
+    │   │       ├── InfoPanel.js          # Help panel container
+    │   │       ├── InfoArticle.js        # Article rendering
+    │   │       ├── InfoGlossary.js       # Terminology definitions
+    │   │       ├── InfoSearch.js         # Full-text search
+    │   │       └── index.js              # Component exports
     │   ├── services/
     │   │   └── InfoContentService.js   # Help content delivery
-    │   └── modules/         # Processing modules (8 total)
+    │   └── modules/         # Processing modules (10 + template)
     │       ├── registry.js        # Module definitions
     │       ├── segmentation/      # U-Net training & inference
     │       ├── denoising-dl/      # DL denoising (20+ files)
     │       ├── denoising-filter/  # Filter-based denoising
-    │       ├── annotation/        # Quick annotation tool
+    │       ├── preprocess/        # Crop / rescale / Z (2 steps)
+    │       ├── stitching/         # Stack stitching (2 steps)
+    │       ├── segcleanup/        # Segmentation cleanup & quantification
+    │       ├── annotation/        # Annotation tool (brush engine)
     │       ├── mesh/              # 3D mesh generation
     │       ├── visualization/     # Interactive 3D viewer
     │       ├── imageviewer/       # TIFF stack gallery

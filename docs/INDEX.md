@@ -123,6 +123,13 @@ Architecture Decision Records documenting key technical choices - **All complete
 | [ADR-002](decisions/002_dual_version_approach.md) | Dual Version Approach | ✅ Accepted |
 | [ADR-003](decisions/003_session_based_isolation.md) | Session-Based Isolation | ✅ Accepted |
 | [ADR-004](decisions/004_module_system_design.md) | Module System Design | ✅ Accepted |
+| [ADR-005](decisions/005_design_system_color_scheme.md) | Design System & Color Scheme | ✅ Accepted |
+| [ADR-006](decisions/006_asn2v_routed_v1_migration.md) | autoStructN2V Routed v1 Migration | ✅ Accepted |
+| [ADR-007](decisions/007_stack_stitching_module.md) | Stack Stitching Module | ✅ Accepted |
+| [ADR-008](decisions/008_preprocess_module.md) | Preprocessing Module | ✅ Accepted |
+| [ADR-009](decisions/009_segcleanup_module.md) | Segmentation Cleanup & Quantification | ✅ Accepted |
+| [ADR-010](decisions/010_format_conversion.md) | File Format Conversion + Mesh Simplification | ✅ Accepted |
+| [ADR-011](decisions/011_shared_viewer_chrome_and_conventions.md) | Shared Viewer Chrome & UI Conventions | ✅ Accepted |
 
 ### 🚀 Vision (Strategy)
 Product roadmap and long-term planning - **All complete!** ✅
