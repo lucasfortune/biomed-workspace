@@ -1,5 +1,5 @@
 /**
- * AnnotationModule - Quick Annotation Tool
+ * AnnotationModule - Annotation
  *
  * Browser-based painting tool for creating ground-truth segmentation masks
  * on TIFF image stacks.
@@ -60,7 +60,7 @@ class AnnotationModule extends BaseModule {
   constructor(stateManager) {
     super(stateManager, {
       id: 'annotation',
-      name: 'Quick Annotation Tool',
+      name: 'Annotation',
       cssPath: '/workspace/js/modules/annotation/css/annotation.css',
       steps: [
         { id: 'select', name: 'Data Selection' },

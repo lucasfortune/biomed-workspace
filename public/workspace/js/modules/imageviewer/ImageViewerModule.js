@@ -803,7 +803,7 @@ class ImageViewerModule extends BaseModule {
       onSliceChange: (i) => this.goToSlice(i),
       onZoomIn: () => this.zoomIn(),
       onZoomOut: () => this.zoomOut(),
-      onZoomFit: () => this.resetZoom(),
+      onZoomFit: () => this.fitToView(),
       onZoomReset: () => this.zoomActual()
     });
     container.innerHTML = this.chrome.render();
@@ -1015,7 +1015,33 @@ class ImageViewerModule extends BaseModule {
   }
 
   /**
-   * Reset zoom
+   * Fit to view — scale the slice so it fills the viewport (up or down)
+   * while preserving aspect, centred. Distinct from 1:1: a downsampled
+   * web preview that is smaller than the viewport is enlarged to fit,
+   * where zoom 1 would leave it small.
+   */
+  fitToView() {
+    const img = document.getElementById('galleryImage')
+      || document.querySelector('[data-pane-img="0"]');
+    const wrapper = img?.parentElement;
+    if (!img || !wrapper || !img.clientWidth || !img.clientHeight) {
+      this.resetZoom();
+      return;
+    }
+    // clientWidth/Height are the CSS-laid-out (contain) size and are
+    // independent of the transform; scale them to the wrapper box.
+    const fit = Math.min(
+      wrapper.clientWidth / img.clientWidth,
+      wrapper.clientHeight / img.clientHeight
+    );
+    this.panOffset = { x: 0, y: 0 };
+    this.zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, fit || 1));
+    this.updateZoomDisplay();
+    this.applyZoomPan();
+  }
+
+  /**
+   * Reset zoom (no transform scale on top of the CSS-contained image)
    */
   resetZoom() {
     this.zoomLevel = 1;

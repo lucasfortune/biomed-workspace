@@ -98,7 +98,7 @@ const moduleRegistry = [
   },
   {
     id: 'annotation',
-    name: 'Quick Annotation Tool',
+    name: 'Annotation',
     description: 'Paint multi-class annotations on image stacks to create training data',
     icon: moduleIcons.annotation,
     path: '/workspace/js/modules/annotation/AnnotationModule.js',

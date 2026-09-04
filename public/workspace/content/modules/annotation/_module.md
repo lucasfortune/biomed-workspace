@@ -1,6 +1,6 @@
 ---
 id: annotation
-title: Quick Annotation Tool
+title: Annotation
 category: module
 module: annotation
 tags:
@@ -17,11 +17,11 @@ seeAlsoTags:
   - segmentation
 ---
 
-# Quick Annotation Tool
+# Annotation
 
 Create ground-truth segmentation masks for training machine learning models. Paint annotations directly on your images using brush and eraser tools.
 
-The Quick Annotation Tool provides a browser-based painting interface for creating segmentation masks on TIFF image stacks. These annotations serve as ground truth for training U-Net segmentation models.
+The Annotation module provides a browser-based painting interface for creating segmentation masks on TIFF image stacks. These annotations serve as ground truth for training U-Net segmentation models.
 
 ## Key Features
 

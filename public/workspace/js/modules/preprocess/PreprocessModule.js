@@ -29,8 +29,7 @@ class PreprocessModule extends BaseModule {
       cssPath: '/workspace/js/modules/preprocess/css/preprocess.css',
       steps: [
         { id: 'select', name: 'Select Stack' },
-        { id: 'adjust', name: 'Adjust' },
-        { id: 'apply', name: 'Apply' }
+        { id: 'adjust', name: 'Adjust' }
       ]
     });
 
@@ -59,11 +58,15 @@ class PreprocessModule extends BaseModule {
 
     this.viewer = {
       img: null, imgUrl: null,
-      scale: 1, offX: 0, offY: 0,   // fit transform (image -> canvas)
+      scale: 1, offX: 0, offY: 0,   // effective transform (image -> canvas)
+      zoom: null,                   // user zoom (null = fit-to-view)
+      panX: 0, panY: 0,             // user pan in canvas (backing) px
+      panning: false, panStart: null,
       cropMode: false, cropDragging: false,
       cropStart: null,
       histDrag: null                // 'lo' | 'hi' while dragging a marker
     };
+    this._fitScale = 1;
 
     this._previewTimer = null;
     this._previewSeq = 0;
@@ -83,7 +86,6 @@ class PreprocessModule extends BaseModule {
         <div class="step-contents">
           ${this.renderStep1()}
           ${this.renderStep2()}
-          ${this.renderStep3()}
         </div>
       </div>
     `;
@@ -131,13 +133,17 @@ class PreprocessModule extends BaseModule {
     this.chrome = new SliceViewerChrome({
       slices: this.file?.slices || 1,
       slice: this.currentSlice,
-      showZoom: false,
+      footerRight: 'drag = pan · wheel = zoom · ←/→ = slice',
       isActive: () => this.currentStep === 2 && !!this.file,
       onSliceChange: (i) => {
         this.currentSlice = i;
         this.chrome.setSlice(i);
         this.requestPreview();
       },
+      onZoomIn: () => this.zoomBy(1.25),
+      onZoomOut: () => this.zoomBy(1 / 1.25),
+      onZoomFit: () => this.zoomFit(),
+      onZoomReset: () => this.zoomActual(),
       onResize: () => this.drawCanvas()
     });
     return `
@@ -150,12 +156,24 @@ class PreprocessModule extends BaseModule {
             are applied when the output is written.
           </p>
 
+          <div class="section-card success-card" id="ppSuccessSection" style="display: none;">
+            <div class="success-header">
+              <span class="success-icon">&#10003;</span>
+              <span class="success-title">Preprocessing Complete</span>
+            </div>
+            <div id="ppResultInfo"></div>
+            <div class="success-actions">
+              <button class="btn primary small" id="ppOpenViewerBtn">Open in Image Viewer</button>
+              <button class="btn secondary small" id="ppNewRunBtn">Start New Run</button>
+            </div>
+          </div>
+
           <div class="sv-main">
             ${this.chrome.render()}
 
             <div class="sv-toolbar">
               <div class="sv-section">
-                <div class="sv-section-header"><h4>Crop</h4>${this.renderHelpIcon('preprocess.step2.crop')}</div>
+                <div class="sv-section-header"><h4>Crop &amp; z range</h4>${this.renderHelpIcon('preprocess.step2.crop')}</div>
                 <div class="sv-row">
                   <button class="btn small" id="ppCropDrawBtn">Draw on image</button>
                   <button class="btn small secondary" id="ppCropClearBtn">Clear</button>
@@ -166,15 +184,11 @@ class PreprocessModule extends BaseModule {
                   <span data-field-group>w <input type="number" id="ppCropW" min="1" step="1"></span>
                   <span data-field-group>h <input type="number" id="ppCropH" min="1" step="1"></span>
                 </div>
-              </div>
-
-              <div class="sv-section">
-                <div class="sv-section-header"><h4>Z range</h4>${this.renderHelpIcon('preprocess.step2.crop')}</div>
                 <div class="pp-grid2">
                   <span>first <input type="number" id="ppZFrom" min="1" step="1"></span>
                   <span>last <input type="number" id="ppZTo" min="1" step="1"></span>
                 </div>
-                <p class="field-hint">Inclusive slice numbers (1-based); leave untouched to keep the whole stack.</p>
+                <p class="field-hint">z: inclusive slice numbers (1-based); leave untouched to keep the whole stack.</p>
               </div>
 
               <div class="sv-section">
@@ -232,66 +246,22 @@ class PreprocessModule extends BaseModule {
                     <option value="uint16">16-bit</option>
                   </select>
                 </div>
+                <label class="pp-name-label" for="ppOutputName">file name</label>
+                <input type="text" id="ppOutputName" value="" placeholder="preprocessed" class="pp-name-input">
+                <div class="pp-progress" id="ppProgressSection" style="display: none;">
+                  <div class="progress-bar-container">
+                    <div class="job-progress-fill" id="ppProgressBar" style="width: 0%"></div>
+                  </div>
+                  <div class="inference-status" id="ppStatusText">Starting...</div>
+                </div>
               </div>
             </div>
           </div>
 
           <div class="navigation-buttons">
             <button id="ppStep2Back" class="btn secondary">Back</button>
-            <button id="ppStep2Next" class="btn">Next: Apply</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  renderStep3() {
-    return `
-      <div id="step3" class="step-content">
-        <div class="step-inner">
-          <h3>Apply ${this.renderHelpIcon('preprocess.step3.apply')}</h3>
-          <p class="step-description">
-            Review the operations and write the preprocessed stack as a new
-            workspace file.
-          </p>
-
-          <div class="section-card">
-            <h4>Summary</h4>
-            <div id="ppSummary"></div>
-          </div>
-
-          <div class="section-card">
-            <h4>Output</h4>
-            <div class="form-field">
-              <label for="ppOutputName">Output name</label>
-              <input type="text" id="ppOutputName" value="preprocessed">
-            </div>
-          </div>
-
-          <div class="section-card" id="ppProgressSection" style="display: none;">
-            <h4>Progress</h4>
-            <div class="inference-status" id="ppStatusText">Starting...</div>
-            <div class="progress-bar-container">
-              <div class="job-progress-fill" id="ppProgressBar" style="width: 0%"></div>
-            </div>
-          </div>
-
-          <div class="section-card success-card" id="ppSuccessSection" style="display: none;">
-            <div class="success-header">
-              <span class="success-icon">&#10003;</span>
-              <span class="success-title">Preprocessing Complete</span>
-            </div>
-            <div id="ppResultInfo"></div>
-            <div class="success-actions">
-              <button class="btn primary" id="ppOpenViewerBtn">Open in Image Viewer</button>
-              <button class="btn secondary" id="ppNewRunBtn">Start New Run</button>
-            </div>
-          </div>
-
-          <div class="navigation-buttons">
-            <button id="ppStep3Back" class="btn secondary">Back</button>
             <button class="btn primary" id="ppApplyBtn">
-              <span class="btn-glyph">&#9658;</span> Apply
+              <span class="btn-glyph">&#9658;</span> Save as New File
             </button>
           </div>
         </div>
@@ -356,11 +326,7 @@ class PreprocessModule extends BaseModule {
 
     // Step 2
     document.getElementById('ppStep2Back')?.addEventListener('click', () => this.goToStep(1));
-    document.getElementById('ppStep2Next')?.addEventListener('click', () => this.goToStep(3));
     this.setupAdjustControls();
-
-    // Step 3
-    document.getElementById('ppStep3Back')?.addEventListener('click', () => this.goToStep(2));
     document.getElementById('ppApplyBtn')?.addEventListener('click', () => this.apply());
     document.getElementById('ppOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
     document.getElementById('ppNewRunBtn')?.addEventListener('click', async () => {
@@ -404,7 +370,12 @@ class PreprocessModule extends BaseModule {
   onStepChange(prev, next) {
     if (this.stepNavigator) this.stepNavigator.update(next);
     if (next === 2) this.enterAdjustStep();
-    if (next === 3) this.renderSummary();
+  }
+
+  /** Default save name for the current file: `{original-filename}_ppd`. */
+  defaultOutputName() {
+    const base = (this.file?.name || '').replace(/\.tiff?$/i, '');
+    return base ? `${base}_ppd` : 'preprocessed';
   }
 
   // ==========================================================================
@@ -444,6 +415,8 @@ class PreprocessModule extends BaseModule {
       this.info = info;
       this.currentSlice = Math.floor(info.sliceCount / 2);
       this.renderSelectedFile();
+      const nameInput = document.getElementById('ppOutputName');
+      if (nameInput) nameInput.value = this.defaultOutputName();
       if (next) next.disabled = false;
     } catch (e) {
       this.state.notify('error', `Could not select stack: ${e.message}`);
@@ -688,48 +661,82 @@ class PreprocessModule extends BaseModule {
       : '');
   }
 
-  canvasToImage(e) {
+  /** Pointer position in canvas backing-store pixels (display may be scaled). */
+  canvasPoint(e) {
     const canvas = document.getElementById('ppCanvas');
     const rect = canvas.getBoundingClientRect();
-    const v = this.viewer;
     return {
-      x: (e.clientX - rect.left - v.offX) / v.scale,
-      y: (e.clientY - rect.top - v.offY) / v.scale
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height)
     };
+  }
+
+  canvasToImage(e) {
+    const v = this.viewer;
+    const p = this.canvasPoint(e);
+    return { x: (p.x - v.offX) / v.scale, y: (p.y - v.offY) / v.scale };
   }
 
   setupCanvasEvents() {
     const canvas = document.getElementById('ppCanvas');
     if (!canvas) return;
+    const v = this.viewer;
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (!this.viewer.cropMode || e.button !== 0) return;
-      e.preventDefault();
-      canvas.setPointerCapture(e.pointerId);
-      this.viewer.cropDragging = true;
-      this.viewer.cropStart = this.canvasToImage(e);
+      // Crop draw takes the left button while crop mode is on
+      if (v.cropMode && e.button === 0) {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        v.cropDragging = true;
+        v.cropStart = this.canvasToImage(e);
+        return;
+      }
+      // Otherwise left / middle drag pans the view
+      if (e.button === 0 || e.button === 1) {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        v.panning = true;
+        v.panStart = { x: e.clientX, y: e.clientY, panX: v.panX, panY: v.panY };
+      }
     });
     canvas.addEventListener('pointermove', (e) => {
-      if (!this.viewer.cropDragging) return;
-      const start = this.viewer.cropStart;
-      const cur = this.canvasToImage(e);
-      this.ops.crop = this.clampCrop({
-        x: Math.round(Math.min(start.x, cur.x)),
-        y: Math.round(Math.min(start.y, cur.y)),
-        width: Math.round(Math.abs(cur.x - start.x)),
-        height: Math.round(Math.abs(cur.y - start.y))
-      });
-      this.syncCropInputs();
-      this.drawCanvas();
+      if (v.cropDragging) {
+        const start = v.cropStart;
+        const cur = this.canvasToImage(e);
+        this.ops.crop = this.clampCrop({
+          x: Math.round(Math.min(start.x, cur.x)),
+          y: Math.round(Math.min(start.y, cur.y)),
+          width: Math.round(Math.abs(cur.x - start.x)),
+          height: Math.round(Math.abs(cur.y - start.y))
+        });
+        this.syncCropInputs();
+        this.drawCanvas();
+        return;
+      }
+      if (v.panning && v.panStart) {
+        const rect = canvas.getBoundingClientRect();
+        v.panX = v.panStart.panX + (e.clientX - v.panStart.x) * (canvas.width / rect.width);
+        v.panY = v.panStart.panY + (e.clientY - v.panStart.y) * (canvas.height / rect.height);
+        this.drawCanvas();
+      }
     });
     const up = () => {
-      if (this.viewer.cropDragging) {
-        this.viewer.cropDragging = false;
+      if (v.cropDragging) {
+        v.cropDragging = false;
         this.setCropMode(false);
       }
+      v.panning = false;
+      v.panStart = null;
     };
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
+
+    canvas.addEventListener('wheel', (e) => {
+      if (!this.file || !v.img) return;
+      e.preventDefault();
+      const cur = v.zoom || this._fitScale || 1;
+      this.setViewZoom(cur * (e.deltaY < 0 ? 1.1 : 1 / 1.1), this.canvasPoint(e));
+    }, { passive: false });
   }
 
   // ---- preview --------------------------------------------------------------
@@ -799,29 +806,32 @@ class PreprocessModule extends BaseModule {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);   // --module-viewer-bg shows through
 
-    // Fit transform maps ORIGINAL image coords -> canvas (the preview JPEG
-    // may be downsampled, so scale via the original width)
+    // Effective transform maps ORIGINAL image coords -> canvas (the preview
+    // JPEG may be downsampled, so scale via the original width). Zoom is null
+    // while fitting; otherwise it is the user's absolute scale, offset by pan.
     const fit = Math.min(canvas.width / this.file.width,
       canvas.height / this.file.height) * 0.97;
-    v.scale = fit;
-    v.offX = (canvas.width - this.file.width * fit) / 2;
-    v.offY = (canvas.height - this.file.height * fit) / 2;
+    this._fitScale = fit;
+    const scale = v.zoom || fit;
+    v.scale = scale;
+    v.offX = (canvas.width - this.file.width * scale) / 2 + v.panX;
+    v.offY = (canvas.height - this.file.height * scale) / 2 + v.panY;
 
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(v.img, v.offX, v.offY,
-      this.file.width * fit, this.file.height * fit);
+      this.file.width * scale, this.file.height * scale);
 
     // Crop overlay: dim the outside, outline the kept region
     const c = this.ops.crop;
     if (c) {
-      const rx = v.offX + c.x * fit;
-      const ry = v.offY + c.y * fit;
-      const rw = c.width * fit;
-      const rh = c.height * fit;
+      const rx = v.offX + c.x * scale;
+      const ry = v.offY + c.y * scale;
+      const rw = c.width * scale;
+      const rh = c.height * scale;
       ctx.save();
       ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
       ctx.beginPath();
-      ctx.rect(v.offX, v.offY, this.file.width * fit, this.file.height * fit);
+      ctx.rect(v.offX, v.offY, this.file.width * scale, this.file.height * scale);
       ctx.rect(rx, ry, rw, rh);
       ctx.fill('evenodd');
       ctx.strokeStyle = '#EB1F17';
@@ -829,6 +839,54 @@ class PreprocessModule extends BaseModule {
       ctx.strokeRect(rx, ry, rw, rh);
       ctx.restore();
     }
+
+    this.chrome?.setZoom(scale);
+  }
+
+  // ---- zoom & pan -----------------------------------------------------------
+
+  /** Multiply the current zoom (relative to fit when unset). */
+  zoomBy(factor) {
+    const cur = this.viewer.zoom || this._fitScale || 1;
+    this.setViewZoom(cur * factor);
+  }
+
+  /**
+   * Set an absolute zoom (image px -> canvas px). `anchor` is a point in
+   * canvas (backing-store) coords kept fixed under the cursor for wheel
+   * zoom; without it the view scales about its centre.
+   */
+  setViewZoom(scale, anchor = null) {
+    const canvas = document.getElementById('ppCanvas');
+    if (!canvas || !this.file) return;
+    const v = this.viewer;
+    const min = (this._fitScale || 0.01) * 0.5;
+    const target = Math.max(min, Math.min(20, scale));
+    const ax = anchor ? anchor.x : canvas.width / 2;
+    const ay = anchor ? anchor.y : canvas.height / 2;
+    // Image point currently under the anchor (uses the last drawn transform)
+    const imgX = (ax - v.offX) / v.scale;
+    const imgY = (ay - v.offY) / v.scale;
+    v.zoom = target;
+    // Solve pan so (imgX, imgY) maps back to (ax, ay) at the new scale
+    const baseX = (canvas.width - this.file.width * target) / 2;
+    const baseY = (canvas.height - this.file.height * target) / 2;
+    v.panX = ax - (baseX + imgX * target);
+    v.panY = ay - (baseY + imgY * target);
+    this.drawCanvas();
+  }
+
+  /** Fit the whole slice to the viewer (default). */
+  zoomFit() {
+    this.viewer.zoom = null;
+    this.viewer.panX = 0;
+    this.viewer.panY = 0;
+    this.drawCanvas();
+  }
+
+  /** 1:1 — one image pixel per canvas pixel, centred. */
+  zoomActual() {
+    this.setViewZoom(1);
   }
 
   // ---- histogram ------------------------------------------------------------
@@ -935,64 +993,8 @@ class PreprocessModule extends BaseModule {
   }
 
   // ==========================================================================
-  // Step 3: apply
+  // Apply / save
   // ==========================================================================
-
-  /** Output dimensions after crop -> rotate -> downscale */
-  outputDims() {
-    const c = this.ops.crop;
-    let w = c ? c.width : this.file.width;
-    let h = c ? c.height : this.file.height;
-    if (this.ops.rotate90 % 2 === 1) [w, h] = [h, w];
-    const f = this.ops.downscale;
-    if (f > 1) { w = Math.floor(w / f); h = Math.floor(h / f); }
-    const [z0, z1] = this.ops.zRange || [0, this.file.slices];
-    return { w, h, slices: z1 - z0 };
-  }
-
-  activeOpsList() {
-    const items = [];
-    const o = this.ops;
-    if (o.crop) items.push(`Crop to ${o.crop.width}&times;${o.crop.height} at (${o.crop.x}, ${o.crop.y})`);
-    if (o.zRange) items.push(`Keep slices ${o.zRange[0] + 1}&ndash;${o.zRange[1]}`);
-    if (o.flipH) items.push('Flip horizontal');
-    if (o.flipV) items.push('Flip vertical');
-    if (o.rotate90) items.push(`Rotate ${[null, '90&deg; cw', '180&deg;', '90&deg; ccw'][o.rotate90]}`);
-    if (o.downscale > 1) items.push(`Downscale ${o.downscale}&times; (mean binning)`);
-    if (o.window) items.push(`Intensity window [${this.round3(o.window[0])}, ${this.round3(o.window[1])}]`);
-    if (o.gamma !== 1.0) items.push(`Gamma ${o.gamma.toFixed(2)}`);
-    if (o.invert) items.push('Invert');
-    if (o.outDtype !== 'keep') items.push(`Convert to ${o.outDtype === 'uint8' ? '8-bit' : '16-bit'}`);
-    return items;
-  }
-
-  renderSummary() {
-    const el = document.getElementById('ppSummary');
-    if (!el || !this.file) return;
-    this.ops.outDtype = document.getElementById('ppOutDtype')?.value || this.ops.outDtype;
-
-    const items = this.activeOpsList();
-    const dims = this.outputDims();
-    let vsNote = '';
-    const vs = this.file.voxelSize;
-    if (vs && vs.x && this.ops.downscale > 1) {
-      vsNote = `<p class="field-hint">Voxel size scales with the binning:
-        ${this.round3(vs.x * this.ops.downscale)} &times; ${this.round3(vs.y * this.ops.downscale)}
-        ${vs.unit === 'um' ? '&micro;m' : (vs.unit || '')} in xy.</p>`;
-    }
-
-    el.innerHTML = `
-      <div class="detail-row"><span class="detail-label">Input:</span>
-        <span class="detail-value">${this.file.name}
-        (${this.file.width}&times;${this.file.height}, ${this.file.slices} slices)</span></div>
-      <div class="detail-row"><span class="detail-label">Output:</span>
-        <span class="detail-value">${dims.w}&times;${dims.h}, ${dims.slices} slices</span></div>
-      ${items.length
-        ? `<ul class="pp-ops-list">${items.map(i => `<li>${i}</li>`).join('')}</ul>`
-        : '<p class="field-hint">No operations configured - the output would be an identical copy.</p>'}
-      ${vsNote}
-    `;
-  }
 
   buildOpsPayload() {
     const o = this.ops;
@@ -1010,7 +1012,7 @@ class PreprocessModule extends BaseModule {
 
   async apply() {
     if (!this.file) return;
-    const outputName = document.getElementById('ppOutputName')?.value || 'preprocessed';
+    const outputName = document.getElementById('ppOutputName')?.value || this.defaultOutputName();
 
     const progressSection = document.getElementById('ppProgressSection');
     const successSection = document.getElementById('ppSuccessSection');

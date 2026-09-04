@@ -22,8 +22,8 @@
     },
     "annotation": {
       "id": "annotation",
-      "title": "Quick Annotation Tool",
-      "displayTitle": "Quick Annotation Tool",
+      "title": "Annotation",
+      "displayTitle": "Annotation",
       "category": "module",
       "module": "annotation",
       "tags": [
@@ -2397,10 +2397,6 @@
       }
     ],
     "Q": [
-      {
-        "term": "Quick Annotation Tool",
-        "articleId": "annotation"
-      },
       {
         "term": "Quantification",
         "definition": "Measuring segmented objects: voxel counts, physical volume, connected components, component sizes and surface area.",

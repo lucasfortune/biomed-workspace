@@ -126,12 +126,23 @@
   margin: var(--module-spacing-sm) 0;
 }
 
-.preprocess-module .pp-ops-list {
-  margin: var(--module-spacing-xs) 0 0;
-  padding-left: var(--module-spacing-md);
+.preprocess-module .pp-name-label {
+  display: block;
+  margin-top: var(--module-spacing-xs);
   font-size: var(--module-font-size-sm);
 }
 
-.preprocess-module .pp-ops-list li {
-  margin-bottom: 3px;
+.preprocess-module .pp-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 3px;
+}
+
+.preprocess-module .pp-progress {
+  margin-top: var(--module-spacing-sm);
+}
+
+.preprocess-module .pp-progress .inference-status {
+  margin-top: 4px;
+  font-size: var(--module-font-size-sm);
 }
