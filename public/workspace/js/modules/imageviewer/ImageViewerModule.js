@@ -674,6 +674,10 @@ class ImageViewerModule extends BaseModule {
    * Initialize the viewer for Step 2
    */
   async initializeViewer() {
+    // Show the first slice fitted to the viewer box (small stacks are tiny at
+    // 1:1); honoured once by the next slice load, then normal zoom/pan resumes.
+    this._fitOnLoad = true;
+
     // Update file info display
     const fileInfoDisplay = document.getElementById('fileInfoDisplay');
     if (fileInfoDisplay) {
@@ -906,7 +910,7 @@ class ImageViewerModule extends BaseModule {
         if (img) {
           img.src = newImg.src;
           img.style.display = 'block';
-          this.applyZoomPan();
+          this._applyInitialFitOrZoom();
         }
         this.chrome?.setStatus(null);
         this.prefetchNeighbors(sliceIndex);
@@ -1048,6 +1052,19 @@ class ImageViewerModule extends BaseModule {
     this.panOffset = { x: 0, y: 0 };
     this.updateZoomDisplay();
     this.applyZoomPan();
+  }
+
+  /**
+   * On the first slice load after entering the viewer, fit the image to the
+   * box (small stacks are tiny at 1:1); afterwards keep the user's zoom/pan.
+   */
+  _applyInitialFitOrZoom() {
+    if (this._fitOnLoad) {
+      this._fitOnLoad = false;
+      this.fitToView();
+    } else {
+      this.applyZoomPan();
+    }
   }
 
   /**

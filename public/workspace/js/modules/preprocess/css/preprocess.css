@@ -121,6 +121,18 @@
   touch-action: none;
 }
 
+/* Preview canvas: drag pans, wheel zooms (see setupCanvasEvents). Suppress
+   default touch/trackpad gestures so they reach the handlers, like the
+   image viewer's gallery wrapper. */
+.preprocess-module #ppCanvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.preprocess-module #ppCanvas:active {
+  cursor: grabbing;
+}
+
 /* Step 3 */
 .preprocess-module .pp-actions {
   margin: var(--module-spacing-sm) 0;

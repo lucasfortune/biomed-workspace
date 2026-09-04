@@ -680,9 +680,12 @@ class PreprocessModule extends BaseModule {
   setupCanvasEvents() {
     const canvas = document.getElementById('ppCanvas');
     if (!canvas) return;
-    const v = this.viewer;
+    // NB: read `this.viewer` fresh inside every handler — onFileSelected()
+    // calls resetState(), which REPLACES this.viewer, so a reference captured
+    // here would go stale and the handlers would mutate a dead object.
 
     canvas.addEventListener('pointerdown', (e) => {
+      const v = this.viewer;
       // Crop draw takes the left button while crop mode is on
       if (v.cropMode && e.button === 0) {
         e.preventDefault();
@@ -700,6 +703,7 @@ class PreprocessModule extends BaseModule {
       }
     });
     canvas.addEventListener('pointermove', (e) => {
+      const v = this.viewer;
       if (v.cropDragging) {
         const start = v.cropStart;
         const cur = this.canvasToImage(e);
@@ -721,6 +725,7 @@ class PreprocessModule extends BaseModule {
       }
     });
     const up = () => {
+      const v = this.viewer;
       if (v.cropDragging) {
         v.cropDragging = false;
         this.setCropMode(false);
@@ -732,6 +737,7 @@ class PreprocessModule extends BaseModule {
     canvas.addEventListener('pointercancel', up);
 
     canvas.addEventListener('wheel', (e) => {
+      const v = this.viewer;
       if (!this.file || !v.img) return;
       e.preventDefault();
       const cur = v.zoom || this._fitScale || 1;
