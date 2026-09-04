@@ -282,3 +282,20 @@
 .stitching-module .sibling-row select {
   flex: 1;
 }
+
+/* Merged step 2 (Align & Compose). In recipe mode there is no alignment:
+   applyComposeLayout() hides the overlay viewer (.sv-wrap) and the
+   .stitch-align-only sections, and the compose toolbar spans full width. */
+.stitching-module .sv-main.compose-only {
+  display: block;
+}
+
+.stitching-module .sv-main.compose-only .sv-toolbar {
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+}
+
+.stitching-module .stitch-progress {
+  margin-top: var(--module-spacing-sm);
+}

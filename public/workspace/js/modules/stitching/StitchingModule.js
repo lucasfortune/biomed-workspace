@@ -47,8 +47,7 @@ class StitchingModule extends BaseModule {
       cssPath: '/workspace/js/modules/stitching/css/stitching.css',
       steps: [
         { id: 'select', name: 'Select Stacks' },
-        { id: 'align', name: 'Align' },
-        { id: 'compose', name: 'Compose' }
+        { id: 'align', name: 'Align & Compose' }
       ]
     });
 
@@ -110,7 +109,6 @@ class StitchingModule extends BaseModule {
         <div class="step-contents">
           ${this.renderStep1()}
           ${this.renderStep2()}
-          ${this.renderStep3()}
         </div>
       </div>
     `;
@@ -197,23 +195,37 @@ class StitchingModule extends BaseModule {
     return `
       <div id="step2" class="step-content">
         <div class="step-inner wide">
-          <h3>Align Junctions ${this.renderHelpIcon('stitching.step2.controls')}</h3>
+          <h3>Align &amp; Compose ${this.renderHelpIcon('stitching.step2.controls')}</h3>
           <p class="step-description">
-            Pick the slice pair that shows the <strong>same physical
-            section</strong> in both stacks, then align. Fixed slice is
-            magenta, moving slice green; aligned structure turns gray.
+            For a new stitch, pick the slice pair that shows the
+            <strong>same physical section</strong> in both stacks and align
+            each junction (fixed slice magenta, moving slice green, aligned
+            structure gray). Then set the output options and compose &mdash;
+            the stitch recipe is saved alongside the result for reuse.
           </p>
 
-          <div class="sv-main">
+          <div class="section-card success-card" id="stitchSuccessSection" style="display: none;">
+            <div class="success-header">
+              <span class="success-icon">&#10003;</span>
+              <span class="success-title">Stitching Complete</span>
+            </div>
+            <div id="stitchResultInfo"></div>
+            <div class="success-actions">
+              <button class="btn primary" id="stitchOpenViewerBtn">Open in Image Viewer</button>
+              <button class="btn secondary" id="stitchNewRunBtn">Start New Run</button>
+            </div>
+          </div>
+
+          <div class="sv-main" id="stitchAlignMain">
             ${this.chrome.render()}
 
             <div class="sv-toolbar">
-              <div class="sv-section">
+              <div class="sv-section stitch-align-only">
                 <div class="sv-section-header"><h4>Junction</h4>${this.renderHelpIcon('stitching.step2.slice-pair')}</div>
                 <div class="junction-nav" id="junctionNav"></div>
               </div>
 
-              <div class="sv-section">
+              <div class="sv-section stitch-align-only">
                 <div class="sv-section-header"><h4>Fixed slice <span class="stack-label" id="fixedStackName"></span></h4></div>
                 <div class="sv-row">
                   <input type="range" class="range-slider" id="fixedSliceRange" min="0" value="0" title="Fixed slice">
@@ -221,7 +233,7 @@ class StitchingModule extends BaseModule {
                 </div>
               </div>
 
-              <div class="sv-section dominance-section">
+              <div class="sv-section dominance-section stitch-align-only">
                 <div class="sv-section-header">
                   <h4>Overlapping sections keep</h4>
                   ${this.renderHelpIcon('stitching.step2.dominance')}
@@ -239,7 +251,7 @@ class StitchingModule extends BaseModule {
                 </div>
               </div>
 
-              <div class="sv-section">
+              <div class="sv-section stitch-align-only">
                 <div class="sv-section-header"><h4>Moving slice <span class="stack-label" id="movingStackName"></span></h4></div>
                 <div class="sv-row">
                   <input type="range" class="range-slider" id="movingSliceRange" min="0" value="0" title="Moving slice">
@@ -247,7 +259,7 @@ class StitchingModule extends BaseModule {
                 </div>
               </div>
 
-              <div class="sv-section">
+              <div class="sv-section stitch-align-only">
                 <div class="sv-section-header"><h4>Transform</h4>${this.renderHelpIcon('stitching.step2.auto-align')}</div>
                 <div class="transform-row">
                   <span>dx <input type="number" class="input-sm" id="junctionDx" step="1" value="0"></span>
@@ -261,12 +273,41 @@ class StitchingModule extends BaseModule {
                   <button class="btn small secondary" id="resetAlignBtn">Reset</button>
                 </div>
               </div>
+
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Placement</h4></div>
+                <div id="placementSummary"></div>
+              </div>
+
+              <div class="sv-section">
+                <div class="sv-section-header"><h4>Output</h4>${this.renderHelpIcon('stitching.step3.compose')}</div>
+                <div class="form-field checkbox-field" id="intensityMatchField">
+                  <input type="checkbox" id="stitchIntensityMatch" checked>
+                  <label for="stitchIntensityMatch">Match intensities between stacks (recommended for separate sessions)</label>
+                </div>
+                <div class="form-field checkbox-field">
+                  <input type="checkbox" id="stitchCropCommon">
+                  <label for="stitchCropCommon">Crop to common area (instead of union canvas with fill)</label>
+                </div>
+                <div class="form-field">
+                  <label for="stitchOutputName">Output name</label>
+                  <input type="text" id="stitchOutputName" value="stitched">
+                </div>
+                <div class="stitch-progress" id="stitchProgressSection" style="display: none;">
+                  <div class="inference-status" id="stitchStatusText">Starting...</div>
+                  <div class="progress-bar-container">
+                    <div class="job-progress-fill" id="stitchProgressBar" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="navigation-buttons">
             <button id="stitchStep2Back" class="btn secondary">Back</button>
-            <button id="stitchStep2Next" class="btn">Next: Compose</button>
+            <button class="btn primary" id="stitchComposeBtn">
+              <span class="btn-glyph">&#9658;</span> Compose
+            </button>
           </div>
         </div>
       </div>
@@ -280,68 +321,6 @@ class StitchingModule extends BaseModule {
         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
       </svg>
     </span>`;
-  }
-
-  renderStep3() {
-    return `
-      <div id="step3" class="step-content">
-        <div class="step-inner">
-          <h3>Compose Stitched Volume ${this.renderHelpIcon('stitching.step3.compose')}</h3>
-          <p class="step-description">
-            Review the placements and compose the output. The stitch recipe
-            is saved alongside the result for later reuse.
-          </p>
-
-          <div class="section-card">
-            <h4>Placement Summary</h4>
-            <div id="placementSummary"></div>
-          </div>
-
-          <div class="section-card">
-            <h4>Options</h4>
-            <div class="form-field checkbox-field" id="intensityMatchField">
-              <input type="checkbox" id="stitchIntensityMatch" checked>
-              <label for="stitchIntensityMatch">Match intensities between stacks (recommended for separate sessions)</label>
-            </div>
-            <div class="form-field checkbox-field">
-              <input type="checkbox" id="stitchCropCommon">
-              <label for="stitchCropCommon">Crop to common area (instead of union canvas with fill)</label>
-            </div>
-            <div class="form-field">
-              <label for="stitchOutputName">Output name</label>
-              <input type="text" id="stitchOutputName" value="stitched">
-            </div>
-          </div>
-
-          <div class="section-card" id="stitchProgressSection" style="display: none;">
-            <h4>Progress</h4>
-            <div class="inference-status" id="stitchStatusText">Starting...</div>
-            <div class="progress-bar-container">
-              <div class="job-progress-fill" id="stitchProgressBar" style="width: 0%"></div>
-            </div>
-          </div>
-
-          <div class="section-card success-card" id="stitchSuccessSection" style="display: none;">
-            <div class="success-header">
-              <span class="success-icon">&#10003;</span>
-              <span class="success-title">Stitching Complete</span>
-            </div>
-            <div id="stitchResultInfo"></div>
-            <div class="success-actions">
-              <button class="btn primary" id="stitchOpenViewerBtn">Open in Image Viewer</button>
-              <button class="btn secondary" id="stitchNewRunBtn">Start New Run</button>
-            </div>
-          </div>
-
-          <div class="navigation-buttons">
-            <button id="stitchStep3Back" class="btn secondary">Back</button>
-            <button class="btn primary" id="stitchComposeBtn">
-              <span class="btn-glyph">&#9658;</span> Compose
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
   }
 
   // ==========================================================================
@@ -415,10 +394,10 @@ class StitchingModule extends BaseModule {
     });
 
     document.getElementById('stitchStep1Next')?.addEventListener('click', () => {
-      this.goToStep(this.workflow === 'recipe' ? 3 : 2);
+      this.goToStep(2);
     });
 
-    // Step 2
+    // Step 2 (align + compose in one step; recipe mode shows compose only)
     document.getElementById('stitchStep2Back')?.addEventListener('click', () => this.goToStep(1));
     document.getElementById('junctionNav')?.addEventListener('click', (e) => {
       const tab = e.target.closest('button[data-junction]');
@@ -426,13 +405,8 @@ class StitchingModule extends BaseModule {
       const i = parseInt(tab.dataset.junction, 10);
       if (!Number.isNaN(i)) this.selectJunction(i);
     });
-    document.getElementById('stitchStep2Next')?.addEventListener('click', () => this.goToStep(3));
     this.setupAlignControls();
 
-    // Step 3
-    document.getElementById('stitchStep3Back')?.addEventListener('click', () => {
-      this.goToStep(this.workflow === 'recipe' ? 1 : 2);
-    });
     document.getElementById('stitchComposeBtn')?.addEventListener('click', () => this.compose());
     document.getElementById('stitchOpenViewerBtn')?.addEventListener('click', () => this.openResultInViewer());
     document.getElementById('stitchNewRunBtn')?.addEventListener('click', () => {
@@ -473,20 +447,40 @@ class StitchingModule extends BaseModule {
 
   canNavigateToStep(n) {
     if (n === 1) return true;
-    if (this.workflow === 'recipe') {
-      // Recipe workflow skips alignment entirely
-      if (n === 2) return false;
-      return this.loadedRecipe != null;
+    // Step 2 is align + compose. Recipe mode shows compose only (no alignment),
+    // so it just needs a loaded recipe; new stitch needs at least two stacks.
+    if (n === 2) {
+      return this.workflow === 'recipe'
+        ? this.loadedRecipe != null
+        : this.stacks.length >= 2;
     }
-    if (n === 2) return this.stacks.length >= 2;
-    if (n === 3) return this.stacks.length >= 2 && this.junctions.length === this.stacks.length;
     return false;
   }
 
   onStepChange(prev, next) {
     if (this.stepNavigator) this.stepNavigator.update(next);
-    if (next === 2) this.enterAlignStep();
-    if (next === 3) this.renderPlacementSummary();
+    if (next === 2) {
+      this.applyComposeLayout();
+      if (this.workflow !== 'recipe') this.enterAlignStep();
+      this.renderPlacementSummary();
+    }
+  }
+
+  /**
+   * Show/hide the align viewer and align-only toolbar sections for the merged
+   * step 2. New stitch: full align UI + compose. Recipe: compose only (viewer
+   * and junction/transform controls hidden; the toolbar goes full width).
+   */
+  applyComposeLayout() {
+    const recipe = this.workflow === 'recipe';
+    const main = document.getElementById('stitchAlignMain');
+    if (!main) return;
+    main.classList.toggle('compose-only', recipe);
+    const wrap = main.querySelector('.sv-wrap');
+    if (wrap) wrap.style.display = recipe ? 'none' : '';
+    main.querySelectorAll('.stitch-align-only').forEach(el => {
+      el.style.display = recipe ? 'none' : '';
+    });
   }
 
   // ==========================================================================
