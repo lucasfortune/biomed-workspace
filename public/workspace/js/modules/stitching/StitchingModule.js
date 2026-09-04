@@ -283,15 +283,15 @@ class StitchingModule extends BaseModule {
                 <div class="sv-section-header"><h4>Output</h4>${this.renderHelpIcon('stitching.step3.compose')}</div>
                 <div class="form-field checkbox-field" id="intensityMatchField">
                   <input type="checkbox" id="stitchIntensityMatch" checked>
-                  <label for="stitchIntensityMatch">Match intensities between stacks (recommended for separate sessions)</label>
+                  <label for="stitchIntensityMatch">Match intensities between stacks</label>
                 </div>
                 <div class="form-field checkbox-field">
                   <input type="checkbox" id="stitchCropCommon">
-                  <label for="stitchCropCommon">Crop to common area (instead of union canvas with fill)</label>
+                  <label for="stitchCropCommon">Crop to common area</label>
                 </div>
                 <div class="form-field">
                   <label for="stitchOutputName">Output name</label>
-                  <input type="text" id="stitchOutputName" value="stitched">
+                  <input type="text" id="stitchOutputName" value="" placeholder="stitched">
                 </div>
                 <div class="stitch-progress" id="stitchProgressSection" style="display: none;">
                   <div class="inference-status" id="stitchStatusText">Starting...</div>
@@ -463,6 +463,31 @@ class StitchingModule extends BaseModule {
       this.applyComposeLayout();
       if (this.workflow !== 'recipe') this.enterAlignStep();
       this.renderPlacementSummary();
+      this.syncDefaultOutputName();
+    }
+  }
+
+  /**
+   * Default output name: the source stack base names joined by "_" plus the
+   * "_stchd" suffix (e.g. "raw1_raw2_stchd"), matching the naming pattern of
+   * the other new-file modules. Falls back to "stitched".
+   */
+  defaultOutputName() {
+    const strip = (p) => (p || '').split('/').pop().replace(/\.tiff?$/i, '');
+    const names = (this.workflow === 'recipe'
+      ? (this.recipeStackPaths || [])
+      : (this.stacks || []).map(s => s.name || s.path)
+    ).map(strip).filter(Boolean);
+    return names.length ? `${names.join('_')}_stchd` : 'stitched';
+  }
+
+  /** Fill the output-name field with the default, unless the user typed their own. */
+  syncDefaultOutputName() {
+    const el = document.getElementById('stitchOutputName');
+    if (!el) return;
+    if (el.value === '' || el.value === this._autoOutputName) {
+      el.value = this.defaultOutputName();
+      this._autoOutputName = el.value;
     }
   }
 
@@ -1340,7 +1365,7 @@ class StitchingModule extends BaseModule {
         && (document.getElementById('stitchIntensityMatch')?.checked || false),
       stacks: placements
     };
-    const outputName = document.getElementById('stitchOutputName')?.value || 'stitched';
+    const outputName = document.getElementById('stitchOutputName')?.value || this.defaultOutputName();
 
     const progressSection = document.getElementById('stitchProgressSection');
     const successSection = document.getElementById('stitchSuccessSection');
