@@ -48,6 +48,6 @@ For example, if pixels are 0.2 µm and the spacing between slices is 0.5 µm, se
 
 ## Where It Applies
 
-The scale is applied to the exported **OBJ** and **STL** geometry, so meshes opened in external software (Blender, Maya, 3D printing slicers) already have correct z proportions. The built-in **3D Visualization** module also reads the recorded aspect and applies it to the Three.js JSON mesh, the slice/capping meshes, and the original-data overlay, so the in-app view matches the exported files.
+The scale is baked into the exported **OBJ** geometry — and therefore also into any STL, PLY, or glTF file you create from it with the file browser's "Convert to..." action — so meshes opened in external software (Blender, Maya, 3D printing slicers) already have correct z proportions. The built-in **3D Visualization** module also reads the recorded aspect and applies it to the Three.js JSON mesh, the slice/capping meshes, and the original-data overlay, so the in-app view matches the exported files.
 
 Tip: If your data is isotropic (cubic voxels), leave this at `1` — the default — and nothing changes.

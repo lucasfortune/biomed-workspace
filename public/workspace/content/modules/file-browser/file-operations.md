@@ -32,7 +32,7 @@ Saves the file to your computer. For TIFF stacks, this downloads the complete mu
 
 Rename (✏️)
 
-Change the filename. The file extension must remain the same (e.g., you cannot rename .tif to .png). Useful for organizing files with descriptive names.
+Change the file's display name — the friendly name shown throughout the workspace. Renaming never touches the underlying file or its path, so lineage, downloads, and module references keep working. Useful for organizing files with descriptive names.
 
 Delete (🗑️)
 

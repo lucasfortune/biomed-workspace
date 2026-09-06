@@ -48,7 +48,7 @@ File Operations
 
 - Download: Save individual files or batch download as ZIP
 
-- Rename: Change filenames (extension must stay the same)
+- Rename: Change a file's display name (the underlying file is never touched)
 
 - Delete: Remove files (with confirmation)
 
