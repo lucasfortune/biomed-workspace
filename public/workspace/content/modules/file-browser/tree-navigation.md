@@ -34,23 +34,23 @@ uploads/
 
 models/
 
-├── segmentation/<id>/ - Trained segmentation models
+├── segmentation/`<id>`/ - Trained segmentation models
 
-└── denoising/<id>/    - Trained denoising models
+└── denoising/`<id>`/    - Trained denoising models
 
 results/
 
-├── segmentation/<id>/ - Segmentation outputs
+├── segmentation/`<id>`/ - Segmentation outputs
 
-├── denoising/<id>/    - Denoising outputs
+├── denoising/`<id>`/    - Denoising outputs
 
-├── meshes/<id>/       - Generated 3D meshes
+├── meshes/`<id>`/       - Generated 3D meshes
 
-├── preprocess/<id>/   - Preprocessing outputs
+├── preprocess/`<id>`/   - Preprocessing outputs
 
-├── stitching/<id>/    - Stitching outputs
+├── stitching/`<id>`/    - Stitching outputs
 
-└── segcleanup/<id>/   - Segmentation cleanup outputs
+└── segcleanup/`<id>`/   - Segmentation cleanup outputs
 
 Subfolders and per-job `<id>` folders are created on demand as modules run, so you only see the ones that hold files.
 
