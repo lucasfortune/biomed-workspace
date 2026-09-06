@@ -13,6 +13,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
+const { buildDisplayName } = require('../helpers/namingHelpers');
 // fs is already imported for async operations; sync functions used for file tracking
 
 class DenoisingService {
@@ -559,8 +560,16 @@ class DenoisingService {
         return lineage;
       };
 
+      // Resolve the source file's display name + a method-specific operation token so
+      // derived names chain from the input (e.g. trypB.tif -> trypB_asn2v.tif). Auxiliary
+      // outputs get a qualifier so they don't collide with the primary denoised stack.
+      const sourceName = this.workspaceManager.getSourceDisplayName(sessionId, inputFileId);
+      const denoiseOp = method === 'autostructn2v'
+        ? 'denoising-autostructn2v-stage1'
+        : 'denoising-n2v';
+
       // Helper: register one output file when present on disk
-      const track = (filePath, category, tags, lineage = null) => {
+      const track = (filePath, category, tags, lineage = null, qualifier = null) => {
         if (!filePath || typeof filePath !== 'string' || !fs.existsSync(filePath)) return;
         const relativePath = path.relative(workspacePath, filePath);
         const stats = fs.statSync(filePath);
@@ -570,7 +579,13 @@ class DenoisingService {
           category,
           tags,
           size: stats.size,
-          folderId: null
+          folderId: null,
+          displayName: buildDisplayName({
+            sourceName,
+            operation: denoiseOp,
+            ext: path.extname(filePath),
+            qualifier
+          })
         };
         if (lineage) entry.lineage = lineage;
         this.workspaceManager.addFileToMetadata(sessionId, entry);
@@ -583,11 +598,11 @@ class DenoisingService {
       track(outputFiles.denoised_stack, 'results', ['denoising', 'data'],
             createLineageObj('denoising'));
       track(outputFiles.model, 'models', ['weights', 'denoising'],
-            createLineageObj('denoising-training'));
-      track(outputFiles.routed_mask, 'models', ['info', 'denoising']);
-      track(outputFiles.route_decision, 'models', ['info', 'denoising']);
-      track(outputFiles.config, 'models', ['config', 'denoising']);
-      track(outputFiles.results, 'models', ['info', 'denoising']);
+            createLineageObj('denoising-training'), 'model');
+      track(outputFiles.routed_mask, 'models', ['info', 'denoising'], null, 'mask');
+      track(outputFiles.route_decision, 'models', ['info', 'denoising'], null, 'route');
+      track(outputFiles.config, 'models', ['config', 'denoising'], null, 'config');
+      track(outputFiles.results, 'models', ['info', 'denoising'], null, 'results');
 
     } catch (error) {
       if (this.logger) {
@@ -1033,6 +1048,10 @@ class DenoisingService {
 
       // Add to workspace metadata
       // New metadata system: results category with denoising/data tags
+      const sourceName = this.workspaceManager.getSourceDisplayName(sessionId, inputFileId);
+      const denoiseOp = method === 'autostructn2v'
+        ? 'denoising-autostructn2v-stage1'
+        : 'denoising-n2v';
       const entry = this.workspaceManager.addFileToMetadata(sessionId, {
         name: path.basename(outputPath),
         path: relativePath,
@@ -1040,6 +1059,11 @@ class DenoisingService {
         tags: ['denoising', 'data'],
         size: stats.size,
         folderId: null,
+        displayName: buildDisplayName({
+          sourceName,
+          operation: denoiseOp,
+          ext: path.extname(outputPath)
+        }),
         lineage: lineage
       });
 

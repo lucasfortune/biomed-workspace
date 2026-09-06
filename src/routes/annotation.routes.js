@@ -13,6 +13,26 @@ const path = require('path');
 const fs = require('fs');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DIRECTORIES } = require('../config/constants');
+const { buildDisplayName, resolveDisplayNameCollision } = require('../helpers/namingHelpers');
+
+/**
+ * Build a unique annotation display name chained from the source image.
+ * @param {array} files - Current metadata.files (for collision checks)
+ * @param {string} sourceFileName - Source image file name
+ * @param {string} ext - Output extension (e.g. '.tif')
+ * @param {string} [qualifier] - Optional qualifier (e.g. 'classes' for the sidecar)
+ * @returns {string}
+ */
+function annotationDisplayName(files, sourceFileName, ext, qualifier) {
+  const candidate = buildDisplayName({
+    sourceName: sourceFileName || 'annotation',
+    operation: 'annotation',
+    ext,
+    qualifier
+  });
+  const existing = (files || []).map(f => f.displayName || f.name);
+  return resolveDisplayNameCollision(candidate, existing);
+}
 
 /**
  * Create annotation routes router
@@ -333,6 +353,7 @@ function createAnnotationRoutes(dependencies) {
               tags: ['annotation', 'wip'],
               uploadedAt: new Date().toISOString(),
               size: fs.statSync(tiffPath).size,
+              displayName: annotationDisplayName(metadata.files, sourceFileName, '.tif'),
               lineage: {
                 processType: 'annotation',
                 inputs: [sourceFileId],
@@ -350,6 +371,7 @@ function createAnnotationRoutes(dependencies) {
               tags: ['annotation', 'info'],
               uploadedAt: new Date().toISOString(),
               size: fs.statSync(sidecarPath).size,
+              displayName: annotationDisplayName(metadata.files, sourceFileName, '.json', 'classes'),
               parentId: fileId
             });
           }
@@ -533,6 +555,7 @@ function createAnnotationRoutes(dependencies) {
             tags: ['annotation'],
             uploadedAt: new Date().toISOString(),
             size: fs.statSync(tiffPath).size,
+            displayName: annotationDisplayName(metadata.files, sourceFileName, '.tif'),
             lineage: {
               processType: 'annotation',
               inputs: [sourceFileId],
@@ -550,6 +573,7 @@ function createAnnotationRoutes(dependencies) {
             tags: ['annotation', 'info'],
             uploadedAt: new Date().toISOString(),
             size: fs.statSync(sidecarPath).size,
+            displayName: annotationDisplayName(metadata.files, sourceFileName, '.json', 'classes'),
             parentId: fileId
           });
 

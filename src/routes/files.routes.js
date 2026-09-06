@@ -196,7 +196,7 @@ function createFilesRoutes(dependencies) {
         return res.status(404).json({ success: false, error: 'File not found' });
       }
 
-      res.download(filePath, file.name);
+      res.download(filePath, file.displayName || file.name);
     } catch (error) {
       if (logger) {
         logger.error('Download file error:', error);
@@ -658,11 +658,23 @@ function createFilesRoutes(dependencies) {
       const files = metadata.files.filter(f => fileIds.includes(f.id));
       const workspacePath = workspaceService.getWorkspacePath(sessionId);
 
-      // Add files to archive
+      // Add files to archive using the consistent display name, guarding against
+      // duplicate entry names within the archive (legacy files may share a name).
+      const usedNames = new Set();
       for (const file of files) {
         const filePath = path.join(workspacePath, file.path);
         if (fs.existsSync(filePath)) {
-          archive.file(filePath, { name: file.name });
+          let entryName = file.displayName || file.name;
+          if (usedNames.has(entryName.toLowerCase())) {
+            const dot = entryName.lastIndexOf('.');
+            const base = dot > 0 ? entryName.slice(0, dot) : entryName;
+            const ext = dot > 0 ? entryName.slice(dot) : '';
+            let i = 2;
+            while (usedNames.has(`${base} (${i})${ext}`.toLowerCase())) i++;
+            entryName = `${base} (${i})${ext}`;
+          }
+          usedNames.add(entryName.toLowerCase());
+          archive.file(filePath, { name: entryName });
         }
       }
 

@@ -187,6 +187,7 @@ class MeshModule extends BaseModule {
                 <div class="form-field">
                   <label for="zAspectInput">
                     Z Voxel Scale
+                    ${this.renderHelpIcon('mesh.step2.z-voxel-scale')}
                   </label>
                   <input type="number" id="zAspectInput" min="0.05" max="20" step="0.1" value="1">
                   <small class="field-hint">
@@ -645,7 +646,7 @@ class MeshModule extends BaseModule {
           <div class="summary-details">
             <div class="detail-row">
               <span>File:</span>
-              <span>${this.selectedFile.name || 'Selected file'}</span>
+              <span>${this.selectedFile.displayName || this.selectedFile.name || 'Selected file'}</span>
             </div>
             <div class="detail-row">
               <span>Dimensions:</span>

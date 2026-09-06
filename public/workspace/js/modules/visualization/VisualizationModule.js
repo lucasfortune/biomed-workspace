@@ -486,7 +486,7 @@ class VisualizationModule extends BaseModule {
               <div class="info-icon">${icon('check')}</div>
               <div class="info-content">
                 <strong>Original Data Available</strong>
-                <p>Source: ${this.originalDataFile.name}</p>
+                <p>Source: ${this.originalDataFile.displayName || this.originalDataFile.name}</p>
                 <p class="info-note">Original data can be overlaid in the 3D viewer.</p>
               </div>
             </div>

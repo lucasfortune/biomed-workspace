@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 /**
  * Create denoising routes router
@@ -173,6 +174,16 @@ function createDenoisingRoutes(dependencies) {
             // Get output file size
             const outputStats = fs.existsSync(outputPath) ? fs.statSync(outputPath) : { size: 0 };
 
+            // Build a consistent display name chained from the source file
+            const sourceName = inputFile
+              ? (inputFile.displayName || inputFile.name)
+              : path.basename(inputPath);
+            const displayName = buildDisplayName({
+              sourceName,
+              operation: `denoising-${method}`,
+              ext: '.tif'
+            });
+
             // Add file to metadata
             // New metadata system: results category with denoising/data tags
             const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
@@ -182,6 +193,7 @@ function createDenoisingRoutes(dependencies) {
               tags: ['denoising', 'data'],
               size: outputStats.size,
               folderId: null,
+              displayName,
               lineage
             });
 

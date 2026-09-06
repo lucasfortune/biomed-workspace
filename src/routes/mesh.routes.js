@@ -16,6 +16,7 @@ const uuid = require('uuid');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 /**
  * Create mesh routes router
@@ -629,15 +630,19 @@ function createMeshRoutes(dependencies) {
         }
       }
 
+      // Display names chain from the source segmentation file (e.g. trypB_seg.tif ->
+      // trypB_seg_mesh.obj / .stl / .json). The mesh metadata is marked as info.
+      const sourceName = workspaceManager.getSourceDisplayName(sessionId, sourceFileId);
+
       // Track each output file
       // New metadata system: results category with mesh/data or mesh/info tags
       // Format tag (json, obj, mtl, stl) added for filtering in visualization module
       const filesToTrack = [
-        { name: 'mesh_data.json', tags: ['mesh', 'data', 'json'] },
-        { name: 'mesh.obj', tags: ['mesh', 'data', 'obj'] },
-        { name: 'mesh.mtl', tags: ['mesh', 'data', 'mtl'] },
-        { name: 'mesh.stl', tags: ['mesh', 'data', 'stl'] },
-        { name: 'metadata.json', tags: ['mesh', 'info'] }
+        { name: 'mesh_data.json', tags: ['mesh', 'data', 'json'], ext: '.json' },
+        { name: 'mesh.obj', tags: ['mesh', 'data', 'obj'], ext: '.obj' },
+        { name: 'mesh.mtl', tags: ['mesh', 'data', 'mtl'], ext: '.mtl' },
+        { name: 'mesh.stl', tags: ['mesh', 'data', 'stl'], ext: '.stl' },
+        { name: 'metadata.json', tags: ['mesh', 'info'], ext: '.json', info: true }
       ];
 
       for (const file of filesToTrack) {
@@ -646,6 +651,13 @@ function createMeshRoutes(dependencies) {
           const relativePath = path.relative(workspacePath, filePath);
           const stats = fs.statSync(filePath);
 
+          const displayName = buildDisplayName({
+            sourceName,
+            operation: 'meshGeneration',
+            ext: file.ext,
+            qualifier: file.info ? 'info' : undefined
+          });
+
           workspaceManager.addFileToMetadata(sessionId, {
             name: file.name,
             path: relativePath,
@@ -653,6 +665,7 @@ function createMeshRoutes(dependencies) {
             tags: file.tags,
             size: stats.size,
             folderId: null,
+            displayName,
             // Include lineage if available
             ...(lineage && { lineage })
           });
@@ -747,8 +760,23 @@ function createMeshRoutes(dependencies) {
       });
     }
 
+    // Prefer the consistent display name (e.g. trypB_seg_mesh.obj); fall back to a
+    // mesh-id-prefixed physical name for legacy meshes without a tracked display name.
+    let downloadName = `${meshId}_${filename}`;
+    try {
+      const workspacePath = workspaceManager.getWorkspacePath(req.session.id);
+      const relativePath = path.relative(workspacePath, filePath);
+      const metadata = workspaceManager.loadMetadata(req.session.id);
+      const tracked = metadata?.files?.find(f => f.path === relativePath);
+      if (tracked && tracked.displayName) {
+        downloadName = tracked.displayName;
+      }
+    } catch (e) {
+      // Fall back to the default name on any lookup error
+    }
+
     // Set download headers
-    res.download(filePath, `${meshId}_${filename}`);
+    res.download(filePath, downloadName);
   });
 
   return router;

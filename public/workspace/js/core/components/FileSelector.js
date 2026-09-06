@@ -357,7 +357,7 @@ class FileSelector {
       this.availableFiles.forEach(file => {
         const option = document.createElement('option');
         option.value = file.path;
-        option.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+        option.textContent = `${file.displayName || file.name} (${this.formatFileSize(file.size)})`;
         option.dataset.fileInfo = JSON.stringify(file);
         workspaceGroup.appendChild(option);
       });
@@ -379,7 +379,7 @@ class FileSelector {
       files.forEach(file => {
         const option = document.createElement('option');
         option.value = file.path;
-        option.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+        option.textContent = `${file.displayName || file.name} (${this.formatFileSize(file.size)})`;
         option.dataset.fileInfo = JSON.stringify(file);
         optgroup.appendChild(option);
       });
@@ -409,7 +409,7 @@ class FileSelector {
     this.externalRecentResults.forEach(result => {
       const option = document.createElement('option');
       option.value = result.value || result.path;
-      option.textContent = result.label || result.name || 'Result';
+      option.textContent = result.label || result.displayName || result.name || 'Result';
       option.dataset.fileInfo = JSON.stringify(result);
       option.dataset.isExternalResult = 'true';
       if (result.trainingId) {
@@ -436,7 +436,7 @@ class FileSelector {
 
         // Use configurable category labels
         const categoryLabel = this.resultCategoryLabels[result.category] || 'Result';
-        const displayName = result.name || `Result (${result.id})`;
+        const displayName = result.displayName || result.name || `Result (${result.id})`;
         const sizeInfo = result.size ? ` (${this.formatFileSize(result.size)})` : '';
 
         option.textContent = `${categoryLabel}: ${displayName}${sizeInfo}`;
@@ -557,7 +557,7 @@ class FileSelector {
       const fileInfo = JSON.parse(selectedOption.dataset.fileInfo || '{}');
       this.selectedFile = fileInfo;
       this.showPreview({
-        name: fileInfo.name,
+        name: fileInfo.displayName || fileInfo.name,
         size: this.formatFileSize(fileInfo.size),
         uploadDate: fileInfo.uploadDate ? new Date(fileInfo.uploadDate).toLocaleDateString() : null,
         info: fileInfo.metadata || 'TIFF image stack'

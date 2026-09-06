@@ -49,6 +49,7 @@ const sessionTracker = require('./services/SessionTracker');
 
 // Lineage helpers
 const { createLineage } = require('./helpers/lineageHelpers');
+const { buildDisplayName } = require('./helpers/namingHelpers');
 
 /**
  * Configure an Express application with all middleware and routes
@@ -117,15 +118,22 @@ function configureApp(app, dependencies) {
         const configPath = path.join(params.output_dir, 'config.json');
         const resultsPath = path.join(params.output_dir, 'results.json');
 
+        // Chain model display names from the training raw image so they're unique and
+        // self-documenting (e.g. trypB_seg_model.pth) instead of duplicate best_model.pth.
+        const trainSource = params.raw_images ? path.basename(params.raw_images) : 'training';
+        const modelName = (qualifier, ext) => buildDisplayName({
+          sourceName: trainSource, operation: 'segmentation', ext, qualifier
+        });
+
         // Track model files with appropriate tags
         if (fs.existsSync(modelPath)) {
-          await trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'] });
+          await trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth') });
         }
         if (fs.existsSync(configPath)) {
-          await trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'] });
+          await trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: modelName('config', '.json') });
         }
         if (fs.existsSync(resultsPath)) {
-          await trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'] });
+          await trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: modelName('info', '.json') });
         }
       }
     });
@@ -163,12 +171,30 @@ function configureApp(app, dependencies) {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
       const relativePath = path.relative(workspacePath, filePath);
 
+      // Build a consistent display name chained from the source/input file, when lineage
+      // identifies one. Info/auxiliary outputs get an 'info' qualifier so they don't
+      // collide with the primary data output. Files without lineage keep their raw name.
+      let displayName;
+      const lin = metadata.lineage;
+      const sourceId = lin && Array.isArray(lin.inputs) ? lin.inputs[0] : null;
+      if (lin && lin.processType && sourceId) {
+        const sourceName = workspaceManager.getSourceDisplayName(sessionId, sourceId);
+        const isInfo = Array.isArray(metadata.tags) && metadata.tags.includes('info');
+        displayName = buildDisplayName({
+          sourceName,
+          operation: lin.processType,
+          ext: path.extname(fileName),
+          qualifier: isInfo ? 'info' : undefined
+        });
+      }
+
       const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
         name: fileName,
         path: relativePath,
         category: category,
         size: fileSize,
         folderId: null,
+        ...(displayName && { displayName }),
         ...metadata  // Spread metadata to include lineage if provided
       });
 
