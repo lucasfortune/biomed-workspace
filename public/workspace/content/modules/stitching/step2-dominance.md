@@ -44,4 +44,4 @@ When two stacks were imaged across the same physical sections, those z positions
 
 - For side-by-side mosaics (small footprint overlap) there are no duplicated z positions, so the setting is ignored and all slices are kept
 
-- The compose step reports how many duplicated sections were actually averaged
+- Composing reports how many duplicated sections were actually averaged

@@ -48,8 +48,6 @@ Each stack after the first is placed by a declared slice pair, "these two slices
 
 1. Select Stacks: start a new stitch, or apply a saved recipe
 
-2. Align: for each junction, pick the matching slice pair and align the overlay
-
-3. Compose: review the placement table and compose the output volume
+2. Align & Compose: for each junction, pick the matching slice pair and align the overlay; then review the placement summary, set the output options, and compose the volume. When applying a saved recipe, the alignment part is skipped and the step shows composing only
 
 The result is a stitched TIFF plus a recipe. Duplicated z sections are trimmed by default (one stack's slices are dropped); a junction set to merge keeps both and averages them (images only), recorded as `z_merge` in the recipe.
