@@ -123,6 +123,17 @@ class WorkspaceService {
   }
 
   /**
+   * Get the display name of a tracked file (for building chained names of derived files)
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID of the source/input file
+   * @param {string} [fallback='file'] - Returned when the file can't be found
+   * @returns {string}
+   */
+  getSourceDisplayName(sessionId, fileId, fallback = 'file') {
+    return this.workspaceManager.getSourceDisplayName(sessionId, fileId, fallback);
+  }
+
+  /**
    * Delete a file
    * @param {string} sessionId - Session ID
    * @param {string} fileId - File ID

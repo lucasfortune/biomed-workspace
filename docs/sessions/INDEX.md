@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-06 (File Naming System Port + Mesh Z Voxel Scale Help — Release 1.4.0)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-06 | [File Naming System (Port) + Mesh Z Voxel Scale Help Article](2026-09-06_file_naming_and_mesh_help.md) | ✨ Feature / 📚 Docs | ~1 session | ✅ Complete |
+
 ### 2026-09-04 (Phase 8 — Release 1.3.0)
 
 | Date | Session | Type | Duration | Status |

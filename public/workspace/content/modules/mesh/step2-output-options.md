@@ -7,12 +7,10 @@ tags:
   - mesh
   - output
   - classes
-  - z-aspect
-  - voxel
-  - anisotropic
 seeAlsoManual:
   - mesh
   - mesh.step1.segmentation-data
+  - mesh.step2.z-voxel-scale
 seeAlsoTags:
   - export
   - 3d
@@ -34,13 +32,7 @@ A summary card shows the file you chose, its dimensions and slice count, the cla
 
 ## Z Voxel Scale
 
-Controls the voxel aspect ratio along the z (slice) axis relative to the in-plane x/y pixels. The range is 0.05 to 20 (step 0.1); the job cannot start while the value is out of range.
-
-- 1 (default): cubic voxels - x : y : z = 1 : 1 : 1.
-- Greater than 1: stretches the stack along z. For example, a value of 2 produces a 1 : 1 : 2 aspect, appropriate when the z-step is twice the in-plane pixel size.
-- Less than 1: compresses the stack along z, for finely-sampled z stacks.
-
-Use this when your acquisition is anisotropic so the mesh keeps true physical proportions. The scale is baked into the generated geometry - both the OBJ file and the JSON shown in the built-in 3D viewer.
+If your acquisition is anisotropic (slice spacing differs from the in-plane pixel size), use the **Z Voxel Scale** option to keep correct physical proportions — see its dedicated help article for details.
 
 ## Generation & Results
 

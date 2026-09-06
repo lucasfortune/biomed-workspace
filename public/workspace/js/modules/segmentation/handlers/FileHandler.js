@@ -247,7 +247,7 @@ class FileHandler {
       if (result.success) {
         this.module.uploadedFiles.inference_data = {
           path: result.inference_data_path,
-          name: file?.name || 'Inference Data',
+          name: file?.displayName || file?.name || 'Inference Data',
           id: result.file_id || null
         };
 

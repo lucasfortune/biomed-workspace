@@ -394,7 +394,7 @@ class FilterDenoisingModule extends BaseModule {
     this.uploadedFile = fileInfo;
 
     this.validationDisplay.showSuccess('File Selected', [
-      { label: 'Name', value: fileInfo.name || 'Selected file' },
+      { label: 'Name', value: fileInfo.displayName || fileInfo.name || 'Selected file' },
       { label: 'Type', value: 'Workspace File' }
     ]);
 

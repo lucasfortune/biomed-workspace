@@ -588,7 +588,7 @@ class FileBrowser {
             <span class="fb-icon">${icon}</span>
           `}
           <div class="fb-file-info">
-            <div class="fb-file-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</div>
+            <div class="fb-file-name" title="${this.escapeHtml(this.getDisplayName(file))}">${this.escapeHtml(this.getDisplayName(file))}</div>
             <div class="fb-file-meta">${this.formatFileSize(file.size)} • ${this.formatDate(file.uploadedAt)}</div>
           </div>
           <div class="fb-file-actions">
@@ -657,7 +657,7 @@ class FileBrowser {
           <span class="fb-result-icon">${icon}</span>
         `}
         <div class="fb-result-info">
-          <div class="fb-result-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</div>
+          <div class="fb-result-name" title="${this.escapeHtml(this.getDisplayName(file))}">${this.escapeHtml(this.getDisplayName(file))}</div>
           <div class="fb-result-path" title="${this.escapeHtml(file.path)}">📁 ${this.escapeHtml(dirPath)}</div>
         </div>
         <div class="fb-result-actions">
@@ -913,11 +913,12 @@ class FileBrowser {
     const file = this.state.get('workspace.files').find(f => f.id === fileId);
     if (!file) return;
 
-    const newName = prompt('Enter new filename:', file.name);
-    if (!newName || newName === file.name) return;
+    const currentName = this.getDisplayName(file);
+    const newName = prompt('Enter new display name:', currentName);
+    if (!newName || newName === currentName) return;
 
-    // Validate extension matches
-    const oldExt = file.name.split('.').pop().toLowerCase();
+    // Validate extension matches (keep the suffix meaningful)
+    const oldExt = currentName.split('.').pop().toLowerCase();
     const newExt = newName.split('.').pop().toLowerCase();
     if (oldExt !== newExt) {
       this.state.notify('error', 'File extension must remain the same');
@@ -952,7 +953,7 @@ class FileBrowser {
     const file = this.state.get('workspace.files').find(f => f.id === fileId);
     if (!file) return;
 
-    if (!confirm(`Delete "${file.name}"?\n\nThis action cannot be undone.`)) {
+    if (!confirm(`Delete "${this.getDisplayName(file)}"?\n\nThis action cannot be undone.`)) {
       return;
     }
 
@@ -1241,7 +1242,7 @@ class FileBrowser {
           <div class="file-info-details">
             <div class="file-info-row">
               <span class="file-info-label">Name:</span>
-              <span class="file-info-value">${this.escapeHtml(file.name)}</span>
+              <span class="file-info-value">${this.escapeHtml(this.getDisplayName(file))}</span>
             </div>
             <div class="file-info-row">
               <span class="file-info-label">Path:</span>
@@ -1476,7 +1477,7 @@ class FileBrowser {
       <div class="file-info-overlay"></div>
       <div class="json-viewer-content">
         <div class="file-info-header">
-          <h3>${this.escapeHtml(file.name)}</h3>
+          <h3>${this.escapeHtml(this.getDisplayName(file))}</h3>
           <button class="file-info-close" title="Close">&#10005;</button>
         </div>
         <div class="json-viewer-body">
@@ -1568,8 +1569,11 @@ class FileBrowser {
     return files.filter(file => {
       // Check if ANY word in query matches filename, category or a tag
       return queryWords.some(word => {
-        // Match 1: Filename (case-insensitive substring match)
+        // Match 1: Filename or display name (case-insensitive substring match)
         if (file.name.toLowerCase().includes(word)) {
+          return true;
+        }
+        if (file.displayName && file.displayName.toLowerCase().includes(word)) {
           return true;
         }
 
@@ -1604,6 +1608,16 @@ class FileBrowser {
     }, 10000);
 
     this.render();
+  }
+
+  /**
+   * Get the user-facing name for a file. Prefers the consistent `displayName` when set,
+   * falling back to the physical `name` for legacy/untracked files.
+   * @param {Object} file - File object
+   * @returns {string}
+   */
+  getDisplayName(file) {
+    return (file && (file.displayName || file.name)) || '';
   }
 
   /**

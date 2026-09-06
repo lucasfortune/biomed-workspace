@@ -1210,7 +1210,8 @@
       "path": "modules/mesh/_module.md",
       "seeAlsoManual": [
         "mesh.step1.segmentation-data",
-        "mesh.step2.output-options"
+        "mesh.step2.output-options",
+        "mesh.step2.z-voxel-scale"
       ],
       "seeAlsoTags": [
         "mesh",
@@ -1248,19 +1249,41 @@
       "tags": [
         "mesh",
         "output",
-        "classes",
-        "z-aspect",
-        "voxel",
-        "anisotropic"
+        "classes"
       ],
       "path": "modules/mesh/step2-output-options.md",
       "seeAlsoManual": [
         "mesh",
-        "mesh.step1.segmentation-data"
+        "mesh.step1.segmentation-data",
+        "mesh.step2.z-voxel-scale"
       ],
       "seeAlsoTags": [
         "export",
         "3d"
+      ]
+    },
+    "mesh.step2.z-voxel-scale": {
+      "id": "mesh.step2.z-voxel-scale",
+      "title": "Z Voxel Scale",
+      "displayTitle": "Z Voxel Scale",
+      "category": "configuration",
+      "module": "mesh",
+      "tags": [
+        "mesh",
+        "z-aspect",
+        "voxel",
+        "anisotropic",
+        "spacing",
+        "scale"
+      ],
+      "path": "modules/mesh/step2-z-voxel-scale.md",
+      "seeAlsoManual": [
+        "mesh",
+        "mesh.step2.output-options"
+      ],
+      "seeAlsoTags": [
+        "voxel",
+        "anisotropic"
       ]
     },
     "segmentation": {
@@ -3003,6 +3026,11 @@
       }
     ],
     "Z": [
+      {
+        "term": "Z Voxel Scale",
+        "definition": "Voxel size along the z (slice) axis relative to the in-plane x/y pixels - set above 1 for anisotropic stacks where slices are spaced farther apart than the in-plane pixel size",
+        "articleId": "mesh.step2.z-voxel-scale"
+      },
       {
         "term": "Zoom",
         "definition": "Magnification level for viewing images - values above 100% show enlarged detail, below 100% shows a wider view",

@@ -7,6 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 class FileService {
   /**
@@ -60,6 +61,25 @@ class FileService {
       // Add lineage if provided
       if (metadata.lineage) {
         fileData.lineage = metadata.lineage;
+      }
+
+      // Build a consistent display name chained from the source/input file, when lineage
+      // identifies one. Info/auxiliary outputs get an 'info' qualifier so they don't
+      // collide with the primary data output. Files without lineage keep their raw name.
+      const lin = metadata.lineage;
+      const sourceId = lin && Array.isArray(lin.inputs) ? lin.inputs[0] : null;
+      if (metadata.displayName) {
+        // Caller supplied an explicit display name
+        fileData.displayName = metadata.displayName;
+      } else if (lin && lin.processType && sourceId) {
+        const sourceName = this.workspaceService.getSourceDisplayName(sessionId, sourceId);
+        const isInfo = Array.isArray(metadata.tags) && metadata.tags.includes('info');
+        fileData.displayName = buildDisplayName({
+          sourceName,
+          operation: lin.processType,
+          ext: path.extname(fileName),
+          qualifier: isInfo ? 'info' : undefined
+        });
       }
 
       const fileEntry = this.workspaceService.addFileToMetadata(sessionId, fileData);

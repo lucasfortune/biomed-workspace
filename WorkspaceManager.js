@@ -1,6 +1,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
+const { resolveDisplayNameCollision } = require('./src/helpers/namingHelpers');
 
 /**
  * WorkspaceManager - Handles workspace initialization and file management
@@ -409,6 +410,15 @@ class WorkspaceManager {
       return existingFile;
     }
 
+    // Resolve a unique, user-facing display name when one is supplied. The display name is
+    // purely cosmetic (UI + downloads) and never drives physical file access; callers that
+    // omit it fall back to `name` everywhere it's rendered.
+    let displayName;
+    if (fileInfo.displayName) {
+      const existingNames = metadata.files.map(f => f.displayName || f.name);
+      displayName = resolveDisplayNameCollision(fileInfo.displayName, existingNames);
+    }
+
     const fileEntry = {
       id: fileInfo.id || this.generateId('file'),
       name: fileInfo.name,
@@ -420,6 +430,8 @@ class WorkspaceManager {
       thumbnailPath: null,
       // Tags for additional classification (e.g., ['inference'] for inference data)
       tags: fileInfo.tags || [],
+      // Consistent display name (optional) - see src/helpers/namingHelpers.js
+      ...(displayName && { displayName }),
       // Physical voxel size {x, y, z, unit} - read from TIFF metadata on
       // upload, inherited through processing, editable in file info (ADR-008)
       ...(fileInfo.voxelSize && { voxelSize: fileInfo.voxelSize }),
@@ -432,6 +444,27 @@ class WorkspaceManager {
 
     console.log('[WorkspaceManager] File tracked:', fileEntry.id, fileEntry.path);
     return fileEntry;
+  }
+
+  /**
+   * Get the display name of a tracked file (for building chained names of derived files).
+   * Falls back to the physical `name`, then to a sensible default, so callers never get
+   * an empty source name.
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID of the source/input file
+   * @param {string} [fallback='file'] - Returned when the file can't be found
+   * @returns {string}
+   */
+  getSourceDisplayName(sessionId, fileId, fallback = 'file') {
+    if (!fileId) return fallback;
+    try {
+      const metadata = this.loadMetadata(sessionId);
+      const file = metadata.files.find(f => f.id === fileId);
+      if (!file) return fallback;
+      return file.displayName || file.name || fallback;
+    } catch (err) {
+      return fallback;
+    }
   }
 
   /**
@@ -580,41 +613,22 @@ class WorkspaceManager {
       throw new Error('File not found');
     }
 
-    // Validate extension matches
-    const oldExt = path.extname(file.name);
+    // Renaming only changes the user-facing display name; the physical file and path are
+    // left untouched so backend logic that depends on on-disk filenames keeps working.
+    const currentDisplay = file.displayName || file.name;
+
+    // Validate extension matches the file's display name (keep the suffix meaningful)
+    const oldExt = path.extname(currentDisplay);
     const newExt = path.extname(newName);
 
     if (oldExt !== newExt) {
       throw new Error('Cannot change file extension');
     }
 
-    // Get the actual filename from the path (not from file.name which may be outdated)
-    const workspaceDir = path.join('workspaces', sessionId);
-    const oldFullPath = path.join(workspaceDir, file.path);
-
-    // Build new path: get directory from old path, append new filename
-    const pathParts = file.path.split('/');
-    const oldFilename = pathParts[pathParts.length - 1]; // Original filename from path
-    pathParts[pathParts.length - 1] = newName; // Replace with new filename
-    const newPath = pathParts.join('/');
-    const newFullPath = path.join(workspaceDir, newPath);
-
-    // Check if old file exists
-    if (fs.existsSync(oldFullPath)) {
-      // Rename the physical file
-      console.log(`[WorkspaceManager] Renaming file: ${oldFullPath} -> ${newFullPath}`);
-      fs.renameSync(oldFullPath, newFullPath);
-    } else {
-      console.warn(`[WorkspaceManager] File not found for rename: ${oldFullPath}`);
-      // File doesn't exist at old path, but continue to update metadata
-    }
-
-    // Update metadata
-    file.name = newName;
-    file.path = newPath;
+    file.displayName = newName;
     this.saveMetadata(sessionId, metadata);
 
-    console.log(`[WorkspaceManager] File metadata updated: name=${newName}, path=${newPath}`);
+    console.log(`[WorkspaceManager] File display name updated: ${currentDisplay} -> ${newName} (path unchanged)`);
 
     return file;
   }

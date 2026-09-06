@@ -688,7 +688,7 @@ class ImageViewerModule extends BaseModule {
         `;
       } else if (this.tiffInfo) {
         fileInfoDisplay.innerHTML = `
-          <span class="filename">${this.selectedFile.name}</span>
+          <span class="filename">${this.selectedFile.displayName || this.selectedFile.name}</span>
           <span class="slice-count">${this.tiffInfo.sliceCount} slices</span>
         `;
       }

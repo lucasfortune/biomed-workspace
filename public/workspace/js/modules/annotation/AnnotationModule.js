@@ -1702,7 +1702,7 @@ class AnnotationModule extends BaseModule {
 
     // Show validation success
     this.validationDisplay.showSuccess('Source Image Selected', [
-      { label: 'File', value: file.name },
+      { label: 'File', value: file.displayName || file.name },
       { label: 'Dimensions', value: `${this.tiffInfo.width} × ${this.tiffInfo.height}` },
       { label: 'Slices', value: this.tiffInfo.sliceCount },
       { label: 'Mode', value: 'New Annotation' }
@@ -1756,7 +1756,7 @@ class AnnotationModule extends BaseModule {
 
     const title = mode === 'resume' ? 'Unfinished Annotation Selected' : 'Existing Annotation Selected';
     const details = [
-      { label: 'File', value: file.name },
+      { label: 'File', value: file.displayName || file.name },
       { label: 'Dimensions', value: `${this.tiffInfo.width} × ${this.tiffInfo.height}` },
       { label: 'Slices', value: this.tiffInfo.sliceCount },
       { label: 'Mode', value: mode === 'resume' ? 'Resume Previous Work' : 'Edit Existing (saved as a new file)' }
@@ -1878,8 +1878,8 @@ class AnnotationModule extends BaseModule {
       this.sourceFileLoaded = true;
       this.validationDisplay.showSuccess(
         this.annotationMode === 'resume' ? 'Unfinished Annotation Selected' : 'Existing Annotation Selected', [
-          { label: 'File', value: this.annotationFile?.name },
-          { label: 'Source Image', value: file.name },
+          { label: 'File', value: this.annotationFile?.displayName || this.annotationFile?.name },
+          { label: 'Source Image', value: file.displayName || file.name },
           { label: 'Dimensions', value: `${a.width} × ${a.height}` },
           { label: 'Slices', value: a.sliceCount },
           { label: 'Mode', value: this.annotationMode === 'resume' ? 'Resume Previous Work' : 'Edit Existing (saved as a new file)' }
