@@ -613,6 +613,7 @@ class StitchingModule extends BaseModule {
       this.stacks.push({
         path: filePath,
         name: file.name || filePath.split('/').pop(),
+        displayName: file.displayName || null,
         slices: info.sliceCount,
         width: info.width,
         height: info.height
@@ -650,7 +651,7 @@ class StitchingModule extends BaseModule {
     list.innerHTML = this.stacks.map((s, i) => `
       <li class="stack-item">
         <span class="stack-order">${i + 1}</span>
-        <span class="stack-name">${s.name}</span>
+        <span class="stack-name">${this._esc(s.displayName || s.name)}</span>
         <span class="stack-dims">${s.width}&times;${s.height}, ${s.slices} slices</span>
         <span class="stack-item-actions">
           <button class="btn tiny" data-action="up" data-index="${i}" ${i === 0 ? 'disabled' : ''}>&uarr;</button>
@@ -1284,6 +1285,12 @@ class StitchingModule extends BaseModule {
     }));
   }
 
+  _esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   renderPlacementSummary() {
     const el = document.getElementById('placementSummary');
     if (!el) return;
@@ -1293,12 +1300,15 @@ class StitchingModule extends BaseModule {
       placements = this.loadedRecipe.stacks.map((s, i) => ({
         ...s, path: this.recipeStackPaths[i]
       }));
-      names = this.recipeStackPaths.map(p => p.split('/').pop());
+      names = this.recipeStackPaths.map(p => {
+        const f = this.workspaceFiles.find(x => x.path === p);
+        return (f && (f.displayName || f.name)) || p.split('/').pop();
+      });
       mode = this.detectRecipeMode();
       this._relationships = null;
     } else {
       placements = this.buildPlacements();
-      names = this.stacks.map(s => s.name);
+      names = this.stacks.map(s => s.displayName || s.name);
       mode = this.mode;
     }
     this._lastPlacements = placements;
@@ -1319,21 +1329,27 @@ class StitchingModule extends BaseModule {
     };
     const mergedLabels = mode === 'labels' && placements.some(p => p.z_merge);
 
+    // Stacked per-stack rows instead of a grid: the toolbar column is 260px
+    // wide, which an 8-column table can never fit. The name gets a full line
+    // (ellipsized, full name in the tooltip); the numbers wrap beneath it.
     el.innerHTML = `
-      <table class="placement-table">
-        <tr><th>#</th><th>Stack</th><th></th><th>z offset</th><th>dx</th><th>dy</th><th>rot&deg;</th><th>slices kept</th></tr>
+      <div class="placement-list">
         ${placements.map((p, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td>${names[i]}</td>
-            <td>${relNote(i)}</td>
-            <td>${p.z_offset}</td>
-            <td>${Number(p.dx).toFixed(1)}</td>
-            <td>${Number(p.dy).toFixed(1)}</td>
-            <td>${Number(p.rotation_deg).toFixed(2)}</td>
-            <td>${p.z_keep ? `${p.z_keep[0]}&ndash;${p.z_keep[1]}` : 'all'}</td>
-          </tr>`).join('')}
-      </table>
+          <div class="placement-item">
+            <div class="placement-name-row">
+              <span class="placement-index">${i + 1}</span>
+              <span class="placement-name" title="${this._esc(names[i])}">${this._esc(names[i])}</span>
+            </div>
+            <div class="placement-values">
+              <span>z <b>${p.z_offset}</b></span>
+              <span>dx <b>${Number(p.dx).toFixed(1)}</b></span>
+              <span>dy <b>${Number(p.dy).toFixed(1)}</b></span>
+              <span>rot <b>${Number(p.rotation_deg).toFixed(2)}&deg;</b></span>
+              <span>slices <b>${p.z_keep ? `${p.z_keep[0]}&ndash;${p.z_keep[1]}` : 'all'}</b></span>
+              ${relNote(i)}
+            </div>
+          </div>`).join('')}
+      </div>
       <p class="field-hint">Mode: ${mode === 'labels' ? 'label maps (nearest-neighbor, hard seams)' : 'images (feathered seams)'}</p>
       ${mergedLabels ? '<p class="field-hint">Merged junctions apply to images only; for these label maps the duplicated sections keep the upper stack.</p>' : ''}
     `;

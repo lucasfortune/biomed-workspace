@@ -230,25 +230,58 @@
   white-space: nowrap;
 }
 
-/* Step 3 */
-.stitching-module .placement-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--module-font-size-sm);
+/* Placement summary: stacked per-stack rows (the toolbar column is 260px;
+   a multi-column table cannot fit). Name line ellipsizes; values wrap. */
+.stitching-module .placement-list {
+  display: flex;
+  flex-direction: column;
 }
 
-.stitching-module .placement-table th,
-.stitching-module .placement-table td {
-  text-align: left;
-  padding: 6px 10px;
+.stitching-module .placement-item {
+  padding: 6px 0;
   border-bottom: 1px solid var(--module-border);
+  min-width: 0;
 }
 
-.stitching-module .placement-table th {
+.stitching-module .placement-item:last-child {
+  border-bottom: none;
+}
+
+.stitching-module .placement-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stitching-module .placement-index {
+  flex-shrink: 0;
   font-size: var(--module-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   color: var(--module-text-secondary);
+}
+
+.stitching-module .placement-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--module-font-size-sm);
+  font-weight: 500;
+}
+
+.stitching-module .placement-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 2px;
+  padding-left: 14px;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.stitching-module .placement-values b {
+  font-weight: 600;
+  color: var(--module-text-primary);
 }
 
 .stitching-module .stitch-warning {

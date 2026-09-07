@@ -24,7 +24,7 @@ Composing turns the placements into a single output volume. It lives in the Alig
 
 ## Placement Summary
 
-- A table lists every stack with its z offset, dx, dy, rotation, and the slice range kept
+- The placement summary lists every stack with its z offset, dx, dy, rotation, and the slice range kept
 
 - A per-junction note shows the inferred relationship: "continues in z", "continues in z, merged", or "side by side"
 
