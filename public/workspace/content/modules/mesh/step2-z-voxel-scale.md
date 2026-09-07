@@ -46,6 +46,8 @@ Z Voxel Scale = z-step (slice spacing) / in-plane pixel size
 
 For example, if pixels are 0.2 µm and the spacing between slices is 0.5 µm, set the scale to `0.5 / 0.2 = 2.5`.
 
+When the selected file has a recorded physical voxel size with a z value (see the File Info voxel-size row in the file browser), this field is prefilled automatically with z / x. You can still override it.
+
 ## Where It Applies
 
 The scale is baked into the exported **OBJ** geometry — and therefore also into any STL, PLY, or glTF file you create from it with the file browser's "Convert to..." action — so meshes opened in external software (Blender, Maya, 3D printing slicers) already have correct z proportions. The built-in **3D Visualization** module also reads the recorded aspect and applies it to the Three.js JSON mesh, the slice/capping meshes, and the original-data overlay, so the in-app view matches the exported files.

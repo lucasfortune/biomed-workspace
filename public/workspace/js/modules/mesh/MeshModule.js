@@ -470,6 +470,18 @@ class MeshModule extends BaseModule {
         const step1Next = document.getElementById('step1Next');
         if (step1Next) step1Next.disabled = false;
 
+        // Prefill the Z voxel scale from the file's physical voxel size
+        // (z/x) when known - ADR-010 follow-up; the user can still override
+        const vs = fileInfo.voxelSize;
+        if (vs && vs.z > 0 && vs.x > 0) {
+          const zAspect = document.getElementById('zAspectInput');
+          if (zAspect) {
+            const ratio = Math.min(20, Math.max(0.05, vs.z / vs.x));
+            zAspect.value = String(Math.round(ratio * 100) / 100);
+            zAspect.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+
         this.saveState();
       } else {
         // Validation failed

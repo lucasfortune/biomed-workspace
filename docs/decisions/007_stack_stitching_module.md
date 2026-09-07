@@ -77,8 +77,12 @@ alignment runs could produce two subtly different transforms.
   systematically at boundaries. Direct seg+seg alignment stays available
   (auto-align then runs on a boundary map extracted from the labels) for
   when only segmentations exist; it is second-best, not preferred.
-- Workspace-made crops record their crop origin in file lineage; the
-  stitcher prefills exact placements for them (no alignment step needed).
+- Workspace-made crops record their crop origin in file lineage
+  (`lineage.cropInfo`, written by the preprocess module). *Struck
+  (2026-09-07, data model consolidation / ADR-012): the originally planned
+  crop-origin placement prefill in the stitcher was never implemented and
+  is dropped - placement UX has moved on and the value is low. cropInfo
+  stays as recorded provenance data.*
 
 ## Decision: two data modes, never mixed
 
@@ -136,7 +140,8 @@ tifffile, numpy are all present.
 
 - **MVP**: N stacks, slice-pair z-offsets, auto translation + manual
   translation/rotation, both data modes with the composition rules above,
-  recipes saved/reapplied, lineage-prefilled crops, streamed output.
+  recipes saved/reapplied, streamed output. (Lineage-prefilled crop
+  placements were planned here but struck - see note above.)
 - **Later**: rotation auto-estimation, overlap auto-detection (score B's
   first k slices against A's last k), non-workspace montage import,
   automatic tiled processing inside the ML modules (which removes the

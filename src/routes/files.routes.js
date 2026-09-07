@@ -427,7 +427,7 @@ function createFilesRoutes(dependencies) {
               size: result.size,
               tags: isMesh ? ['mesh', 'data', format]
                            : [...new Set([...(file.tags || []), 'converted'])],
-              ...(voxelSize && !isMesh && { voxelSize }),
+              ...(voxelSize && { voxelSize }),
               displayName: buildDisplayName({
                 sourceName: file.displayName || file.name,
                 operation: 'convert',

@@ -233,7 +233,11 @@ function createPreprocessRoutes(dependencies) {
       proc.stderr.on('data', (d) => { stderrBuffer += d.toString(); });
 
       proc.on('close', (code) => {
-        fsp.unlink(configPath).catch(() => {});
+        // The config is the run manifest (applied ops: crop/flip/rotate/
+        // downscale/gamma) - kept and tracked on success, discarded on failure
+        if (code !== 0 || !resultData) {
+          fsp.unlink(configPath).catch(() => {});
+        }
 
         if (code === 0 && resultData) {
           let outputFileId = null;
@@ -279,6 +283,27 @@ function createPreprocessRoutes(dependencies) {
               ...(lineage && { lineage })
             });
             outputFileId = outputEntry?.id || null;
+
+            // Track the run manifest like every other module's info file (B7)
+            if (fs.existsSync(configPath)) {
+              workspaceManager.addFileToMetadata(sessionId, {
+                name: path.basename(configPath),
+                path: path.relative(workspacePath, configPath),
+                category: 'results',
+                tags: ['preprocess', 'info'],
+                size: fs.statSync(configPath).size,
+                folderId: null,
+                ...(inputFile && {
+                  displayName: buildDisplayName({
+                    sourceName: inputFile.displayName || inputFile.name,
+                    operation: 'preprocess',
+                    ext: '.json',
+                    qualifier: 'config'
+                  })
+                }),
+                ...(lineage && { lineage: { ...lineage } })
+              });
+            }
           } catch (trackError) {
             if (logger) logger.error('[Preprocess] Error tracking output:', trackError);
           }
