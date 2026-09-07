@@ -27,6 +27,8 @@ A recipe holds the placements from an earlier stitch, not its pixels. Choosing o
 
 - The recipe lists one stack slot per placement, in the original order
 
+- Each slot remembers the original stack by its file identity and prefills it when the file is still in the workspace; a slot whose file has been deleted is marked as missing, and composing is blocked until you pick a replacement for it
+
 - Clearing the selection removes the recipe and its slots
 
 ## Swapping Slots

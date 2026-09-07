@@ -133,6 +133,16 @@ function createStitchingRoutes(dependencies) {
       if (!Array.isArray(recipe.stacks)) {
         return res.status(400).json({ success: false, error: 'Not a stitch recipe' });
       }
+      // v2 recipes carry a fileId per stack: resolve it (id primary) back
+      // to the file's current path so the client prefills correctly even
+      // when the stored path string is stale
+      try {
+        const manifestFiles = workspaceManager.loadMetadata(sessionId)?.files || [];
+        recipe.stacks = recipe.stacks.map((s) => {
+          const entry = s.fileId ? manifestFiles.find(f => f.id === s.fileId) : null;
+          return entry ? { ...s, path: entry.path } : s;
+        });
+      } catch (e) { /* recipe returned as saved */ }
       res.json({ success: true, recipe });
     } catch (error) {
       if (logger) logger.error('[Stitching] Recipe read error:', error);
@@ -175,8 +185,38 @@ function createStitchingRoutes(dependencies) {
       const safeName = (outputName || 'stitched').replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
       const outputPath = path.join(outputDir, `${safeName}.tif`);
 
-      // Resolve stack paths; keep the workspace-relative recipe for reuse
-      const inputRelPaths = [];
+      // Resolve each stack slot: fileId is primary, path the fallback
+      // (recipe schema v2; v1 path-only recipes keep working). All
+      // unresolvable slots are collected into one structured 400 instead
+      // of a 500 on the first miss.
+      const manifestFiles = workspaceManager.loadMetadata(sessionId)?.files || [];
+      const missing = [];
+      const resolvedStacks = recipe.stacks.map((s) => {
+        let entry = null;
+        if (s.fileId) entry = manifestFiles.find(f => f.id === s.fileId) || null;
+        if (!entry && s.path) entry = manifestFiles.find(f => f.path === s.path) || null;
+        const relPath = entry ? entry.path : s.path;
+        let abs = null;
+        try {
+          abs = relPath ? resolveWorkspacePath(workspacePath, relPath) : null;
+        } catch (e) {
+          abs = null;
+        }
+        if (!abs || !fs.existsSync(abs)) {
+          missing.push(relPath || s.fileId || 'unknown');
+          return null;
+        }
+        return { src: s, abs, rel: path.relative(workspacePath, abs), fileId: entry ? entry.id : null };
+      });
+      if (missing.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Recipe references missing stacks: ${missing.join(', ')}`,
+          missing
+        });
+      }
+
+      const inputRelPaths = resolvedStacks.map(r => r.rel);
       const pythonRecipe = {
         output_path: outputPath,
         mode: recipe.mode === 'labels' ? 'labels' : 'grayscale',
@@ -184,30 +224,30 @@ function createStitchingRoutes(dependencies) {
         intensity_match: !!recipe.intensity_match,
         fill_value: recipe.fill_value != null ? Number(recipe.fill_value) : null,
         feather_px: recipe.feather_px != null ? parseInt(recipe.feather_px, 10) : 64,
-        stacks: recipe.stacks.map((s) => {
-          const abs = resolveWorkspacePath(workspacePath, s.path);
-          if (!fs.existsSync(abs)) {
-            throw new Error(`Stack not found: ${s.path}`);
-          }
-          inputRelPaths.push(path.relative(workspacePath, abs));
-          return {
-            path: abs,
-            z_offset: parseInt(s.z_offset || 0, 10),
-            dx: Number(s.dx || 0),
-            dy: Number(s.dy || 0),
-            rotation_deg: Number(s.rotation_deg || 0),
-            z_keep: s.z_keep || null,
-            z_merge: !!s.z_merge
-          };
-        })
+        stacks: resolvedStacks.map((r) => ({
+          path: r.abs,
+          z_offset: parseInt(r.src.z_offset || 0, 10),
+          dx: Number(r.src.dx || 0),
+          dy: Number(r.src.dy || 0),
+          rotation_deg: Number(r.src.rotation_deg || 0),
+          z_keep: r.src.z_keep || null,
+          z_merge: !!r.src.z_merge
+        }))
       };
 
-      // Save the portable recipe (workspace-relative paths) for reuse on
-      // sibling volumes (align once, apply to everything - ADR-007)
+      // Save the portable recipe (schema v2: {path, fileId} per stack -
+      // id primary, workspace-relative path as fallback + human-readable)
+      // for reuse on sibling volumes (align once, apply to everything -
+      // ADR-007)
       const savedRecipe = {
         ...pythonRecipe,
+        version: 2,
         output_path: undefined,
-        stacks: pythonRecipe.stacks.map((s, i) => ({ ...s, path: inputRelPaths[i] }))
+        stacks: pythonRecipe.stacks.map((s, i) => ({
+          ...s,
+          path: inputRelPaths[i],
+          fileId: resolvedStacks[i].fileId
+        }))
       };
       const recipePath = path.join(outputDir, 'stitch_recipe.json');
       await fsp.writeFile(recipePath, JSON.stringify(savedRecipe, null, 2));

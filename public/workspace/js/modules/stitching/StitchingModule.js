@@ -1276,6 +1276,7 @@ class StitchingModule extends BaseModule {
 
     return this.stacks.map((s, i) => ({
       path: s.path,
+      fileId: s.id || null,
       z_offset: placements[i].z_offset,
       dx: placements[i].dx,
       dy: placements[i].dy,
@@ -1298,7 +1299,10 @@ class StitchingModule extends BaseModule {
     let placements, names, mode;
     if (this.workflow === 'recipe' && this.loadedRecipe) {
       placements = this.loadedRecipe.stacks.map((s, i) => ({
-        ...s, path: this.recipeStackPaths[i]
+        ...s,
+        path: this.recipeStackPaths[i],
+        // fileId follows the actually selected file (recipe schema v2)
+        fileId: this.workspaceFiles.find(x => x.path === this.recipeStackPaths[i])?.id || null
       }));
       names = this.recipeStackPaths.map(p => {
         const f = this.workspaceFiles.find(x => x.path === p);
@@ -1355,6 +1359,27 @@ class StitchingModule extends BaseModule {
     `;
     const intensityField = document.getElementById('intensityMatchField');
     if (intensityField) intensityField.style.display = mode === 'labels' ? 'none' : '';
+
+    // Recipe workflow: block compose while any slot is unresolved and say why
+    if (this.workflow === 'recipe' && this.loadedRecipe) {
+      const unresolved = this.unresolvedRecipePaths();
+      const composeBtn = document.getElementById('stitchComposeBtn');
+      if (unresolved.length > 0) {
+        el.insertAdjacentHTML('beforeend',
+          `<p class="field-hint">Unresolved stack${unresolved.length > 1 ? 's' : ''}: ` +
+          `${unresolved.map(p => this._esc(p.split('/').pop())).join(', ')} ` +
+          `(file no longer in the workspace). Choose a replacement for each slot in Step 1.</p>`);
+        if (composeBtn) composeBtn.disabled = true;
+      } else if (composeBtn) {
+        composeBtn.disabled = false;
+      }
+    }
+  }
+
+  /** Recipe slots whose selected path no longer matches a workspace file */
+  unresolvedRecipePaths() {
+    return (this.recipeStackPaths || [])
+      .filter(p => !this.workspaceFiles.find(x => x.path === p));
   }
 
   detectRecipeMode() {
@@ -1371,6 +1396,18 @@ class StitchingModule extends BaseModule {
   }
 
   async compose() {
+    // Recipe workflow: refuse to start while any slot is unresolved
+    if (this.workflow === 'recipe' && this.loadedRecipe) {
+      const unresolved = this.unresolvedRecipePaths();
+      if (unresolved.length > 0) {
+        this.state.notify('error',
+          `Missing stack${unresolved.length > 1 ? 's' : ''}: ` +
+          `${unresolved.map(p => p.split('/').pop()).join(', ')} - ` +
+          'choose a replacement for each slot in Step 1');
+        return;
+      }
+    }
+
     const placements = this._lastPlacements || this.buildPlacements();
     const mode = this._composeMode || this.mode || 'grayscale';
 
