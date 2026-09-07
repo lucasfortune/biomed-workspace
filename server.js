@@ -42,6 +42,11 @@ const sessionTracker = require('./src/services/SessionTracker');
 // Socket.IO handlers
 const { initializeSocketHandlers } = require('./src/sockets');
 
+// Session middleware (shared between Express and Socket.IO so socket
+// handshakes carry the same session as HTTP requests - room ownership
+// checks depend on it)
+const { createSessionMiddleware } = require('./src/middleware/session.middleware');
+
 // App configuration
 const configureApp = require('./src/app');
 
@@ -145,6 +150,13 @@ const server = http.createServer(app);
 // Create Socket.IO (attaches to server for both WebSocket and polling)
 const io = socketIo(server);
 
+// One session middleware instance for both Express and Socket.IO. Attaching
+// it to the engine parses the session during the socket handshake, so every
+// socket knows its user session (socket.request.session) and the room
+// ownership gate can verify job ownership.
+const sessionMiddleware = createSessionMiddleware(env, { sessionsDir: DATA_PATHS.sessions });
+io.engine.use(sessionMiddleware);
+
 // Initialize Socket.IO handlers
 initializeSocketHandlers(io, logger);
 
@@ -158,6 +170,7 @@ configureApp(app, {
   env,
   logger,
   io,
+  sessionMiddleware,
   workspaceManager,
   services: {
     workspaceService,

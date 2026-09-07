@@ -14,6 +14,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
 const { buildDisplayName } = require('../helpers/namingHelpers');
+const sessionTracker = require('../services/SessionTracker');
 
 /**
  * Create stitching routes router
@@ -179,6 +180,8 @@ function createStitchingRoutes(dependencies) {
     try {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
       const stitchId = `stitch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Registry entry: socket-room ownership checks + cleanup guard
+      sessionTracker.registerJob(stitchId, sessionId, 'stitching');
       const outputDir = path.join(workspacePath, 'results', 'stitching', stitchId);
       await fsp.mkdir(outputDir, { recursive: true });
 
@@ -286,6 +289,7 @@ function createStitchingRoutes(dependencies) {
       pythonProcess.stderr.on('data', (d) => { stderrBuffer += d.toString(); });
 
       pythonProcess.on('close', (code) => {
+        sessionTracker.completeJob(stitchId, code === 0 ? 'completed' : 'failed');
         fsp.unlink(configPath).catch(() => {});
 
         if (code === 0 && resultData) {

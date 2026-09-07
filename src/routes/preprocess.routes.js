@@ -19,6 +19,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
 const { buildDisplayName } = require('../helpers/namingHelpers');
+const sessionTracker = require('../services/SessionTracker');
 
 function createPreprocessRoutes(dependencies) {
   const router = express.Router();
@@ -189,6 +190,8 @@ function createPreprocessRoutes(dependencies) {
       const inputFile = metadata?.files?.find(f => f.path === relInput);
 
       const preprocessId = `pp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Registry entry: socket-room ownership checks + cleanup guard
+      sessionTracker.registerJob(preprocessId, sessionId, 'preprocess');
       const outputDir = path.join(workspacePath, 'results', 'preprocess', preprocessId);
       await fsp.mkdir(outputDir, { recursive: true });
 
@@ -233,6 +236,8 @@ function createPreprocessRoutes(dependencies) {
       proc.stderr.on('data', (d) => { stderrBuffer += d.toString(); });
 
       proc.on('close', (code) => {
+        sessionTracker.completeJob(preprocessId, code === 0 ? 'completed' : 'failed');
+
         // The config is the run manifest (applied ops: crop/flip/rotate/
         // downscale/gamma) - kept and tracked on success, discarded on failure
         if (code !== 0 || !resultData) {

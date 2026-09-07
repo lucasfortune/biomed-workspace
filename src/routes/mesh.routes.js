@@ -619,7 +619,8 @@ function createMeshRoutes(dependencies) {
     const meshId = req.params.meshId;
     const meshSession = sessionTracker.meshSessions.get(meshId);
 
-    if (!meshSession) {
+    // Ownership: another session's job looks like an unknown one
+    if (!meshSession || meshSession.sessionId !== req.session.id) {
       return res.status(404).json({
         success: false,
         error: 'Mesh session not found'
@@ -649,7 +650,8 @@ function createMeshRoutes(dependencies) {
     const { meshId, format } = req.params;
     const meshSession = sessionTracker.meshSessions.get(meshId);
 
-    if (!meshSession) {
+    // Ownership: another session's job looks like an unknown one
+    if (!meshSession || meshSession.sessionId !== req.session.id) {
       return res.status(404).json({
         success: false,
         error: 'Mesh session not found'

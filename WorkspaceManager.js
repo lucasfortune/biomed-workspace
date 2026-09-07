@@ -726,6 +726,44 @@ class WorkspaceManager {
   }
 
   /**
+   * Invalidate derived caches (thumbnail, slice caches, mesh previews) for a
+   * file whose bytes were rewritten in place (e.g. annotation re-save,
+   * validation-time 16->8 bit conversion). Keeps the immutability story
+   * honest: any rewrite invalidates caches. Best-effort - never throws.
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - File ID
+   */
+  invalidateFileCaches(sessionId, fileId) {
+    try {
+      const metadata = this.loadMetadata(sessionId);
+      const file = metadata.files.find(f => f.id === fileId);
+      if (!file) return;
+
+      const workspacePath = this.getWorkspacePath(sessionId);
+      const filePath = path.join(workspacePath, file.path);
+
+      if (file.thumbnailPath) {
+        const thumbPath = path.join(workspacePath, file.thumbnailPath);
+        try {
+          if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath);
+        } catch (e) { /* best-effort */ }
+        file.thumbnailPath = null;
+        this.saveMetadata(sessionId, metadata);
+      }
+
+      this.cleanupSliceCache(workspacePath, fileId, filePath);
+      const localSlicesDir = path.join(path.dirname(filePath), '.slices');
+      if (fs.existsSync(localSlicesDir)) {
+        this.cleanupDirectorySliceCache(localSlicesDir, fileId);
+      }
+      this.cleanupMeshPreviewCache(workspacePath, filePath);
+    } catch (error) {
+      // Cache invalidation is best-effort; stale caches are a lesser evil
+      // than failing the rewrite operation
+    }
+  }
+
+  /**
    * Clean up slice cache files for a given file
    * Handles all cache naming conventions:
    *   - Standard slices: {fileId}_{slice}_{size}.jpg

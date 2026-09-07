@@ -25,6 +25,62 @@ const {
   emitDenoisingError
 } = require('./denoising.socket');
 
+const sessionTracker = require('../services/SessionTracker');
+
+// Known job-room prefixes, longest first so 'denoising-inference-' wins
+// over 'denoising-'. Every join goes through the ownership gate below.
+const ROOM_PREFIXES = [
+  'denoising-inference-',
+  'denoising-',
+  'training-',
+  'inference-',
+  'mesh-',
+  'restore-',
+  'stitching-',
+  'preprocess-',
+  'segcleanup-'
+];
+
+/**
+ * Ownership gate for job rooms: a socket may only join the room of a job
+ * that belongs to its own express session (jobs carry sessionId in the
+ * SessionTracker maps / generic job registry). Exception: restore rooms -
+ * their id is generated client-side and joined BEFORE the restore request
+ * exists server-side, so they are gated on an authenticated session only.
+ * Unknown room prefixes are denied.
+ * @param {object} socket - Socket.IO socket (session attached via io.engine)
+ * @param {string} room - Room name being joined
+ * @param {object} logger - Logger instance
+ * @returns {boolean} True when the join is allowed
+ */
+function isRoomJoinAllowed(socket, room, logger) {
+  const sessionId = socket.request?.session?.id || null;
+  const user = socket.request?.session?.user || null;
+  if (!sessionId || !user) {
+    logger.warn(`[Socket] Denied join (no authenticated session): ${room}`);
+    return false;
+  }
+
+  const prefix = ROOM_PREFIXES.find(p => String(room).startsWith(p));
+  if (!prefix) {
+    logger.warn(`[Socket] Denied join (unknown room): ${room}`);
+    return false;
+  }
+
+  if (prefix === 'restore-') {
+    return true;
+  }
+
+  const jobId = String(room).slice(prefix.length);
+  const owner = sessionTracker.getJobOwner(jobId);
+  if (owner !== sessionId) {
+    // Don't leak whether the job exists
+    logger.warn(`[Socket] Denied join (not owner): ${room}`);
+    return false;
+  }
+  return true;
+}
+
 /**
  * Initialize Socket.IO connection handlers
  * @param {object} io - Socket.IO server instance
@@ -33,6 +89,14 @@ const {
 function initializeSocketHandlers(io, logger) {
   io.on('connection', (socket) => {
     logger.debug('Client connected:', socket.id);
+
+    // Single choke point for room ownership: every handler below joins
+    // through socket.join, so the gate covers all current and future rooms
+    const originalJoin = socket.join.bind(socket);
+    socket.join = (room) => {
+      if (!isRoomJoinAllowed(socket, room, logger)) return undefined;
+      return originalJoin(room);
+    };
 
     // Register training event handlers
     registerTrainingHandlers(socket, logger);
@@ -112,6 +176,7 @@ function createSocketEmitter(io) {
 module.exports = {
   initializeSocketHandlers,
   createSocketEmitter,
+  isRoomJoinAllowed,
   // Re-export individual emit functions for direct use
   emitTrainingProgress,
   emitTrainingComplete,

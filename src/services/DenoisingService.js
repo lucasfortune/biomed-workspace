@@ -986,6 +986,11 @@ class DenoisingService {
     });
 
     pythonScript.on('close', (code) => {
+      // Mark the registered inference job finished (cleanup guard/ownership)
+      if (this.sessionTracker) {
+        this.sessionTracker.completeJob(inferenceId, code === 0 ? 'completed' : 'failed');
+      }
+
       if (code !== 0) {
         io.to(roomName).emit('denoising-inference-complete', {
           success: false,
@@ -1230,6 +1235,11 @@ class DenoisingService {
     });
 
     pythonScript.on('close', (code) => {
+      // Mark the registered inference job finished (cleanup guard/ownership)
+      if (this.sessionTracker) {
+        this.sessionTracker.completeJob(inferenceId, code === 0 ? 'completed' : 'failed');
+      }
+
       if (code !== 0) {
         io.to(roomName).emit('denoising-inference-complete', {
           success: false,

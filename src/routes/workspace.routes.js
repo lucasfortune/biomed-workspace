@@ -445,14 +445,20 @@ function createWorkspaceRoutes(dependencies) {
         }
       };
 
-      // Restore workspace from zip buffer with progress tracking
-      const result = await workspaceService.restoreWorkspace(
-        sessionId,
-        req.file.buffer,
-        fileService,
-        req.session.user?.username,
-        progressCallback
-      );
+      // Restore workspace from the uploaded temp file (streamed, sanitized);
+      // the temp file is deleted afterwards either way
+      let result;
+      try {
+        result = await workspaceService.restoreWorkspace(
+          sessionId,
+          req.file.path,
+          fileService,
+          req.session.user?.username,
+          progressCallback
+        );
+      } finally {
+        fs.unlink(req.file.path, () => {});
+      }
 
       res.json({
         success: true,

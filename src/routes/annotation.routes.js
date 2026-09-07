@@ -339,6 +339,9 @@ function createAnnotationRoutes(dependencies) {
             }
             workspaceManager.saveMetadata(sessionId, metadata);
 
+            // The TIFF was rewritten in place: drop stale caches
+            workspaceManager.invalidateFileCaches(sessionId, fileId);
+
             if (sidecarIndex === -1) {
               // Add sidecar if it didn't exist
               workspaceManager.addFileToMetadata(sessionId, {

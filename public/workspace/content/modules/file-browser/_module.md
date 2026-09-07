@@ -56,6 +56,6 @@ File Operations
 
 Workspace Persistence
 
-Important: All data exists only for your current session. When you log out or your session expires, files are cleared. Use the workspace download/restore features to save and continue your work across sessions.
+Important: All data is session-based and temporary. Your workspace is kept for up to 48 hours after your last activity and is then deleted automatically; logging out (after confirmation) deletes it immediately. Use the workspace download/restore features to save and continue your work across sessions.
 
 See the related articles for detailed information on each feature.

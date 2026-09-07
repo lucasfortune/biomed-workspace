@@ -42,6 +42,64 @@ class SessionTracker {
      *          stage, progress, error }
      */
     this.denoisingSessions = new Map();
+
+    /**
+     * Generic job registry for module jobs without a dedicated map
+     * (preprocess, stitching, segcleanup, DL inference, filter denoising).
+     * Registration makes them visible to the cleanup guard and gives the
+     * socket/HTTP ownership checks one place to resolve a job's owner.
+     * Key: jobId
+     * Value: { sessionId, kind, status, startTime, endTime }
+     */
+    this.jobSessions = new Map();
+  }
+
+  // ============================================================================
+  // GENERIC JOB REGISTRY
+  // ============================================================================
+
+  /**
+   * Register a module job for ownership checks and the cleanup guard
+   * @param {string} jobId - Job ID (room suffix)
+   * @param {string} sessionId - Owning user session ID
+   * @param {string} kind - Job kind (e.g. 'preprocess', 'stitching')
+   */
+  registerJob(jobId, sessionId, kind) {
+    this.jobSessions.set(jobId, {
+      sessionId,
+      kind,
+      status: 'running',
+      startTime: new Date(),
+      endTime: null
+    });
+  }
+
+  /**
+   * Mark a registered job as finished
+   * @param {string} jobId - Job ID
+   * @param {string} [status='completed'] - Final status
+   */
+  completeJob(jobId, status = 'completed') {
+    const job = this.jobSessions.get(jobId);
+    if (job) {
+      job.status = status;
+      job.endTime = new Date();
+    }
+  }
+
+  /**
+   * Resolve the owning user session of any tracked job/room id, across all
+   * per-kind maps and the generic registry.
+   * @param {string} jobId - Job/room ID
+   * @returns {string|null} Owning session ID, or null when unknown
+   */
+  getJobOwner(jobId) {
+    return this.trainingSessions.get(jobId)?.sessionId
+      || this.inferenceSessions.get(jobId)?.sessionId
+      || this.meshSessions.get(jobId)?.sessionId
+      || this.denoisingSessions.get(jobId)?.sessionId
+      || this.jobSessions.get(jobId)?.sessionId
+      || null;
   }
 
   // ============================================================================
@@ -551,6 +609,12 @@ class SessionTracker {
       if (denoising.sessionId === sessionId &&
           (denoising.status === 'running' || denoising.status === 'initializing' || denoising.status === 'pending')) {
         activeProcesses.push(`denoising:${denoisingId}`);
+      }
+    }
+
+    for (const [jobId, job] of this.jobSessions.entries()) {
+      if (job.sessionId === sessionId && job.status === 'running') {
+        activeProcesses.push(`${job.kind}:${jobId}`);
       }
     }
 

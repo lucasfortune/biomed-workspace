@@ -8,7 +8,7 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { UPLOAD_LIMITS } = require('../config/constants');
+const { UPLOAD_LIMITS, DATA_PATHS } = require('../config/constants');
 
 /**
  * Create multer storage configuration
@@ -170,9 +170,23 @@ function createUploadMiddleware(workspaceManager, logger) {
     }
   });
 
-  // Workspace ZIP upload middleware (memory storage for buffer access, 5GB limit)
+  // Workspace ZIP upload middleware (5GB limit). Disk storage: buffering a
+  // multi-GB archive in memory (the old memoryStorage) could exhaust the
+  // process; the restore streams from the temp file and deletes it after.
   const uploadWorkspaceZip = multer({
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => {
+        try {
+          fs.mkdirSync(DATA_PATHS.tmp, { recursive: true });
+          cb(null, DATA_PATHS.tmp);
+        } catch (err) {
+          cb(err);
+        }
+      },
+      filename: (req, file, cb) => {
+        cb(null, `restore_${Date.now()}_${Math.round(Math.random() * 1e9)}.zip`);
+      }
+    }),
     fileFilter: workspaceZipFileFilter,
     limits: {
       fileSize: UPLOAD_LIMITS.workspaceZipFileSize || 5 * 1024 * 1024 * 1024 // 5GB default

@@ -214,6 +214,13 @@ function createMLRoutes(dependencies) {
       req.session.uploadedFiles.raw_images_id = rawFileEntry.id || null;
       req.session.uploadedFiles.annotations_id = annFileEntry.id || null;
 
+      // Validation may rewrite a pre-existing annotation stack in place
+      // (16->8 bit conversion / label remapping in validate_tiff.py):
+      // drop its stale thumbnail/slice caches
+      if (skipUpload && annFileEntry.id) {
+        workspaceManager.invalidateFileCaches(sessionId, annFileEntry.id);
+      }
+
       res.json({
         success: true,
         message: skipUpload
@@ -368,7 +375,12 @@ function createMLRoutes(dependencies) {
    */
   router.get('/training-status/:trainingId', requireAuth, (req, res) => {
     const trainingId = req.params.trainingId;
-    const training = trainingSessions.get(trainingId);
+    let training = trainingSessions.get(trainingId);
+
+    // Ownership: another session's job looks like an unknown one
+    if (training && training.sessionId !== req.session.id) {
+      training = undefined;
+    }
 
     if (!training) {
       // Session not in memory - could be server restart or old session
@@ -394,6 +406,15 @@ function createMLRoutes(dependencies) {
     const { trainingId } = req.params;
 
     try {
+      // Ownership: only the owning session may cancel (404, don't leak)
+      const training = trainingSessions.get(trainingId);
+      if (!training || training.sessionId !== req.session.id) {
+        return res.status(404).json({
+          success: false,
+          error: 'No active training process found for this ID'
+        });
+      }
+
       const cancelled = trainingService.cancelTraining(trainingId, io);
 
       if (cancelled) {
@@ -1058,7 +1079,8 @@ function createMLRoutes(dependencies) {
     const inferenceId = req.params.inferenceId;
     const inference = inferenceSessions.get(inferenceId);
 
-    if (!inference) {
+    // Ownership: another session's job looks like an unknown one
+    if (!inference || inference.sessionId !== req.session.id) {
       return res.status(404).json({ error: 'Inference session not found' });
     }
 
@@ -1077,7 +1099,8 @@ function createMLRoutes(dependencies) {
     const trainingId = req.params.trainingId;
     const training = trainingSessions.get(trainingId);
 
-    if (!training || training.status !== 'completed') {
+    // Ownership check included: another session's model is a 404
+    if (!training || training.sessionId !== req.session.id || training.status !== 'completed') {
       return res.status(404).json({ error: 'Model not found or training not completed' });
     }
 

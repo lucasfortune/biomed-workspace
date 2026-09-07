@@ -66,6 +66,7 @@ function configureApp(app, dependencies) {
     env,
     logger,
     io,
+    sessionMiddleware,
     workspaceManager,
     services,
     activityLogger
@@ -231,8 +232,9 @@ function configureApp(app, dependencies) {
     crossOriginResourcePolicy: { policy: "cross-origin" } // Allow loading resources
   }));
 
-  // Session middleware
-  app.use(createSessionMiddleware(env, { sessionsDir: DATA_PATHS.sessions }));
+  // Session middleware (the shared instance also attached to Socket.IO;
+  // created here only when the caller doesn't provide one, e.g. in tests)
+  app.use(sessionMiddleware || createSessionMiddleware(env, { sessionsDir: DATA_PATHS.sessions }));
 
   // CORS configuration
   const allowedOrigins = env.ALLOWED_ORIGINS

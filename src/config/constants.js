@@ -21,6 +21,9 @@ const DATA_PATHS = {
   workspaces: path.join(DATA_DIR, 'workspaces'),
   sessions: path.join(DATA_DIR, 'sessions'),
   logs: path.join(DATA_DIR, 'logs'),
+  // Scratch space for streamed uploads (e.g. workspace-restore ZIPs);
+  // sibling of workspaces so the cleanup service never mistakes it for one
+  tmp: path.join(DATA_DIR, 'tmp'),
   usersFile: path.join(DATA_DIR, 'users.json')
 };
 
@@ -55,17 +58,24 @@ const UPLOAD_LIMITS = {
   workspaceZipFileSize: 5 * 1024 * 1024 * 1024  // 5GB for workspace ZIP files
 };
 
+// Retention policy (ONE policy, stated honestly in the UI/docs): workspaces
+// are kept for RETENTION_HOURS after last activity, then cleaned up; the
+// session cookie expires on the same schedule so login lifetime and data
+// lifetime match. Decision (2026-09-07, ADR-012): 48 h - small user base,
+// storage affordable; revisit if the platform grows into storage pressure.
+const RETENTION_HOURS = 48;
+
 // Session configuration
 const SESSION_CONFIG = {
-  ttl: 86400 * 7,        // 7 days in seconds
-  cookieMaxAge: 86400000 * 7  // 7 days in milliseconds
+  ttl: RETENTION_HOURS * 60 * 60,             // seconds
+  cookieMaxAge: RETENTION_HOURS * 60 * 60 * 1000  // milliseconds
 };
 
 // Cleanup service configuration
 const CLEANUP_CONFIG = {
-  intervalMs: 15 * 60 * 1000,          // Run cleanup every 15 minutes
-  gracePeriodMs: 12 * 60 * 60 * 1000,  // 12 hours before considering a session abandoned
-  enableOnStartup: true                 // Start cleanup service when server starts
+  intervalMs: 15 * 60 * 1000,                       // Run cleanup every 15 minutes
+  gracePeriodMs: RETENTION_HOURS * 60 * 60 * 1000,  // Retention after last activity
+  enableOnStartup: true                              // Start cleanup service when server starts
 };
 
 // Allowed file types
@@ -143,7 +153,8 @@ function ensureDataDirectories() {
   const dataDirs = [
     DATA_PATHS.workspaces,
     DATA_PATHS.sessions,
-    DATA_PATHS.logs
+    DATA_PATHS.logs,
+    DATA_PATHS.tmp
   ];
 
   dataDirs.forEach(dir => {
@@ -169,6 +180,7 @@ module.exports = {
   PYTHON_PATH,
   DIRECTORIES,
   CACHE_DIRS,
+  RETENTION_HOURS,
   UPLOAD_LIMITS,
   SESSION_CONFIG,
   CLEANUP_CONFIG,

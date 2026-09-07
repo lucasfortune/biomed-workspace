@@ -26,6 +26,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
 const { buildDisplayName } = require('../helpers/namingHelpers');
+const sessionTracker = require('../services/SessionTracker');
 
 function createSegcleanupRoutes(dependencies) {
   const router = express.Router();
@@ -78,8 +79,11 @@ function createSegcleanupRoutes(dependencies) {
   /**
    * Run an async job process; wires stdout protocol lines into the
    * Socket.IO room and calls done(resultData|null, stderr) on close.
+   * The job is expected to be registered in the SessionTracker registry
+   * under the room's id suffix; it is marked complete on close.
    */
   function runJob(args, roomName, done) {
+    const jobId = roomName.replace(/^segcleanup-/, '');
     const proc = spawn(PYTHON_PATH, ['python/segcleanup.py', ...args]);
     let buffer = '';
     let stderrBuffer = '';
@@ -106,7 +110,10 @@ function createSegcleanupRoutes(dependencies) {
       }
     });
     proc.stderr.on('data', (d) => { stderrBuffer += d.toString(); });
-    proc.on('close', () => done(resultData, stderrBuffer));
+    proc.on('close', () => {
+      sessionTracker.completeJob(jobId, resultData ? 'completed' : 'failed');
+      done(resultData, stderrBuffer);
+    });
     proc.on('error', (err) => {
       io.to(roomName).emit('segcleanup-error', { message: `Failed to spawn process: ${err.message}` });
     });
@@ -310,6 +317,7 @@ function createSegcleanupRoutes(dependencies) {
         || lookupFile(sessionId, workspacePath, absolute);
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionTracker.registerJob(jobId, sessionId, 'segcleanup');
       const workDir = path.join(workspacePath, '.segcleanup', `work_${jobId}`);
       await fsp.mkdir(workDir, { recursive: true });
       const outputPath = path.join(workDir, 'working.tif');
@@ -384,6 +392,7 @@ function createSegcleanupRoutes(dependencies) {
         || lookupFile(sessionId, workspacePath, absolute);
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionTracker.registerJob(jobId, sessionId, 'segcleanup');
       const outputDir = path.join(workspacePath, '.segcleanup', `quant_${jobId}`);
       await fsp.mkdir(outputDir, { recursive: true });
 
@@ -469,6 +478,7 @@ function createSegcleanupRoutes(dependencies) {
         || lookupFile(sessionId, workspacePath, absolute);
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionTracker.registerJob(jobId, sessionId, 'segcleanup');
       const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
       await fsp.mkdir(outputDir, { recursive: true });
       const safeName = (outputName || 'edited')

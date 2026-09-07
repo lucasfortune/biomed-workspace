@@ -25,7 +25,7 @@ Download your entire workspace as a ZIP file and restore it later to continue yo
 
 ## Why This Matters
 
-This application uses session-based storage — your files exist only during your current session. When you log out, close the browser, or your session expires, all uploaded files and generated results are cleared.
+This application uses session-based storage: your workspace is kept for up to 48 hours after your last activity, then it is deleted automatically. Your login session expires on the same 48-hour schedule, and logging out (after its confirmation dialog) deletes the workspace immediately. Anything not downloaded before then — uploaded files and generated results alike — is gone.
 
 ## The workspace backup/restore feature solves this by letting you
 

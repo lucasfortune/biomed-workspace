@@ -13,6 +13,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
 const { buildDisplayName } = require('../helpers/namingHelpers');
+const sharedSessionTracker = require('../services/SessionTracker');
 
 /**
  * Create denoising routes router
@@ -68,6 +69,8 @@ function createDenoisingRoutes(dependencies) {
     try {
       // Generate processing ID
       const processingId = `filter_${Date.now()}`;
+      // Registry entry: cleanup-guard visibility while the filter runs
+      sharedSessionTracker.registerJob(processingId, sessionId, 'denoising-filter');
 
       // Get workspace path and resolve input file
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
@@ -142,6 +145,7 @@ function createDenoisingRoutes(dependencies) {
       });
 
       pythonProcess.on('close', async (code) => {
+        sharedSessionTracker.completeJob(processingId, code === 0 ? 'completed' : 'failed');
         if (code === 0) {
           // Parse result from stdout
           const resultLine = stdout.split('\n').find(l => l.startsWith('FILTER_RESULT:'));
@@ -720,7 +724,12 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      const session = denoisingService.getSession(trainingId);
+      let session = denoisingService.getSession(trainingId);
+
+      // Ownership: another session's job looks like an unknown one
+      if (session && session.sessionId !== req.session.id) {
+        session = undefined;
+      }
 
       if (!session) {
         // Session not in memory - could be server restart or completed training
@@ -777,6 +786,15 @@ function createDenoisingRoutes(dependencies) {
         return res.status(500).json({
           success: false,
           error: 'DenoisingService not available'
+        });
+      }
+
+      // Ownership: only the owning session may cancel (404, don't leak)
+      const owned = denoisingService.getSession(trainingId);
+      if (!owned || owned.sessionId !== req.session.id) {
+        return res.status(404).json({
+          success: false,
+          error: 'No active training process found for this ID'
         });
       }
 
@@ -873,6 +891,9 @@ function createDenoisingRoutes(dependencies) {
 
       // Generate inference ID
       const inferenceId = `dl_infer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Registry entry: socket-room ownership checks + cleanup guard
+      // (completed by DenoisingService when the process exits)
+      sharedSessionTracker.registerJob(inferenceId, sessionId, 'denoising-inference');
 
       // Create output directory
       const outputDir = path.join(workspacePath, 'results', 'denoising', inferenceId);

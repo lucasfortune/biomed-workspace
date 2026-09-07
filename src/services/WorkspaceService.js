@@ -344,17 +344,19 @@ class WorkspaceService {
   }
 
   /**
-   * Restore workspace from a zip buffer
-   * Clears existing workspace and extracts zip contents
+   * Restore workspace from an uploaded zip file on disk
+   * Clears existing workspace and extracts zip contents (streamed, with
+   * entry-path sanitization - absolute paths and '..' components are
+   * rejected so a crafted archive can't write outside the workspace).
    * Updates session ID in metadata
    * @param {string} sessionId - Session ID
-   * @param {Buffer} zipBuffer - Zip file buffer
+   * @param {string} zipPath - Path to the uploaded zip file (temp file)
    * @param {object} fileService - FileService instance for thumbnail regeneration
    * @param {string} username - Username for logging
    * @param {function} progressCallback - Optional callback for progress updates (phase, progress, message)
    * @returns {Promise<object>} Result with file count and status
    */
-  async restoreWorkspace(sessionId, zipBuffer, fileService = null, username = null, progressCallback = null) {
+  async restoreWorkspace(sessionId, zipPath, fileService = null, username = null, progressCallback = null) {
     // Helper to emit progress if callback provided
     const emitProgress = (phase, progress, message) => {
       if (progressCallback) {
@@ -371,7 +373,7 @@ class WorkspaceService {
 
     // Phase 1: Validate ZIP
     emitProgress('validating', 55, 'Validating workspace archive...');
-    const hasMetadata = await this.validateWorkspaceZip(zipBuffer);
+    const hasMetadata = await this.validateWorkspaceZip(zipPath);
     if (!hasMetadata) {
       throw new Error('Invalid workspace zip: missing metadata.json');
     }
@@ -383,18 +385,9 @@ class WorkspaceService {
       this.logger.info(`Cleared ${clearResult.clearedFileCount} files before restore`);
     }
 
-    // Phase 3: Extract ZIP to workspace
+    // Phase 3: Stream-extract ZIP into the workspace with sanitized paths
     emitProgress('extracting', 75, 'Extracting files...');
-    await new Promise((resolve, reject) => {
-      const stream = require('stream');
-      const bufferStream = new stream.PassThrough();
-      bufferStream.end(zipBuffer);
-
-      bufferStream
-        .pipe(unzipper.Extract({ path: workspacePath }))
-        .on('close', resolve)
-        .on('error', reject);
-    });
+    await this.extractZipSafely(zipPath, workspacePath);
 
     // Phase 4: Load and update metadata
     emitProgress('updating', 90, 'Updating metadata...');
@@ -450,19 +443,65 @@ class WorkspaceService {
   }
 
   /**
-   * Validate that a zip buffer contains a valid workspace structure
-   * @param {Buffer} zipBuffer - Zip file buffer
+   * Stream-extract a zip file into a target directory, skipping any entry
+   * whose path is absolute or contains '..' components (zip-slip guard).
+   * @param {string} zipPath - Path to the zip file
+   * @param {string} targetDir - Directory to extract into
+   * @returns {Promise<void>}
+   */
+  extractZipSafely(zipPath, targetDir) {
+    const targetRoot = path.resolve(targetDir);
+    return new Promise((resolve, reject) => {
+      const pendingWrites = [];
+
+      fs.createReadStream(zipPath)
+        .pipe(unzipper.Parse())
+        .on('entry', (entry) => {
+          const entryPath = String(entry.path).replace(/\\/g, '/');
+          const segments = entryPath.split('/');
+
+          const unsafe = path.isAbsolute(entryPath)
+            || /^[a-zA-Z]:/.test(entryPath)
+            || segments.some(seg => seg === '..');
+          const destination = unsafe ? null : path.resolve(targetRoot, entryPath);
+          if (!destination
+              || !(destination === targetRoot || destination.startsWith(targetRoot + path.sep))) {
+            if (this.logger) {
+              this.logger.warn(`[Restore] Skipping unsafe zip entry: ${entry.path}`);
+            }
+            entry.autodrain();
+            return;
+          }
+
+          if (entry.type === 'Directory') {
+            fs.mkdirSync(destination, { recursive: true });
+            entry.autodrain();
+            return;
+          }
+
+          fs.mkdirSync(path.dirname(destination), { recursive: true });
+          const writeStream = fs.createWriteStream(destination);
+          pendingWrites.push(new Promise((done, fail) => {
+            writeStream.on('finish', done);
+            writeStream.on('error', fail);
+          }));
+          entry.pipe(writeStream);
+        })
+        .on('close', () => Promise.all(pendingWrites).then(() => resolve(), reject))
+        .on('error', reject);
+    });
+  }
+
+  /**
+   * Validate that a zip file contains a valid workspace structure
+   * @param {string} zipPath - Path to the zip file
    * @returns {Promise<boolean>} True if valid workspace zip
    */
-  async validateWorkspaceZip(zipBuffer) {
+  async validateWorkspaceZip(zipPath) {
     return new Promise((resolve, reject) => {
-      const stream = require('stream');
-      const bufferStream = new stream.PassThrough();
-      bufferStream.end(zipBuffer);
-
       let hasMetadata = false;
 
-      bufferStream
+      fs.createReadStream(zipPath)
         .pipe(unzipper.Parse())
         .on('entry', (entry) => {
           if (entry.path === 'metadata.json') {
