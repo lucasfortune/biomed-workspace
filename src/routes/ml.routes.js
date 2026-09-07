@@ -8,7 +8,6 @@
  * - Import models
  * - Run inference
  * - Download results
- * - Reset session
  */
 
 const express = require('express');
@@ -1403,107 +1402,6 @@ function createMLRoutes(dependencies) {
         }
       }
     });
-  });
-
-  // ===========================================================================
-  // SESSION RESET
-  // ===========================================================================
-
-  /**
-   * Reset session
-   * POST /reset-session
-   */
-  router.post('/reset-session', requireAuth, async (req, res) => {
-    try {
-      const sessionId = req.session.id;
-      if (logger) logger.info('Resetting session:', sessionId);
-
-      const sessionDir = path.join('uploads', sessionId);
-      const modelDir = path.join('models', sessionId);
-      const outputDir = path.join('outputs', sessionId);
-
-      const deleteDirectory = (dirPath) => {
-        if (fs.existsSync(dirPath)) {
-          try {
-            fs.rmSync(dirPath, { recursive: true, force: true });
-            return true;
-          } catch (error) {
-            if (logger) logger.error('Error deleting directory:', dirPath, error);
-            return false;
-          }
-        }
-        return true;
-      };
-
-      deleteDirectory(sessionDir);
-      deleteDirectory(modelDir);
-      deleteDirectory(outputDir);
-
-      // Clean up training sessions
-      const trainingIdsToCleanup = [];
-      for (const [trainingId, training] of trainingSessions.entries()) {
-        if (training.sessionId === sessionId) {
-          trainingIdsToCleanup.push(trainingId);
-          const trainingResultsDir = path.join('results', trainingId);
-          deleteDirectory(trainingResultsDir);
-        }
-      }
-
-      // Clean up inference sessions
-      const inferenceIdsToCleanup = [];
-      for (const [inferenceId, inference] of inferenceSessions.entries()) {
-        if (inference.sessionId === sessionId) {
-          inferenceIdsToCleanup.push(inferenceId);
-          if (inference.result && inference.result.output_path) {
-            const resultDir = path.dirname(inference.result.output_path);
-            deleteDirectory(resultDir);
-          }
-        }
-      }
-
-      // Clean up imported model results directories
-      if (req.session.importedModelResultsDirs?.length > 0) {
-        for (const resultsDir of req.session.importedModelResultsDirs) {
-          if (fs.existsSync(resultsDir)) {
-            deleteDirectory(resultsDir);
-          }
-        }
-        req.session.importedModelResultsDirs = [];
-      }
-
-      // Remove sessions from maps
-      for (const trainingId of trainingIdsToCleanup) {
-        trainingSessions.delete(trainingId);
-      }
-
-      for (const inferenceId of inferenceIdsToCleanup) {
-        inferenceSessions.delete(inferenceId);
-      }
-
-      // Clear session data but keep user authenticated
-      const user = req.session.user;
-      req.session.uploadedFiles = undefined;
-      req.session.trainingConfig = undefined;
-      req.session.currentTraining = undefined;
-      req.session.importedModel = undefined;
-      req.session.user = user;
-
-      res.json({
-        success: true,
-        message: 'Session reset successfully',
-        cleanupSummary: {
-          trainingSessions: trainingIdsToCleanup.length,
-          inferenceSessions: inferenceIdsToCleanup.length
-        }
-      });
-
-    } catch (error) {
-      if (logger) logger.error('Error in reset-session:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error during session reset'
-      });
-    }
   });
 
   return router;

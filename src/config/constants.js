@@ -43,6 +43,10 @@ const DIRECTORIES = {
   unfinishedAnnotations: 'unfinished_annotations'
 };
 
+// Per-workspace cache directories: excluded from ZIP export and preserved
+// (not user data) by clearWorkspace on restore. One list, used by both.
+const CACHE_DIRS = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '.segcleanup'];
+
 // File upload limits
 const UPLOAD_LIMITS = {
   tiffFileSize: 200 * 1024 * 1024,        // 200MB for TIFF stacks
@@ -114,13 +118,12 @@ function validatePythonPath() {
 }
 
 /**
- * Ensure required directories exist (code directories in BASE_DIR)
+ * Ensure required directories exist (code directories in BASE_DIR).
+ * The legacy project-root uploads/results/models data directories are gone:
+ * all user data lives in per-session workspaces (workspaces/<sessionId>/).
  */
 function ensureDirectories() {
   const requiredDirs = [
-    DIRECTORIES.uploads,
-    DIRECTORIES.results,
-    DIRECTORIES.models,
     DIRECTORIES.public
   ];
 
@@ -165,6 +168,7 @@ module.exports = {
   DATA_PATHS,
   PYTHON_PATH,
   DIRECTORIES,
+  CACHE_DIRS,
   UPLOAD_LIMITS,
   SESSION_CONFIG,
   CLEANUP_CONFIG,

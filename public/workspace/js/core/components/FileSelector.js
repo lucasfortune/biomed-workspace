@@ -85,14 +85,11 @@ class FileSelector {
     this.acceptAllTiff = config.acceptAllTiff === true;
     this.uploadEndpoint = config.uploadEndpoint || '/api/workspace/upload';
 
-    // Configurable result categories (supports both new 'results' and legacy categories)
-    this.resultCategories = config.resultCategories || ['results', 'segmentations', 'denoised_images', 'processed', 'meshes'];
+    // Configurable result categories (manifests are normalized to the
+    // three-category system on load, so 'results' is the only default)
+    this.resultCategories = config.resultCategories || ['results'];
     this.resultCategoryLabels = config.resultCategoryLabels || {
-      'results': 'Result',
-      'segmentations': 'Segmentation',
-      'denoised_images': 'Denoised',
-      'processed': 'Processed',
-      'meshes': 'Mesh'
+      'results': 'Result'
     };
     // Tags to identify result types (for new 'results' category system)
     this.resultTags = config.resultTags || null;  // e.g., ['segmentation', 'data'] to filter results

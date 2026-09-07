@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
 const unzipper = require('unzipper');
+const { CACHE_DIRS } = require('../config/constants');
 
 class WorkspaceService {
   /**
@@ -168,17 +169,6 @@ class WorkspaceService {
   }
 
   /**
-   * Move a file to a folder
-   * @param {string} sessionId - Session ID
-   * @param {string} fileId - File ID
-   * @param {string|null} targetFolderId - Target folder ID (null for root)
-   * @returns {Promise<object>} Updated file object
-   */
-  async moveFile(sessionId, fileId, targetFolderId) {
-    return this.workspaceManager.moveFile(sessionId, fileId, targetFolderId);
-  }
-
-  /**
    * Search files by name
    * @param {string} sessionId - Session ID
    * @param {string} query - Search query
@@ -206,51 +196,6 @@ class WorkspaceService {
    */
   async setThumbnailPath(sessionId, fileId, thumbnailPath) {
     return this.workspaceManager.setThumbnailPath(sessionId, fileId, thumbnailPath);
-  }
-
-  // ===========================================================================
-  // FOLDER OPERATIONS
-  // ===========================================================================
-
-  /**
-   * Get all folders
-   * @param {string} sessionId - Session ID
-   * @returns {Promise<Array>} Folders array
-   */
-  async getFolders(sessionId) {
-    return this.workspaceManager.getFolders(sessionId);
-  }
-
-  /**
-   * Create a folder
-   * @param {string} sessionId - Session ID
-   * @param {string} name - Folder name
-   * @param {string|null} parentId - Parent folder ID
-   * @returns {Promise<object>} Created folder
-   */
-  async createFolder(sessionId, name, parentId = null) {
-    return this.workspaceManager.createFolder(sessionId, name, parentId);
-  }
-
-  /**
-   * Rename a folder
-   * @param {string} sessionId - Session ID
-   * @param {string} folderId - Folder ID
-   * @param {string} newName - New folder name
-   * @returns {Promise<object>} Updated folder
-   */
-  async renameFolder(sessionId, folderId, newName) {
-    return this.workspaceManager.renameFolder(sessionId, folderId, newName);
-  }
-
-  /**
-   * Delete a folder
-   * @param {string} sessionId - Session ID
-   * @param {string} folderId - Folder ID
-   * @returns {Promise<object>} Result
-   */
-  async deleteFolder(sessionId, folderId) {
-    return this.workspaceManager.deleteFolder(sessionId, folderId);
   }
 
   // ===========================================================================
@@ -331,7 +276,7 @@ class WorkspaceService {
     }
 
     // Cache directories to exclude
-    const excludeDirs = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '.segcleanup'];
+    const excludeDirs = CACHE_DIRS;
 
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

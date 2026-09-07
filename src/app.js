@@ -39,7 +39,6 @@ const {
   validateTiffStacks: validateTiffStacksPython,
   validateImportedModel: validateImportedModelPython,
   validateInferenceTiff: validateInferenceTiffPython,
-  generateThumbnail: generateThumbnailPython,
   startTrainingProcess: startTrainingProcessPython,
   startInferenceProcess: startInferenceProcessPython
 } = require('./helpers/pythonRunner');
@@ -140,13 +139,13 @@ function configureApp(app, dependencies) {
 
         // Track model files with appropriate tags
         if (fs.existsSync(modelPath)) {
-          await trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth'), lineage: trainingLineage() });
+          await fileService.trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth'), lineage: trainingLineage() });
         }
         if (fs.existsSync(configPath)) {
-          await trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: modelName('config', '.json'), lineage: trainingLineage() });
+          await fileService.trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: modelName('config', '.json'), lineage: trainingLineage() });
         }
         if (fs.existsSync(resultsPath)) {
-          await trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: modelName('info', '.json'), lineage: trainingLineage() });
+          await fileService.trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: modelName('info', '.json'), lineage: trainingLineage() });
         }
       }
     });
@@ -169,7 +168,7 @@ function configureApp(app, dependencies) {
             logger.debug(`[INFERENCE] Built lineage for inference ${inferenceId}:`, lineage);
           }
 
-          await trackInferenceResults(result, inferenceId, inf.sessionId, resultSource, lineage);
+          await fileService.trackInferenceResults(result, inferenceId, inf.sessionId, resultSource, lineage);
           const workspacePath = workspaceManager.getWorkspacePath(inf.sessionId);
           const convertedResult = convertResultPathsForWeb(result, inf.sessionId, workspacePath);
           inf.result = convertedResult;
@@ -181,70 +180,6 @@ function configureApp(app, dependencies) {
   // =============================================================================
   // HELPER FUNCTIONS
   // =============================================================================
-
-  async function trackModuleOutput(sessionId, filePath, category, metadata = {}) {
-    try {
-      const fileName = path.basename(filePath);
-      const fileSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
-      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
-      const relativePath = path.relative(workspacePath, filePath);
-
-      // Build a consistent display name chained from the source/input file, when lineage
-      // identifies one. Info/auxiliary outputs get an 'info' qualifier so they don't
-      // collide with the primary data output. Files without lineage keep their raw name.
-      let displayName;
-      const lin = metadata.lineage;
-      const sourceId = lin && Array.isArray(lin.inputs) ? lin.inputs[0] : null;
-      if (lin && lin.processType && sourceId) {
-        const sourceName = workspaceManager.getSourceDisplayName(sessionId, sourceId);
-        const isInfo = Array.isArray(metadata.tags) && metadata.tags.includes('info');
-        displayName = buildDisplayName({
-          sourceName,
-          operation: lin.processType,
-          ext: path.extname(fileName),
-          qualifier: isInfo ? 'info' : undefined
-        });
-      }
-
-      const fileEntry = workspaceManager.addFileToMetadata(sessionId, {
-        name: fileName,
-        path: relativePath,
-        category: category,
-        size: fileSize,
-        folderId: null,
-        ...(displayName && { displayName }),
-        ...metadata  // Spread metadata to include lineage if provided
-      });
-
-      logger.debug(`Tracked ${category} output:`, fileName);
-
-      const ext = path.extname(fileName).toLowerCase();
-      if (ext === '.tif' || ext === '.tiff') {
-        const thumbnailsDir = path.join(workspacePath, '.thumbnails');
-        if (!fs.existsSync(thumbnailsDir)) {
-          fs.mkdirSync(thumbnailsDir, { recursive: true });
-        }
-
-        const thumbnailPath = path.join(thumbnailsDir, `${fileEntry.id}.jpg`);
-
-        generateThumbnailPython(PYTHON_PATH, filePath, thumbnailPath, { logger })
-          .then(async (success) => {
-            if (success) {
-              await workspaceManager.setThumbnailPath(
-                sessionId,
-                fileEntry.id,
-                `.thumbnails/${fileEntry.id}.jpg`
-              );
-            }
-          });
-      }
-
-      return fileEntry;
-    } catch (error) {
-      logger.error('Error tracking module output:', error);
-      return null;
-    }
-  }
 
   function convertResultPathsForWeb(result, sessionId, workspacePath) {
     const resultsDir = path.join(workspacePath, 'results');
@@ -264,34 +199,6 @@ function configureApp(app, dependencies) {
     }
 
     return convertedResult;
-  }
-
-  async function trackInferenceResults(result, inferenceId, sessionId, source, lineage = null) {
-    if (!result || !result.success) {
-      logger.debug(`[TRACKING] Skipping tracking - result not successful (source: ${source})`);
-      return;
-    }
-
-    logger.debug(`[TRACKING] Tracking inference results from ${source} for inference ${inferenceId}`);
-    if (lineage) {
-      logger.debug(`[TRACKING] Including lineage: ${JSON.stringify(lineage)}`);
-    }
-
-    const filesToTrack = [
-      { path: result.output_path, category: 'results', tags: ['segmentation', 'data'] },
-      { path: result.metadata_path, category: 'results', tags: ['segmentation', 'info'] },
-      { path: result.visualization_path, category: 'results', tags: ['segmentation', 'info'] }
-    ];
-
-    for (const file of filesToTrack) {
-      if (file.path && fs.existsSync(file.path)) {
-        // Pass lineage and tags as part of metadata
-        await trackModuleOutput(sessionId, file.path, file.category, { lineage, tags: file.tags });
-        logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category}, tags: ${file.tags.join(', ')})`);
-      }
-    }
-
-    logger.debug(`[TRACKING] Completed tracking for inference ${inferenceId} (source: ${source})`);
   }
 
   // =============================================================================

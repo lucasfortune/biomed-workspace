@@ -153,35 +153,6 @@ function createFilesRoutes(dependencies) {
   });
 
   /**
-   * Move file to folder
-   * PATCH /api/workspace/file/:fileId/move
-   */
-  router.patch('/file/:fileId/move', requireAuth, async (req, res) => {
-    try {
-      const { fileId } = req.params;
-      const { targetFolderId } = req.body;
-      const sessionId = req.session.id;
-
-      const file = await workspaceService.moveFile(sessionId, fileId, targetFolderId);
-
-      if (activityLogger) {
-        activityLogger.logActivity(
-          req.session.user.username,
-          'file_moved',
-          { fileId, targetFolderId }
-        );
-      }
-
-      res.json({ success: true, file });
-    } catch (error) {
-      if (logger) {
-        logger.error('Move file error:', error);
-      }
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-  /**
    * Download file
    * GET /api/workspace/file/:fileId/download
    */

@@ -212,13 +212,6 @@ class SegmentationAPI {
   // ============================================================================
 
   /**
-   * Reset current session
-   */
-  async resetSession() {
-    return this._post('/reset-session', {});
-  }
-
-  /**
    * Check authentication status
    */
   async checkAuth() {

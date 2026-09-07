@@ -78,23 +78,11 @@ function createStaticRoutes(dependencies) {
 
   /**
    * Serve public static files
+   * (The legacy unauthenticated /uploads, /results and /models mounts are
+   * gone: user data lives in per-session workspaces and is served only by
+   * the authenticated, session-scoped workspace routes below.)
    */
   router.use(express.static(path.join(__dirname, '../../public')));
-
-  /**
-   * Legacy static file serving for uploads
-   */
-  router.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
-
-  /**
-   * Legacy static file serving for results
-   */
-  router.use('/results', express.static(path.join(__dirname, '../../results')));
-
-  /**
-   * Legacy static file serving for models
-   */
-  router.use('/models', express.static(path.join(__dirname, '../../models')));
 
   // ===========================================================================
   // WORKSPACE STATIC FILES (session-scoped)

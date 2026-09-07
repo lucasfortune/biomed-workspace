@@ -17,22 +17,6 @@ class MeshAPI {
   }
 
   /**
-   * Get available segmentation sources (results + annotations)
-   * @returns {Promise<{success: boolean, sources: object}>}
-   */
-  async getSources() {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/mesh/sources`, {
-        credentials: 'include'
-      });
-      return await response.json();
-    } catch (error) {
-      console.error('[MeshAPI] getSources error:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
    * Get TIFF stack metadata (dimensions, classes, etc.)
    * @param {string} fileId - File ID or path
    * @returns {Promise<{success: boolean, info: object}>}

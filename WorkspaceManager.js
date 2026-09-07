@@ -2,6 +2,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const { resolveDisplayNameCollision } = require('./src/helpers/namingHelpers');
+const { CACHE_DIRS } = require('./src/config/constants');
 
 /**
  * WorkspaceManager - Handles workspace initialization and file management
@@ -196,7 +197,7 @@ class WorkspaceManager {
       sessionId: sessionId,
       createdAt: new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
-      version: '1.1.0',
+      version: '1.2.0',
       files: [],
       folders: []
     };
@@ -333,7 +334,7 @@ class WorkspaceManager {
         sessionId,
         createdAt: new Date().toISOString(),
         lastAccessed: new Date().toISOString(),
-        version: '1.1.0',
+        version: '1.2.0',
         files: [],
         folders: []
       };
@@ -343,11 +344,16 @@ class WorkspaceManager {
       const data = fs.readFileSync(metadataPath, 'utf8');
       const metadata = JSON.parse(data);
 
-      // Backward compatibility: Add folders array if missing (v1.0.0 -> v1.1.0)
-      if (!metadata.folders) {
-        metadata.folders = [];
-        metadata.version = '1.1.0';
-        // Note: Auto-save happens on next operation
+      // Normalize legacy shapes to the canonical model (ADR-012). Workspaces
+      // only persist briefly, but old ZIP backups can be restored any time,
+      // so every read tolerates and upgrades old manifests. Changes are
+      // persisted so the upgrade happens once per manifest.
+      if (this.normalizeManifest(metadata)) {
+        try {
+          fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+        } catch (e) {
+          // Non-fatal: the normalized in-memory copy is still returned
+        }
       }
 
       return metadata;
@@ -355,6 +361,76 @@ class WorkspaceManager {
       console.error(`Error loading metadata for session ${sessionId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Upgrade a manifest in place to the canonical v1.5.0 data model:
+   * - `folders` array present (v1.0.0 -> v1.1.0)
+   * - categories mapped to the three-category system, tags completed
+   *   (normalizeCategory/normalizeTags)
+   * - legacy lineage shapes rewritten to
+   *   {processType, processedAt, inputs[], processId} (the pre-consolidation
+   *   DL-inference records used {operation, sourceFileId, timestamp,
+   *   inferenceId})
+   * - missing `name` recovered from the path basename
+   * @param {object} metadata - Parsed manifest (mutated in place)
+   * @returns {boolean} True when anything was changed
+   */
+  normalizeManifest(metadata) {
+    let changed = false;
+
+    if (!metadata.folders) {
+      metadata.folders = [];
+      changed = true;
+    }
+
+    for (const file of metadata.files || []) {
+      // Category + tags. Tags are only re-derived for entries that carried
+      // a legacy category: canonical entries may deliberately have no type
+      // tag (e.g. stitch recipes), and inference must not add one there.
+      const legacyCategory = file.category;
+      const category = this.normalizeCategory(legacyCategory);
+      if (category !== legacyCategory) {
+        file.category = category;
+        file.tags = this.normalizeTags(category, file.tags || [], {
+          legacyCategory,
+          fileName: file.name
+        });
+        changed = true;
+      } else if (!Array.isArray(file.tags)) {
+        file.tags = [];
+        changed = true;
+      }
+
+      // Missing name: recover from the path
+      if (!file.name && file.path) {
+        file.name = path.basename(file.path);
+        changed = true;
+      }
+
+      // Legacy lineage shapes -> canonical record
+      const lin = file.lineage;
+      if (lin && !lin.processType && lin.operation) {
+        const op = String(lin.operation);
+        file.lineage = {
+          // 'denoising-<method>-inference' and friends all describe a
+          // denoising output; other unknown operations keep their string
+          processType: /^denoising-.*-inference$/.test(op) ? 'denoising' : op,
+          processedAt: lin.timestamp || file.uploadedAt || new Date().toISOString(),
+          inputs: lin.sourceFileId ? [lin.sourceFileId] : [],
+          ...(lin.inferenceId && { processId: lin.inferenceId })
+        };
+        changed = true;
+      } else if (lin && lin.processType && !Array.isArray(lin.inputs)) {
+        lin.inputs = [];
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      metadata.version = '1.2.0';
+    }
+    return changed;
   }
 
   /**
@@ -513,98 +589,6 @@ class WorkspaceManager {
   }
 
   /**
-   * Create a new folder
-   * @param {string} sessionId - Session ID
-   * @param {string} folderName - Name of the folder
-   * @param {string|null} parentId - Parent folder ID (null for root)
-   * @param {string} color - Folder color
-   * @returns {object} Created folder object
-   */
-  async createFolder(sessionId, folderName, parentId = null, color = '#4A90E2') {
-    const metadata = this.loadMetadata(sessionId);
-
-    // Validate parent exists if specified
-    if (parentId && !metadata.folders.find(f => f.id === parentId)) {
-      throw new Error('Parent folder not found');
-    }
-
-    const folder = {
-      id: this.generateId('folder'),
-      name: folderName,
-      parentId: parentId,
-      createdAt: new Date().toISOString(),
-      color: color
-    };
-
-    metadata.folders.push(folder);
-    this.saveMetadata(sessionId, metadata);
-
-    return folder;
-  }
-
-  /**
-   * Rename a folder
-   * @param {string} sessionId - Session ID
-   * @param {string} folderId - Folder ID to rename
-   * @param {string} newName - New folder name
-   * @returns {object} Updated folder object
-   */
-  async renameFolder(sessionId, folderId, newName) {
-    const metadata = this.loadMetadata(sessionId);
-    const folder = metadata.folders.find(f => f.id === folderId);
-
-    if (!folder) {
-      throw new Error('Folder not found');
-    }
-
-    folder.name = newName;
-    this.saveMetadata(sessionId, metadata);
-
-    return folder;
-  }
-
-  /**
-   * Delete a folder (moves files to root)
-   * @param {string} sessionId - Session ID
-   * @param {string} folderId - Folder ID to delete
-   * @returns {object} Success message
-   */
-  async deleteFolder(sessionId, folderId) {
-    const metadata = this.loadMetadata(sessionId);
-
-    // Remove folder from array
-    metadata.folders = metadata.folders.filter(f => f.id !== folderId);
-
-    // Move all files in folder to root (folderId = null)
-    metadata.files.forEach(file => {
-      if (file.folderId === folderId) {
-        file.folderId = null;
-      }
-    });
-
-    // Move all child folders to root
-    metadata.folders.forEach(folder => {
-      if (folder.parentId === folderId) {
-        folder.parentId = null;
-      }
-    });
-
-    this.saveMetadata(sessionId, metadata);
-
-    return { success: true, message: 'Folder deleted, contents moved to root' };
-  }
-
-  /**
-   * Get all folders
-   * @param {string} sessionId - Session ID
-   * @returns {array} Array of folder objects
-   */
-  async getFolders(sessionId) {
-    const metadata = this.loadMetadata(sessionId);
-    return metadata.folders || [];
-  }
-
-  /**
    * Get file by ID
    * @param {string} sessionId - Session ID
    * @param {string} fileId - File ID
@@ -656,32 +640,6 @@ class WorkspaceManager {
     this.saveMetadata(sessionId, metadata);
 
     console.log(`[WorkspaceManager] File display name updated: ${currentDisplay} -> ${file.displayName} (path unchanged)`);
-
-    return file;
-  }
-
-  /**
-   * Move file to folder
-   * @param {string} sessionId - Session ID
-   * @param {string} fileId - File ID
-   * @param {string|null} targetFolderId - Target folder ID (null for root)
-   * @returns {object} Updated file object
-   */
-  async moveFile(sessionId, fileId, targetFolderId) {
-    const metadata = this.loadMetadata(sessionId);
-    const file = metadata.files.find(f => f.id === fileId);
-
-    if (!file) {
-      throw new Error('File not found');
-    }
-
-    // Validate folder exists if specified
-    if (targetFolderId && !metadata.folders.find(f => f.id === targetFolderId)) {
-      throw new Error('Target folder not found');
-    }
-
-    file.folderId = targetFolderId;
-    this.saveMetadata(sessionId, metadata);
 
     return file;
   }
@@ -936,35 +894,6 @@ class WorkspaceManager {
   }
 
   /**
-   * Move multiple files to folder (batch)
-   * @param {string} sessionId - Session ID
-   * @param {array} fileIds - Array of file IDs
-   * @param {string|null} targetFolderId - Target folder ID (null for root)
-   * @returns {object} Result with moved count
-   */
-  async moveFilesToFolder(sessionId, fileIds, targetFolderId) {
-    const metadata = this.loadMetadata(sessionId);
-
-    // Validate folder exists
-    if (targetFolderId && !metadata.folders.find(f => f.id === targetFolderId)) {
-      throw new Error('Target folder not found');
-    }
-
-    let movedCount = 0;
-
-    metadata.files.forEach(file => {
-      if (fileIds.includes(file.id)) {
-        file.folderId = targetFolderId;
-        movedCount++;
-      }
-    });
-
-    this.saveMetadata(sessionId, metadata);
-
-    return { success: true, movedCount };
-  }
-
-  /**
    * Search files by name
    * @param {string} sessionId - Session ID
    * @param {string} query - Search query
@@ -1038,62 +967,8 @@ class WorkspaceManager {
   }
 
   /**
-   * Get file tree with folder structure
-   * @param {string} sessionId - Session ID
-   * @returns {object} Hierarchical tree structure
-   */
-  async getFileTree(sessionId) {
-    const metadata = this.loadMetadata(sessionId);
-
-    // Build tree structure
-    const tree = {
-      id: 'root',
-      name: 'Root',
-      type: 'folder',
-      children: []
-    };
-
-    // Create folder map
-    const folderMap = new Map();
-    folderMap.set(null, tree); // root
-
-    // Add folders
-    metadata.folders.forEach(folder => {
-      folderMap.set(folder.id, {
-        ...folder,
-        type: 'folder',
-        children: []
-      });
-    });
-
-    // Build folder hierarchy
-    metadata.folders.forEach(folder => {
-      const folderNode = folderMap.get(folder.id);
-      const parent = folderMap.get(folder.parentId);
-
-      if (parent) {
-        parent.children.push(folderNode);
-      }
-    });
-
-    // Add files to appropriate folders
-    metadata.files.forEach(file => {
-      const parent = folderMap.get(file.folderId);
-
-      if (parent) {
-        parent.children.push({
-          ...file,
-          type: 'file'
-        });
-      }
-    });
-
-    return tree;
-  }
-
-  /**
    * Clear all workspace files for restore operation
-   * Deletes all files and directories except cache dirs (.thumbnails, .slices, .mesh-previews)
+   * Deletes all files and directories except the shared CACHE_DIRS list
    * Resets metadata to empty state
    * @param {string} sessionId - Session ID
    * @returns {object} Result with cleared file count
@@ -1105,8 +980,8 @@ class WorkspaceManager {
       throw new Error(`Workspace not found for session: ${sessionId}`);
     }
 
-    // Directories to preserve (will be recreated if needed)
-    const cacheDirectories = ['.thumbnails', '.slices', '.mesh-previews'];
+    // Cache directories to preserve - the same list the ZIP export excludes
+    const cacheDirectories = CACHE_DIRS;
 
     // Get current file count for reporting
     const metadata = this.loadMetadata(sessionId);
@@ -1159,7 +1034,7 @@ class WorkspaceManager {
       sessionId: sessionId,
       createdAt: metadata.createdAt || new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
-      version: '1.1.0',
+      version: '1.2.0',
       files: [],
       folders: []
     };

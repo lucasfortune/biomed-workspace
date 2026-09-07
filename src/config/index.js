@@ -6,10 +6,8 @@
 
 const constants = require('./constants');
 const multerConfig = require('./multer.config');
-const sessionConfig = require('./session.config');
 
 module.exports = {
   ...constants,
-  multerConfig,
-  sessionConfig
+  multerConfig
 };

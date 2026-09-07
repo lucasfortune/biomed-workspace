@@ -191,22 +191,12 @@ function getProcessingHistoryString(fileId, allFiles) {
 function findOriginalDataFile(fileId, allFiles) {
   const result = findRootFiles(fileId, allFiles);
 
-  // Helper to check if file is original raw data
+  // Helper to check if file is original raw data. Legacy categories no
+  // longer appear here: loadMetadata normalizes every manifest on read.
   const isOriginalData = (file) => {
-    if (!file) return false;
-
-    // New category system: uploads with raw tag
-    if (file.category === 'uploads' && file.tags && file.tags.includes('raw')) {
-      return true;
-    }
-
-    // Legacy categories for backward compatibility with existing workspaces
-    const legacyCategories = ['raw_images', 'raw', 'inference_data'];
-    if (legacyCategories.includes(file.category)) {
-      return true;
-    }
-
-    return false;
+    return !!(file
+      && file.category === 'uploads'
+      && file.tags && file.tags.includes('raw'));
   };
 
   // First, check root files
