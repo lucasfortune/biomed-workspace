@@ -18,6 +18,7 @@ const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 function createPreprocessRoutes(dependencies) {
   const router = express.Router();
@@ -267,6 +268,13 @@ function createPreprocessRoutes(dependencies) {
               tags: ['preprocess', 'raw', 'data'],
               size: stats.size,
               folderId: null,
+              ...(inputFile && {
+                displayName: buildDisplayName({
+                  sourceName: inputFile.displayName || inputFile.name,
+                  operation: 'preprocess',
+                  ext: path.extname(outputPath)
+                })
+              }),
               ...(voxelSize && { voxelSize }),
               ...(lineage && { lineage })
             });

@@ -648,10 +648,14 @@ class WorkspaceManager {
       throw new Error('Cannot change file extension');
     }
 
-    file.displayName = newName;
+    // Keep display names unique on rename too (mirrors insert-time behavior)
+    const otherNames = metadata.files
+      .filter(f => f.id !== fileId)
+      .map(f => f.displayName || f.name);
+    file.displayName = resolveDisplayNameCollision(newName, otherNames);
     this.saveMetadata(sessionId, metadata);
 
-    console.log(`[WorkspaceManager] File display name updated: ${currentDisplay} -> ${newName} (path unchanged)`);
+    console.log(`[WorkspaceManager] File display name updated: ${currentDisplay} -> ${file.displayName} (path unchanged)`);
 
     return file;
   }
@@ -975,8 +979,11 @@ class WorkspaceManager {
 
     const lowerQuery = query.toLowerCase();
 
+    // Match both the physical name and the user-facing display name, since
+    // the UI shows displayName || name
     return metadata.files.filter(file =>
-      file.name.toLowerCase().includes(lowerQuery)
+      file.name.toLowerCase().includes(lowerQuery) ||
+      (file.displayName && file.displayName.toLowerCase().includes(lowerQuery))
     );
   }
 

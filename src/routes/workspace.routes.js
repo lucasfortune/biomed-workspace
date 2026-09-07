@@ -260,14 +260,18 @@ function createWorkspaceRoutes(dependencies) {
       // Determine relative path within workspace
       const relativePath = path.relative(workspacePath, uploadedFile.path);
 
-      // Add file to metadata
+      // Add file to metadata. Invariant: `name` is the on-disk basename
+      // (name === basename(path)); the user's original filename becomes the
+      // display name, so uploads read cleanly in the UI without the
+      // timestamp prefix.
       const fileEntry = workspaceService.addFileToMetadata(sessionId, {
-        name: uploadedFile.originalname,
+        name: path.basename(relativePath),
         path: relativePath,
         category: category,
         tags: tags,
         size: uploadedFile.size,
         folderId: req.body.folderId || null,
+        displayName: uploadedFile.originalname,
         ...(uploadVoxelSize && { voxelSize: uploadVoxelSize })
       });
 

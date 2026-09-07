@@ -25,6 +25,7 @@ const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 function createSegcleanupRoutes(dependencies) {
   const router = express.Router();
@@ -125,6 +126,13 @@ function createSegcleanupRoutes(dependencies) {
         tags: ['segcleanup', 'segmentation', 'data'],
         size: stats.size,
         folderId: null,
+        ...(inputFile && {
+          displayName: buildDisplayName({
+            sourceName: inputFile.displayName || inputFile.name,
+            operation: 'segcleanup',
+            ext: path.extname(outputPath)
+          })
+        }),
         ...(inputFile?.voxelSize && { voxelSize: inputFile.voxelSize }),
         ...(lineage && { lineage })
       });
@@ -572,6 +580,15 @@ function createSegcleanupRoutes(dependencies) {
           tags: ['segcleanup', 'report'],
           size: stats.size,
           folderId: null,
+          ...(sourceFileId && {
+            displayName: buildDisplayName({
+              sourceName: workspaceManager.getSourceDisplayName(sessionId, sourceFileId),
+              operation: 'segcleanup',
+              ext: path.extname(name),
+              // 'report' / 'objects' - keeps the two CSVs distinguishable
+              qualifier: path.basename(name, path.extname(name))
+            })
+          }),
           ...(lineage && { lineage })
         });
         tracked.push(entry);

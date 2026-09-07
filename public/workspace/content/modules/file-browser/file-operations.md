@@ -32,7 +32,7 @@ Saves the file to your computer. For TIFF stacks, this downloads the complete mu
 
 Rename (✏️)
 
-Change the file's display name — the friendly name shown throughout the workspace. Renaming never touches the underlying file or its path, so lineage, downloads, and module references keep working. Useful for organizing files with descriptive names.
+Change the file's display name — the friendly name shown throughout the workspace. Renaming never touches the underlying file or its path, so lineage, downloads, and module references keep working. If the new name is already taken by another file, a numbered suffix like " (2)" is appended automatically. Useful for organizing files with descriptive names.
 
 Delete (🗑️)
 
@@ -68,7 +68,7 @@ Only available for multi-slice TIFF stacks. Opens a dialog where you can:
 - Preview how many slices will be in each part
 - Choose whether to delete the original file after splitting
 
-The result is two new files named `<original>_part1.tif` and `<original>_part2.tif`. Both parts retain the same category and tags as the original, and their processing history will show they were split from the source file.
+The result is two new files shown as `<original>_split_part1.tif` and `<original>_split_part2.tif`. Both parts retain the same category and tags as the original, and their processing history will show they were split from the source file.
 
 ## File Info Details
 
@@ -92,4 +92,4 @@ For TIFF stacks, File Info shows a voxel-size row. The physical voxel size is re
 
 ## Convert To
 
-Use Convert to… in the context menu to write a new file in another format. TIFF converts to MRC (and MRC back to TIFF), and mesh .obj files convert to STL, PLY, or glTF (GLB). The converted file is added to the workspace tagged `converted`, and a TIFF's voxel size is passed to the MRC output.
+Use Convert to… in the context menu to write a new file in another format. TIFF converts to MRC (and MRC back to TIFF), and mesh .obj files convert to STL, PLY, or glTF (GLB). The converted file is added to the workspace tagged `converted` and shown as `<original>_conv.<format>` (e.g. `stack_conv.stl`), and a TIFF's voxel size is passed to the MRC output.

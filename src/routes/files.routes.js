@@ -12,6 +12,7 @@ const archiver = require('archiver');
 const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 /**
  * Create file routes router
@@ -312,6 +313,11 @@ function createFilesRoutes(dependencies) {
               size: result.size,
               tags: file.tags || [],
               ...(file.voxelSize && { voxelSize: file.voxelSize }),
+              displayName: buildDisplayName({
+                sourceName: file.displayName || file.name,
+                operation: 'duplicate',
+                ext: path.extname(outputName)
+              }),
               lineage: {
                 processType: 'duplicate',
                 inputs: [fileId],
@@ -422,6 +428,11 @@ function createFilesRoutes(dependencies) {
               tags: isMesh ? ['mesh', 'data', format]
                            : [...new Set([...(file.tags || []), 'converted'])],
               ...(voxelSize && !isMesh && { voxelSize }),
+              displayName: buildDisplayName({
+                sourceName: file.displayName || file.name,
+                operation: 'convert',
+                ext: `.${format}`
+              }),
               lineage: {
                 processType: 'convert',
                 inputs: [fileId],
@@ -530,6 +541,12 @@ function createFilesRoutes(dependencies) {
               size: result.part1.size,
               tags: file.tags || [],
               ...(file.voxelSize && { voxelSize: file.voxelSize }),
+              displayName: buildDisplayName({
+                sourceName: file.displayName || file.name,
+                operation: 'split',
+                ext: path.extname(output1Path),
+                qualifier: 'part1'
+              }),
               lineage: {
                 processType: 'split',
                 inputs: [fileId],
@@ -545,6 +562,12 @@ function createFilesRoutes(dependencies) {
               size: result.part2.size,
               tags: file.tags || [],
               ...(file.voxelSize && { voxelSize: file.voxelSize }),
+              displayName: buildDisplayName({
+                sourceName: file.displayName || file.name,
+                operation: 'split',
+                ext: path.extname(output2Path),
+                qualifier: 'part2'
+              }),
               lineage: {
                 processType: 'split',
                 inputs: [fileId],

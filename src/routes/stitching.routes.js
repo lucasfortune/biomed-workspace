@@ -13,6 +13,7 @@ const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DATA_PATHS } = require('../config/constants');
 const { createLineage } = require('../helpers/lineageHelpers');
+const { buildDisplayName } = require('../helpers/namingHelpers');
 
 /**
  * Create stitching routes router
@@ -264,6 +265,11 @@ function createStitchingRoutes(dependencies) {
             const voxelSize = inputRelPaths
               .map(rel => metadata?.files?.find(f => f.path === rel)?.voxelSize)
               .find(Boolean);
+            // Display names chain from the first input stack
+            const firstInput = metadata?.files?.find(f => f.path === inputRelPaths[0]);
+            const stitchSource = firstInput
+              ? (firstInput.displayName || firstInput.name)
+              : path.basename(inputRelPaths[0] || 'stitch');
             const outputEntry = workspaceManager.addFileToMetadata(sessionId, {
               name: path.basename(outputPath),
               path: path.relative(workspacePath, outputPath),
@@ -272,6 +278,11 @@ function createStitchingRoutes(dependencies) {
                              : ['stitching', 'raw', 'data'],
               size: stats.size,
               folderId: null,
+              displayName: buildDisplayName({
+                sourceName: stitchSource,
+                operation: 'stitching',
+                ext: path.extname(outputPath)
+              }),
               ...(voxelSize && { voxelSize }),
               lineage
             });
@@ -284,6 +295,12 @@ function createStitchingRoutes(dependencies) {
               tags: ['stitching', 'recipe'],
               size: recipeStats.size,
               folderId: null,
+              displayName: buildDisplayName({
+                sourceName: stitchSource,
+                operation: 'stitching',
+                ext: path.extname(recipePath),
+                qualifier: 'recipe'
+              }),
               lineage
             });
           } catch (trackError) {

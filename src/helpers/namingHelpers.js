@@ -27,7 +27,18 @@ const OPERATION_TOKENS = {
   meshGeneration: 'mesh',
   mesh: 'mesh',
   // Annotation
-  annotation: 'annot'
+  annotation: 'annot',
+  // Preprocessing
+  preprocess: 'prep',
+  // Stitching
+  stitching: 'stitch',
+  // Segmentation cleanup
+  segcleanup: 'clean',
+  // File operations (convert appends the target format via the extension:
+  // stack_conv.stl; split parts are distinguished via qualifier part1/part2)
+  convert: 'conv',
+  duplicate: 'copy',
+  split: 'split'
 };
 
 // Soft cap on the base portion (without extension). Beyond this we trim the *middle* of
