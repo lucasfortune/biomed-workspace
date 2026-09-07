@@ -928,6 +928,13 @@ function createDenoisingRoutes(dependencies) {
           }
         }
 
+        // Resolve the tracked file id of the model producing the final output
+        // (stage2 for sequential pipelines) for lineage; null when untracked
+        const finalModelPath = stage2ModelPath || stage1ModelPath;
+        const modelFileId = finalModelPath
+          ? workspaceManager.getFileIdByPath(sessionId, path.relative(workspacePath, finalModelPath))
+          : null;
+
         // For autoStructN2V with imported models, run sequential pipeline
         if (method === 'autostructn2v' && stage2ModelPath) {
           inferenceParams = {
@@ -947,7 +954,8 @@ function createDenoisingRoutes(dependencies) {
             // For file tracking
             sessionId,
             workspacePath,
-            inputFileId
+            inputFileId,
+            modelFileId
           };
 
           // Use sequential inference
@@ -966,7 +974,8 @@ function createDenoisingRoutes(dependencies) {
             // For file tracking
             sessionId,
             workspacePath,
-            inputFileId
+            inputFileId,
+            modelFileId
           };
 
           denoisingService.runInference(inferenceParams, io);
@@ -1054,7 +1063,12 @@ function createDenoisingRoutes(dependencies) {
           // For file tracking
           sessionId,
           workspacePath,
-          inputFileId
+          inputFileId,
+          // Lineage: tracked file id of the trained model (null when untracked)
+          modelFileId: workspaceManager.getFileIdByPath(
+            sessionId,
+            path.relative(workspacePath, modelPath)
+          )
         }, io);
 
         if (logger) {

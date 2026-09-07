@@ -436,7 +436,12 @@ class WorkspaceManager {
       // upload, inherited through processing, editable in file info (ADR-008)
       ...(fileInfo.voxelSize && { voxelSize: fileInfo.voxelSize }),
       // Lineage - only added for processed files (not original uploads)
-      ...(fileInfo.lineage && { lineage: fileInfo.lineage })
+      ...(fileInfo.lineage && { lineage: fileInfo.lineage }),
+      // Sidecar link - set on companion files (e.g. annotation _classes.json)
+      // that live and die with their parent file
+      ...(fileInfo.parentId && { parentId: fileInfo.parentId }),
+      // In-place modification timestamp (uploadedAt stays the creation time)
+      ...(fileInfo.lastModifiedAt && { lastModifiedAt: fileInfo.lastModifiedAt })
     };
 
     metadata.files.push(fileEntry);
@@ -444,6 +449,24 @@ class WorkspaceManager {
 
     console.log('[WorkspaceManager] File tracked:', fileEntry.id, fileEntry.path);
     return fileEntry;
+  }
+
+  /**
+   * Resolve a tracked file's id from its workspace-relative path.
+   * @param {string} sessionId - Session ID
+   * @param {string} relativePath - Workspace-relative path
+   * @returns {string|null} File id, or null when the path isn't tracked
+   */
+  getFileIdByPath(sessionId, relativePath) {
+    if (!relativePath) return null;
+    try {
+      const metadata = this.loadMetadata(sessionId);
+      const normalized = relativePath.replace(/\\/g, '/');
+      const file = metadata.files.find(f => f.path === relativePath || f.path === normalized);
+      return file ? file.id : null;
+    } catch (err) {
+      return null;
+    }
   }
 
   /**
@@ -718,8 +741,23 @@ class WorkspaceManager {
     // Clean up empty parent directories (for result files in nested structures)
     this.cleanupEmptyDirectories(fileDir, workspacePath);
 
-    // Remove from metadata
-    metadata.files = metadata.files.filter(f => f.id !== fileId);
+    // Delete sidecar files that live and die with this file (parentId link,
+    // e.g. an annotation's _classes.json) so they never become orphans
+    const sidecars = metadata.files.filter(f => f.parentId === fileId);
+    for (const sidecar of sidecars) {
+      const sidecarPath = path.join(workspacePath, sidecar.path);
+      if (fs.existsSync(sidecarPath)) {
+        try {
+          fs.unlinkSync(sidecarPath);
+        } catch (error) {
+          // Row removal below still de-orphans the metadata
+        }
+      }
+      this.cleanupEmptyDirectories(path.dirname(sidecarPath), workspacePath);
+    }
+
+    // Remove from metadata (file + its sidecars)
+    metadata.files = metadata.files.filter(f => f.id !== fileId && f.parentId !== fileId);
     this.saveMetadata(sessionId, metadata);
 
     return { success: true, message: 'File deleted' };

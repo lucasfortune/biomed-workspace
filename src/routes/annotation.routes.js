@@ -13,25 +13,37 @@ const path = require('path');
 const fs = require('fs');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH, DIRECTORIES } = require('../config/constants');
-const { buildDisplayName, resolveDisplayNameCollision } = require('../helpers/namingHelpers');
+const { buildDisplayName } = require('../helpers/namingHelpers');
+const { createLineage } = require('../helpers/lineageHelpers');
 
 /**
- * Build a unique annotation display name chained from the source image.
- * @param {array} files - Current metadata.files (for collision checks)
+ * Build an annotation display name chained from the source image. Collision
+ * resolution happens inside addFileToMetadata, so this only builds the candidate.
  * @param {string} sourceFileName - Source image file name
  * @param {string} ext - Output extension (e.g. '.tif')
  * @param {string} [qualifier] - Optional qualifier (e.g. 'classes' for the sidecar)
  * @returns {string}
  */
-function annotationDisplayName(files, sourceFileName, ext, qualifier) {
-  const candidate = buildDisplayName({
+function annotationDisplayName(sourceFileName, ext, qualifier) {
+  return buildDisplayName({
     sourceName: sourceFileName || 'annotation',
     operation: 'annotation',
     ext,
     qualifier
   });
-  const existing = (files || []).map(f => f.displayName || f.name);
-  return resolveDisplayNameCollision(candidate, existing);
+}
+
+/**
+ * Canonical annotation lineage: createLineage plus the documented `status`
+ * extension ('in_progress' | 'complete').
+ * @param {string} sourceFileId - Source image file id
+ * @param {string} status - Annotation status
+ * @returns {object}
+ */
+function annotationLineage(sourceFileId, status) {
+  const lineage = createLineage('annotation', [sourceFileId]);
+  lineage.status = status;
+  return lineage;
 }
 
 /**
@@ -310,14 +322,10 @@ function createAnnotationRoutes(dependencies) {
 
           fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
 
-          // Update or add to workspace metadata
-          const metadata = workspaceManager.loadMetadata(sessionId);
-          if (!metadata.files) {
-            metadata.files = [];
-          }
-
+          // Update or add to workspace metadata (via the canonical constructor)
           if (existingFile) {
-            // Update existing file entries
+            // Update existing file entries in place
+            const metadata = workspaceManager.loadMetadata(sessionId);
             const tiffIndex = metadata.files.findIndex(f => f.id === fileId);
             if (tiffIndex !== -1) {
               metadata.files[tiffIndex].size = fs.statSync(tiffPath).size;
@@ -328,55 +336,47 @@ function createAnnotationRoutes(dependencies) {
             if (sidecarIndex !== -1) {
               metadata.files[sidecarIndex].size = fs.statSync(sidecarPath).size;
               metadata.files[sidecarIndex].lastModifiedAt = new Date().toISOString();
-            } else {
+            }
+            workspaceManager.saveMetadata(sessionId, metadata);
+
+            if (sidecarIndex === -1) {
               // Add sidecar if it didn't exist
-              // New metadata system: results category with annotation/info tags
-              metadata.files.push({
+              workspaceManager.addFileToMetadata(sessionId, {
                 id: `${fileId}_sidecar`,
                 name: sidecarFilename,
                 path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
                 category: 'results',
                 tags: ['annotation', 'info'],
-                uploadedAt: new Date().toISOString(),
                 size: fs.statSync(sidecarPath).size,
+                displayName: annotationDisplayName(sourceFileName, '.json', 'classes'),
                 parentId: fileId
               });
             }
           } else {
-            // Add new TIFF file
-            // New metadata system: results category with annotation/wip tags
-            metadata.files.push({
+            // Add new TIFF file (results category with annotation/wip tags)
+            workspaceManager.addFileToMetadata(sessionId, {
               id: fileId,
               name: tiffFilename,
               path: path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename),
               category: 'results',
               tags: ['annotation', 'wip'],
-              uploadedAt: new Date().toISOString(),
               size: fs.statSync(tiffPath).size,
-              displayName: annotationDisplayName(metadata.files, sourceFileName, '.tif'),
-              lineage: {
-                processType: 'annotation',
-                inputs: [sourceFileId],
-                status: 'in_progress'
-              }
+              displayName: annotationDisplayName(sourceFileName, '.tif'),
+              lineage: annotationLineage(sourceFileId, 'in_progress')
             });
 
-            // Add sidecar file
-            // New metadata system: results category with annotation/info tags
-            metadata.files.push({
+            // Add sidecar file (results category with annotation/info tags)
+            workspaceManager.addFileToMetadata(sessionId, {
               id: `${fileId}_sidecar`,
               name: sidecarFilename,
               path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
               category: 'results',
               tags: ['annotation', 'info'],
-              uploadedAt: new Date().toISOString(),
               size: fs.statSync(sidecarPath).size,
-              displayName: annotationDisplayName(metadata.files, sourceFileName, '.json', 'classes'),
+              displayName: annotationDisplayName(sourceFileName, '.json', 'classes'),
               parentId: fileId
             });
           }
-
-          workspaceManager.saveMetadata(sessionId, metadata);
 
           if (logger) logger.info(`[Annotation] Saved progress: ${tiffFilename}`);
           if (activityLogger) {
@@ -539,45 +539,31 @@ function createAnnotationRoutes(dependencies) {
           // Generate file ID
           const fileId = `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-          // Add to workspace metadata
-          const metadata = workspaceManager.loadMetadata(sessionId);
-          if (!metadata.files) {
-            metadata.files = [];
-          }
-
-          // Add TIFF file - completed annotations are user-created content
-          // New metadata system: uploads category with annotation tag
-          metadata.files.push({
+          // Add to workspace metadata (via the canonical constructor)
+          // TIFF file - completed annotations are user-created content
+          // (uploads category with annotation tag)
+          workspaceManager.addFileToMetadata(sessionId, {
             id: fileId,
             name: tiffFilename,
             path: path.join('annotations', tiffFilename),
             category: 'uploads',
             tags: ['annotation'],
-            uploadedAt: new Date().toISOString(),
             size: fs.statSync(tiffPath).size,
-            displayName: annotationDisplayName(metadata.files, sourceFileName, '.tif'),
-            lineage: {
-              processType: 'annotation',
-              inputs: [sourceFileId],
-              status: 'complete'
-            }
+            displayName: annotationDisplayName(sourceFileName, '.tif'),
+            lineage: annotationLineage(sourceFileId, 'complete')
           });
 
-          // Add sidecar file
-          // New metadata system: results category with annotation/info tags
-          metadata.files.push({
+          // Sidecar file (results category with annotation/info tags)
+          workspaceManager.addFileToMetadata(sessionId, {
             id: `${fileId}_sidecar`,
             name: sidecarFilename,
             path: path.join('annotations', sidecarFilename),
             category: 'results',
             tags: ['annotation', 'info'],
-            uploadedAt: new Date().toISOString(),
             size: fs.statSync(sidecarPath).size,
-            displayName: annotationDisplayName(metadata.files, sourceFileName, '.json', 'classes'),
+            displayName: annotationDisplayName(sourceFileName, '.json', 'classes'),
             parentId: fileId
           });
-
-          workspaceManager.saveMetadata(sessionId, metadata);
 
           if (logger) logger.info(`[Annotation] Created final annotation: ${tiffFilename}`);
           if (activityLogger) {

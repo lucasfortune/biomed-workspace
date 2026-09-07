@@ -125,15 +125,28 @@ function configureApp(app, dependencies) {
           sourceName: trainSource, operation: 'segmentation', ext, qualifier
         });
 
+        // Training outputs record lineage to the raw + annotation input files.
+        // A fresh record per output; empty inputs when the ids are unavailable
+        // (never a lineage object without an inputs array).
+        const inputIds = (training.inputFileIds || []).filter(Boolean);
+        const trainingLineage = () => inputIds.length
+          ? createLineage('segmentation-training', inputIds, params.training_id)
+          : {
+              processType: 'segmentation-training',
+              processedAt: new Date().toISOString(),
+              inputs: [],
+              processId: params.training_id
+            };
+
         // Track model files with appropriate tags
         if (fs.existsSync(modelPath)) {
-          await trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth') });
+          await trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth'), lineage: trainingLineage() });
         }
         if (fs.existsSync(configPath)) {
-          await trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: modelName('config', '.json') });
+          await trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: modelName('config', '.json'), lineage: trainingLineage() });
         }
         if (fs.existsSync(resultsPath)) {
-          await trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: modelName('info', '.json') });
+          await trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: modelName('info', '.json'), lineage: trainingLineage() });
         }
       }
     });
@@ -148,6 +161,11 @@ function configureApp(app, dependencies) {
           let lineage = null;
           if (inf.inputFileIds && inf.inputFileIds.length > 0) {
             lineage = createLineage('segmentation', inf.inputFileIds, inferenceId);
+            // Record the model that produced this output (data inputs stay in
+            // `inputs`; the model is an optional annotation on the record)
+            if (inf.modelFileId) {
+              lineage.modelFileId = inf.modelFileId;
+            }
             logger.debug(`[INFERENCE] Built lineage for inference ${inferenceId}:`, lineage);
           }
 

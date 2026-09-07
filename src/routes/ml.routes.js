@@ -203,9 +203,17 @@ function createMLRoutes(dependencies) {
           );
         }
       } else {
-        rawFileEntry = { path: path.relative(workspacePath, rawFile.path) };
-        annFileEntry = { path: path.relative(workspacePath, annotationFile.path) };
+        // Pre-uploaded files are already tracked - resolve their ids by path
+        // so training outputs can still record lineage to them
+        const rawRelPath = path.relative(workspacePath, rawFile.path);
+        const annRelPath = path.relative(workspacePath, annotationFile.path);
+        rawFileEntry = { path: rawRelPath, id: workspaceManager.getFileIdByPath(sessionId, rawRelPath) };
+        annFileEntry = { path: annRelPath, id: workspaceManager.getFileIdByPath(sessionId, annRelPath) };
       }
+
+      // Record the tracked file ids for training-output lineage
+      req.session.uploadedFiles.raw_images_id = rawFileEntry.id || null;
+      req.session.uploadedFiles.annotations_id = annFileEntry.id || null;
 
       res.json({
         success: true,
@@ -322,6 +330,11 @@ function createMLRoutes(dependencies) {
         current_epoch: 0,
         total_epochs: config.num_epochs,
         params: trainingParams,
+        // Lineage tracking: raw + annotation input file ids for training outputs
+        inputFileIds: [
+          req.session.uploadedFiles.raw_images_id,
+          req.session.uploadedFiles.annotations_id
+        ].filter(Boolean),
         history: [] // Array of {epoch, train_loss, val_loss, train_dice, val_dice}
       });
 
@@ -964,6 +977,14 @@ function createMLRoutes(dependencies) {
 
       inferenceId = uuid.v4();
 
+      // Resolve the model's tracked file id (if the model lives in the workspace)
+      // so output lineage can record which model produced the segmentation.
+      // Imported models without a tracked entry resolve to null.
+      const modelFileId = workspaceManager.getFileIdByPath(
+        sessionId,
+        path.relative(workspacePath, actualModelPath)
+      );
+
       // Initialize imported model results directories tracking
       if (!req.session.importedModelResultsDirs) {
         req.session.importedModelResultsDirs = [];
@@ -998,7 +1019,9 @@ function createMLRoutes(dependencies) {
         totalSlices: 0,
         usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated),
         // Lineage tracking: store input file IDs for provenance
-        inputFileIds: inputFileIds || []
+        inputFileIds: inputFileIds || [],
+        // Lineage tracking: model that runs this inference (null when untracked)
+        modelFileId
       });
 
       if (activityLogger) {

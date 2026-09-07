@@ -1443,15 +1443,22 @@ class FileBrowser {
       const data = await response.json();
 
       if (data.success) {
+        let text;
         if (data.hasLineage && data.processingHistory) {
           // Show processing history (e.g., "Denoising -> Segmentation -> Mesh Generation")
-          valueElement.textContent = data.processingHistory;
-          lineageRow.style.display = 'flex';
+          text = data.processingHistory;
         } else {
           // No lineage - this is an original upload
-          valueElement.textContent = 'Original Upload';
-          lineageRow.style.display = 'flex';
+          text = 'Original Upload';
         }
+        // Broken chains (deleted upstream files) are shown honestly instead of
+        // pretending the visible part is the whole history
+        if (data.hasErrors && Array.isArray(data.errors)
+            && data.errors.some(e => e.type === 'missing_file')) {
+          text = `(source deleted) → ${text}`;
+        }
+        valueElement.textContent = text;
+        lineageRow.style.display = 'flex';
       } else {
         // Hide the row if there was an error
         lineageRow.style.display = 'none';

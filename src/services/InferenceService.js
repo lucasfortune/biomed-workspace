@@ -587,6 +587,9 @@ class InferenceService {
 
     try {
       const lineage = createLineage('segmentation', inference.inputFileIds, inferenceId);
+      if (inference.modelFileId) {
+        lineage.modelFileId = inference.modelFileId;
+      }
       if (this.logger) {
         this.logger.debug('[INFERENCE] Built lineage:', lineage);
       }

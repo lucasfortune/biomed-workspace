@@ -14,6 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
 const { buildDisplayName } = require('../helpers/namingHelpers');
+const { createLineage } = require('../helpers/lineageHelpers');
 // fs is already imported for async operations; sync functions used for file tracking
 
 class DenoisingService {
@@ -546,18 +547,19 @@ class DenoisingService {
       const session = this.getSession(trainingId);
       const inputFileId = session?.inputFileId;
 
-      // Helper to create proper lineage object
-      const createLineageObj = (processType) => {
-        const lineage = {
-          processType: processType,
+      // Helper to create a canonical lineage record. When the input file id is
+      // unknown the record still carries an (empty) inputs array so consumers
+      // never see a lineage object without one.
+      const makeLineage = (processType) => {
+        if (inputFileId) {
+          return createLineage(processType, [inputFileId], trainingId);
+        }
+        return {
+          processType,
           processedAt: new Date().toISOString(),
+          inputs: [],
           processId: trainingId
         };
-        // Add input file reference if available
-        if (inputFileId) {
-          lineage.inputs = [inputFileId];
-        }
-        return lineage;
       };
 
       // Resolve the source file's display name + a method-specific operation token so
@@ -594,15 +596,21 @@ class DenoisingService {
         }
       };
 
-      // Routed v1.0 output keys (see finalize_routed_output in python/denoising/output.py)
+      // Routed v1.0 output keys (see finalize_routed_output in python/denoising/output.py).
+      // All auxiliary training artifacts carry the same denoising-training lineage as the
+      // model so nothing in the run looks like an original upload.
       track(outputFiles.denoised_stack, 'results', ['denoising', 'data'],
-            createLineageObj('denoising'));
+            makeLineage('denoising'));
       track(outputFiles.model, 'models', ['weights', 'denoising'],
-            createLineageObj('denoising-training'), 'model');
-      track(outputFiles.routed_mask, 'models', ['info', 'denoising'], null, 'mask');
-      track(outputFiles.route_decision, 'models', ['info', 'denoising'], null, 'route');
-      track(outputFiles.config, 'models', ['config', 'denoising'], null, 'config');
-      track(outputFiles.results, 'models', ['info', 'denoising'], null, 'results');
+            makeLineage('denoising-training'), 'model');
+      track(outputFiles.routed_mask, 'models', ['info', 'denoising'],
+            makeLineage('denoising-training'), 'mask');
+      track(outputFiles.route_decision, 'models', ['info', 'denoising'],
+            makeLineage('denoising-training'), 'route');
+      track(outputFiles.config, 'models', ['config', 'denoising'],
+            makeLineage('denoising-training'), 'config');
+      track(outputFiles.results, 'models', ['info', 'denoising'],
+            makeLineage('denoising-training'), 'results');
 
     } catch (error) {
       if (this.logger) {
@@ -895,7 +903,7 @@ class DenoisingService {
    */
   async runInference(params, io) {
     const { inferenceId, modelPath, inputPath, outputDir, modelConfig, stage, method,
-            mode, sessionId, workspacePath, inputFileId } = params;
+            mode, sessionId, workspacePath, inputFileId, modelFileId } = params;
 
     if (!this.pythonPath) {
       this._emitInferenceError(io, inferenceId, 'Python path not configured');
@@ -955,7 +963,7 @@ class DenoisingService {
 
             // Track the output file in workspace metadata
             this._trackInferenceOutput(resultData, {
-              sessionId, workspacePath, inputFileId, method, inferenceId
+              sessionId, workspacePath, inputFileId, method, inferenceId, modelFileId
             });
 
             io.to(roomName).emit('denoising-inference-complete', resultData);
@@ -1011,7 +1019,7 @@ class DenoisingService {
    * @param {object} trackingInfo - Tracking context
    */
   _trackInferenceOutput(resultData, trackingInfo) {
-    const { sessionId, workspacePath, inputFileId, method, inferenceId } = trackingInfo;
+    const { sessionId, workspacePath, inputFileId, method, inferenceId, modelFileId } = trackingInfo;
 
     // Check if we have required info for tracking
     if (!sessionId || !workspacePath || !this.workspaceManager) {
@@ -1034,17 +1042,23 @@ class DenoisingService {
       const relativePath = path.relative(workspacePath, outputPath);
       const stats = fs.statSync(outputPath);
 
-      // Build lineage information
-      const lineage = {
-        operation: `denoising-${method || 'dl'}-inference`,
-        inferenceId: inferenceId,
-        timestamp: new Date().toISOString()
+      // Canonical lineage record (processType/processedAt/inputs/processId). The
+      // optional modelFileId records which model produced the output without
+      // polluting `inputs`, which stays data-only for root resolution.
+      const makeLineage = () => {
+        const lineage = inputFileId
+          ? createLineage('denoising', [inputFileId], inferenceId)
+          : {
+              processType: 'denoising',
+              processedAt: new Date().toISOString(),
+              inputs: [],
+              processId: inferenceId
+            };
+        if (modelFileId) {
+          lineage.modelFileId = modelFileId;
+        }
+        return lineage;
       };
-
-      // Add input file reference if available
-      if (inputFileId) {
-        lineage.sourceFileId = inputFileId;
-      }
 
       // Add to workspace metadata
       // New metadata system: results category with denoising/data tags
@@ -1064,8 +1078,28 @@ class DenoisingService {
           operation: denoiseOp,
           ext: path.extname(outputPath)
         }),
-        lineage: lineage
+        lineage: makeLineage()
       });
+
+      // Track the inference metadata sidecar like every other module's info file
+      const metadataPath = resultData.metadataPath;
+      if (metadataPath && fs.existsSync(metadataPath)) {
+        this.workspaceManager.addFileToMetadata(sessionId, {
+          name: path.basename(metadataPath),
+          path: path.relative(workspacePath, metadataPath),
+          category: 'results',
+          tags: ['denoising', 'info'],
+          size: fs.statSync(metadataPath).size,
+          folderId: null,
+          displayName: buildDisplayName({
+            sourceName,
+            operation: denoiseOp,
+            ext: path.extname(metadataPath),
+            qualifier: 'info'
+          }),
+          lineage: makeLineage()
+        });
+      }
 
       // Expose the tracked file to the client (used for the Image Viewer hand-off)
       if (entry) {
@@ -1091,7 +1125,7 @@ class DenoisingService {
    */
   async runSequentialInference(params, io) {
     const { inferenceId, modelPaths, configPath, fullConfig, inputPath, outputDir, modelConfig,
-            mode, sessionId, workspacePath, inputFileId } = params;
+            mode, sessionId, workspacePath, inputFileId, modelFileId } = params;
 
     if (!this.pythonPath) {
       this._emitInferenceError(io, inferenceId, 'Python path not configured');
@@ -1170,7 +1204,7 @@ class DenoisingService {
 
             // Track the output file in workspace metadata
             this._trackInferenceOutput(resultData, {
-              sessionId, workspacePath, inputFileId, method: 'autostructn2v', inferenceId
+              sessionId, workspacePath, inputFileId, method: 'autostructn2v', inferenceId, modelFileId
             });
 
             io.to(roomName).emit('denoising-inference-complete', resultData);
