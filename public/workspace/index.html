@@ -117,13 +117,13 @@
             </div>
 
             <div class="workspace-info">
-              <small>Workspace Version 1.4.0</small>
+              <small>Workspace Version 1.5.0</small>
               <details class="whats-new">
-                <summary>What's new in 1.4.0</summary>
+                <summary>What's new in 1.5.0</summary>
                 <ul>
-                  <li>Consistent, self-documenting file names across every module — outputs chain from their source (e.g. trypB → trypB_gaussian → trypB_gaussian_seg → trypB_gaussian_seg_mesh), with no more duplicate names.</li>
-                  <li>Cleaner downloads — single files and ZIP exports use the readable display name; renaming a file is instant and never touches the file on disk.</li>
-                  <li>Dedicated Z Voxel Scale help article in the mesh module, with its own help icon on the control.</li>
+                  <li>Complete provenance: every file records its full processing history (including the model used for a result), and every module's outputs get readable, chained names.</li>
+                  <li>Sturdier stitch recipes — slots remember stacks by identity, missing files are flagged before composing instead of failing mid-run.</li>
+                  <li>Security &amp; lifecycle hardening: progress streams and job controls are private to your session, workspace restore is safer with large archives, and one clear retention policy (48 h after last activity) now governs both your login and your files.</li>
                 </ul>
                 <a href="https://lucasfortune.github.io/the-virtual-parasite/workspace/" class="resource-link" target="_blank" rel="noopener noreferrer">Full changelog &amp; docs</a>
               </details>

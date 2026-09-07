@@ -130,6 +130,7 @@ Architecture Decision Records documenting key technical choices - **All complete
 | [ADR-009](decisions/009_segcleanup_module.md) | Segmentation Cleanup & Quantification | ✅ Accepted |
 | [ADR-010](decisions/010_format_conversion.md) | File Format Conversion + Mesh Simplification | ✅ Accepted |
 | [ADR-011](decisions/011_shared_viewer_chrome_and_conventions.md) | Shared Viewer Chrome & UI Conventions | ✅ Accepted |
+| [ADR-012](decisions/012_workspace_data_model_consolidation.md) | Workspace Data Model Consolidation | ✅ Accepted |
 
 ### 🚀 Vision (Strategy)
 Product roadmap and long-term planning - **All complete!** ✅

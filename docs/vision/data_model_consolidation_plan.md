@@ -1,6 +1,8 @@
 # Data Model Consolidation Plan (target: v1.5.0)
 
-Status: PLANNED (2026-09-07). Prerequisite for the workspace report (Section 5 will
+Status: EXECUTED (2026-09-07, WP1-WP7 complete, released as v1.5.0; outcome
+recorded in ADR-012 and docs/sessions/2026-09-07_data_model_consolidation_1_5_0.md).
+Prerequisite for the workspace report (Section 5 will
 describe the model this plan produces). Findings source: three code sweeps preserved
 at `../../../workspace_report/sweeps/` (session/storage, file entity/metadata,
 provenance/artifacts) and the synthesis `../../../workspace_report/data_model_workup.md`.

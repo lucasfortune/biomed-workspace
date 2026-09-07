@@ -4,8 +4,8 @@
 
 This document provides a comprehensive overview of the project's file structure, explaining the purpose of each directory and key files.
 
-**Last Updated:** 2026-01-01
-**Project Root:** `/home/lucas/Documents/phd/RKI_laue/viz_app/`
+**Last Updated:** 2026-09-07 (v1.5.0 data-model consolidation)
+**Project Root:** repository root (`image_processing_workspace/`). User data lives under `DATA_DIR` (defaults to the project root; see `src/config/constants.js` DATA_PATHS).
 
 ---
 
@@ -24,13 +24,11 @@ viz_app/
 ├── src/                     # MODULAR BACKEND (routes, services, middleware)
 ├── python/                  # ML scripts (shared by both versions)
 ├── utils/                   # Shared utilities (logger, env loader)
-├── test_data/               # Test datasets
-├── uploads/                 # User uploads (session-specific)
-├── models/                  # Trained models (session-specific)
-├── results/                 # Inference results
-├── workspaces/              # Workspace sessions
-├── sessions/                # Express session storage
-├── logs/                    # Activity logs
+├── test_data/               # Built-in sample datasets (seeded into new workspaces)
+├── workspaces/              # Per-session workspaces (ALL user data; under DATA_DIR)
+├── sessions/                # Express session storage (under DATA_DIR)
+├── logs/                    # Activity logs (under DATA_DIR)
+├── tmp/                     # Scratch space for streamed uploads, e.g. restore ZIPs (under DATA_DIR)
 ├── venv/                    # Python virtual environment
 ├── node_modules/            # Node.js dependencies
 ├── server.js                # Entry point (~160 lines)
@@ -45,6 +43,8 @@ viz_app/
 ├── README.md                # Project overview
 └── .gitignore               # Git ignore rules
 ```
+
+> **Note (v1.5.0):** The legacy project-root `uploads/`, `models/` and `results/` data directories are **gone**. They are no longer created (`ensureDirectories` in `src/config/constants.js` only ensures `public/`), and their unauthenticated static mounts were removed. All user data lives in per-session workspace directories (`workspaces/<sessionId>/`, see [Workspaces](#workspaces-workspaces)) and is served only via authenticated, session-scoped routes.
 
 ---
 
@@ -66,8 +66,11 @@ docs/
 │   ├── SOCKET_PROTOCOL.md   # Socket.IO events
 │   ├── PYTHON_INTEGRATION.md# Python communication
 │   └── FILE_STRUCTURE.md    # This document
-├── architecture/            # System architecture docs (future)
-│   └── OVERVIEW.md          # Architecture overview (future)
+├── architecture/            # System architecture docs
+│   ├── OVERVIEW.md          # Architecture overview
+│   ├── AUTHENTICATION.md    # Auth & session design
+│   ├── STATE_ARCHITECTURE.md# Server/client state design
+│   └── DUAL_VERSION_DESIGN.md# Classic vs Workspace design
 ├── sessions/                # Development session logs
 │   ├── INDEX.md             # Session history index
 │   ├── 2025-11-26_bugfix.md # Phase 2 bug fixes
@@ -168,7 +171,7 @@ public/
 | **Status** | Stable, complete | Phase 4 complete |
 | **UI Pattern** | Single-page linear workflow | Multi-module IDE-like |
 | **State** | Local variables | Centralized StateManager |
-| **Modules** | Monolithic | 8 modules, dynamic loading |
+| **Modules** | Monolithic | 10 modules (+ template), dynamic loading |
 | **Entry Point** | `/classic` | `/workspace` |
 | **File Structure** | Flat `/classic/js/` | Nested `/workspace/js/modules/` |
 | **Features** | Segmentation only | Segmentation, Denoising, Annotation, Mesh, Visualization |
@@ -190,28 +193,32 @@ viz_app/
 │   ├── app.js               # Express app configuration (~307 lines)
 │   │
 │   ├── config/
-│   │   └── constants.js     # Python path, directories, validation
+│   │   ├── index.js         # Config exports
+│   │   ├── constants.js     # DATA_PATHS, CACHE_DIRS, RETENTION_HOURS, SESSION_CONFIG, validation
+│   │   └── multer.config.js # Multer storage configuration
 │   │
 │   ├── middleware/
 │   │   ├── auth.middleware.js     # requireAuth, requireApproved, requireAdmin
-│   │   ├── session.middleware.js  # Express session configuration
+│   │   ├── session.middleware.js  # Express session configuration (uses SESSION_CONFIG)
 │   │   ├── upload.middleware.js   # Multer file upload configuration
 │   │   └── error.middleware.js    # Global error handler
 │   │
-│   ├── routes/                        # 11 route files
+│   ├── routes/                        # 13 route files
 │   │   ├── index.js               # Route aggregator
-│   │   ├── static.routes.js       # HTML pages, static files, workspace serving
-│   │   ├── auth.routes.js         # Login, register, logout, check-auth
-│   │   ├── folders.routes.js      # Folder CRUD operations
-│   │   ├── files.routes.js        # File operations (rename, delete, etc.)
+│   │   ├── static.routes.js       # HTML pages, static files, authenticated workspace file serving
+│   │   ├── auth.routes.js         # Login, register, logout (optional workspace deletion), check-auth
+│   │   ├── files.routes.js        # File operations (rename/displayName, delete, etc.)
 │   │   ├── workspace.routes.js    # Workspace init, status, upload, ZIP export/restore
 │   │   ├── ml.routes.js           # Training, inference, model import
 │   │   ├── denoising.routes.js    # DL & filter denoising (~1400 lines)
+│   │   ├── preprocess.routes.js   # Crop / rescale / Z preprocessing jobs
+│   │   ├── stitching.routes.js    # Stack stitching jobs
+│   │   ├── segcleanup.routes.js   # Segmentation cleanup & quantification jobs
 │   │   ├── annotation.routes.js   # Annotation save/load (~600 lines)
 │   │   ├── mesh.routes.js         # Mesh generation (~500 lines)
 │   │   └── admin.routes.js        # Admin API endpoints (~300 lines)
 │   │
-│   ├── services/                      # 7 service files
+│   ├── services/                      # 9 service files
 │   │   ├── index.js               # Service exports
 │   │   ├── AuthService.js         # User authentication logic
 │   │   ├── WorkspaceService.js    # Workspace/session management
@@ -219,10 +226,20 @@ viz_app/
 │   │   ├── TrainingService.js     # ML training orchestration
 │   │   ├── InferenceService.js    # ML inference orchestration
 │   │   ├── DenoisingService.js    # Denoising orchestration (~1000 lines)
-│   │   └── SessionTracker.js      # Training/inference/denoising session maps
+│   │   ├── CleanupService.js      # Retention cleanup (RETENTION_HOURS after last activity)
+│   │   ├── TelegramService.js     # Admin notifications
+│   │   └── SessionTracker.js      # Training/inference/mesh/denoising maps + generic job registry
 │   │
 │   ├── sockets/
-│   │   └── index.js               # Socket.IO event handlers
+│   │   ├── index.js               # Socket.IO setup, ownership-checked room joins
+│   │   ├── training.socket.js     # Per-domain event handlers
+│   │   ├── inference.socket.js
+│   │   ├── denoising.socket.js
+│   │   ├── mesh.socket.js
+│   │   ├── preprocess.socket.js
+│   │   ├── stitching.socket.js
+│   │   ├── segcleanup.socket.js
+│   │   └── restore.socket.js
 │   │
 │   └── helpers/
 │       ├── index.js               # Helper exports
@@ -230,6 +247,7 @@ viz_app/
 │       ├── validation.js          # Input validation helpers
 │       ├── pathHelpers.js         # Path utilities
 │       ├── fileHelpers.js         # File system utilities
+│       ├── namingHelpers.js       # displayName provenance-chain naming
 │       └── lineageHelpers.js      # Data lineage/provenance tracking
 │
 ├── utils/
@@ -285,10 +303,24 @@ python/
 ├── run_inference.py         # Inference with progress
 ├── validate_tiff.py         # Training data validation
 ├── validate_inference_tiff.py  # Inference data validation
-└── validate_imported_model.py  # Model import validation
+├── validate_imported_model.py  # Model import validation
+├── validate_dl_tiff.py      # DL denoising data validation
+├── autostructn2v_wrapper.py # DL denoising (N2V/autoStructN2V)
+├── filter_denoising.py      # Gaussian/NLM filter denoising
+├── preprocess_stack.py      # Crop / rescale / Z preprocessing
+├── stitch_align.py          # Stitching alignment
+├── stitch_apply.py          # Stitching application
+├── segcleanup.py            # Segmentation cleanup & quantification
+├── generate_mesh.py         # 3D mesh generation
+├── generate_thumbnail.py    # Thumbnail generation
+├── extract_slice.py / extract_raw_slice.py  # Slice extraction
+├── create_annotation_tiff.py / read_annotation_tiff.py / convert_annotations.py
+├── downsample_for_web.py    # Visualization downsampling
+├── tiff_stack_ops.py / tiff_validation_utils.py / convert_file.py
+├── denoising/ utils/ vendor/  # Support packages (incl. vendored autoStructN2V)
 ```
 
-**Script Purposes:**
+**Core ML Script Purposes:**
 
 | Script | Lines | Purpose | Protocol |
 |--------|-------|---------|----------|
@@ -304,115 +336,69 @@ See [Python Integration Reference](PYTHON_INTEGRATION.md) for detailed protocol 
 
 ## Test Data (`test_data/`)
 
-**Purpose:** Built-in test datasets for users awaiting approval
+**Purpose:** Built-in sample datasets, seeded into every new workspace
 
 ```
 test_data/
-├── trypB_testData_training.tif      # Training images
-├── trypB_testData_annotations.tif   # Annotation masks
-└── trypB_testData_inference.tif     # Inference images
+├── trypB_testData_training.tif      # Raw images (seeded as sample_raw.tif)
+├── trypB_testData_annotations.tif   # Annotation masks (seeded as sample_annotation.tif)
+├── trypB_testData_denoising.tif     # Denoising sample
+└── trypB_testData_inference.tif     # Inference sample
 ```
 
 **Usage:**
-- Available to all authenticated users
-- No approval required
-- Accessed via `isTestData: 'true'` flag in upload requests
+- There is no test-data checkbox flow anymore. On workspace creation, `WorkspaceManager.seedSampleData()` copies a matched raw + annotation pair into `workspaces/<sessionId>/uploads/` and registers them in `metadata.json` exactly like ordinary uploads
+- Seeded samples appear in file selectors and the file browser as normal workspace files
+- Pending (unapproved) users can work with the seeded samples; custom uploads require approved status
 
 ---
 
 ## Runtime Directories
 
-### Uploads (`uploads/`)
-
-**Purpose:** User-uploaded files (session-isolated)
-
-```
-uploads/
-├── <sessionId1>/
-│   ├── timestamp-training.tif
-│   ├── timestamp-annotations.tif
-│   └── timestamp-inference.tif
-├── <sessionId2>/
-│   └── ...
-└── ...
-```
-
-**Lifecycle:**
-- Created on first upload
-- Persists for session duration
-- Deleted on session reset
-- Automatic cleanup on server restart (orphaned files)
-
----
-
-### Models (`models/`)
-
-**Purpose:** Trained model storage (session + training ID)
-
-```
-models/
-├── <sessionId1>/
-│   ├── <trainingId1>/
-│   │   ├── best_model.pth      # PyTorch checkpoint
-│   │   ├── config.json         # Training config
-│   │   └── results.json        # Final metrics
-│   ├── <trainingId2>/
-│   │   └── ...
-│   └── ...
-├── <sessionId2>/
-│   └── ...
-└── ...
-```
-
-**File Descriptions:**
-- `best_model.pth` - Best model from training (lowest val loss)
-- `config.json` - Configuration used for training
-- `results.json` - Final epoch metrics
-
----
-
-### Results (`results/`)
-
-**Purpose:** Inference output files
-
-```
-results/
-├── <trainingId>/           # Results using trained model
-│   ├── inference_result.tif
-│   ├── inference_result_metadata.json
-│   ├── inference_result_visualization_data.json
-│   └── original_data_downsampled.tif
-├── imported_model_<timestamp>/  # Results using imported model
-│   ├── inference_result.tif
-│   ├── inference_result_metadata.json
-│   ├── inference_result_visualization_data.json
-│   └── original_data_downsampled.tif
-└── ...
-```
-
-**File Descriptions:**
-- `inference_result.tif` - Segmented TIFF stack
-- `inference_result_metadata.json` - Metadata and metrics
-- `inference_result_visualization_data.json` - Sparse 3D data for web viz
-- `original_data_downsampled.tif` - Downsampled original for overlay
-
----
-
 ### Workspaces (`workspaces/`)
 
-**Purpose:** Workspace version file organization (Phase 1+)
+**Purpose:** Per-session workspace directories - ALL user data lives here (under `DATA_DIR`)
 
 ```
 workspaces/
 ├── <sessionId>/
-│   ├── uploads/
-│   ├── models/
-│   ├── results/
-│   └── metadata.json
+│   ├── metadata.json                  # Single persistent manifest (schema 1.2.0)
+│   ├── uploads/                       # User uploads + seeded samples
+│   │   ├── raw/sample_raw.tif
+│   │   └── annotations/sample_annotation.tif
+│   ├── results/                       # Per-module result subdirectories
+│   │   ├── preprocess/<id>/
+│   │   ├── stitching/<id>/
+│   │   ├── segcleanup/<id>/
+│   │   ├── denoising/<id>/
+│   │   └── segmentation/<trainingId>/
+│   │       ├── inference_result.tif
+│   │       ├── inference_result_metadata.json
+│   │       ├── inference_result_visualization_data.json
+│   │       └── original_data_downsampled.tif
+│   ├── models/                        # Trained/imported models
+│   │   └── segmentation/<trainingId>/
+│   │       ├── best_model.pth         # Best model from training (lowest val loss)
+│   │       ├── config.json            # Training config
+│   │       └── results.json           # Final metrics
+│   ├── annotations/                   # Saved annotations
+│   ├── unfinished_annotations/        # In-progress annotation state
+│   ├── .thumbnails/                   # Cache (CACHE_DIRS)
+│   ├── .slices/                       # Cache
+│   ├── .mesh-previews/                # Cache
+│   ├── .preprocess/                   # Cache
+│   └── .segcleanup/                   # Cache
 └── ...
 ```
 
-**Status:** Phase 1 implemented, Phase 3 will expand
+**Key points:**
+- `metadata.json` is the **sole persistent store** for file registry, lineage and provenance (schema version 1.2.0). `loadMetadata()` runs `normalizeManifest()` on read, which upgrades legacy manifests (categories to uploads/models/results, legacy lineage shapes to canonical `{processType, processedAt, inputs[], processId}`)
+- Cache directories (the shared `CACHE_DIRS` constant in `src/config/constants.js`) are excluded from ZIP export and preserved on restore
+- Workspace files are served **only** via authenticated, session-scoped routes (`/workspaces/:sessionId/...` with session ownership checks in `static.routes.js`); there are no unauthenticated static mounts
+
+**Lifecycle:**
+- Created on first workspace initialization (with seeded sample data)
+- Deleted by the cleanup service `RETENTION_HOURS` (48 h) after last activity, or on logout if the user confirms workspace deletion
 
 ---
 
@@ -442,7 +428,7 @@ sessions/
 **Lifecycle:**
 - Created on login
 - Updated on each request
-- TTL: 7 days
+- TTL: `RETENTION_HOURS` = 48 h (`src/config/constants.js`) - the session cookie and the workspace cleanup grace period both derive from it, so login lifetime and data lifetime match
 - Deleted on logout or expiration
 
 ---
@@ -474,7 +460,7 @@ logs/
 ```json
 {
   "name": "biomedical-segmentation-interface",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
@@ -585,24 +571,24 @@ users.json
 
 ### Session-Based Files
 
-**Pattern:** `<sessionId>/<resource>`
+**Pattern:** `workspaces/<sessionId>/<category>/<resource>`
 
 **Example:**
 ```
-uploads/9OGmrzPIrG2IIrkC6TndCsLMh6JKEdh6/1638123456789-training.tif
-models/9OGmrzPIrG2IIrkC6TndCsLMh6JKEdh6/a1b2c3d4.../best_model.pth
+workspaces/9OGmrzPIrG2IIrkC6TndCsLMh6JKEdh6/uploads/1638123456789-training.tif
+workspaces/9OGmrzPIrG2IIrkC6TndCsLMh6JKEdh6/models/segmentation/a1b2c3d4.../best_model.pth
 ```
 
 ---
 
 ### Training-Based Files
 
-**Pattern:** `<sessionId>/<trainingId>/<resource>`
+**Pattern:** `workspaces/<sessionId>/{models,results}/segmentation/<trainingId>/<resource>`
 
 **Example:**
 ```
-models/9OGmrzPIrG2.../a1b2c3d4-e5f6-7890.../best_model.pth
-results/a1b2c3d4-e5f6-7890.../inference_result.tif
+workspaces/9OGmrzPIrG2.../models/segmentation/a1b2c3d4-e5f6-7890.../best_model.pth
+workspaces/9OGmrzPIrG2.../results/segmentation/a1b2c3d4-e5f6-7890.../inference_result.tif
 ```
 
 ---
@@ -616,6 +602,14 @@ results/a1b2c3d4-e5f6-7890.../inference_result.tif
 1638123456789-training.tif
 1638123456789-annotations.tif
 ```
+
+---
+
+### Physical Name vs Display Name
+
+Manifest entries carry two names:
+- `name` - physical filename, always `=== basename(path)` (invariant, never changes)
+- `displayName` - cosmetic name shown in the UI, built as a chained provenance name (e.g. `trypB_prep_stitch.tif`); renaming a file only changes `displayName`
 
 ---
 
@@ -689,9 +683,10 @@ public/workspace/js/modules/segmentation/
 
 **Server-side (Node.js):**
 ```javascript
-// Always use path.join with __dirname
-const uploadDir = path.join(__dirname, 'uploads', sessionId);
-const modelPath = path.join(__dirname, 'models', sessionId, trainingId, 'best_model.pth');
+// Always build from DATA_PATHS (src/config/constants.js), never from bare __dirname
+const { DATA_PATHS } = require('./src/config/constants');
+const uploadDir = path.join(DATA_PATHS.workspaces, sessionId, 'uploads');
+const modelPath = path.join(DATA_PATHS.workspaces, sessionId, 'models', 'segmentation', trainingId, 'best_model.pth');
 ```
 
 ---
@@ -730,31 +725,26 @@ import moduleRegistry from '/workspace/js/modules/registry.js';
 
 **Critical:**
 - `users.json` - User database
-- `uploads/` - User data
-- `models/` - Trained models
+- `workspaces/` - ALL user data (uploads, models, results, annotations, manifests)
 - `.env` - Configuration
 
 **Optional:**
-- `results/` - Can be regenerated
 - `logs/` - Historical data
-- `sessions/` - Ephemeral data
+- `sessions/` - Ephemeral data (expires after 48 h anyway)
+
+Users can also back up their own data via workspace ZIP export (`GET /api/workspace/download`).
 
 ---
 
 ### Cleanup Strategy
 
-**Automated:**
-- Session files expire after 7 days
-- Orphaned uploads (no session) can be cleaned manually
+**Automated (one retention policy):**
+- `CleanupService` runs every 15 minutes and deletes workspaces `RETENTION_HOURS` (48 h) after last activity
+- The session cookie expires on the same 48 h schedule, so login lifetime and data lifetime match
+- Logout offers workspace deletion (after a confirmation dialog); logout + login is the "session reset" (there is no `/reset-session` endpoint anymore)
 
 **Manual:**
 ```bash
-# Remove old results (older than 30 days)
-find results/ -type f -mtime +30 -delete
-
-# Remove orphaned uploads (no active session)
-# Check sessions/ directory first
-
 # Clear logs
 echo "" > logs/activity.log
 ```
@@ -778,4 +768,4 @@ echo "" > logs/activity.log
 ---
 
 **Status:** ✅ Complete
-**Last Updated:** 2025-12-19
+**Last Updated:** 2026-09-07 (v1.5.0)

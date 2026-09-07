@@ -202,10 +202,16 @@ server.js (~160 lines)     → Entry point, service creation, startup
     ├── routes/                  → HTTP endpoint handlers
     │   ├── static.routes.js
     │   ├── auth.routes.js
-    │   ├── folders.routes.js
     │   ├── files.routes.js
     │   ├── workspace.routes.js
-    │   └── ml.routes.js
+    │   ├── ml.routes.js
+    │   ├── denoising.routes.js
+    │   ├── annotation.routes.js
+    │   ├── mesh.routes.js
+    │   ├── preprocess.routes.js
+    │   ├── stitching.routes.js
+    │   ├── segcleanup.routes.js
+    │   └── admin.routes.js
     ├── services/                → Business logic
     │   ├── AuthService.js
     │   ├── WorkspaceService.js

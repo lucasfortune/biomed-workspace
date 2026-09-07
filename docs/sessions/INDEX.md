@@ -15,6 +15,12 @@ This index provides a chronological record of all development sessions. Sessions
 
 ## 🗓️ Complete Timeline (Reverse Chronological)
 
+### 2026-09-07 (Data Model Consolidation — Release 1.5.0)
+
+| Date | Session | Type | Duration | Status |
+|------|---------|------|----------|--------|
+| 2026-09-07 | [Data Model Consolidation (Release 1.5.0)](2026-09-07_data_model_consolidation_1_5_0.md) | 🔧 Refactor / 🔒 Security / 🚀 Release | ~1 session | ✅ Complete |
+
 ### 2026-09-06 (File Naming System Port + Mesh Z Voxel Scale Help — Release 1.4.0)
 
 | Date | Session | Type | Duration | Status |
@@ -689,5 +695,5 @@ Examples:
 
 ---
 
-**Last Updated:** 2026-05-27
-**Total Sessions Documented:** 27
+**Last Updated:** 2026-09-07
+**Total Sessions Documented:** 28

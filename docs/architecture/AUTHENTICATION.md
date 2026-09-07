@@ -1,6 +1,6 @@
 # Authentication Architecture
 
-**Last Updated:** 2025-11-27
+**Last Updated:** 2026-09-07 (v1.5.0 data-model consolidation)
 **Status:** ✅ Complete
 **Target Audience:** Developers, security engineers, administrators
 
@@ -44,7 +44,7 @@ This document describes the authentication and authorization architecture of the
 - Not JWT/token-based
 - Server-side session storage (file-based)
 - Cookie-based session identification
-- 7-day session lifetime
+- 48-hour session lifetime (`RETENTION_HOURS` in `src/config/constants.js`) - the same schedule drives workspace cleanup, so login lifetime and data lifetime match
 
 **Why Session-Based?**
 - Simple implementation
@@ -85,7 +85,7 @@ This document describes the authentication and authorization architecture of the
 
 ### Implementation
 
-**File:** `server.js` (lines 138-169)
+**File:** `src/middleware/auth.middleware.js`
 
 ---
 
@@ -119,12 +119,12 @@ function requireAuth(req, res, next) {
 - `GET /classic` - Classic version
 - `GET /workspace` - Workspace version
 - `GET /check-auth` - Auth status check
-- `GET /test_data/:filename` - Test data access
+- `/workspaces/:sessionId/uploads/*`, `/workspaces/:sessionId/results/*` - Session-scoped workspace file serving (session ownership verified; there are no unauthenticated `/uploads`, `/results` or `/models` mounts)
 - Most API endpoints
 
 **Use Cases:**
 - View application interface
-- Use test data
+- Work with the seeded sample data (every new workspace is seeded with a built-in raw + annotation sample pair)
 - Browse UI
 - Check auth status
 
@@ -196,13 +196,14 @@ function requireAdmin(req, res, next) {
 - ❌ Pending users
 - ❌ Not logged in
 
-**Protected Routes:**
+**Protected Routes** (admin API lives in `src/routes/admin.routes.js`, mounted at `/admin`):
 - `GET /admin` - Admin dashboard
 - `GET /admin/users` - User list
-- `POST /admin/approve/:username` - Approve user
-- `POST /admin/reject/:username` - Reject user
+- `GET /admin/pending-users` - Pending user list
+- `POST /admin/approve-user` - Approve user (body: `{ username }`)
+- `POST /admin/reject-user` - Reject user (body: `{ username }`)
 - `GET /admin/active-sessions` - Session monitoring
-- `GET /admin/logs` - Activity logs
+- `GET /admin/activity-logs` - Activity logs
 
 **Use Cases:**
 - User approval/rejection
@@ -235,7 +236,7 @@ function requireAdmin(req, res, next) {
    │
    ├─► Can log in
    ├─► Can view interface (requireAuth)
-   ├─► Can use test data
+   ├─► Can use the seeded sample data
    ├─► Cannot upload custom files (requireApproved)
    └─► Cannot import models (requireApproved)
    │
@@ -272,7 +273,7 @@ function requireAdmin(req, res, next) {
 ### Registration Flow
 
 **Endpoint:** `POST /register`
-**File:** `server.js` (lines 248-313)
+**File:** `src/routes/auth.routes.js`
 
 **Request:**
 ```json
@@ -340,7 +341,7 @@ function requireAdmin(req, res, next) {
 ### Login Flow
 
 **Endpoint:** `POST /login`
-**File:** `server.js` (lines 315-391)
+**File:** `src/routes/auth.routes.js`
 
 **Request:**
 ```json
@@ -412,8 +413,8 @@ function requireAdmin(req, res, next) {
 
 ### Approval Flow (Admin)
 
-**Approve Endpoint:** `POST /admin/approve/:username`
-**Reject Endpoint:** `POST /admin/reject/:username`
+**Approve Endpoint:** `POST /admin/approve-user` (body: `{ username }`)
+**Reject Endpoint:** `POST /admin/reject-user` (body: `{ username }`)
 **Middleware:** `requireAdmin`
 
 **Approve Process:**
@@ -445,21 +446,19 @@ function requireAdmin(req, res, next) {
 ### Logout Flow
 
 **Endpoint:** `POST /logout`
+**Body (optional):** `{ "deleteWorkspace": true }`
 
 **Process:**
-```javascript
-req.session.destroy((err) => {
-  if (err) {
-    return res.status(500).json({ success: false, error: 'Logout failed' });
-  }
-  res.json({ success: true, message: 'Logout successful' });
-});
-```
+1. If `deleteWorkspace === true` (the UI shows a confirmation dialog first), the user's workspace directory (`workspaces/<sessionId>/`) is deleted via `WorkspaceManager.deleteWorkspace()` and in-memory session tracking is cleaned up
+2. The server-side session is destroyed and the cookie cleared
 
 **Behavior:**
 - Destroys server-side session
 - Clears session cookie
+- Optionally deletes the workspace (after a confirmation dialog)
 - User must log in again
+
+**Note:** There is no `POST /reset-session` endpoint anymore - logout + login is the reset.
 
 ---
 
@@ -467,33 +466,37 @@ req.session.destroy((err) => {
 
 ### Session Configuration
 
-**File:** `server.js` (lines 27-42)
+**File:** `src/middleware/session.middleware.js` (using `SESSION_CONFIG` from `src/config/constants.js`)
 
 ```javascript
-app.use(session({
+// src/middleware/session.middleware.js
+return session({
   store: new FileStore({
-    path: './sessions',
-    ttl: 86400 * 7,              // 7 days
+    path: sessionsDir,               // defaults to './sessions'
+    ttl: SESSION_CONFIG.ttl,         // RETENTION_HOURS * 3600 = 48 h
     retries: 0,
-    secret: process.env.SESSION_SECRET || 'segmentation-app-secret'
+    secret: env.SESSION_SECRET
   }),
-  secret: process.env.SESSION_SECRET || 'segmentation-app-secret',
+  secret: env.SESSION_SECRET,        // required; throws if missing
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,          // no sessions for unauthenticated users
   cookie: {
-    secure: false,               // Set to true for HTTPS in production
-    maxAge: 86400000 * 7         // 7 days
+    secure: isProduction,            // HTTPS required in production
+    httpOnly: true,                  // no client-side JS access
+    sameSite: 'lax',                 // CSRF protection
+    maxAge: SESSION_CONFIG.cookieMaxAge  // RETENTION_HOURS * 3600 * 1000 = 48 h
   }
-}));
+});
 ```
 
 **Key Settings:**
 - **Storage:** File-based (`session-file-store`)
-- **Location:** `./sessions/` directory
-- **Lifetime (TTL):** 7 days
-- **Cookie MaxAge:** 7 days
-- **Secret:** Environment variable or default (change in production!)
-- **Secure:** false (enable for HTTPS)
+- **Location:** `./sessions/` directory (under `DATA_DIR`)
+- **Lifetime (TTL) / Cookie MaxAge:** 48 h - both derive from `RETENTION_HOURS` (`src/config/constants.js`), the same constant that drives the workspace cleanup grace period
+- **Secret:** `SESSION_SECRET` environment variable (required - the middleware throws without it)
+- **Secure:** enabled automatically when `NODE_ENV === 'production'`
+
+The Socket.IO server shares this same session middleware (`io.engine.use(sessionMiddleware)` in `server.js`), so socket connections carry the express session and job-room joins can be ownership-checked (see `src/sockets/index.js`).
 
 ---
 
@@ -504,8 +507,8 @@ req.session = {
   // Added by express-session
   id: 'abc123...',               // Unique session ID
   cookie: {
-    originalMaxAge: 604800000,   // 7 days in ms
-    expires: '2025-12-04T...',
+    originalMaxAge: 172800000,   // 48 h in ms
+    expires: '2026-09-09T...',
     secure: false,
     httpOnly: true,
     path: '/'
@@ -524,9 +527,9 @@ req.session = {
 
   // Added by application (file uploads, training, etc.)
   uploadedFiles: {
-    training: '/uploads/abc123/training.tif',
-    annotation: '/uploads/abc123/annotation.tif',
-    inference: '/uploads/abc123/inference.tif'
+    training: 'workspaces/abc123/uploads/training.tif',
+    annotation: 'workspaces/abc123/uploads/annotation.tif',
+    inference: 'workspaces/abc123/uploads/inference.tif'
   },
   trainingConfig: { ... },
   currentTraining: 'training_uuid',
@@ -606,30 +609,29 @@ if (!passwordMatch) {
 
 ### Session-Based File Isolation
 
-**Pattern:** All uploaded files are session-scoped
+**Pattern:** ALL user data lives inside the per-session workspace directory
 
 ```
-uploads/<sessionId>/
-   ├─ training.tif
-   ├─ annotation.tif
-   └─ inference.tif
-
-models/<sessionId>/<trainingId>/
-   ├─ best_model.pth
-   ├─ config.json
-   └─ results.json
-
-results/<inferenceId>/
-   ├─ segmented.tif
-   ├─ metadata.json
-   └─ visualization.json
+workspaces/<sessionId>/
+   ├─ metadata.json                       # Single persistent manifest
+   ├─ uploads/                            # Uploads + seeded samples
+   ├─ results/<module>/<jobId>/           # e.g. results/preprocess/<id>/,
+   │                                      #      results/segmentation/<trainingId>/
+   ├─ models/segmentation/<trainingId>/
+   │    ├─ best_model.pth
+   │    ├─ config.json
+   │    └─ results.json
+   ├─ annotations/  unfinished_annotations/
+   └─ .thumbnails/ .slices/ .mesh-previews/ .preprocess/ .segcleanup/  (caches)
 ```
 
 **Security Implications:**
 - Session ID as source of truth for file access
 - No cross-session file access
 - File paths validated against session
-- Prevents unauthorized file access
+- Workspace files are served **only** via authenticated, session-scoped routes (`/workspaces/:sessionId/...` with ownership checks in `static.routes.js`); the legacy unauthenticated `/uploads`, `/results` and `/models` static mounts are removed
+- Socket.IO job-room joins are ownership-checked (`isRoomJoinAllowed` in `src/sockets/index.js` + `SessionTracker.getJobOwner()`); job status/cancel/download HTTP endpoints also verify ownership and return 404 for other sessions' jobs
+- Workspace restore streams the uploaded ZIP from a temp file on disk (`DATA_PATHS.tmp`) with zip-slip sanitization (no in-memory buffering)
 
 See [ADR-003: Session-Based Isolation](../decisions/003_session_based_isolation.md).
 
@@ -653,37 +655,26 @@ app.post('/import-pretrained-model', requireApproved, uploadImport.array('files'
 ```
 
 **Inline Checks (Additional):**
-```javascript
-// Check for test data vs custom upload
-const isTestData = req.body.isTestData === 'true';
-
-if (!isTestData && req.session.user.status !== 'active') {
-  return res.status(403).json({
-    error: 'Custom file upload requires account approval'
-  });
-}
-```
+Some routes additionally verify `req.session.user.status === 'active'` inline before accepting custom data; seeded sample files require no such check because they are already part of the workspace.
 
 ---
 
-### Test Data Access (Pending Users)
+### Seeded Sample Data (Pending Users)
 
-**Pattern:** Pending users can use built-in test data
+**Pattern:** Every new workspace is seeded with built-in sample files; pending users can use them
 
-**Test Data Location:** `/test_data/`
-- `trypB_testData_training.tif`
-- `trypB_testData_annotations.tif`
-- `trypB_testData_inference.tif`
+**Sample Source:** `test_data/` (copied on workspace creation by `WorkspaceManager.seedSampleData()`)
+- `trypB_testData_training.tif` → seeded as `uploads/raw/sample_raw.tif`
+- `trypB_testData_annotations.tif` → seeded as `uploads/annotations/sample_annotation.tif`
 
 **How it Works:**
-1. User selects "Use Test Data" checkbox
-2. Client sets `isTestData: 'true'` in request
-3. Server copies test files to session directory
-4. Proceeds with normal workflow
-5. No `requireApproved` check for test data
+1. On workspace creation, the matched raw + annotation sample pair is copied into `workspaces/<sessionId>/uploads/`
+2. The samples are registered in `metadata.json` exactly like ordinary uploads
+3. They appear in file selectors and the file browser as normal workspace files (there is no per-request "test data" checkbox or `isTestData` flag anymore)
+4. All modules work on them through the normal workflow
 
 **Benefits:**
-- Pending users can explore application
+- Pending users can explore the whole pipeline without upload rights
 - Learn workflow before approval
 - No risk of malicious file uploads
 - Admin can approve based on usage
@@ -732,7 +723,7 @@ Response:
 
 **Approve User:**
 ```javascript
-POST /admin/approve/:username (requireAdmin)
+POST /admin/approve-user (requireAdmin, body: { username })
 
 Response:
 {
@@ -747,7 +738,7 @@ Response:
 
 **Reject User:**
 ```javascript
-POST /admin/reject/:username (requireAdmin)
+POST /admin/reject-user (requireAdmin, body: { username })
 
 Response:
 {
@@ -779,7 +770,7 @@ Response:
 
 **Activity Logs:**
 ```javascript
-GET /admin/logs (requireAdmin)
+GET /admin/activity-logs (requireAdmin)
 
 Response:
 {
@@ -922,9 +913,10 @@ node manageUsers.js reset-password john newpassword123
 
 **Session Security:**
 - ✅ Secure session storage (file-based)
-- ✅ HttpOnly cookies (prevent XSS)
-- ✅ Session expiry (7 days)
-- ✅ Session secret (environment variable)
+- ✅ HttpOnly cookies (prevent XSS), `sameSite: 'lax'`
+- ✅ Session expiry (48 h, matching workspace retention)
+- ✅ Session secret (required environment variable)
+- ✅ Socket.IO shares the session middleware; job-room joins are ownership-checked
 
 **File Security:**
 - ✅ Session-based isolation
@@ -973,7 +965,7 @@ app.use(session({
   cookie: {
     secure: true,
     httpOnly: true,
-    maxAge: 86400000 * 7
+    maxAge: SESSION_CONFIG.cookieMaxAge  // keep tied to RETENTION_HOURS
   }
 }));
 ```
@@ -1106,5 +1098,5 @@ console.log('Password:', password); // NEVER log passwords!
 ---
 
 **Document Status:** ✅ Complete
-**Last Updated:** 2025-11-27
+**Last Updated:** 2026-09-07 (v1.5.0)
 **Maintained By:** Development Team

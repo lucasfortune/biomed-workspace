@@ -167,7 +167,6 @@ The application has been restructured to support **two parallel interfaces** wit
 │   │   ├── index.js           # Route aggregator
 │   │   ├── static.routes.js   # HTML pages, static files
 │   │   ├── auth.routes.js     # Login, register, logout
-│   │   ├── folders.routes.js  # Folder CRUD
 │   │   ├── files.routes.js    # File operations
 │   │   ├── workspace.routes.js# Workspace management + ZIP export/restore
 │   │   ├── ml.routes.js       # Training, inference, model import
@@ -444,9 +443,9 @@ Four new endpoints were added to `server.js` for workspace functionality:
 The application uses **per-session isolation** for file uploads and model training:
 
 1. Each user session gets a unique session ID (via Express session)
-2. Uploaded files stored in `uploads/<sessionId>/`
-3. Trained models stored in `models/<sessionId>/<trainingId>/`
-4. Inference results stored in `results/<trainingId>/` or `results/imported_model_<timestamp>/`
+2. All user data lives in the per-session workspace `workspaces/<sessionId>/`
+3. Uploads in `workspaces/<sessionId>/uploads/`, trained models in `workspaces/<sessionId>/models/segmentation/<trainingId>/`
+4. Results in `workspaces/<sessionId>/results/<module>/<jobId>/`
 
 **Important:** All file paths are session-scoped. When debugging file issues, always check the session ID.
 
@@ -532,7 +531,7 @@ All validation scripts output JSON to stdout for parsing.
 **Stage 3: Model Training**
 - Endpoint: `/start-training`
 - Spawns `python/train_model.py` with config
-- Outputs best_model.pth, config.json, results.json to `models/<sessionId>/<trainingId>/`
+- Outputs best_model.pth, config.json, results.json to `workspaces/<sessionId>/models/segmentation/<trainingId>/`
 - Real-time progress via Socket.IO
 
 **Stage 4: Inference**
@@ -781,8 +780,9 @@ module.exports = createMyFeatureRoutes;
 
 ### File Cleanup
 
-Session reset (`/reset-session`) handles cleanup of:
-- Session-specific directories (`uploads/<sessionId>`, `models/<sessionId>`)
+Cleanup happens on logout (workspace deletion after a confirmation dialog) and via the
+CleanupService (48 h retention after last activity, matching the session cookie). This covers:
+- The session's workspace directory (`workspaces/<sessionId>/`)
 - Training/inference results directories
 - In-memory session maps
 - Express session destruction
@@ -943,7 +943,7 @@ The admin dashboard (`/admin/active-sessions`) returns ALL sessions, not just ac
 - Session ID is consistent across both versions
 
 **File Paths:**
-- Classic uploads: `uploads/<sessionId>/`
+- Classic uploads: `workspaces/<sessionId>/uploads/`
 - Workspace uploads: Same path structure (shared)
 - Models and results: Same path structure (shared)
 

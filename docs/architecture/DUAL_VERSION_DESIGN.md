@@ -1,6 +1,6 @@
 # Dual Version Architecture
 
-**Last Updated:** 2025-11-27
+**Last Updated:** 2026-09-07 (v1.5.0 data-model consolidation)
 **Status:** ✅ Complete
 **Target Audience:** Developers, architects
 
@@ -49,7 +49,7 @@ The dual-version approach was chosen to enable **incremental innovation** withou
 **Workspace Version:**
 - Modular, IDE-like interface
 - Module system with dynamic loading
-- In active development (Phase 2 complete)
+- Phase 4 complete (10 modules + template)
 - Best for: Complex multi-module workflows
 
 **Shared:**
@@ -162,7 +162,7 @@ Step 5: Run Inference & Visualize Results
 
 **Complete Feature Set:**
 - ✅ Upload training images and annotations (TIFF)
-- ✅ Use test data (for pending users)
+- ✅ Use the seeded sample data (available to pending users; every new workspace is seeded with a built-in raw + annotation pair)
 - ✅ Configure training (patch size, learning rate, epochs, etc.)
 - ✅ Train U-Net model with real-time progress
 - ✅ View training charts (loss, accuracy per epoch)
@@ -173,7 +173,7 @@ Step 5: Run Inference & Visualize Results
 - ✅ 3D visualization of results (Three.js)
 - ✅ Class filtering in visualization
 - ✅ Original data overlay
-- ✅ Session reset
+- ✅ Session reset via logout + login (there is no `/reset-session` endpoint; logout offers workspace deletion after a confirmation dialog)
 
 ### State Management
 
@@ -256,7 +256,7 @@ socket.on('training-progress', (progress) => {
 **Eventual Deprecation:**
 - Once Workspace version reaches feature parity
 - Migration path will be provided
-- Timeline: TBD (not before Phase 4+)
+- Timeline: TBD
 
 ---
 
@@ -266,11 +266,11 @@ socket.on('training-progress', (progress) => {
 
 The **Workspace Version** is the new modular interface designed for complex multi-module workflows with an IDE-like experience.
 
-**Status:** 🚧 **Phase 2 Complete, Segmentation Module In Progress**
+**Status:** ✅ **Phase 4 Complete - 10 modules implemented (+ template)**
 **Route:** `/workspace`
 **Location:** `/public/workspace/`
 **Development Start:** Phase 2
-**Current State:** Foundation complete, first module being integrated
+**Current State:** All modules implemented: segmentation, DL denoising, filter denoising, preprocess, stitching, segmentation cleanup, annotation, mesh, 3D visualization, image viewer
 
 ### Architecture
 
@@ -296,12 +296,14 @@ The **Workspace Version** is the new modular interface designed for complex mult
 │           │                                                 │
 │           └─ WorkspaceAPI (Unified API Client)             │
 │                                                             │
-│  Dynamically Loaded Modules:                               │
+│  Dynamically Loaded Modules (10 + template):               │
 │     │                                                       │
 │     ├─ SegmentationModule                                  │
-│     ├─ DenoisingModule (future)                            │
-│     ├─ AnnotationModule (future)                           │
-│     └─ ... (extensible)                                    │
+│     ├─ DLDenoisingModule / FilterDenoisingModule           │
+│     ├─ PreprocessModule / StitchingModule                  │
+│     ├─ SegCleanupModule / AnnotationModule                 │
+│     ├─ MeshModule / VisualizationModule                    │
+│     └─ ImageViewerModule (+ TemplateModule)                │
 │                                                             │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -380,28 +382,22 @@ Welcome Hub (Module Cards)
 
 ### Features
 
-**Phase 2 Complete:**
-- ✅ Workspace initialization
+**Complete (v1.5.0):**
+- ✅ Workspace initialization (with seeded sample data)
 - ✅ StateManager with event-driven updates
 - ✅ ModuleLoader with dynamic imports
-- ✅ Module registry system
+- ✅ Module registry system (11 module ids, 9 hub cards in pipeline order)
 - ✅ Welcome hub with module cards
 - ✅ Module activation/deactivation lifecycle
 - ✅ WorkspaceAPI client
-- ✅ Sidebar (stats, file browser placeholder)
-
-**In Progress (Phase 2+):**
-- 🚧 Segmentation module (wrapping classic functionality)
-- 🚧 Socket.IO integration in module context
-- 🚧 Full training/inference workflow in workspace
-
-**Planned (Phase 3+):**
-- 📅 File browser (full workspace file management)
-- 📅 Denoising module
-- 📅 Annotation module
-- 📅 Mesh generation module
-- 📅 Advanced visualization module
-- 📅 Module pipeline chaining
+- ✅ Full file browser (metadata, thumbnails, lineage, batch operations,
+  ZIP backup/restore)
+- ✅ All processing modules: image viewer, preprocessing, DL denoising
+  (routed autoStructN2V/N2V), filter denoising, annotation, segmentation,
+  segmentation cleanup, stitching, mesh generation, 3D visualization
+- ✅ Help system (100+ articles, glossary, search)
+- ✅ Data model consolidation: canonical lineage, display names, job
+  ownership, 48 h retention (ADR-012)
 
 ### Core Systems
 
@@ -599,22 +595,14 @@ See [Module Architecture](MODULE_ARCHITECTURE.md) and [ADR-004](../decisions/004
 
 ### Current Limitations
 
-- ⚠️ **In development** - Not all features complete
-- ⚠️ **File upload category issue** - Missing metadata (Phase 3 fix)
-- ⚠️ **Segmentation module** - Integration in progress
-- ⚠️ **Limited modules** - Only segmentation so far
+- ⚠️ **Jobs are in-memory** - a server restart loses progress state
+  (outputs on disk survive); acknowledged trade-off, see ADR-012
+- ⚠️ **No disk quota** - deployment-level concern
 
 ### Future Roadmap
 
-**Phase 3:**
-- File browser with full management
-- Complete segmentation module integration
-- Fix file upload category metadata
-
-**Phase 4+:**
-- Additional modules (denoising, annotation, mesh)
-- Module pipeline chaining
-- Advanced features (undo/redo, project saving)
+- Batch processing workflows / module pipeline chaining
+- Model zoo / pretrained models
 
 See [Roadmap](../vision/ROADMAP.md) for details.
 
@@ -673,13 +661,18 @@ app.get('/api/workspace/status', requireAuth, ...);
 
 ### File Storage
 
-**Shared directory structure:**
+**Shared directory structure (per-session workspaces):**
 ```
-uploads/<sessionId>/
-models/<sessionId>/<trainingId>/
-results/<inferenceId>/
-test_data/
+workspaces/<sessionId>/
+├── uploads/
+├── models/segmentation/<trainingId>/
+├── results/<module>/<jobId>/
+├── annotations/  unfinished_annotations/
+├── .thumbnails/ .slices/ ... (caches)
+└── metadata.json   (single manifest)
 ```
+Built-in sample files are seeded from `test_data/` into every new
+workspace on creation.
 
 **Session-Based Isolation:**
 - Same session ID for both versions
@@ -761,7 +754,7 @@ server.js
 - New features
 - New modules
 - Architecture improvements
-- Phase 3+ work
+- Ongoing feature work
 
 **Files to Edit:**
 ```
@@ -849,27 +842,28 @@ See [Module Creation Guide](../guides/MODULE_CREATION.md) (Phase 3).
 | **Learning Curve** | Easy | Medium | |
 | **Maintenance** | Simple | More complex | |
 | **Future Features** | Limited | Unlimited | |
-| **Segmentation** | ✅ Complete | 🚧 In progress | |
-| **Denoising** | ❌ Not available | 📅 Phase 4 | |
-| **Annotation** | ❌ Not available | 📅 Phase 4 | |
-| **Mesh Generation** | ❌ Not available | 📅 Phase 4 | |
-| **Module Chaining** | ❌ Not possible | 📅 Phase 4+ | |
-| **3D Visualization** | ✅ Three.js | ✅ Same (reusable) | |
+| **Segmentation** | ✅ Complete | ✅ Complete | |
+| **Denoising** | ❌ Not available | ✅ DL (routed autoStructN2V/N2V) + filters | |
+| **Annotation** | ❌ Not available | ✅ Complete | |
+| **Mesh Generation** | ❌ Not available | ✅ Complete | |
+| **Preprocess / Stitching / Cleanup** | ❌ Not available | ✅ Complete | |
+| **Module Chaining** | ❌ Not possible | Manual (via file browser) | batch pipelines planned |
+| **3D Visualization** | ✅ Three.js | ✅ Dedicated module | |
 | **Backend API** | Same endpoints | Same + workspace-specific | |
 | **Python ML** | Shared scripts | Shared scripts | |
 | **Authentication** | Shared system | Shared system | |
-| **File Storage** | Shared structure | Shared structure | |
+| **File Storage** | Shared workspaces | Shared workspaces | `workspaces/<sessionId>/` |
 | **Session** | Shared session | Shared session | |
-| **Test Data** | ✅ Available | ✅ Available | |
-| **Custom Uploads** | ✅ Working | 🚧 Needs category fix | Phase 3 |
-| **Status** | ✅ Stable | 🚧 In development | |
-| **User Base** | Active users | Testing phase | |
+| **Sample Data** | ✅ Seeded | ✅ Seeded | seeded into every new workspace |
+| **Custom Uploads** | ✅ Working | ✅ Working | approved users |
+| **Status** | ✅ Stable (maintenance) | ✅ Stable (primary) | |
+| **User Base** | Legacy | Primary interface | |
 
 ---
 
 ## Migration Strategy
 
-### Current Approach (Phase 2-3)
+### Current Approach
 
 **Coexistence:**
 - Both versions available
@@ -879,9 +873,10 @@ See [Module Creation Guide](../guides/MODULE_CREATION.md) (Phase 3).
 
 **Development Focus:**
 - Classic: Maintenance mode only
-- Workspace: Active development
+- Workspace: Primary, actively developed interface (feature-complete
+  pipeline since Phase 4; consolidated data model since v1.5.0)
 
-### Future Migration (Phase 4+)
+### Future Migration
 
 **Once Workspace reaches feature parity:**
 

@@ -1,6 +1,6 @@
 # State Management Architecture
 
-**Last Updated:** 2025-11-27
+**Last Updated:** 2026-09-07 (v1.5.0 data-model consolidation)
 **Status:** ✅ Complete
 **Target Audience:** Developers working with state in the workspace version
 
@@ -48,11 +48,11 @@ The application uses **two distinct state management systems**:
 - **Storage:** In-memory JavaScript object
 
 **2. Backend State (Both Versions)**
-- **Components:** Express session + in-memory Maps
+- **Components:** Express session + in-memory Maps (`SessionTracker`) + per-workspace `metadata.json`
 - **Scope:** Server-side persistence
-- **Lifetime:** Session duration or server uptime
+- **Lifetime:** Session duration or server uptime (metadata.json persists with the workspace)
 - **Pattern:** Request-based
-- **Storage:** express-session (in-memory) + Map objects
+- **Storage:** express-session (file-based) + `SessionTracker` Maps + `workspaces/<sessionId>/metadata.json` (the sole persistent store for the file registry and lineage)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -85,9 +85,18 @@ The application uses **two distinct state management systems**:
 │  ├─ currentTraining: trainingId                            │
 │  └─ importedModel: { ... }                                 │
 │                                                             │
-│  In-Memory Maps                                            │
+│  In-Memory Maps (SessionTracker)                           │
 │  ├─ trainingSessions (Map)                                 │
-│  └─ inferenceSessions (Map)                                │
+│  ├─ inferenceSessions (Map)                                │
+│  ├─ meshSessions (Map)                                     │
+│  ├─ denoisingSessions (Map)                                │
+│  └─ jobSessions (Map, generic job registry:                │
+│       preprocess / stitching / segcleanup /                │
+│       DL-inference / filter jobs)                          │
+│                                                             │
+│  Per-Workspace Manifest (on disk, persistent)              │
+│  └─ workspaces/<sessionId>/metadata.json                   │
+│       (file registry, lineage, schema 1.2.0)               │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -121,8 +130,8 @@ The workspace version uses a **centralized state management system** built on to
   workspace: {
     sessionId: 'abc123...', // Express session ID
     initialized: true,       // Workspace initialized?
-    files: [                 // File tree (Phase 3)
-      { name: 'file1.tif', category: 'training', ... }
+    files: [                 // Manifest entries from metadata.json
+      { name: 'file1.tif', displayName: 'file1.tif', category: 'uploads', ... }
     ],
     stats: {                 // Workspace statistics
       fileCount: 5,
@@ -531,22 +540,28 @@ stateManager.events.on('state:reset', ({ previousState }) => {
 
 ### Express Session Storage
 
-**File:** `server.js` (session configuration)
-**Storage:** In-memory (express-session default)
-**Lifetime:** Session duration (configurable)
+**File:** `src/middleware/session.middleware.js` (uses `SESSION_CONFIG` from `src/config/constants.js`)
+**Storage:** File-based (`session-file-store`, `./sessions/` under `DATA_DIR`)
+**Lifetime:** 48 h (`RETENTION_HOURS`) - the session cookie/TTL and the workspace cleanup grace period both derive from the same constant
 
 **Session Configuration:**
 ```javascript
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
+// src/middleware/session.middleware.js
+return session({
+  store: new FileStore({ path: sessionsDir, ttl: SESSION_CONFIG.ttl, retries: 0, secret: env.SESSION_SECRET }),
+  secret: env.SESSION_SECRET,      // required
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Set to true for HTTPS in production
-    maxAge: 1000 * 60 * 60 * 24 // 24 hours
+    secure: isProduction,          // HTTPS in production
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: SESSION_CONFIG.cookieMaxAge   // 48 h
   }
-}));
+});
 ```
+
+The same middleware is shared with Socket.IO (`io.engine.use(sessionMiddleware)` in `server.js`), so socket handshakes carry the express session.
 
 ---
 
@@ -568,9 +583,9 @@ req.session = {
 
   // Added by upload endpoints
   uploadedFiles: {
-    training: '/uploads/abc123/training.tif',
-    annotation: '/uploads/abc123/annotation.tif',
-    inference: '/uploads/abc123/inference.tif'
+    training: 'workspaces/abc123/uploads/training.tif',
+    annotation: 'workspaces/abc123/uploads/annotation.tif',
+    inference: 'workspaces/abc123/uploads/inference.tif'
   },
 
   // Added by training configuration
@@ -587,8 +602,8 @@ req.session = {
 
   // Added by model import
   importedModel: {
-    modelPath: '/uploads/abc123/model.pth',
-    configPath: '/uploads/abc123/config.json',
+    modelPath: 'workspaces/abc123/uploads/imported_models/model.pth',
+    configPath: 'workspaces/abc123/uploads/imported_models/config.json',
     validated: true,
     validation: { ... }
   }
@@ -597,15 +612,16 @@ req.session = {
 
 ---
 
-### In-Memory Maps
+### In-Memory Maps (SessionTracker)
 
-**Purpose:** Store training and inference session data
+**File:** `src/services/SessionTracker.js`
+**Purpose:** Track running/finished jobs and map every job ID to its owning session
+
+`SessionTracker` holds dedicated maps for **training**, **inference**, **mesh** and **denoising** sessions, plus a **generic job registry** (`jobSessions`) covering preprocess, stitching, segcleanup, DL-inference and filter jobs. `getJobOwner(jobId)` resolves the owning session across all of these - used for Socket.IO room-join ownership checks and for job status/cancel/download endpoint authorization (other sessions' jobs return 404).
 
 **Training Sessions:**
 ```javascript
-const trainingSessions = new Map();
-
-trainingSessions.set(trainingId, {
+sessionTracker.trainingSessions.set(trainingId, {
   id: trainingId,
   sessionId: req.session.id,
   status: 'running',         // 'running' | 'completed' | 'failed'
@@ -623,16 +639,14 @@ trainingSessions.set(trainingId, {
 
 **Inference Sessions:**
 ```javascript
-const inferenceSessions = new Map();
-
-inferenceSessions.set(inferenceId, {
+sessionTracker.inferenceSessions.set(inferenceId, {
   id: inferenceId,
   sessionId: req.session.id,
   status: 'running',         // 'running' | 'completed' | 'failed'
   startTime: Date.now(),
-  modelPath: '/models/...',
-  dataPath: '/uploads/...',
-  outputPath: '/results/...',
+  modelPath: 'workspaces/<sessionId>/models/segmentation/...',
+  dataPath: 'workspaces/<sessionId>/uploads/...',
+  outputPath: 'workspaces/<sessionId>/results/segmentation/...',
   progress: {
     currentSlice: 50,
     totalSlices: 100,
@@ -643,30 +657,35 @@ inferenceSessions.set(inferenceId, {
 });
 ```
 
+**Generic Job Registry:**
+```javascript
+// preprocess / stitching / segcleanup / DL-inference / filter jobs
+sessionTracker.jobSessions.set(jobId, { sessionId, type, ... });
+sessionTracker.getJobOwner(jobId);  // → owning sessionId (any map)
+```
+
 ---
 
 ### State Persistence
 
 **What Persists:**
-- ✅ Session data (req.session) - via express-session
-- ✅ Uploaded files - on disk
-- ✅ Trained models - on disk
-- ✅ Inference results - on disk
+- ✅ Session data (req.session) - via express-session (file store, survives restarts within the 48 h TTL)
+- ✅ The workspace directory `workspaces/<sessionId>/` - uploads, models, results, annotations on disk
+- ✅ `metadata.json` - the **sole persistent store** for the file registry, lineage and provenance (schema version 1.2.0). `loadMetadata()` runs `normalizeManifest()` on read, upgrading legacy manifests (categories to uploads/models/results, legacy lineage shapes to the canonical `{processType, processedAt, inputs[], processId}`)
 
 **What Doesn't Persist (Lost on Server Restart):**
-- ❌ trainingSessions Map (in-memory)
-- ❌ inferenceSessions Map (in-memory)
+- ❌ All SessionTracker Maps (training/inference/mesh/denoising/jobSessions)
 - ❌ Active WebSocket connections
 
 **Implications:**
-- Server restart clears in-flight training/inference
-- Sessions may persist (depending on express-session configuration)
-- Files remain on disk (orphaned if session lost)
+- Server restart clears in-flight jobs
+- Sessions persist across restarts (file store) until their 48 h TTL
+- Workspace files remain on disk until the cleanup service removes them (48 h after last activity) or the user deletes the workspace on logout
 
 **Production Consideration:**
-- Use Redis for session storage (persistent across restarts)
-- Use Redis for trainingSessions/inferenceSessions Maps
-- Implement cleanup job for orphaned files
+- Use Redis for session storage at scale
+- Use Redis for SessionTracker Maps
+- Orphan cleanup is handled by `CleanupService` (runs every 15 minutes, `RETENTION_HOURS` grace period)
 
 ---
 
@@ -698,16 +717,18 @@ Backend                          Frontend
                               UI Updates (subscriptions)
 ```
 
+**Room joins are ownership-checked:** Socket.IO shares the express-session middleware (`io.engine.use(sessionMiddleware)` in `server.js`), and every join of a job room is verified against the job's owning session (`isRoomJoinAllowed` in `src/sockets/index.js` + `SessionTracker.getJobOwner()`). A client can only join rooms for jobs its own session started.
+
 **Training Progress:**
 ```javascript
-// Backend (server.js)
+// Backend (src/helpers/pythonRunner.js + src/sockets/*)
 pythonProcess.stdout.on('data', (data) => {
   const line = data.toString();
   if (line.startsWith('PROGRESS:')) {
     const progress = JSON.parse(line.substring(9));
 
     // Update in-memory map
-    trainingSessions.get(trainingId).progress = progress;
+    sessionTracker.trainingSessions.get(trainingId).progress = progress;
 
     // Broadcast to clients
     io.to(`training-${trainingId}`).emit('training-progress', progress);
@@ -756,17 +777,17 @@ stateManager.update('workspace.files', files)
 
 ### Session ID as Source of Truth
 
-**All file paths are session-scoped:**
+**All file paths are session-scoped inside the workspace:**
 ```
-uploads/<sessionId>/
-models/<sessionId>/<trainingId>/
-results/<inferenceId>/
+workspaces/<sessionId>/uploads/
+workspaces/<sessionId>/models/segmentation/<trainingId>/
+workspaces/<sessionId>/results/<module>/<jobId>/
 ```
 
 **Why session-based (not user-based)?**
 - Same user can have multiple concurrent sessions
 - Clean separation for debugging
-- Easy cleanup on session reset
+- Easy cleanup (retention cleanup or workspace deletion on logout)
 - Security: Session ID harder to guess
 
 See [ADR-003: Session-Based Isolation](../decisions/003_session_based_isolation.md).
@@ -791,15 +812,15 @@ console.log('Session data:', req.session);
 console.log('Uploaded files:', req.session.uploadedFiles);
 
 // Check training session
-const training = trainingSessions.get(trainingId);
+const training = sessionTracker.trainingSessions.get(trainingId);
 console.log('Training session:', training);
 ```
 
 **Common Issues:**
-1. **Session lost** - Check cookie, session timeout
-2. **Files not found** - Verify session ID matches directory
+1. **Session lost** - Check cookie, session timeout (48 h)
+2. **Files not found** - Verify session ID matches the workspace directory; check `metadata.json`
 3. **State not updating** - Check event subscriptions
-4. **Orphaned files** - Session reset or server restart
+4. **Workspace gone** - Retention cleanup (48 h after last activity) or workspace deleted on logout
 
 See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md).
 
@@ -1087,35 +1108,36 @@ Express Creates Session
    ▼
 User Uploads Files
    │
-   ├─► Save to uploads/<sessionId>/
+   ├─► Save to workspaces/<sessionId>/uploads/
+   ├─► Register in workspaces/<sessionId>/metadata.json
    └─► Update req.session.uploadedFiles
    │
    ▼
 User Trains Model
    │
-   ├─► Create training entry in Map
+   ├─► Create training entry in SessionTracker Map
    ├─► Spawn Python process
    └─► Update req.session.currentTraining
    │
    ▼
 User Runs Inference
    │
-   ├─► Create inference entry in Map
+   ├─► Create inference entry in SessionTracker Map
    ├─► Spawn Python process
-   └─► Generate result files
+   └─► Generate result files (results/segmentation/<id>/)
    │
    ▼
-User Resets Session
+User Logs Out (there is no /reset-session; logout + login is the reset)
    │
-   ├─► Delete uploads/<sessionId>/
-   ├─► Delete models/<sessionId>/
-   ├─► Clear req.session data
-   └─► Remove from in-memory Maps
-   │
-   ▼
-Session Expires / User Logs Out
-   │
+   ├─► Optional: delete workspaces/<sessionId>/ (confirmation dialog)
+   ├─► Clear in-memory SessionTracker entries
    └─► Session destroyed
+   │
+   ▼
+Session Expires (48 h after last activity)
+   │
+   ├─► Session file removed (TTL)
+   └─► CleanupService deletes workspaces/<sessionId>/ on the same schedule
 ```
 
 ---
@@ -1150,5 +1172,5 @@ Session Expires / User Logs Out
 ---
 
 **Document Status:** ✅ Complete
-**Last Updated:** 2025-11-27
+**Last Updated:** 2026-09-07 (v1.5.0)
 **Maintained By:** Development Team
