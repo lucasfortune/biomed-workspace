@@ -163,7 +163,7 @@ def parse_obj(input_path):
 
 def write_stl(vertices, normals, faces, output_path):
     with open(output_path, "wb") as f:
-        f.write(b"Binary STL converted by viz_app".ljust(80, b"\0"))
+        f.write(b"Binary STL converted by BioMed Workspace".ljust(80, b"\0"))
         f.write(np.uint32(len(faces)).tobytes())
         v0 = vertices[faces[:, 0]]
         v1 = vertices[faces[:, 1]]
@@ -185,7 +185,7 @@ def write_ply(vertices, normals, faces, output_path):
         header = (
             "ply\n"
             "format binary_little_endian 1.0\n"
-            "comment converted by viz_app\n"
+            "comment converted by BioMed Workspace\n"
             f"element vertex {len(vertices)}\n"
             "property float x\nproperty float y\nproperty float z\n"
             "property float nx\nproperty float ny\nproperty float nz\n"
@@ -215,7 +215,7 @@ def write_glb(vertices, normals, faces, output_path):
     bin_chunk = idx_bytes + pos_bytes + nrm_bytes
 
     gltf = {
-        "asset": {"version": "2.0", "generator": "viz_app converter"},
+        "asset": {"version": "2.0", "generator": "BioMed Workspace converter"},
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         "nodes": [{"mesh": 0}],

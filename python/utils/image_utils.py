@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Image Utilities - Common image processing functions for viz_app Python scripts.
+Image Utilities - Common image processing functions for BioMed Workspace Python scripts.
 
 Provides consistent image normalization, preview generation, and slice extraction.
 """

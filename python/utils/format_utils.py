@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Format Utilities - Common formatting functions for viz_app Python scripts.
+Format Utilities - Common formatting functions for BioMed Workspace Python scripts.
 
 Provides consistent formatting for file sizes, memory values, and other display values.
 """

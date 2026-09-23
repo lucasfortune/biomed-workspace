@@ -63,7 +63,7 @@ function loadEnvironment() {
   // Save back to .env file if modified
   if (modified) {
     const lines = [];
-    lines.push('# Biomedical Image Segmentation Application');
+    lines.push('# BioMed Workspace');
     lines.push('# Auto-generated configuration file');
     lines.push('');
     lines.push('# Session Secret (auto-generated)');

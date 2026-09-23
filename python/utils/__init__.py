@@ -1,4 +1,4 @@
-# Python utilities for viz_app
+# Python utilities for BioMed Workspace
 
 from .format_utils import format_size, format_memory
 from .image_utils import (

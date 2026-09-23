@@ -1,193 +1,179 @@
-# Biomedical Image Processing Workspace
+# BioMed Workspace
 
-A modular web-based platform for biomedical image processing with machine learning pipelines, featuring U-Net segmentation, real-time training, and interactive 3D visualization.
+A browser-based workspace for processing volumetric microscopy data, from raw
+image stack to segmented, quantified 3D surface. Nine modules share one file
+system, one provenance model and one design language, so a stack can be
+cropped, denoised, annotated, segmented, cleaned up, stitched, meshed and
+viewed in 3D without leaving the browser or writing code.
 
-![Node.js](https://img.shields.io/badge/Node.js-v18+-blue) ![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Three.js](https://img.shields.io/badge/Three.js-r128-orange)
+The workspace is developed within the DFG priority programme SPP 2332
+"Physics of Parasitism". A public instance runs at
+**[thevirtualparasite.net](https://www.thevirtualparasite.net)**, with user
+documentation at
+**[lucasfortune.github.io/the-virtual-parasite](https://lucasfortune.github.io/the-virtual-parasite/workspace/)**.
+
+![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Node.js](https://img.shields.io/badge/Node.js-18+-339933)
+![Python](https://img.shields.io/badge/Python-3.9+-3776AB)
+![License](https://img.shields.io/badge/license-BSD--3--Clause-green)
 
 ---
 
-## 🚀 Quick Start
+## Modules
 
-### Prerequisites
-- Node.js v18 or higher
-- Python 3.8 or higher
-- 8GB RAM minimum (16GB recommended for training)
+Modules are listed in pipeline order, as they appear on the workspace hub.
+
+| Module | What it does |
+|---|---|
+| **Image Viewer** | View TIFF stacks in gallery and thumbnail modes, compare two stacks side by side |
+| **Preprocessing** | Crop, trim, flip, downscale and re-window stacks before processing |
+| **Denoising: Deep Learning** | Self-supervised denoising with Noise2Void and [AutoStructN2V](https://github.com/lucasfortune/asn2v), which detects structured noise and routes each stack to the matching training recipe |
+| **Denoising: Filter-Based** | Gaussian and non-local-means filtering with automatic noise estimation |
+| **Annotation** | Paint multi-class labels on image stacks to create training data |
+| **U-Net Segmentation** | Train a U-Net on annotated stacks with live training curves, then segment new volumes |
+| **Segmentation Cleanup** | Fill holes, remove specks, smooth, merge classes, touch up by hand, and export per-class quantification as CSV |
+| **Stack Stitching** | Join stacks along z or as mosaics using overlay alignment; alignments are saved as reusable recipes |
+| **Surface Mesh Generation** | Convert segmented volumes to 3D surface meshes with physical voxel scaling |
+| **3D Visualization** | Explore meshes interactively in the browser (Three.js) |
+
+Across all modules:
+
+- **File browser** with search, batch operations, format conversion (TIFF and
+  MRC import/export), and ZIP export and restore of a whole workspace.
+- **Provenance.** Every file records its full processing history, including
+  the trained model behind a result, and outputs get readable, chained names.
+- **Physical metadata.** Voxel sizes travel with the data from upload to mesh.
+- **Built-in help.** 104 context-sensitive help articles and a glossary,
+  reachable from the help icon next to each control. The same content is
+  published to the documentation site.
+- **Sample data.** Every new workspace is seeded with a matched raw stack and
+  annotation, so the full pipeline can be tried without uploading anything.
+- **Real-time progress** for training and inference via Socket.IO.
+- **Private workspaces.** Each session has an isolated workspace; data is
+  retained for 48 hours after last activity, and users keep their work as ZIP
+  archives.
+
+The original linear workflow (the "Classic" version) is still served at
+`/classic` for existing users but is no longer developed.
+
+---
+
+## Running your own instance
+
+### Requirements
+
+- Node.js 18 or newer (`.nvmrc` pins 20)
+- Python 3.9 or newer
+- 8 GB RAM minimum; 16 GB and a CUDA-capable GPU are recommended for training
 
 ### Installation
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/lucasfortune/viz_app.git
-cd viz_app
+git clone https://github.com/lucasfortune/biomed-workspace.git
+cd biomed-workspace
 
-# 2. Install Node.js dependencies
+# Node dependencies
 npm install
 
-# 3. Install Python dependencies
+# Python environment. The server expects the interpreter at ./venv/bin/python
+# (./venv/Scripts/python.exe on Windows); a symlink to an existing env also works.
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
+
+# Install PyTorch first, choosing the build for your CUDA version:
+#   https://pytorch.org/get-started/locally/
+pip install torch torchvision
 pip install -r requirements.txt
 
-# 4. Start the application
-npm start
-
-# 5. Open browser
-# Navigate to http://localhost:3000
+npm start                         # then open http://localhost:3000
 ```
 
-### First Time Setup
+On first start the server writes a `.env` file with a generated
+`SESSION_SECRET`. AutoStructN2V is vendored under `python/vendor/` and needs
+no separate installation.
 
-1. **Create admin user** (required for first login):
-```bash
-node manageUsers.js add-admin <username> <password> <fullName> <email> <institution>
-```
+### First login
 
-2. **Login** at `http://localhost:3000`
-3. **Choose version**:
-   - **Workspace** (recommended): New modular interface with IDE-like experience
-   - **Classic**: Original linear workflow (stable, fully functional)
-
----
-
-## 📖 Full Documentation
-
-**→ [Complete Documentation Index](docs/INDEX.md)**
-
-| Topic | Link |
-|-------|------|
-| 🎯 **Getting Started Guide** | [docs/guides/GETTING_STARTED.md](docs/guides/GETTING_STARTED.md) |
-| 🏗️ **Architecture Overview** | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
-| 📋 **API Reference** | [docs/reference/API_ENDPOINTS.md](docs/reference/API_ENDPOINTS.md) |
-| 🔧 **Module Creation** | [docs/guides/MODULE_CREATION.md](docs/guides/MODULE_CREATION.md) |
-| 🚀 **Deployment Guide** | [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) |
-| 🐛 **Troubleshooting** | [docs/guides/TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md) |
-| 🗺️ **Roadmap** | [docs/vision/ROADMAP.md](docs/vision/ROADMAP.md) |
-
----
-
-## ✨ Features
-
-### Workspace Version (Phase 4 Complete)
-- **Modular Architecture**: IDE-like interface with 6 processing modules
-- **Processing Modules**: Segmentation, DL Denoising (N2V), Filter Denoising, Annotation, Mesh Generation, 3D Visualization, Image Viewer
-- **File Browser**: Visual file tree with search, batch operations, ZIP export/restore
-- **Help System**: 200+ context-sensitive help articles with glossary
-- **Design System**: Light/dark mode with Physics of Parasitism branding
-- **State Management**: Centralized state with event-driven updates
-- **Real-time Progress**: Socket.IO integration for training/inference tracking
-
-### Classic Version (Stable)
-- Complete ML pipeline in linear workflow
-- Training and inference with real-time charts
-- Model import/export
-- Session-based isolation
-
-### Common Features
-- Session-based authentication with admin approval workflow
-- Test data included for quick evaluation
-- Multi-user support with isolated workspaces
-- TIFF stack processing (8-bit and 16-bit)
-- Model management (save, download, import)
-
----
-
-## 🏃 Quick Usage
-
-### Workspace Version
-1. **Select Module** from the welcome hub (6 modules available)
-2. **Upload Data**: Raw images via file browser (or use test data)
-3. **Process**: Configure and run module-specific workflows
-4. **Monitor Progress**: Real-time updates via Socket.IO
-5. **Export Results**: Download processed files or ZIP archive
-
-### Classic Version (LEGACY)
-- Traditional 5-step linear workflow
-- Same capabilities, different UI
-
----
-
-## 🔧 Common Commands
+Accounts require approval by an admin. Create the first admin from the
+command line:
 
 ```bash
-# Development mode with auto-reload
-npm run dev
-
-# Production mode
-npm start
-
-# Custom port
-PORT=3001 npm start
-
-# User management
-node manageUsers.js list                    # List all users
-node manageUsers.js approve <username>      # Approve pending user
-node manageUsers.js reset-password <user> <pass>
+node manageUsers.js add-admin <username> <password> "<Full Name>" <email> "<Institution>"
 ```
 
----
+New users register through the web interface; approve them with:
 
-## 📂 Project Structure
-
-```
-/viz_app/
-├── /public/
-│   ├── /classic/         # Original app (stable)
-│   └── /workspace/       # Modular app (Phase 4 complete, 8 modules)
-├── /python/              # ML processing scripts
-├── /src/                 # Modular backend (routes, services, middleware)
-├── /docs/                # Comprehensive documentation
-├── server.js             # Express backend entry point
-├── CLAUDE.md             # AI assistant guide
-└── README.md             # This file
-```
-
----
-
-## 🆘 Troubleshooting
-
-**Port already in use:**
 ```bash
-PORT=3001 npm start
+node manageUsers.js list-pending
+node manageUsers.js approve <username>
 ```
 
-**CUDA out of memory:**
-- Reduce batch size or patch size in training configuration
+`node manageUsers.js` without arguments lists all commands (reject, remove,
+reset-password, ban-email, ...).
 
-**File upload fails:**
-- Check file size limit (default: 200MB)
-- Verify TIFF format compatibility
+### Common commands
 
-**For more help:** See [Troubleshooting Guide](docs/guides/TROUBLESHOOTING.md)
+```bash
+npm run dev             # development mode with auto-reload (nodemon)
+PORT=3001 npm start     # custom port
+HOST=0.0.0.0 npm start  # listen on all interfaces (default is 127.0.0.1)
+```
 
----
-
-## 📊 Project Status
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1 | ✅ Complete | Classic version foundation |
-| Phase 2 | ✅ Complete | Workspace & module system |
-| Phase 3 | ✅ Complete | File browser & workspace management |
-| Phase 4 | ✅ Complete | Additional modules & platform polish |
-| Phase 5 | 📋 Planned | Batch processing & model zoo |
-
-See [Roadmap](docs/vision/ROADMAP.md) for detailed plan.
+For a production setup (nginx, PM2, HTTPS) see the
+[deployment guide](docs/guides/DEPLOYMENT.md).
 
 ---
 
-## 📄 License
+## Project structure
 
-MIT License
+```
+server.js              Express entry point
+WorkspaceManager.js    Workspace, file and provenance management
+manageUsers.js         User administration CLI
+src/                   Backend: routes, services, middleware, sockets, config
+public/
+  workspace/           Workspace frontend (vanilla JS modules, help content)
+  classic/             Legacy linear workflow
+python/                Processing scripts called by the server
+  vendor/              Vendored AutoStructN2V v1.0
+test_data/             Sample stacks seeded into new workspaces
+docs/                  Architecture, reference, guides and ADRs
+```
 
 ---
 
-## 🔗 Links
+## Documentation
 
-- **Documentation**: [docs/INDEX.md](docs/INDEX.md)
-- **Architecture**: [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md)
-- **Session Logs**: [docs/sessions/INDEX.md](docs/sessions/INDEX.md)
-- **GitHub**: https://github.com/lucasfortune/viz_app
+- **User documentation:** [the-virtual-parasite docs site](https://lucasfortune.github.io/the-virtual-parasite/workspace/)
+- **Developer documentation:** [docs/INDEX.md](docs/INDEX.md), including the
+  [architecture overview](docs/architecture/OVERVIEW.md),
+  [API reference](docs/reference/API_ENDPOINTS.md),
+  [module creation guide](docs/guides/MODULE_CREATION.md) and
+  [troubleshooting guide](docs/guides/TROUBLESHOOTING.md)
+- **Design decisions:** twelve architecture decision records in
+  [docs/decisions/](docs/decisions/)
 
 ---
 
-**Last Updated:** 2026-01-04 | **Current Version:** Phase 4 Complete
+## Related projects
+
+- [AutoStructN2V](https://github.com/lucasfortune/asn2v): structured-noise-aware
+  self-supervised denoising, used by the Deep Learning Denoising module
+- [PhantEM](https://github.com/lucasfortune/phantem): synthetic benchmark
+  generation for electron microscopy denoising
+
+---
+
+## License
+
+The source code is released under the [BSD 3-Clause License](LICENSE).
+
+The vendored AutoStructN2V package is distributed under its own BSD 3-Clause
+license ([python/vendor/autoStructN2V_LICENSE](python/vendor/autoStructN2V_LICENSE)).
+The Physics of Parasitism and DFG logos in `public/imgs/` are not covered by
+the license and remain the property of their respective owners.
+
+## Acknowledgements
+
+Developed within the DFG priority programme SPP 2332 "Physics of Parasitism".
+The public instance runs on de.NBI cloud infrastructure.

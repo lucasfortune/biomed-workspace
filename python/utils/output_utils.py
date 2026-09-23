@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Output Utilities - Standardized output patterns for viz_app Python scripts.
+Output Utilities - Standardized output patterns for BioMed Workspace Python scripts.
 
 Provides consistent output formatting for progress updates, results, and errors.
 These formats are parsed by the Node.js backend to emit Socket.IO events.

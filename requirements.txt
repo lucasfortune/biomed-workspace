@@ -1,4 +1,4 @@
-# Biomedical Image Segmentation Visualizer - Python Dependencies
+# BioMed Workspace - Python Dependencies
 
 # Core deep learning framework
 # NOTE: Install PyTorch manually BEFORE running pip install -r requirements.txt
