@@ -65,7 +65,7 @@ Exported from `/public/workspace/js/core/components/index.js`:
 | SliceViewerChrome | Shared slice-viewer header / slider / footer |
 
 The help-panel components in the same directory (`InfoPanel`, `InfoArticle`,
-`InfoGlossary`, `InfoSearch`) are loaded as classic `<script>` tags by
+`InfoGlossary`, `InfoSearch`) are loaded as plain (non-module) `<script>` tags by
 `workspace/index.html`, and `ResumeDialog` is dynamically imported by
 `workspace.js`; none of them are exported from the index.
 

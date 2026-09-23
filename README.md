@@ -53,9 +53,6 @@ Across all modules:
   retained for 48 hours after last activity, and users keep their work as ZIP
   archives.
 
-The original linear workflow (the "Classic" version) is still served at
-`/classic` for existing users but is no longer developed.
-
 ---
 
 ## Running your own instance
@@ -133,7 +130,7 @@ manageUsers.js         User administration CLI
 src/                   Backend: routes, services, middleware, sockets, config
 public/
   workspace/           Workspace frontend (vanilla JS modules, help content)
-  classic/             Legacy linear workflow
+  *.html, js/, css/    Login, registration and admin pages
 python/                Processing scripts called by the server
   vendor/              Vendored AutoStructN2V v1.0
 test_data/             Sample stacks seeded into new workspaces

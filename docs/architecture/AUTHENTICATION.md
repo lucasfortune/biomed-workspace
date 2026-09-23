@@ -64,7 +64,7 @@ This document describes the authentication and authorization architecture of the
 │  Tier 1: requireAuth (Basic Authentication)                │
 │  ├─ Allows: Logged-in users (pending OR approved)          │
 │  ├─ Use case: View interface, use test data                │
-│  └─ Protected: /app, /workspace, /classic, etc.            │
+│  └─ Protected: /workspace, most API endpoints              │
 │                                                             │
 │  Tier 2: requireApproved (Full Access)                     │
 │  ├─ Allows: Approved users (status === 'active')           │
@@ -115,10 +115,7 @@ function requireAuth(req, res, next) {
 - ❌ Rejected users (can't log in)
 
 **Protected Routes:**
-- `GET /app` - Classic version
-- `GET /classic` - Classic version
-- `GET /workspace` - Workspace version
-- `GET /check-auth` - Auth status check
+- `GET /workspace` - Workspace application
 - `/workspaces/:sessionId/uploads/*`, `/workspaces/:sessionId/results/*` - Session-scoped workspace file serving (session ownership verified; there are no unauthenticated `/uploads`, `/results` or `/models` mounts)
 - Most API endpoints
 

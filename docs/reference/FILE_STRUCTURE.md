@@ -11,7 +11,7 @@ This document provides a comprehensive overview of the project's file structure,
 
 ## Overview
 
-The project uses a **dual-version architecture** with separate directories for Classic and Workspace versions, sharing a common backend.
+The project consists of a single frontend, the modular **Workspace** (`public/workspace/`), plus a few standalone authentication and admin pages, all served by a modular Express backend (`src/`) that drives a Python ML pipeline (`python/`).
 
 ---
 
@@ -20,9 +20,9 @@ The project uses a **dual-version architecture** with separate directories for C
 ```
 biomed-workspace/
 ├── docs/                    # Documentation (comprehensive)
-├── public/                  # Frontend code (dual version)
+├── public/                  # Frontend code (Workspace + auth pages)
 ├── src/                     # MODULAR BACKEND (routes, services, middleware)
-├── python/                  # ML scripts (shared by both versions)
+├── python/                  # ML scripts (spawned by the backend)
 ├── utils/                   # Shared utilities (logger, env loader)
 ├── test_data/               # Built-in sample datasets (seeded into new workspaces)
 ├── workspaces/              # Per-session workspaces (ALL user data; under DATA_DIR)
@@ -70,7 +70,7 @@ docs/
 │   ├── OVERVIEW.md          # Architecture overview
 │   ├── AUTHENTICATION.md    # Auth & session design
 │   ├── STATE_ARCHITECTURE.md# Server/client state design
-│   └── DUAL_VERSION_DESIGN.md# Classic vs Workspace design
+│   └── MODULE_ARCHITECTURE.md# Module system design
 └── decisions/               # Architecture decision records (ADR-001 to ADR-012)
 ```
 
@@ -85,28 +85,33 @@ docs/
 
 ## Frontend (`public/`)
 
-**Purpose:** Client-side code for both application versions
+**Purpose:** Client-side code: the Workspace application and the standalone auth/admin pages
 
 ```
 public/
-├── welcome.html             # Landing page (version selection)
-├── login.html               # Login page
+├── welcome.html             # Landing page with login form (served at /)
 ├── register.html            # Registration page
 ├── admin.html               # Admin dashboard
+├── favicon.svg              # Site icon
 │
-├── classic/                 # Classic version (Phase 0, stable)
-│   ├── index.html           # Classic app entry
-│   ├── js/
-│   │   ├── app.js           # Main controller
-│   │   ├── training.js      # Training logic
-│   │   ├── inference.js     # Inference logic
-│   │   ├── visualization.js # 3D visualization (Three.js)
-│   │   ├── socket.js        # Socket.IO connection
-│   │   └── fileUpload.js    # File upload handling
-│   └── css/
-│       └── style.css        # Classic styles
+├── js/                      # Scripts for the standalone pages
+│   ├── welcome.js           # Login, theme toggle, launch link
+│   ├── register.js          # Registration form
+│   ├── admin.js             # Admin dashboard logic
+│   ├── privacy-policy.js    # Privacy policy modal
+│   └── utils.js             # Shared helpers (e.g. HTML escaping)
 │
-└── workspace/               # Workspace version (10 modules)
+├── css/                     # Styles for the standalone pages
+│   ├── base.css             # Reset and base styles (register, admin)
+│   ├── components.css       # Shared UI components (register, admin)
+│   ├── auth.css             # Registration form
+│   ├── welcome.css          # Welcome page
+│   ├── admin.css            # Admin dashboard
+│   └── privacy-policy.css   # Privacy policy modal
+│
+├── imgs/                    # Logos (pop_logo.svg, pop_transpBG.svg, dfg_transpBG.svg)
+│
+└── workspace/               # Workspace application (10 modules)
     ├── index.html           # Workspace entry
     ├── js/
     │   ├── workspace.js     # Main controller
@@ -147,22 +152,23 @@ public/
     │       ├── imageviewer/       # TIFF stack gallery
     │       └── template/          # Module starter template
     ├── css/
-    │   └── workspace.css          # Workspace styling (light/dark mode)
+    │   ├── workspace.css          # Workspace styling (light/dark mode)
+    │   └── info-panel.css         # Help panel styling
     └── content/                   # Help system content
         └── modules/               # Module-specific help articles
 ```
 
-**Classic vs Workspace:**
+**Workspace at a glance:**
 
-| Aspect | Classic | Workspace |
-|--------|---------|-----------|
-| **Status** | Stable, complete | Active (v1.5.0) |
-| **UI Pattern** | Single-page linear workflow | Multi-module IDE-like |
-| **State** | Local variables | Centralized StateManager |
-| **Modules** | Monolithic | 10 modules (+ template), dynamic loading |
-| **Entry Point** | `/classic` | `/workspace` |
-| **File Structure** | Flat `/classic/js/` | Nested `/workspace/js/modules/` |
-| **Features** | Segmentation only | Segmentation, Denoising, Annotation, Mesh, Visualization |
+| Aspect | Workspace |
+|--------|-----------|
+| **Status** | Active (v1.5.0) |
+| **UI Pattern** | Multi-module, IDE-like |
+| **State** | Centralized StateManager |
+| **Modules** | 10 modules (+ template), dynamic loading |
+| **Entry Point** | `/workspace` |
+| **File Structure** | Nested `/workspace/js/modules/` |
+| **Features** | Image viewer, preprocessing, denoising, annotation, segmentation, segmentation cleanup, stitching, mesh, 3D visualization |
 
 ---
 
@@ -329,9 +335,7 @@ See [Python Integration Reference](PYTHON_INTEGRATION.md) for detailed protocol 
 ```
 test_data/
 ├── trypB_testData_training.tif      # Raw images (seeded as sample_raw.tif)
-├── trypB_testData_annotations.tif   # Annotation masks (seeded as sample_annotation.tif)
-├── trypB_testData_denoising.tif     # Denoising sample
-└── trypB_testData_inference.tif     # Inference sample
+└── trypB_testData_annotations.tif   # Annotation masks (seeded as sample_annotation.tif)
 ```
 
 **Usage:**
@@ -685,8 +689,8 @@ const modelPath = path.join(DATA_PATHS.workspaces, sessionId, 'models', 'segment
 ```javascript
 // Relative to public/ directory
 '/workspace/js/core/StateManager.js'
-'/classic/js/app.js'
-'/css/workspace.css'
+'/workspace/css/workspace.css'
+'/js/welcome.js'
 
 // API calls
 fetch('/api/workspace/init', ...)

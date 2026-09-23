@@ -95,17 +95,16 @@ This guide covers testing strategies for the Biomedical Image Processing Workspa
 
 ### Built-in Test Data
 
-The application includes test data in `test_data/` directory:
+Two sample stacks in `test_data/` are copied into every new workspace:
 
-| File | Purpose | Size | Details |
-|------|---------|------|---------|
-| `trypB_testData_training.tif` | Training images | ~50 MB | 100 slices, 512x512, 8-bit |
-| `trypB_testData_annotations.tif` | Training annotations | ~50 MB | 100 slices, 512x512, 8-bit, 3 classes |
-| `trypB_testData_inference.tif` | Inference images | ~50 MB | 100 slices, 512x512, 8-bit |
+| File | Appears in the workspace as | Details |
+|------|-----------------------------|---------|
+| `trypB_testData_training.tif` | `sample_raw.tif` | 23 slices, 256x256, 8-bit |
+| `trypB_testData_annotations.tif` | `sample_annotation.tif` | 23 slices, 256x256, 8-bit, 3 classes |
 
 **Usage:**
 - Available to all users (including pending approval)
-- Accessible via "Use Test Data" buttons in UI
+- Selected like any other workspace file in the module file selectors
 - Validates entire pipeline without custom uploads
 
 ### Custom Test Data
@@ -272,12 +271,12 @@ redis-cli
 
 ### 2. File Upload & Validation
 
-**Classic Version Upload:**
-- [ ] Navigate to `/classic`
-- [ ] Click "Upload Training Data"
-- [ ] Select training TIFF (8-bit, 100 slices)
-- [ ] Select annotation TIFF (8-bit, 3 classes, same dimensions)
-- [ ] Upload
+**Workspace Upload (Segmentation Module):**
+- [ ] Navigate to `/workspace`
+- [ ] Launch the "U-Net Segmentation" module
+- [ ] Expand "Train from Scratch"
+- [ ] Upload training TIFF (8-bit, 100 slices) via the "Raw Images" file selector
+- [ ] Upload annotation TIFF (8-bit, 3 classes, same dimensions) via the "Annotations" file selector
 - [ ] Verify progress indicator
 - [ ] Verify validation success message
 - [ ] Check session storage: Uploaded file paths stored
@@ -306,7 +305,7 @@ redis-cli
 
 **Large File Upload (500 MB):**
 - [ ] Create or use 500 MB TIFF
-- [ ] Upload via Classic
+- [ ] Upload via a Workspace file selector
 - [ ] Monitor progress bar (should update during upload)
 - [ ] Verify upload completes successfully
 - [ ] Check nginx access log for 200 status
@@ -500,14 +499,15 @@ redis-cli
 2. **Login:**
    - [ ] Navigate to `/login`
    - [ ] Login as approved user
-   - [ ] Verify redirected to `/`
+   - [ ] Verify redirected to `/workspace`
 
-3. **Select Version:**
-   - [ ] Click "Launch Classic"
-   - [ ] Verify Classic UI loads
+3. **Open Segmentation Module:**
+   - [ ] Click "Launch Module" on the "U-Net Segmentation" card
+   - [ ] Verify the segmentation module UI loads
 
-4. **Upload Test Data:**
-   - [ ] Click "Use Test Data" (training)
+4. **Select Test Data:**
+   - [ ] Expand "Train from Scratch"
+   - [ ] Select the built-in sample training and annotation files (seeded into every workspace) in the "Raw Images" and "Annotations" selectors
    - [ ] Verify validation success
    - [ ] Verify training/annotation file info displayed
 
@@ -522,25 +522,23 @@ redis-cli
    - [ ] Wait for completion (~5 minutes)
    - [ ] Verify success message
 
-7. **Upload Inference Data:**
-   - [ ] Click "Use Test Data" (inference)
-   - [ ] Verify validation success
+7. **Select Inference Data:**
+   - [ ] Select the sample inference file in the "Inference Data" selector
+   - [ ] Verify no compatibility warnings
 
 8. **Run Inference:**
-   - [ ] Click "Run Inference"
+   - [ ] Click "Run Segmentation"
    - [ ] Monitor progress (~2 minutes)
    - [ ] Verify completion
 
-9. **View Visualization:**
-   - [ ] Click "View 3D Visualization"
-   - [ ] Verify point cloud renders
-   - [ ] Test camera controls (rotate, zoom, pan)
-   - [ ] Toggle original data overlay
-   - [ ] Filter classes
+9. **View Results:**
+   - [ ] Click "Open in Image Viewer"
+   - [ ] Verify the segmentation result displays
+   - [ ] Optionally open the result in the "3D Visualization" module and test camera controls (rotate, zoom, pan)
 
 10. **Cleanup:**
-    - [ ] Click "Reset Session"
-    - [ ] Verify reset success
+    - [ ] Click "Start New Run"
+    - [ ] Verify the module returns to step 1
     - [ ] Logout
 
 **Expected Result:** Entire workflow completes without errors in ~15 minutes.
@@ -559,9 +557,9 @@ redis-cli
    - [ ] Login as approved user
 
 3. **Upload Custom Training Data:**
-   - [ ] Navigate to `/classic`
-   - [ ] Click "Upload Training Data"
-   - [ ] Select custom files
+   - [ ] Navigate to `/workspace` and launch the "U-Net Segmentation" module
+   - [ ] Expand "Train from Scratch"
+   - [ ] Upload custom files via the "Raw Images" and "Annotations" file selectors
    - [ ] Monitor upload progress (large files)
    - [ ] Verify validation success
 
@@ -601,10 +599,10 @@ redis-cli
 
 2. **Login:**
    - [ ] Login as approved user
-   - [ ] Navigate to `/classic`
+   - [ ] Navigate to `/workspace` and launch the "U-Net Segmentation" module
 
 3. **Import Model:**
-   - [ ] Click "Import Pretrained Model"
+   - [ ] Expand "Use Pretrained Model"
    - [ ] Upload `.pth` and `.json` files
    - [ ] Monitor validation
    - [ ] Verify success message
@@ -634,7 +632,7 @@ redis-cli
 ```bash
 # Measure page load time
 # Open DevTools > Network tab
-# Navigate to /classic
+# Navigate to /workspace
 # Check: DOMContentLoaded < 2s, Load < 5s
 
 # Measure API response time
@@ -1024,34 +1022,34 @@ describe('API Endpoints', () => {
 const { test, expect } = require('@playwright/test');
 
 test('complete segmentation workflow', async ({ page }) => {
-  // Login
-  await page.goto('http://localhost:3000/login');
-  await page.fill('#username', 'testuser');
-  await page.fill('#password', 'password123');
-  await page.click('button[type="submit"]');
+  // Login (the welcome page at / hosts the login form)
+  await page.goto('http://localhost:3000/');
+  await page.fill('#loginUsername', 'testuser');
+  await page.fill('#loginPassword', 'password123');
+  await page.click('#loginForm button[type="submit"]');
+  await page.waitForURL('**/workspace');
 
-  // Navigate to Classic
-  await page.click('a[href="/classic"]');
+  // Launch the U-Net Segmentation module from the hub
+  await page.click('[data-module-id="segmentation"] .btn-launch');
 
-  // Upload test data
-  await page.click('button:has-text("Use Test Data")');
-  await expect(page.locator('.validation-success')).toBeVisible();
+  // Step 1: Train from Scratch with raw images + annotations
+  await page.click('.workflow-header[data-workflow="train"]');
+  // ...select files in the "Raw Images" and "Annotations" selectors
+  await expect(page.locator('#step1Next')).toBeEnabled();
+  await page.click('#step1Next');
 
-  // Start training
-  await page.click('button:has-text("Start Training")');
-  await expect(page.locator('.training-progress')).toBeVisible();
+  // Step 2: keep the default configuration
+  await page.click('#step2Next');
 
-  // Wait for completion (with timeout)
-  await page.waitForSelector('.training-complete', { timeout: 600000 });
+  // Step 3: train and wait for completion (with timeout)
+  await page.click('#startTrainingBtn');
+  await expect(page.locator('#trainingNextBtn')).toBeEnabled({ timeout: 600000 });
+  await page.click('#trainingNextBtn');
 
-  // Run inference
-  await page.click('button:has-text("Use Test Data")');
-  await page.click('button:has-text("Run Inference")');
-  await page.waitForSelector('.inference-complete', { timeout: 300000 });
-
-  // View visualization
-  await page.click('button:has-text("View 3D Visualization")');
-  await expect(page.locator('canvas')).toBeVisible();
+  // Step 4: select inference data and run segmentation
+  // ...select a file in the "Inference Data" selector
+  await page.click('#runInferenceBtn');
+  await expect(page.locator('#inferenceCompletionSection')).toBeVisible({ timeout: 300000 });
 });
 ```
 
@@ -1124,7 +1122,7 @@ cookie: { maxAge: 60000 } // 1 minute
 
 **Setup:**
 1. Create or download 500 MB TIFF
-2. Upload via Classic version
+2. Upload via a Workspace file selector
 3. Monitor progress
 
 **Expected:**

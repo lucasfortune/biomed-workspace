@@ -427,8 +427,8 @@
 
 /* ============================================
    INFERENCE PROGRESS INSIDE THE LOADING OVERLAY
-   The overlay is appended to <body> (BaseModule.showLoading / classic
-   utils.js), i.e. outside .segmentation-module, so this fallback block
+   The overlay is appended to <body> (BaseModule.showLoading),
+   i.e. outside .segmentation-module, so this fallback block
    carries its own module-namespaced class instead.
    ============================================ */
 

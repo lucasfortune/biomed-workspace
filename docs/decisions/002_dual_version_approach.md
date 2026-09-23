@@ -1,9 +1,12 @@
 # ADR-002: Dual Version Approach (Classic + Workspace)
 
 **Date:** 2024-06-01 (Estimated - Phase 2 planning)
-**Status:** Accepted
+**Status:** Superseded (the Classic version was removed in 1.5.1; the Workspace is the only frontend)
 **Deciders:** Development Team, Product Owner
 **Tags:** architecture, migration-strategy, user-experience, modularity
+
+> **Superseded.** This record is kept for history. The Classic version it
+> describes was removed from the codebase in release 1.5.1.
 
 ---
 

@@ -934,43 +934,42 @@ this.state.subscribe('modules.segmentation.output', (output) => {
 
 ## Integration Patterns
 
-### Pattern 1: Wrap Existing Code
+### Pattern 1: Reuse Existing Code
 
-**Use Case:** Migrate Classic version functionality to Workspace module
+**Use Case:** A new module needs functionality that another module already implements (e.g. painting tools, canvas handling, undo history)
 
 **Strategy:**
-- Keep existing functions separate
-- Module calls existing functions
+- Keep the existing classes in their home module
+- Import them directly by absolute path
 - Minimal refactoring
 
 **Example:**
 ```javascript
-// Existing classic code (app.js)
-function uploadTrainingData(formData) {
-  // ... existing logic ...
-}
+// Segmentation Cleanup module reuses the Annotation module's painting utilities
+import BaseModule from '/workspace/js/core/BaseModule.js';
+import AnnotationCanvas from '/workspace/js/modules/annotation/utils/AnnotationCanvas.js';
+import BrushEngine from '/workspace/js/modules/annotation/utils/BrushEngine.js';
+import HistoryManager from '/workspace/js/modules/annotation/utils/HistoryManager.js';
 
-// Segmentation module (wraps existing)
-class SegmentationModule {
-  async activate() {
-    this.render();
-  }
-
-  handleUpload() {
-    // Call existing function
-    uploadTrainingData(this.formData);
+class SegcleanupModule extends BaseModule {
+  async enterEditStep() {
+    if (!this.canvas) {
+      this.canvas = new AnnotationCanvas(this.chrome.area);
+      this.brushEngine = new BrushEngine(this.canvas);
+      this.historyManager = new HistoryManager();
+    }
   }
 }
 ```
 
 **Advantages:**
-- Fast migration
-- Low risk
-- Code reuse
+- Fast to build
+- Low risk (reused code is already tested)
+- Consistent behavior across modules
 
 **Disadvantages:**
-- Not fully modular
-- May have dependencies on global state
+- Creates a dependency between modules
+- Changes to the shared classes must be checked in every consumer
 
 ---
 
@@ -1331,7 +1330,6 @@ deactivate() {
 
 - [Architecture Overview](OVERVIEW.md) - System-wide architecture
 - [State Architecture](STATE_ARCHITECTURE.md) - State management patterns
-- [Dual Version Design](DUAL_VERSION_DESIGN.md) - Classic vs Workspace
 
 ### Reference
 

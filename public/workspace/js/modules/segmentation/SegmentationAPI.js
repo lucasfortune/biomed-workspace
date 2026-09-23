@@ -167,7 +167,7 @@ class SegmentationAPI {
   // ============================================================================
 
   /**
-   * Import pre-trained model (classic file upload)
+   * Import pre-trained model (direct file upload)
    * @param {File} modelFile - .pth model file
    * @param {File} configFile - .json config file
    */

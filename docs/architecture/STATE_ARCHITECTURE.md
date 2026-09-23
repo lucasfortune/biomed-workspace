@@ -1148,7 +1148,6 @@ Session Expires (48 h after last activity)
 
 - [Architecture Overview](OVERVIEW.md) - System-wide architecture
 - [Module Architecture](MODULE_ARCHITECTURE.md) - Module system design
-- [Dual Version Design](DUAL_VERSION_DESIGN.md) - Classic vs Workspace
 
 ### Reference
 
@@ -1167,7 +1166,7 @@ Session Expires (48 h after last activity)
 ---
 
 **Navigation:**
-← [Dual Version Design](DUAL_VERSION_DESIGN.md) | [Architecture Docs](.) | [Module Architecture](MODULE_ARCHITECTURE.md) →
+← [Architecture Overview](OVERVIEW.md) | [Architecture Docs](.) | [Module Architecture](MODULE_ARCHITECTURE.md) →
 
 ---
 

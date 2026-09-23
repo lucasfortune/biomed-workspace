@@ -22,8 +22,7 @@ This document provides comprehensive documentation for all HTTP endpoints in the
 | [Admin API](#admin-api-endpoints) | User management, logs, session monitoring |
 | [Main Routes](#main-routes) | Page serving and static file routes |
 | [ML Pipeline - Training](#ml-pipeline-training-endpoints) | Upload data, configure training, start training |
-| [ML Pipeline - Inference](#ml-pipeline-inference-endpoints) | Run inference, import models, download results |
-| [Session Management](#session-management-endpoints) | Session reset and cleanup |
+| [ML Pipeline - Inference](#ml-pipeline-inference-endpoints) | Upload inference data, import models, run inference, download results |
 
 ---
 
@@ -210,7 +209,7 @@ Destroy current session and log out user.
 
 - Destroys Express session
 - Clears session cookie
-- Does not delete uploaded files or models (use `/reset-session` for that)
+- Deletes the workspace only when `deleteWorkspace: true` is sent; otherwise its files expire under the 48-hour retention policy
 
 ---
 
@@ -1151,7 +1150,7 @@ These routes serve HTML pages and static files.
 
 ### GET /
 
-Serve welcome page (landing page for version selection).
+Serve welcome page (landing page with login form).
 
 **Authentication:** None
 **Status:** ✅ Stable
@@ -1164,26 +1163,6 @@ Serve welcome page (landing page for version selection).
 #### Response
 
 Serves `public/welcome.html`
-
----
-
-### GET /classic
-
-Serve classic application interface.
-
-**Authentication:** `requireAuth`
-**Status:** ✅ Stable
-
-#### Request
-
-**Method:** `GET`
-**Endpoint:** `/classic`
-
-#### Response
-
-Serves `public/classic/index.html`
-
-**Note:** Requires authentication. Redirects to login if not authenticated.
 
 ---
 
@@ -1209,7 +1188,7 @@ Serves `public/workspace/index.html`
 
 ### GET /login
 
-Serve login page.
+Legacy login URL.
 
 **Authentication:** None
 **Status:** ✅ Stable
@@ -1221,7 +1200,7 @@ Serve login page.
 
 #### Response
 
-Serves `public/login.html`
+Redirects to `/` (the login form lives on the welcome page)
 
 ---
 
@@ -1263,43 +1242,9 @@ Serves `public/admin.html`
 
 ---
 
-### GET /test_data/:filename
-
-Serve test data files.
-
-**Authentication:** `requireAuth`
-**Status:** ✅ Stable
-
-#### Request
-
-**Method:** `GET`
-**Endpoint:** `/test_data/:filename`
-
-**Path Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| filename | string | Yes | Name of test data file |
-
-**Available Files:**
-- `trypB_testData_training.tif`
-- `trypB_testData_annotations.tif`
-- `trypB_testData_inference.tif`
-
-#### Response
-
-**Success (200 OK):** Sends TIFF file
-
-**Error (404):**
-```
-Test file not found
-```
-
----
-
 ## ML Pipeline: Training Endpoints
 
-These endpoints handle the training workflow in the classic application.
+These endpoints handle the training workflow of the Workspace segmentation module.
 
 ### POST /upload-data
 
@@ -1603,7 +1548,7 @@ Get current status of training session.
 
 ## ML Pipeline: Inference Endpoints
 
-These endpoints handle inference and model import.
+These endpoints handle inference and model import for the Workspace segmentation module.
 
 ### POST /upload-inference
 
@@ -1757,51 +1702,6 @@ const response = await fetch('/import-pretrained-model', {
 - Model file must be `.pth` (PyTorch state dict)
 - Config file must be `.json` with required fields
 - Config must match model architecture
-
----
-
-### GET /verify-imported-model
-
-Verify imported model is still valid in session.
-
-**Authentication:** None
-**Status:** ✅ Stable
-
-#### Request
-
-**Method:** `GET`
-**Endpoint:** `/verify-imported-model`
-
-#### Response
-
-**Success (200 OK):**
-```javascript
-{
-  "success": true,
-  "modelInfo": {
-    "model_size": "50.2 MB",
-    "config": {
-      "features": 32,
-      "num_layers": 4,
-      "num_classes": 3
-    }
-  }
-}
-```
-
-**Error Responses:**
-
-| Status | Condition | Response |
-|--------|-----------|----------|
-| 400 | No imported model | `{ success: false, error: "No valid imported model found in session" }` |
-| 400 | Files deleted | `{ success: false, error: "Imported model files no longer exist" }` |
-| 500 | Server error | `{ success: false, error: "Server error during model verification" }` |
-
-#### Behavior
-
-- Checks `req.session.importedModel`
-- Verifies files still exist on disk
-- Does not re-validate model structure
 
 ---
 
@@ -2081,72 +1981,6 @@ Serve downsampled original data for visualization overlay.
 - Downsampled data generated during inference by Python script
 - Used for "Original Data Overlay" toggle in 3D visualization
 - File is much smaller than original (downsampled for web performance)
-
----
-
-## Session Management Endpoints
-
-### POST /reset-session
-
-> **Removed.** This endpoint no longer exists on the server; the section is
-> kept for reference only. Workspace files are now cleared through the
-> workspace endpoints and the 48-hour retention policy (ADR-012).
-
-Reset session and delete all associated files.
-
-**Authentication:** `requireAuth`
-**Status:** ❌ Removed
-
-#### Request
-
-**Method:** `POST`
-**Endpoint:** `/reset-session`
-
-#### Response
-
-**Success (200 OK):**
-```javascript
-{
-  "success": true,
-  "message": "Session reset successfully",
-  "cleanupSummary": {
-    "trainingSessions": 2,
-    "inferenceSessions": 1
-  }
-}
-```
-
-**Error (500):**
-```javascript
-{
-  "success": false,
-  "error": "Failed to destroy session"
-}
-```
-
-#### Behavior
-
-**Cleanup Actions:**
-1. Deletes `workspaces/<sessionId>/uploads/` directory
-2. Deletes `workspaces/<sessionId>/models/` directory
-3. Deletes `outputs/<sessionId>/` directory
-4. Deletes all `results/<trainingId>/` directories for this session
-5. Deletes inference results directories
-6. Removes training sessions from `trainingSessions` Map
-7. Removes inference sessions from `inferenceSessions` Map
-8. Destroys Express session
-
-**Cleanup is comprehensive:**
-- All uploaded files deleted
-- All trained models deleted
-- All inference results deleted
-- All in-memory session data removed
-- Session cookie cleared
-
-**Use Cases:**
-- User wants to start fresh
-- Clean up before logout
-- Testing and development
 
 ---
 

@@ -16,7 +16,7 @@
  * ```
  *
  * The help-panel components (InfoPanel, InfoArticle, InfoGlossary, InfoSearch)
- * live in this directory too but are loaded as classic <script> tags from
+ * live in this directory too but are loaded as plain (non-module) <script> tags from
  * workspace/index.html, and ResumeDialog is dynamically imported by
  * workspace.js - none of them go through this index.
  */

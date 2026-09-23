@@ -31,13 +31,6 @@ function createStaticRoutes(dependencies) {
   });
 
   /**
-   * Main app redirect (legacy)
-   */
-  router.get('/app', requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, '../../public', 'index.html'));
-  });
-
-  /**
    * Login page - redirect to welcome page (legacy login.html removed)
    */
   router.get('/login', (req, res) => {
@@ -56,13 +49,6 @@ function createStaticRoutes(dependencies) {
    */
   router.get('/admin', requireAdmin, (req, res) => {
     res.sendFile(path.join(__dirname, '../../public', 'admin.html'));
-  });
-
-  /**
-   * Classic segmentation app
-   */
-  router.get('/classic', requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, '../../public', 'classic', 'index.html'));
   });
 
   /**

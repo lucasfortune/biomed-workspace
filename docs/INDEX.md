@@ -27,7 +27,6 @@ to that site automatically.
 | [Module Architecture](architecture/MODULE_ARCHITECTURE.md) | Module system and `BaseModule` |
 | [State Architecture](architecture/STATE_ARCHITECTURE.md) | State management patterns |
 | [Authentication](architecture/AUTHENTICATION.md) | Sessions, accounts and admin approval |
-| [Dual Version Design](architecture/DUAL_VERSION_DESIGN.md) | Workspace vs. the legacy Classic version |
 
 ## Reference
 
@@ -48,7 +47,7 @@ A starting point for new modules is the template in
 | ADR | Title |
 |---|---|
 | [ADR-001](decisions/001_vanilla_js_over_framework.md) | Vanilla JS over a framework |
-| [ADR-002](decisions/002_dual_version_approach.md) | Dual version approach |
+| [ADR-002](decisions/002_dual_version_approach.md) | Dual version approach (superseded) |
 | [ADR-003](decisions/003_session_based_isolation.md) | Session-based isolation |
 | [ADR-004](decisions/004_module_system_design.md) | Module system design |
 | [ADR-005](decisions/005_design_system_color_scheme.md) | Design system and color scheme |

@@ -662,45 +662,6 @@ function createMLRoutes(dependencies) {
     }
   });
 
-  /**
-   * Verify imported model
-   * GET /verify-imported-model
-   */
-  router.get('/verify-imported-model', (req, res) => {
-    try {
-      const importedModel = req.session.importedModel;
-
-      if (!importedModel || !importedModel.validated) {
-        return res.status(400).json({
-          success: false,
-          error: 'No valid imported model found in session'
-        });
-      }
-
-      if (!fs.existsSync(importedModel.modelPath) || !fs.existsSync(importedModel.configPath)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Imported model files no longer exist'
-        });
-      }
-
-      res.json({
-        success: true,
-        modelInfo: {
-          model_size: importedModel.validation.model_size,
-          config: importedModel.validation.config
-        }
-      });
-
-    } catch (error) {
-      if (logger) logger.error('Error verifying imported model:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Server error during model verification'
-      });
-    }
-  });
-
   // ===========================================================================
   // SEGMENTATION MODEL IMPORT (Workspace Workflow)
   // ===========================================================================

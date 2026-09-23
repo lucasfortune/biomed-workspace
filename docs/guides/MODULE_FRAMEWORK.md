@@ -23,7 +23,7 @@ The Module Framework provides a consistent structure for building workspace modu
 > the index used to export.
 >
 > The help-panel components in the same directory (`InfoPanel`, `InfoArticle`,
-> `InfoGlossary`, `InfoSearch`) are loaded as classic `<script>` tags by
+> `InfoGlossary`, `InfoSearch`) are loaded as plain (non-module) `<script>` tags by
 > `workspace/index.html`, and `ResumeDialog` is dynamically imported by
 > `workspace.js` - none of them are exported from the index.
 

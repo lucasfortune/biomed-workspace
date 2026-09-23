@@ -6,13 +6,13 @@
 
 ## Overview
 
-This guide will walk you through installing and running the application for the first time. You'll learn how to set up both the backend (Node.js + Python) and choose between the Classic or Workspace interface.
+This guide will walk you through installing and running the application for the first time. You'll learn how to set up the backend (Node.js + Python) and open the Workspace interface.
 
 By the end of this guide, you'll have:
 - A running server on `http://localhost:3000`
 - An admin user account
-- Access to both Classic and Workspace versions
-- Understanding of the dual-version architecture
+- Access to the Workspace
+- An overview of the Workspace module system
 
 ---
 
@@ -193,47 +193,27 @@ Creates the first admin user with full permissions. This user can approve other 
 
 3. **Login** with the admin credentials you just created
 
-4. **Choose a version:**
-   - **Workspace** (recommended): New modular interface
-   - **Classic**: Original linear workflow
+4. **You are redirected to the Workspace** (`/workspace`). When you are already logged in, the welcome page shows a "Launch Workspace" button instead.
 
 ---
 
-## Understanding the Dual-Version Architecture
+## Understanding the Workspace
 
-### Workspace Version (Recommended)
-**Best for:** Modular workflows, future expansion, modern UI
+**Best for:** Modular workflows, pipeline chaining, extensibility
 
 **Features:**
-- Module-based interface (currently: Segmentation)
+- Module-based interface (image viewer, preprocessing, denoising, annotation, U-Net segmentation, segmentation cleanup, stack stitching, mesh generation, 3D visualization)
 - IDE-like experience
 - State management system
 - Extensible architecture
 
-**Status:** Phase 2 Complete
-
-**Access:** Click "Launch Workspace" on welcome page
-
----
-
-### Classic Version (Stable)
-**Best for:** Traditional workflow, proven stability
-
-**Features:**
-- Linear 5-step workflow
-- All original functionality
-- Stable and tested
-- Complete ML pipeline
-
-**Status:** Fully functional, maintained
-
-**Access:** Click "Launch Classic App" on welcome page
+**Access:** Log in on the welcome page, or click "Launch Workspace" when already logged in
 
 ---
 
 ## Quick Test with Sample Data
 
-### Test the Workspace Version
+### Test the Workspace
 
 1. **Launch Workspace** from welcome page
 2. **Click "Segmentation" module** card
@@ -305,7 +285,7 @@ tail -f logs/activity.log
 
 ### Reset a Session
 1. Login as user
-2. Navigate to desired version
+2. Open the Workspace
 3. Click "Reset Session" (if available)
 
 **Command Line:**
@@ -321,8 +301,7 @@ After completing this guide, verify:
 - [ ] Server starts without errors
 - [ ] Can login with admin account
 - [ ] Can access welcome page
-- [ ] Can launch Workspace version
-- [ ] Can launch Classic version
+- [ ] Can launch the Workspace
 - [ ] Test data workflow completes successfully
 - [ ] 3D visualization renders correctly
 - [ ] Can logout and login again

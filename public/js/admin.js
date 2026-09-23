@@ -99,7 +99,7 @@ async function checkAdminAccess() {
         
         if (!data.user.isAdmin) {
             alert('Access denied. Admin privileges required.');
-            window.location.href = '/app';
+            window.location.href = '/workspace';
             return;
         }
         

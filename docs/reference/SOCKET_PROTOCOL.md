@@ -263,8 +263,8 @@ socket.on('training-complete', (data) => {
     // Hide progress UI
     hideProgressBar();
 
-    // Enable download button
-    document.getElementById('btn-download-model').disabled = false;
+    // Enable the "Next: Inference" button
+    document.getElementById('trainingNextBtn').disabled = false;
 
     // Show success message
     showNotification('Training complete!', 'success');
@@ -992,11 +992,11 @@ function testSocketConnection() {
 - [Troubleshooting](../guides/TROUBLESHOOTING.md) - Socket.IO connection issues
 
 **Implementation:**
-- Server: `server.js:1648-1668` (connection handlers)
-- Training emission: `server.js:1792-1849` (Python output parsing)
-- Inference emission: `server.js:1904-2073` (Python output parsing)
-- Client: `public/classic/js/socket.js` (Classic app)
-- Client: `public/workspace/js/modules/segmentation/` (Workspace app)
+- Server: `src/sockets/index.js` (connection handler), `src/sockets/training.socket.js` and `src/sockets/inference.socket.js` (segmentation room handlers)
+- Training emission: `src/services/TrainingService.js`, `src/helpers/pythonRunner.js` (Python output parsing)
+- Inference emission: `src/services/InferenceService.js`, `src/helpers/pythonRunner.js` (Python output parsing)
+- Client: `public/workspace/js/modules/segmentation/SegmentationModule.js` (socket connection and event listeners)
+- Client: `public/workspace/js/modules/segmentation/handlers/TrainingHandler.js` and `handlers/InferenceHandler.js` (room joins, progress handling)
 
 ---
 

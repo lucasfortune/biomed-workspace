@@ -64,7 +64,7 @@ class SegmentationModule extends BaseModule {
     this.importHandler = new ImportHandler(this);
     this.stateHandler = new StateHandler(this);
 
-    // Module-specific state (replaces global variables from classic app)
+    // Module-specific state
     this.socket = null;
     this.currentTrainingId = null;
     this.currentInferenceId = null;

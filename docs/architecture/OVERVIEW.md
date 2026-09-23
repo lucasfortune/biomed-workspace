@@ -8,7 +8,7 @@
 
 ## Introduction
 
-This document provides a high-level overview of the Biomedical Image Processing Workspace system architecture. It covers the dual-version architecture, core components, technology stack, data flow, and component relationships.
+This document provides a high-level overview of the Biomedical Image Processing Workspace system architecture. It covers the frontend architecture, core components, technology stack, data flow, and component relationships.
 
 ### What This Document Covers
 
@@ -27,7 +27,6 @@ This document provides a high-level overview of the Biomedical Image Processing 
 
 ### Related Documentation
 
-- [Dual Version Design](DUAL_VERSION_DESIGN.md) - Classic vs Workspace comparison
 - [State Architecture](STATE_ARCHITECTURE.md) - State management patterns
 - [Module Architecture](MODULE_ARCHITECTURE.md) - Module system design
 - [Authentication](AUTHENTICATION.md) - Auth system and permissions
@@ -45,18 +44,17 @@ The system follows a **client-server architecture** with real-time communication
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         FRONTEND                            │
-│  ┌──────────────┐                ┌──────────────┐          │
-│  │   Classic    │                │  Workspace   │          │
-│  │   Version    │                │   Version    │          │
-│  │              │                │              │          │
-│  │ - Linear UI  │                │ - Modular UI │          │
-│  │ - Three.js   │                │ - StateManager│         │
-│  │ - Direct API │                │ - ModuleLoader│         │
-│  └──────┬───────┘                └──────┬───────┘          │
-└─────────┼──────────────────────────────┼──────────────────┘
-          │                              │
-          │         HTTP/WebSocket        │
-          └──────────────┬───────────────┘
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Workspace (/workspace)                              │   │
+│  │                                                      │   │
+│  │  - Modular UI      - StateManager    - ModuleLoader  │   │
+│  │  - Processing modules and Three.js viewers           │   │
+│  │                                                      │   │
+│  │  Auth pages: welcome.html (/), register, admin       │   │
+│  └─────────────────────┬────────────────────────────────┘   │
+└────────────────────────┼────────────────────────────────────┘
+                         │
+                         │  HTTP/WebSocket
                          │
 ┌────────────────────────▼────────────────────────────────────┐
 │                BACKEND (Node.js - Modular)                  │
@@ -102,32 +100,24 @@ The system follows a **client-server architecture** with real-time communication
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Dual-Version Architecture
+### Frontend Architecture
 
-The application exists in **two parallel versions** serving different use cases:
-
-**Classic Version (`/public/classic/`):**
-- Linear, step-by-step workflow
-- Single-page application
-- Direct API integration
-- Status: **Stable, fully functional**
-- Best for: Simple segmentation workflows
-
-**Workspace Version (`/public/workspace/`):**
+The application has a **single frontend**, the Workspace (`/public/workspace/`, served at `/workspace`):
 - Modular, IDE-like interface
 - Module system with dynamic loading
 - Centralized state management
-- Status: **Phase 2 complete, segmentation module in progress**
-- Best for: Complex multi-module workflows
+- Processing modules (segmentation, denoising, annotation, preprocessing, stitching, mesh generation, visualization, and more)
 
-**Shared Components:**
+It is complemented by a small set of standalone pages for authentication and administration: `welcome.html` (login, served at `/`), `register.html`, and `admin.html`.
+
+**Backend components used by the frontend:**
 - Express backend (modular architecture in `/src/`)
 - Python ML pipeline
 - Session management
 - File storage system
 - Authentication system
 
-See [Dual Version Design](DUAL_VERSION_DESIGN.md) for detailed comparison.
+See [State Architecture](STATE_ARCHITECTURE.md) and [Module Architecture](MODULE_ARCHITECTURE.md) for details.
 
 ---
 
@@ -230,7 +220,7 @@ server.js (~160 lines)     → Entry point, service creation, startup
 ```
 
 **Responsibilities:**
-- Serve static files (both frontend versions)
+- Serve static files (Workspace and auth pages)
 - Handle authentication and sessions
 - Provide REST API (29 endpoints across route modules)
 - Manage Socket.IO rooms for real-time updates
@@ -241,40 +231,9 @@ See [API Endpoints](../reference/API_ENDPOINTS.md) for complete endpoint documen
 
 ---
 
-### 2. Classic Frontend (`/public/classic/`)
+### 2. Workspace Frontend (`/public/workspace/`)
 
-**Purpose:** Original linear workflow interface for biomedical image segmentation.
-
-**File Structure:**
-```
-/public/classic/
-├── index.html              # Main page
-├── /js/
-│   ├── app.js             # Main application controller
-│   ├── socket.js          # Socket.IO connection
-│   ├── training.js        # Training UI and charts
-│   ├── inference.js       # Inference UI and controls
-│   ├── visualization.js   # Three.js 3D visualization
-│   └── utils.js           # Utility functions
-└── /css/
-    └── styles.css         # Classic UI styling
-```
-
-**Workflow:**
-1. Upload training data (images + annotations)
-2. Configure training parameters
-3. Train U-Net model
-4. Upload inference data
-5. Run inference
-6. Visualize 3D results
-
-**Status:** Fully functional and stable.
-
----
-
-### 3. Workspace Frontend (`/public/workspace/`)
-
-**Purpose:** New modular interface with IDE-like module system.
+**Purpose:** Modular interface with an IDE-like module system; the application's only frontend.
 
 **File Structure:**
 ```
@@ -288,8 +247,9 @@ See [API Endpoints](../reference/API_ENDPOINTS.md) for complete endpoint documen
 │   │   └── WorkspaceAPI.js         # Backend API client
 │   └── /modules/
 │       ├── registry.js             # Module definitions
-│       └── segmentation/
-│           └── SegmentationModule.js
+│       ├── segmentation/           # One directory per module
+│       │   └── SegmentationModule.js
+│       └── ...                     # denoising, annotation, mesh, etc.
 └── /css/
     └── workspace.css               # Workspace styling
 ```
@@ -313,13 +273,11 @@ See [API Endpoints](../reference/API_ENDPOINTS.md) for complete endpoint documen
 - Category-based organization
 - Consistent error handling
 
-**Status:** Phase 2 complete, segmentation module in progress.
-
-See [Dual Version Design](DUAL_VERSION_DESIGN.md) for detailed comparison.
+**Auth and admin pages:** `welcome.html`, `register.html`, and `admin.html` live directly under `/public/`, with their scripts in `/public/js/` and styles in `/public/css/`.
 
 ---
 
-### 4. Python ML Scripts (`/python/`)
+### 3. Python ML Scripts (`/python/`)
 
 **Purpose:** Machine learning pipeline for TIFF validation, U-Net training, and inference.
 
@@ -343,7 +301,7 @@ See [Python Integration](../reference/PYTHON_INTEGRATION.md) for complete docume
 
 ---
 
-### 5. File Storage System
+### 4. File Storage System
 
 **Purpose:** Session-isolated file storage. There is no database: each
 session owns one workspace directory, described by a single manifest.
@@ -780,7 +738,6 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 
 ### Architecture Documentation
 
-- [Dual Version Design](DUAL_VERSION_DESIGN.md) - Classic vs Workspace
 - [State Architecture](STATE_ARCHITECTURE.md) - State management patterns
 - [Module Architecture](MODULE_ARCHITECTURE.md) - Module system design
 - [Authentication](AUTHENTICATION.md) - Auth and permissions
@@ -797,7 +754,6 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 ### Architecture Decisions
 
 - [ADR-001](../decisions/001_vanilla_js_over_framework.md) - Vanilla JS choice
-- [ADR-002](../decisions/002_dual_version_approach.md) - Dual version rationale
 - [ADR-003](../decisions/003_session_based_isolation.md) - Session isolation
 - [ADR-004](../decisions/004_module_system_design.md) - Module system design
 
@@ -830,7 +786,6 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 | `server.js` | Entry point, startup | ~160 lines |
 | `src/app.js` | Express app config | ~307 lines |
 | `src/helpers/pythonRunner.js` | Python spawning | ~520 lines |
-| `public/classic/js/app.js` | Classic main controller | ~800 lines |
 | `public/workspace/js/workspace.js` | Workspace controller | ~400 lines |
 | `public/workspace/js/core/StateManager.js` | State management | ~200 lines |
 | `python/train_model.py` | U-Net training | ~300 lines |
@@ -841,7 +796,6 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 | Directory | Purpose |
 |-----------|---------|
 | `/src/` | Modular backend (routes, services, middleware) |
-| `/public/classic/` | Classic frontend |
 | `/public/workspace/` | Workspace frontend |
 | `/python/` | ML scripts |
 | `/docs/` | Documentation |
@@ -850,7 +804,7 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 ---
 
 **Navigation:**
-← [Documentation Index](../INDEX.md) | [Architecture Docs](.) | [Dual Version Design](DUAL_VERSION_DESIGN.md) →
+← [Documentation Index](../INDEX.md) | [Architecture Docs](.) | [State Architecture](STATE_ARCHITECTURE.md) →
 
 ---
 
