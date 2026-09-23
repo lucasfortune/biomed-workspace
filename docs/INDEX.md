@@ -1,6 +1,6 @@
 # Developer Documentation
 
-Technical documentation for the BioMed Workspace (version 1.5.0). For using
+Technical documentation for the BioMed Workspace (version 1.5.1). For using
 the platform, see the
 [user documentation](https://lucasfortune.github.io/the-virtual-parasite/workspace/);
 the in-app help articles live in `public/workspace/content/` and are synced

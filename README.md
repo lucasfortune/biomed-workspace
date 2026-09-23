@@ -12,7 +12,7 @@ The workspace is developed within the DFG priority programme SPP 2332
 documentation at
 **[lucasfortune.github.io/the-virtual-parasite](https://lucasfortune.github.io/the-virtual-parasite/workspace/)**.
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Version](https://img.shields.io/badge/version-1.5.1-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-18+-339933)
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-green)

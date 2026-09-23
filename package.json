@@ -1,6 +1,6 @@
 {
   "name": "biomed-workspace",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Browser-based workspace for processing volumetric microscopy data: denoising, annotation, U-Net segmentation, stitching and 3D meshing",
   "main": "server.js",
   "scripts": {
