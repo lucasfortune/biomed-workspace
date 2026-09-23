@@ -1118,7 +1118,11 @@ function createMLRoutes(dependencies) {
       return res.status(404).json({ error: 'Inference result data not found' });
     }
 
-    const outputPath = result.output_path;
+    // Result paths are stored as web paths (/workspaces/...); resolve them
+    // to file paths the same way the tiff-info and slice routes do.
+    const outputPath = webPathToFilePath(result.output_path);
+    const metadataPath = webPathToFilePath(result.metadata_path);
+    const visualizationPath = webPathToFilePath(result.visualization_path);
 
     if (!fs.existsSync(outputPath)) {
       return res.status(404).json({
@@ -1140,12 +1144,12 @@ function createMLRoutes(dependencies) {
 
     archive.file(outputPath, { name: path.basename(outputPath) });
 
-    if (result.metadata_path && fs.existsSync(result.metadata_path)) {
-      archive.file(result.metadata_path, { name: path.basename(result.metadata_path) });
+    if (metadataPath && fs.existsSync(metadataPath)) {
+      archive.file(metadataPath, { name: path.basename(metadataPath) });
     }
 
-    if (result.visualization_path && fs.existsSync(result.visualization_path)) {
-      archive.file(result.visualization_path, { name: path.basename(result.visualization_path) });
+    if (visualizationPath && fs.existsSync(visualizationPath)) {
+      archive.file(visualizationPath, { name: path.basename(visualizationPath) });
     }
 
     const readmeContent = `# Segmentation Results\n\nInference ID: ${inferenceId}\nGenerated: ${new Date().toISOString()}\n`;
