@@ -264,7 +264,6 @@ dist
 
 # Session data (if stored locally)
 /sessions/
-!docs/sessions/
 
 # User data
 users.json
@@ -275,3 +274,12 @@ docs/prompts/
 # developing & bugfixing
 docs/dev/
 docs/user_guides/
+
+# Internal development material (kept locally, not published)
+CLAUDE.md
+.claude/
+docs/sessions/
+docs/vision/
+docs/archive/
+docs/testing/
+docs/templates/

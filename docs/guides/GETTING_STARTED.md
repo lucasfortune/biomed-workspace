@@ -40,8 +40,8 @@ npm --version    # Should show 8.x.x or higher
 
 ```bash
 # Clone the repository
-git clone https://github.com/lucasfortune/viz_app.git
-cd viz_app
+git clone https://github.com/lucasfortune/biomed-workspace.git
+cd biomed-workspace
 
 # Verify you're in the right directory
 ls -la  # You should see package.json, server.js, etc.
@@ -131,7 +131,7 @@ npm start
 
 **Expected Output:**
 ```
-> biomedical-segmentation-interface@1.0.0 start
+> biomed-workspace@1.0.0 start
 > node server.js
 
 Server running on http://localhost:3000
@@ -153,7 +153,7 @@ Starts the Express server with Socket.IO for real-time updates.
 
 ```bash
 # Navigate to project directory
-cd /path/to/viz_app
+cd /path/to/biomed-workspace
 
 # Create admin user
 node manageUsers.js add-admin myusername mypassword "My Full Name" "email@example.com" "My Institution"
@@ -338,9 +338,8 @@ After completing this guide, verify:
 4. [ ] Learn to [create modules](MODULE_CREATION.md) (if developing)
 
 **For developers:**
-1. [ ] Review [CLAUDE.md](../../CLAUDE.md) for development guidelines
-2. [ ] Check [Session Logs](../sessions/INDEX.md) for recent changes
-3. [ ] Read [Architecture Decisions](../decisions/) for design rationale
+1. [ ] Read the [Architecture Overview](../architecture/OVERVIEW.md)
+2. [ ] Read [Architecture Decisions](../decisions/) for design rationale
 
 ---
 
@@ -413,7 +412,7 @@ const upload = multer({
 - **Main Documentation:** [docs/INDEX.md](../INDEX.md)
 - **API Reference:** [docs/reference/API_ENDPOINTS.md](../reference/API_ENDPOINTS.md)
 - **Deployment Guide:** [docs/guides/DEPLOYMENT.md](DEPLOYMENT.md)
-- **GitHub Issues:** https://github.com/lucasfortune/viz_app/issues
+- **GitHub Issues:** https://github.com/lucasfortune/biomed-workspace/issues
 
 ---
 

@@ -210,8 +210,8 @@ pm2 --version
 ```bash
 # Clone to home directory
 cd ~
-git clone https://github.com/lucasfortune/viz_app.git
-cd viz_app
+git clone https://github.com/lucasfortune/biomed-workspace.git
+cd biomed-workspace
 
 # Or pull latest changes
 git pull origin main
@@ -243,11 +243,11 @@ REDIS_PASSWORD=your-redis-password-here  # Optional but recommended
 MAX_FILE_SIZE=524288000  # 500 MB in bytes
 
 # Python Virtual Environment Path
-PYTHON_VENV=/home/biomedapp/viz_app/venv/bin/python
+PYTHON_VENV=/home/biomedapp/biomed-workspace/venv/bin/python
 
 # Logging
 LOG_LEVEL=info
-LOG_FILE=/home/biomedapp/viz_app/logs/app.log
+LOG_FILE=/home/biomedapp/biomed-workspace/logs/app.log
 
 # Domain (for HTTPS)
 DOMAIN=yourdomain.com
@@ -270,13 +270,13 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 chmod 600 .env
 
 # Set ownership
-sudo chown -R biomedapp:biomedapp /home/biomedapp/viz_app
+sudo chown -R biomedapp:biomedapp /home/biomedapp/biomed-workspace
 ```
 
 ### 4. Install Node.js Dependencies
 
 ```bash
-cd /home/biomedapp/viz_app
+cd /home/biomedapp/biomed-workspace
 npm ci --production  # Use ci for deterministic installs
 ```
 
@@ -318,7 +318,7 @@ By default, the application uses file-based session storage. For production, Red
 ### 1. Install Redis Client for Node.js
 
 ```bash
-cd /home/biomedapp/viz_app
+cd /home/biomedapp/biomed-workspace
 npm install redis connect-redis --save
 ```
 
@@ -474,7 +474,7 @@ PM2 keeps your application running, handles crashes, and manages logs.
 ### 1. Create PM2 Ecosystem File
 
 ```bash
-cd /home/biomedapp/viz_app
+cd /home/biomedapp/biomed-workspace
 nano ecosystem.config.js
 ```
 
@@ -625,7 +625,7 @@ server {
     client_header_timeout 300s;
 
     # Root directory for static files
-    root /home/biomedapp/viz_app/public;
+    root /home/biomedapp/biomed-workspace/public;
     index index.html;
 
     # Proxy API requests to Node.js
@@ -737,13 +737,13 @@ openssl rand -base64 48
 
 ```bash
 # Application files
-sudo chown -R biomedapp:biomedapp /home/biomedapp/viz_app
-chmod 755 /home/biomedapp/viz_app
-chmod 600 /home/biomedapp/viz_app/.env
-chmod 600 /home/biomedapp/viz_app/users.json
-chmod 700 /home/biomedapp/viz_app/uploads
-chmod 700 /home/biomedapp/viz_app/models
-chmod 700 /home/biomedapp/viz_app/results
+sudo chown -R biomedapp:biomedapp /home/biomedapp/biomed-workspace
+chmod 755 /home/biomedapp/biomed-workspace
+chmod 600 /home/biomedapp/biomed-workspace/.env
+chmod 600 /home/biomedapp/biomed-workspace/users.json
+chmod 700 /home/biomedapp/biomed-workspace/uploads
+chmod 700 /home/biomedapp/biomed-workspace/models
+chmod 700 /home/biomedapp/biomed-workspace/results
 ```
 
 ### 2. Firewall Configuration
@@ -864,7 +864,7 @@ sudo nano /etc/apt/apt.conf.d/50unattended-upgrades
 pm2 logs biomedapp --lines 100
 
 # Log files location
-ls -lh /home/biomedapp/viz_app/logs/
+ls -lh /home/biomedapp/biomed-workspace/logs/
 
 # Rotate logs (automatic with PM2)
 pm2 install pm2-logrotate
@@ -876,10 +876,10 @@ pm2 set pm2-logrotate:retain 7
 
 ```bash
 # View activity log
-tail -f /home/biomedapp/viz_app/logs/activity.log
+tail -f /home/biomedapp/biomed-workspace/logs/activity.log
 
 # Monitor for errors
-grep ERROR /home/biomedapp/viz_app/logs/activity.log
+grep ERROR /home/biomedapp/biomed-workspace/logs/activity.log
 ```
 
 ### 2. nginx Logs
@@ -918,7 +918,7 @@ htop
 
 # Disk usage
 df -h
-du -sh /home/biomedapp/viz_app/*
+du -sh /home/biomedapp/biomed-workspace/*
 
 # Disk I/O
 sudo iotop
@@ -997,7 +997,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 
 # Backup users.json
-cp /home/biomedapp/viz_app/users.json $BACKUP_DIR/users_$TIMESTAMP.json
+cp /home/biomedapp/biomed-workspace/users.json $BACKUP_DIR/users_$TIMESTAMP.json
 
 # Keep only last 30 days of backups
 find $BACKUP_DIR -name "users_*.json" -mtime +30 -delete
@@ -1028,7 +1028,7 @@ nano /home/biomedapp/backup-files.sh
 
 ```bash
 #!/bin/bash
-SOURCE_DIR="/home/biomedapp/viz_app"
+SOURCE_DIR="/home/biomedapp/biomed-workspace"
 BACKUP_DIR="/backup/biomedapp"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -1060,8 +1060,8 @@ sudo apt install -y awscli
 aws configure
 
 # Backup to S3
-aws s3 sync /home/biomedapp/viz_app/uploads s3://your-bucket/backups/uploads/
-aws s3 sync /home/biomedapp/viz_app/models s3://your-bucket/backups/models/
+aws s3 sync /home/biomedapp/biomed-workspace/uploads s3://your-bucket/backups/uploads/
+aws s3 sync /home/biomedapp/biomed-workspace/models s3://your-bucket/backups/models/
 ```
 
 ### 3. Redis Backups
@@ -1121,7 +1121,7 @@ echo "Redis backup completed: dump_$TIMESTAMP.rdb"
 
 ### Application Setup
 
-- [ ] Repository cloned to `/home/biomedapp/viz_app`
+- [ ] Repository cloned to `/home/biomedapp/biomed-workspace`
 - [ ] `.env` file created with production values
 - [ ] `SESSION_SECRET` is strong random string
 - [ ] `NODE_ENV=production` set
@@ -1249,7 +1249,7 @@ sudo tail -f /var/log/nginx/error.log
 **Solutions:**
 ```bash
 # Check .env file exists and has correct values
-cat /home/biomedapp/viz_app/.env
+cat /home/biomedapp/biomed-workspace/.env
 
 # Check PM2 logs for specific error
 pm2 logs biomedapp --lines 100 --err
@@ -1261,7 +1261,7 @@ pm2 logs biomedapp --lines 100 --err
 # - Missing node_modules (run npm install)
 
 # Test running directly (not with PM2)
-cd /home/biomedapp/viz_app
+cd /home/biomedapp/biomed-workspace
 NODE_ENV=production node server.js
 ```
 
@@ -1315,7 +1315,7 @@ ls -l /etc/letsencrypt/live/yourdomain.com/
 grep client_max_body_size /etc/nginx/sites-available/biomedapp
 
 # Check upload directory permissions
-ls -ld /home/biomedapp/viz_app/uploads
+ls -ld /home/biomedapp/biomed-workspace/uploads
 
 # Check disk space
 df -h
@@ -1372,17 +1372,17 @@ npm list express-session connect-redis
 **Solutions:**
 ```bash
 # Activate venv and test Python import
-source /home/biomedapp/viz_app/venv/bin/activate
+source /home/biomedapp/biomed-workspace/venv/bin/activate
 python -c "import torch; print(torch.__version__)"
 
 # Check venv path in .env
-grep PYTHON_VENV /home/biomedapp/viz_app/.env
+grep PYTHON_VENV /home/biomedapp/biomed-workspace/.env
 
 # Check Python script has execute permissions
-ls -l /home/biomedapp/viz_app/python/*.py
+ls -l /home/biomedapp/biomed-workspace/python/*.py
 
 # Test Python script directly
-/home/biomedapp/viz_app/venv/bin/python /home/biomedapp/viz_app/python/validate_tiff.py
+/home/biomedapp/biomed-workspace/venv/bin/python /home/biomedapp/biomed-workspace/python/validate_tiff.py
 ```
 
 #### 9. **High Memory Usage**
@@ -1415,15 +1415,15 @@ free -h
 ```bash
 # Check disk usage
 df -h
-du -sh /home/biomedapp/viz_app/*
+du -sh /home/biomedapp/biomed-workspace/*
 
 # Find large files
-find /home/biomedapp/viz_app -type f -size +100M -exec ls -lh {} \;
+find /home/biomedapp/biomed-workspace -type f -size +100M -exec ls -lh {} \;
 
 # Clean up old sessions (older than 7 days)
-find /home/biomedapp/viz_app/uploads -type d -mtime +7 -exec rm -rf {} \;
-find /home/biomedapp/viz_app/models -type d -mtime +7 -exec rm -rf {} \;
-find /home/biomedapp/viz_app/results -type d -mtime +7 -exec rm -rf {} \;
+find /home/biomedapp/biomed-workspace/uploads -type d -mtime +7 -exec rm -rf {} \;
+find /home/biomedapp/biomed-workspace/models -type d -mtime +7 -exec rm -rf {} \;
+find /home/biomedapp/biomed-workspace/results -type d -mtime +7 -exec rm -rf {} \;
 
 # Rotate PM2 logs
 pm2 flush
@@ -1448,7 +1448,7 @@ htop
 df -h
 
 # Check for errors in logs
-grep ERROR /home/biomedapp/viz_app/logs/activity.log | tail -20
+grep ERROR /home/biomedapp/biomed-workspace/logs/activity.log | tail -20
 ```
 
 ### Weekly Tasks
@@ -1458,9 +1458,9 @@ grep ERROR /home/biomedapp/viz_app/logs/activity.log | tail -20
 pm2 logs biomedapp --lines 500 | less
 
 # Check disk usage trends
-du -sh /home/biomedapp/viz_app/uploads
-du -sh /home/biomedapp/viz_app/models
-du -sh /home/biomedapp/viz_app/results
+du -sh /home/biomedapp/biomed-workspace/uploads
+du -sh /home/biomedapp/biomed-workspace/models
+du -sh /home/biomedapp/biomed-workspace/results
 
 # Review backup logs
 cat /home/biomedapp/backups/backup.log
@@ -1478,7 +1478,7 @@ sudo fail2ban-client status nginx-http-auth
 sudo apt update && sudo apt upgrade -y
 
 # Update Node.js packages (check for breaking changes first)
-cd /home/biomedapp/viz_app
+cd /home/biomedapp/biomed-workspace
 npm outdated
 # Review and update package.json, then:
 # npm install
@@ -1492,9 +1492,9 @@ pip list --outdated
 deactivate
 
 # Clean up old sessions (older than 30 days)
-find /home/biomedapp/viz_app/uploads -type d -mtime +30 -exec rm -rf {} \;
-find /home/biomedapp/viz_app/models -type d -mtime +30 -exec rm -rf {} \;
-find /home/biomedapp/viz_app/results -type d -mtime +30 -exec rm -rf {} \;
+find /home/biomedapp/biomed-workspace/uploads -type d -mtime +30 -exec rm -rf {} \;
+find /home/biomedapp/biomed-workspace/models -type d -mtime +30 -exec rm -rf {} \;
+find /home/biomedapp/biomed-workspace/results -type d -mtime +30 -exec rm -rf {} \;
 
 # Review and rotate logs if needed
 pm2 flush
@@ -1529,7 +1529,7 @@ sudo journalctl --vacuum-time=30d
 
 ```bash
 # 1. Pull latest code
-cd /home/biomedapp/viz_app
+cd /home/biomedapp/biomed-workspace
 git pull origin main
 
 # 2. Install new dependencies (if any)

@@ -281,7 +281,7 @@ redis-cli
 - [ ] Verify progress indicator
 - [ ] Verify validation success message
 - [ ] Check session storage: Uploaded file paths stored
-- [ ] Verify files in `uploads/<sessionId>/`
+- [ ] Verify files in `workspaces/<sessionId>/uploads/`
 
 **Test Data Upload:**
 - [ ] Click "Use Test Data" button
@@ -342,9 +342,9 @@ redis-cli
 - [ ] Wait for training to complete
 - [ ] Verify success message: "Training complete"
 - [ ] Verify model files created:
-  - `models/<sessionId>/<trainingId>/best_model.pth`
-  - `models/<sessionId>/<trainingId>/config.json`
-  - `models/<sessionId>/<trainingId>/results.json`
+  - `workspaces/<sessionId>/models/segmentation/<trainingId>/best_model.pth`
+  - `workspaces/<sessionId>/models/segmentation/<trainingId>/config.json`
+  - `workspaces/<sessionId>/models/segmentation/<trainingId>/results.json`
 - [ ] Verify final metrics displayed
 - [ ] Verify "Run Inference" button enabled
 
@@ -380,9 +380,9 @@ redis-cli
 - [ ] Wait for inference to complete
 - [ ] Verify success message
 - [ ] Verify result files created:
-  - `results/<inferenceId>/segmented.tif`
-  - `results/<inferenceId>/metadata.json`
-  - `results/<inferenceId>/visualization.json`
+  - `workspaces/<sessionId>/results/segmentation/inference_<inferenceId>/segmented.tif`
+  - `workspaces/<sessionId>/results/segmentation/inference_<inferenceId>/metadata.json`
+  - `workspaces/<sessionId>/results/segmentation/inference_<inferenceId>/visualization.json`
 - [ ] Verify "View 3D Visualization" button enabled
 
 **Inference with Imported Model:**
@@ -439,8 +439,8 @@ redis-cli
 - [ ] Verify success message
 - [ ] Verify all UI sections reset to initial state
 - [ ] Verify session files deleted:
-  - `uploads/<sessionId>/` → Deleted
-  - `models/<sessionId>/` → Deleted
+  - `workspaces/<sessionId>/uploads/` → Deleted
+  - `workspaces/<sessionId>/models/` → Deleted
 - [ ] Check `trainingSessions` and `inferenceSessions` maps cleared
 
 **Session Expiry:**

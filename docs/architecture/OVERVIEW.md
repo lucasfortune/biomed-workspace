@@ -96,10 +96,9 @@ The system follows a **client-server architecture** with real-time communication
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │                    FILE STORAGE                             │
-│  - uploads/<sessionId>/                                     │
-│  - models/<sessionId>/<trainingId>/                         │
-│  - results/<inferenceId>/                                   │
-│  - test_data/                                               │
+│  - workspaces/<sessionId>/ (manifest + uploads, models,     │
+│    results); sessions/, logs/, tmp/, users.json             │
+│  - test_data/ (sample stacks)                               │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -346,28 +345,31 @@ See [Python Integration](../reference/PYTHON_INTEGRATION.md) for complete docume
 
 ### 5. File Storage System
 
-**Purpose:** Session-isolated file storage for uploads, models, and results.
+**Purpose:** Session-isolated file storage. There is no database: each
+session owns one workspace directory, described by a single manifest.
 
-**Directory Structure:**
+**Directory Structure** (user data lives under `DATA_DIR`, which defaults to
+the repository root):
 ```
-/viz_app/
-├── /uploads/<sessionId>/           # User uploads
-│   ├── training.tif
-│   ├── annotations.tif
-│   └── inference.tif
-├── /models/<sessionId>/<trainingId>/
-│   ├── best_model.pth              # Trained model
-│   ├── config.json                 # Training config
-│   └── results.json                # Training metrics
-├── /results/<inferenceId>/
-│   ├── segmented.tif               # Inference output
-│   ├── metadata.json               # Inference metadata
-│   └── visualization.json          # 3D viz data
-└── /test_data/
-    ├── trypB_testData_training.tif
-    ├── trypB_testData_annotations.tif
-    └── trypB_testData_inference.tif
+DATA_DIR/
+├── workspaces/<sessionId>/         # One workspace per session
+│   ├── metadata.json               # Manifest: every file, its tags, lineage, voxel size
+│   ├── uploads/                    # Raw stacks and annotations
+│   ├── models/                     # Trained models (weights + config)
+│   ├── results/                    # Module outputs (denoised, segmented, meshes, reports)
+│   └── .thumbnails/, .slices/, ... # Regenerable caches (excluded from ZIP export)
+├── sessions/                       # Login sessions (session-file-store)
+├── logs/                           # Server and activity logs
+├── tmp/                            # Scratch space for streamed uploads
+└── users.json                      # User accounts (bcrypt hashes)
+
+test_data/                          # Sample stacks, seeded into every new workspace
 ```
+
+Workspaces are retained for 48 hours after last activity (the same limit as
+the login session). See
+[ADR-012: Workspace Data Model Consolidation](../decisions/012_workspace_data_model_consolidation.md)
+for the manifest schema, provenance model and lifecycle.
 
 **Isolation Strategy:** Session-based (not user-based)
 - Each session gets unique directory
@@ -388,7 +390,7 @@ See [ADR-003: Session-Based Isolation](../decisions/003_session_based_isolation.
 │  STAGE 1: Upload & Validation                               │
 ├─────────────────────────────────────────────────────────────┤
 │  1. User uploads TIFF files (training + annotations)        │
-│  2. Backend saves to uploads/<sessionId>/                   │
+│  2. Backend saves to workspaces/<sessionId>/uploads/        │
 │  3. Spawn validate_tiff.py                                  │
 │  4. Validate: dimensions, dtype, class counts               │
 │  5. Auto-convert 16-bit → 8-bit if needed                   │
@@ -742,34 +744,11 @@ pip install -r requirements.txt
 
 ## Future Enhancements
 
-### Short-Term (Phase 3)
+### Possible future directions
 
-- **File browser** - Full workspace file management
-- **Category metadata** - Fix file upload category issue
-- **Session persistence** - Redis for session storage
-
-### Medium-Term (Phase 4+)
-
-- **Additional modules:**
-  - Denoising module
-  - Annotation module
-  - Mesh generation module
-  - Advanced visualization module
-
-- **Workspace features:**
-  - Module dependencies
-  - Pipeline chaining (output → input)
-  - Module marketplace
-
-### Long-Term
-
-- **Platform evolution:**
-  - Multi-user collaboration
-  - Cloud deployment (AWS/Azure)
-  - GPU cluster support
-  - Plugin ecosystem
-
-See [Roadmap](../vision/ROADMAP.md) for detailed planning.
+- Batch processing and module pipeline chaining
+- Model exchange (e.g. BioImage Model Zoo)
+- Chunked formats such as OME-Zarr for very large volumes
 
 ---
 
@@ -866,9 +845,7 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md) for solutions.
 | `/public/workspace/` | Workspace frontend |
 | `/python/` | ML scripts |
 | `/docs/` | Documentation |
-| `/uploads/<sessionId>/` | User uploads (runtime) |
-| `/models/<sessionId>/` | Trained models (runtime) |
-| `/results/<inferenceId>/` | Inference results (runtime) |
+| `/workspaces/<sessionId>/` | Per-session workspace (runtime) |
 
 ---
 

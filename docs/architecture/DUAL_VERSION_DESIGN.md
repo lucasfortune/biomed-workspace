@@ -49,7 +49,7 @@ The dual-version approach was chosen to enable **incremental innovation** withou
 **Workspace Version:**
 - Modular, IDE-like interface
 - Module system with dynamic loading
-- Phase 4 complete (10 modules + template)
+- 10 modules + template (v1.5.0)
 - Best for: Complex multi-module workflows
 
 **Shared:**
@@ -266,7 +266,7 @@ socket.on('training-progress', (progress) => {
 
 The **Workspace Version** is the new modular interface designed for complex multi-module workflows with an IDE-like experience.
 
-**Status:** ✅ **Phase 4 Complete - 10 modules implemented (+ template)**
+**Status:** ✅ **10 modules implemented (+ template), v1.5.0**
 **Route:** `/workspace`
 **Location:** `/public/workspace/`
 **Development Start:** Phase 2
@@ -603,8 +603,6 @@ See [Module Architecture](MODULE_ARCHITECTURE.md) and [ADR-004](../decisions/004
 
 - Batch processing workflows / module pipeline chaining
 - Model zoo / pretrained models
-
-See [Roadmap](../vision/ROADMAP.md) for details.
 
 ---
 
@@ -1042,28 +1040,11 @@ See [Troubleshooting Guide](../guides/TROUBLESHOOTING.md).
 
 ## Future Considerations
 
-### Short-Term (Phase 3)
+### Possible future directions
 
-- Complete segmentation module integration
-- Fix file upload category issue
-- Add file browser to workspace
-- Improve workspace UX
-
-### Medium-Term (Phase 4)
-
-- Add denoising module
-- Add annotation module
-- Add mesh generation module
-- Module pipeline chaining
-
-### Long-Term (Phase 5+)
-
-- Evaluate classic deprecation
-- Consider framework adoption (if needed)
-- Advanced workspace features
-- Collaboration features
-
-See [Roadmap](../vision/ROADMAP.md) for details.
+- Batch processing and module pipeline chaining
+- Model exchange (e.g. BioImage Model Zoo)
+- Chunked formats such as OME-Zarr for very large volumes
 
 ---
 

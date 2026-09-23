@@ -1,6 +1,6 @@
 # API Endpoints Reference
 
-> **Complete HTTP endpoint catalog for the Biomedical Image Segmentation Application**
+> **Complete HTTP endpoint catalog for the BioMed Workspace**
 
 This document provides comprehensive documentation for all HTTP endpoints in the application. Endpoints are organized by category for easy navigation.
 
@@ -455,7 +455,7 @@ const response = await fetch('/api/workspace/upload', {
 #### Behavior
 
 - Uses multer for file handling
-- Files stored in `uploads/<sessionId>/`
+- Files stored in `workspaces/<sessionId>/uploads/`
 - Only accepts TIFF files
 - 200MB file size limit
 - Logs activity via `activityLogger.logActivity()`
@@ -1390,7 +1390,7 @@ const response = await fetch('/upload-data', {
 
 - **Custom uploads:** Requires `status: 'active'` (approved users only)
 - **Test data:** Available to all authenticated users (including pending)
-- Files stored in `uploads/<sessionId>/`
+- Files stored in `workspaces/<sessionId>/uploads/`
 - Validation via `python/validate_tiff.py`
 - May auto-convert 16-bit annotations to 8-bit
 - Detects number of classes from annotation masks
@@ -1524,7 +1524,7 @@ Start model training with configured parameters.
 #### Behavior
 
 - Generates unique `training_id` (UUID v4)
-- Creates output directory: `models/<sessionId>/<trainingId>/`
+- Creates output directory: `workspaces/<sessionId>/models/segmentation/<trainingId>/`
 - Adds `num_classes` from validation to config
 - Stores training session in `trainingSessions` Map
 - Spawns `python/train_model.py` process
@@ -1536,7 +1536,7 @@ Start model training with configured parameters.
 2. Client joins Socket.IO room: `training-${trainingId}`
 3. Server emits `training-progress` events with metrics
 4. Server emits `training-complete` event when done
-5. Model saved to `models/<sessionId>/<trainingId>/best_model.pth`
+5. Model saved to `workspaces/<sessionId>/models/segmentation/<trainingId>/best_model.pth`
 
 **Approval Check:**
 - Test data training: Available to all users
@@ -1681,7 +1681,7 @@ const response = await fetch('/upload-inference', {
 
 - Custom uploads require `status: 'active'`
 - Test data available to all authenticated users
-- Files stored in `uploads/<sessionId>/`
+- Files stored in `workspaces/<sessionId>/uploads/`
 - Validation via `python/validate_inference_tiff.py`
 - File path stored in response (not in session)
 
@@ -1747,7 +1747,7 @@ const response = await fetch('/import-pretrained-model', {
 #### Behavior
 
 - **Requires approved status** (`status: 'active'`)
-- Files stored in `uploads/<sessionId>/`
+- Files stored in `workspaces/<sessionId>/uploads/`
 - 2GB file size limit for models
 - Validation via `python/validate_imported_model.py`
 - Stores model info in `req.session.importedModel`
@@ -2088,10 +2088,14 @@ Serve downsampled original data for visualization overlay.
 
 ### POST /reset-session
 
+> **Removed.** This endpoint no longer exists on the server; the section is
+> kept for reference only. Workspace files are now cleared through the
+> workspace endpoints and the 48-hour retention policy (ADR-012).
+
 Reset session and delete all associated files.
 
 **Authentication:** `requireAuth`
-**Status:** ✅ Stable
+**Status:** ❌ Removed
 
 #### Request
 
@@ -2123,8 +2127,8 @@ Reset session and delete all associated files.
 #### Behavior
 
 **Cleanup Actions:**
-1. Deletes `uploads/<sessionId>/` directory
-2. Deletes `models/<sessionId>/` directory
+1. Deletes `workspaces/<sessionId>/uploads/` directory
+2. Deletes `workspaces/<sessionId>/models/` directory
 3. Deletes `outputs/<sessionId>/` directory
 4. Deletes all `results/<trainingId>/` directories for this session
 5. Deletes inference results directories

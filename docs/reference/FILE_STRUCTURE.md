@@ -18,7 +18,7 @@ The project uses a **dual-version architecture** with separate directories for C
 ## Root Directory
 
 ```
-viz_app/
+biomed-workspace/
 ├── docs/                    # Documentation (comprehensive)
 ├── public/                  # Frontend code (dual version)
 ├── src/                     # MODULAR BACKEND (routes, services, middleware)
@@ -39,7 +39,7 @@ viz_app/
 ├── package.json             # Node.js dependencies
 ├── package-lock.json        # Dependency lock file
 ├── requirements.txt         # Python dependencies
-├── CLAUDE.md                # Development guidelines
+├── LICENSE                  # BSD 3-Clause
 ├── README.md                # Project overview
 └── .gitignore               # Git ignore rules
 ```
@@ -71,19 +71,7 @@ docs/
 │   ├── AUTHENTICATION.md    # Auth & session design
 │   ├── STATE_ARCHITECTURE.md# Server/client state design
 │   └── DUAL_VERSION_DESIGN.md# Classic vs Workspace design
-├── sessions/                # Development session logs
-│   ├── INDEX.md             # Session history index
-│   ├── 2025-11-26_bugfix.md # Phase 2 bug fixes
-│   ├── 2025-11-26_cleanup.md# Phase 2 cleanup
-│   └── 2025-11-26_overlay_debug.md# Overlay debugging
-├── decisions/               # Architecture Decision Records (future)
-├── vision/                  # Project vision & roadmap (future)
-├── templates/               # Documentation templates
-│   ├── GUIDE_TEMPLATE.md    # Guide template
-│   ├── SESSION_TEMPLATE.md  # Session log template
-│   ├── ADR_TEMPLATE.md      # ADR template
-│   └── API_REFERENCE_ENTRY.md# API doc template
-└── archive/                 # Archived documents (future)
+└── decisions/               # Architecture decision records (ADR-001 to ADR-012)
 ```
 
 **Key Files:**
@@ -91,7 +79,7 @@ docs/
 - `guides/GETTING_STARTED.md` - First-time setup
 - `guides/TROUBLESHOOTING.md` - Common issues
 - `reference/API_ENDPOINTS.md` - All HTTP endpoints
-- `sessions/INDEX.md` - Development history
+- `decisions/` - Architecture decision records
 
 ---
 
@@ -118,7 +106,7 @@ public/
 │   └── css/
 │       └── style.css        # Classic styles
 │
-└── workspace/               # Workspace version (Phase 4 complete)
+└── workspace/               # Workspace version (10 modules)
     ├── index.html           # Workspace entry
     ├── js/
     │   ├── workspace.js     # Main controller
@@ -168,7 +156,7 @@ public/
 
 | Aspect | Classic | Workspace |
 |--------|---------|-----------|
-| **Status** | Stable, complete | Phase 4 complete |
+| **Status** | Stable, complete | Active (v1.5.0) |
 | **UI Pattern** | Single-page linear workflow | Multi-module IDE-like |
 | **State** | Local variables | Centralized StateManager |
 | **Modules** | Monolithic | 10 modules (+ template), dynamic loading |
@@ -185,7 +173,7 @@ public/
 The backend has been refactored from a monolithic ~3000-line `server.js` into a modular architecture in the `src/` directory.
 
 ```
-viz_app/
+biomed-workspace/
 ├── server.js                # Entry point (~160 lines)
 │   └── Startup, services, server creation, graceful shutdown
 │
@@ -459,7 +447,7 @@ logs/
 
 ```json
 {
-  "name": "biomedical-segmentation-interface",
+  "name": "biomed-workspace",
   "version": "1.3.0",
   "scripts": {
     "start": "node server.js",

@@ -16,7 +16,7 @@
 >
 > **Quick Links:**
 > - [Module Framework Documentation](MODULE_FRAMEWORK.md) - API reference
-> - [Template module + UI contract README](/public/workspace/js/modules/template/) - copy this
+> - [Template module + UI contract README](../../public/workspace/js/modules/template/) - copy this
 
 ---
 
@@ -496,7 +496,7 @@ class DenoisingModule extends BaseModule {
 export default DenoisingModule;
 ```
 
-See the [template README](/public/workspace/js/modules/template/README.md) for
+See the [template README](../../public/workspace/js/modules/template/README.md) for
 the full UI contract (step markup, job button placement, success card, progress
 bar, reset on leave, test data, and the styling rules) and
 [Module Framework](MODULE_FRAMEWORK.md) for the component options.
@@ -651,7 +651,8 @@ where the module belongs in the processing pipeline.
 If your module needs server-side processing, add a route file under
 `src/routes/` (a factory function returning a router) and register it in
 `src/app.js` - `server.js` is only the entry point. The sketch below shows the
-handler bodies; see [Adding New Routes](../../CLAUDE.md) for the file pattern.
+handler bodies; existing route files such as
+`src/routes/preprocess.routes.js` show the full pattern.
 
 ```javascript
 // ============================================================================
@@ -1313,7 +1314,7 @@ See these guides for more:
 ## Related Documentation
 
 - [Module Framework](MODULE_FRAMEWORK.md) - BaseModule and component API reference
-- [Template module README](/public/workspace/js/modules/template/README.md) - the UI contract
+- [Template module README](../../public/workspace/js/modules/template/README.md) - the UI contract
 - [Module Architecture](../architecture/MODULE_ARCHITECTURE.md) - Complete architecture
 - [Module System Reference](../reference/MODULE_SYSTEM.md) - ModuleLoader API
 - [State Architecture](../architecture/STATE_ARCHITECTURE.md) - State management

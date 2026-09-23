@@ -4,9 +4,8 @@
 **Release:** v1.5.0
 **Related:** ADR-003 (session isolation), ADR-007 (stitching), ADR-008
 (preprocessing + voxel size), ADR-010 (format conversion)
-**Source material:** the full data-model workup and inconsistency register
-(three code sweeps, ~30 findings) prepared for the workspace report; the
-execution plan lives at `docs/vision/data_model_consolidation_plan.md`.
+**Source material:** a full data-model workup and inconsistency register
+(three code sweeps, ~30 findings), executed as work packages WP1 to WP7.
 
 ## Context
 

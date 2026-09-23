@@ -256,27 +256,6 @@ Then restart server.
 
 ---
 
-### Uploaded Files Don't Appear in Module Dropdown ⚠️
-
-**Symptoms:**
-- Files uploaded but not visible in file selector
-- Only test data appears
-
-**Cause:** Phase 2 limitation - category metadata not implemented
-
-**Status:** Known issue, deferred to Phase 3
-
-**Workaround:**
-Use test data for now
-
-**Fix Coming:**
-Phase 3 will implement categorized file organization
-
-**More Info:**
-See [Roadmap Phase 3](../vision/ROADMAP.md#phase-3-file-browser--workspace-management)
-
----
-
 ### TIFF Validation Fails
 
 **Symptoms:**
@@ -398,18 +377,6 @@ ls -la models/{sessionId}/{trainingId}/
 
 ## Inference Issues
 
-### "currentInferenceId is not defined" Error (Fixed)
-
-**Status:** ✅ Fixed in Phase 2
-
-**Historical Info:**
-This was a bug from global variable cleanup. Fixed in `inference.js` by using `window.segmentationModule.currentInferenceId`.
-
-**If you still see this:**
-Ensure you're using the latest code version.
-
----
-
 ### Inference Starts But Never Completes
 
 **Symptoms:**
@@ -474,59 +441,6 @@ chmod 644 results/{trainingId}/inference_result.tif
 
 ---
 
-### Visualization Controls Missing CSS (Fixed)
-
-**Status:** ✅ Fixed in Phase 2
-
-**Historical Info:**
-CSS styles weren't loading for visualization controls. Fixed by adding styles to `segmentation-modern.css`.
-
-**If controls look wrong:**
-Hard refresh browser (Ctrl+F5 / Cmd+Shift+R)
-
----
-
-### Original Data Overlay Not Appearing (Fixed)
-
-**Status:** ✅ Fixed in Phase 2
-
-**Historical Info:**
-Server was passing incomplete paths to Python script, causing downsampled overlay not to be generated correctly.
-
-**If overlay still doesn't work:**
-1. Check browser console for "[OriginalData]" logs
-2. Expected: "Decoded 20 image(s)" not "Decoded 1 image(s)"
-3. Expected: "262144 RGBA values, 1048576 bytes" not "0 bytes"
-
-**To test:**
-Toggle "Original Data Overlay" checkbox in visualization step.
-
----
-
-## Phase-Specific Issues
-
-### Phase 2: Segmentation Module
-
-**Known Limitations:**
-1. File upload category mismatch (see above)
-2. Only segmentation module available
-3. Workspace file browser is placeholder
-
-**Status:** Phase 2 complete, Phase 3 planned
-
----
-
-### Phase 3 Blockers
-
-**File Upload Category Issue:**
-- **Problem:** FileSelector expects `category` property
-- **Impact:** Custom uploads don't appear in dropdown
-- **Workaround:** Use test data
-- **Fix:** Phase 3 implementation
-- **Details:** [Roadmap](../vision/ROADMAP.md#phase-3-file-browser--workspace-management)
-
----
-
 ## Getting More Help
 
 ### Enable Debug Mode
@@ -575,10 +489,8 @@ Press `F12` and check:
 
 ## Still Stuck?
 
-1. **Check Session Logs:** [docs/sessions/INDEX.md](../sessions/INDEX.md) for recent bug fixes
-2. **Review Architecture:** [docs/architecture/OVERVIEW.md](../architecture/OVERVIEW.md) to understand system
-3. **Search Issues:** Recent sessions may document similar problems
-4. **GitHub Issues:** https://github.com/lucasfortune/viz_app/issues
+1. **Review Architecture:** [docs/architecture/OVERVIEW.md](../architecture/OVERVIEW.md) to understand system
+2. **GitHub Issues:** https://github.com/lucasfortune/biomed-workspace/issues
 
 ---
 
