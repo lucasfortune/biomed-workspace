@@ -98,6 +98,17 @@ function createAuthRoutes(dependencies) {
         return res.status(401).json(result);
       }
 
+      // Session fixation defence: issue a fresh session ID unless this
+      // session already belongs to the same user. Workspaces are keyed by
+      // session ID, so re-logging in as the same user must keep the ID or
+      // the workspace would be orphaned.
+      const sameUser = req.session.user && req.session.user.id === result.sessionData.id;
+      if (!sameUser) {
+        await new Promise((resolve, reject) => {
+          req.session.regenerate(err => (err ? reject(err) : resolve()));
+        });
+      }
+
       // Create session
       req.session.user = result.sessionData;
 
