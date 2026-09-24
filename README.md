@@ -169,6 +169,9 @@ The vendored AutoStructN2V package is distributed under its own BSD 3-Clause
 license ([python/vendor/autoStructN2V_LICENSE](python/vendor/autoStructN2V_LICENSE)).
 The Physics of Parasitism and DFG logos in `public/imgs/` are not covered by
 the license and remain the property of their respective owners.
+The sample stacks in `test_data/` are included with the permission of the
+providing lab for demonstrating and testing the software. They are not
+covered by the BSD 3-Clause License.
 
 ## Acknowledgements
 
