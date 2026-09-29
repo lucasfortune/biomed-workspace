@@ -8,6 +8,11 @@
  * - Step 1: Data selection (source images, resume unfinished, edit existing)
  * - Step 2: Annotation interface with brush/eraser tools
  * - Multi-class support with color-coded labels
+ * - Per-class interpolation between annotated slices (shape-based, ADR-013)
+ * - Hidden and locked classes are protected from brush, eraser and fill
+ * - Fill tool, Alt+click eyedropper, 1-9 class keys, rename + colour, batch show/lock
+ * - Overlay opacity slider and V-to-peek
+ * - Pixel classifier suggestions (random forest on the user's strokes, ADR-013 §8)
  * - Save progress and create final annotations as TIFF
  *
  * @module AnnotationModule
@@ -46,6 +51,10 @@ import AnnotationAPI from './AnnotationAPI.js';
 import AnnotationCanvas from './utils/AnnotationCanvas.js';
 import BrushEngine from './utils/BrushEngine.js';
 import HistoryManager from './utils/HistoryManager.js';
+import { planGaps, interpolateClass } from './utils/SliceInterpolator.js';
+
+/** Default for the widest keyframe distance the interpolation still bridges */
+const DEFAULT_MAX_GAP = 10;
 
 // =============================================================================
 // MODULE CLASS
@@ -107,6 +116,20 @@ class AnnotationModule extends BaseModule {
 
     // Dirty state tracking
     this.isDirty = false;
+
+    // Slice interpolation (ADR-013)
+    this.classPresence = new Map();      // slice index -> Set<classId> present on that slice
+    this.interpolatedSlices = new Map(); // slice index -> Set<classId> filled by interpolation, not yet edited
+    this.lastInterpolation = null;       // { classId, snapshots: Map<slice, Uint8Array|null> } for revert
+    this.interpolateDialog = null;       // open dialog element, if any
+
+    // Pixel classifier (ADR-013 §8)
+    this.suggestions = new Map();        // slice index -> { labels: Uint8Array, confidence: Uint8Array }
+    this.classifierModelId = null;       // server-side model trained on the current labels
+    this.labelsVersion = 0;              // bumped on every label change; the model remembers the version it saw
+    this.classifierTrainedVersion = -1;
+    this.classifierBackground = null;    // class id treated as background by the classifier (or null)
+    this.suggestBusy = false;
 
     // Autosave
     this.autosaveEnabled = true;
@@ -240,7 +263,11 @@ class AnnotationModule extends BaseModule {
                         <span class="tool-icon">${icon('eraser')}</span>
                         <span class="tool-label">Eraser</span>
                       </button>
-                    </div> 
+                      <button id="toolFill" class="tool-btn" title="Fill (F): click a region to fill it with the active class">
+                        <span class="tool-icon">${icon('fill')}</span>
+                        <span class="tool-label">Fill</span>
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Brush Size Section -->
@@ -253,6 +280,58 @@ class AnnotationModule extends BaseModule {
                       <input type="range" id="brushSizeSlider" min="1" max="50" value="10"
                              class="brush-slider range-slider" title="Brush size">
                       <span id="brushSizeValue" class="brush-size-value">10px</span>
+                    </div>
+                  </div>
+
+                  <!-- Overlay Section -->
+                  <div class="sv-section">
+                    <div class="sv-section-header">
+                      <h4>Overlay</h4>
+                      ${this.renderHelpIcon('annotation.step2.tools')}
+                    </div>
+                    <div class="brush-size-control" title="Opacity of the painted classes. Hold V to peek at the raw image.">
+                      <input type="range" id="overlayOpacitySlider" min="0" max="100" value="70"
+                             class="brush-slider range-slider" title="Overlay opacity">
+                      <span id="overlayOpacityValue" class="brush-size-value">70%</span>
+                    </div>
+                    <div class="overlay-hint">Hold <kbd>V</kbd> to peek at the image</div>
+                  </div>
+
+                  <!-- Suggest Section (pixel classifier) -->
+                  <div class="sv-section suggest-section">
+                    <div class="sv-section-header">
+                      <h4>Suggest</h4>
+                      ${this.renderHelpIcon('annotation.step2.suggest')}
+                    </div>
+                    <label class="suggest-field" title="Strokes of this class teach the classifier what is NOT a structure; its predictions are left empty">
+                      <span>Background class</span>
+                      <select id="suggestBackground"></select>
+                    </label>
+                    <div class="brush-size-control" title="Pixels predicted with lower confidence are left empty">
+                      <span class="suggest-inline-label">Min conf.</span>
+                      <input type="range" id="suggestConfidence" min="0" max="100" value="60"
+                             class="brush-slider range-slider" title="Minimum confidence">
+                      <span id="suggestConfidenceValue" class="brush-size-value">60%</span>
+                    </div>
+                    <label class="suggest-check" title="Median filter on the prediction to remove speckles">
+                      <input type="checkbox" id="suggestSmooth" checked> Smooth result
+                    </label>
+                    <div class="suggest-buttons">
+                      <button id="suggestBtn" class="btn primary" title="Train on your strokes and suggest the current slice (S)">
+                        Suggest slice
+                      </button>
+                    </div>
+                    <div class="suggest-range">
+                      <input type="number" id="suggestFrom" min="1" value="1" title="First slice">
+                      <span>to</span>
+                      <input type="number" id="suggestTo" min="1" value="1" title="Last slice">
+                      <button id="suggestRangeBtn" class="btn secondary" title="Suggest every slice in the range">Range</button>
+                    </div>
+                    <div id="suggestStatus" class="suggest-status"></div>
+                    <div id="suggestActions" class="suggest-actions" hidden>
+                      <button id="acceptSuggestionBtn" class="btn primary" title="Write the suggestion into empty pixels of this slice (A)">Accept</button>
+                      <button id="discardSuggestionBtn" class="btn secondary" title="Drop the suggestion for this slice">Discard</button>
+                      <button id="acceptAllSuggestionsBtn" class="btn secondary" title="Accept every pending suggestion" hidden>Accept all</button>
                     </div>
                   </div>
 
@@ -272,6 +351,10 @@ class AnnotationModule extends BaseModule {
                         <span class="tool-label">Redo</span>
                       </button>
                     </div>
+                    <button id="revertInterpolationBtn" class="btn secondary btn-revert-interpolation"
+                            title="Restore every slice the last interpolation wrote to its previous content" hidden>
+                      ${icon('layers')} Revert interpolation
+                    </button>
                     <div class="autosave-toggle">
                       <label class="toggle-switch">
                         <input type="checkbox" id="autosaveToggle" checked>
@@ -287,8 +370,12 @@ class AnnotationModule extends BaseModule {
                     <div class="classes-header">
                       <h4>Classes</h4>
                       ${this.renderHelpIcon('annotation.step2.classes')}
+                      <span class="classes-header-spacer"></span>
+                      <button id="toggleAllVisibleBtn" class="btn-class-batch" title="Hide all classes">${icon('eyeOff')}</button>
+                      <button id="toggleAllLockedBtn" class="btn-class-batch" title="Lock all classes">${icon('lock')}</button>
                       <button id="addClassBtn" class="btn-add-class" title="Add class">+</button>
                     </div>
+                    <input type="color" id="classColorInput" class="class-color-input" aria-label="Class colour">
                     <div id="classList" class="class-list">
                       <!-- Classes will be rendered dynamically -->
                     </div>
@@ -482,18 +569,56 @@ class AnnotationModule extends BaseModule {
         return;
       }
 
+      // Peek at the raw image while V is held
+      if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) {
+        if (!e.repeat) this.brushEngine?.setOverlayVisible(false);
+        return;
+      }
+
+      // 1-9: select the n-th class
+      if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const cls = this.brushEngine?.getClasses()[parseInt(e.key, 10) - 1];
+        if (cls) this.selectClass(cls.id);
+        return;
+      }
+
+      // S: suggest the current slice, A: accept its suggestion
+      if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        this.suggestSlices([this.currentSlice]);
+        return;
+      }
+      if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey) {
+        if (this.suggestions.has(this.currentSlice)) { e.preventDefault(); this.acceptSuggestion(); }
+        return;
+      }
+
       // ←/→ slice navigation is handled by SliceViewerChrome
       if (e.key === 'b' || e.key === 'B') {
         this.setTool('brush');
       } else if (e.key === 'e' || e.key === 'E') {
         this.setTool('eraser');
+      } else if (e.key === 'f' || e.key === 'F') {
+        this.setTool('fill');
       } else if (e.key === '[') {
         this.adjustBrushSize(-5);
       } else if (e.key === ']') {
         this.adjustBrushSize(5);
+      } else if (e.key === ',') {
+        this.jumpToKeyframe(-1);
+      } else if (e.key === '.') {
+        this.jumpToKeyframe(1);
       }
     };
     document.addEventListener('keydown', this.keydownHandler);
+
+    // Release the peek when V comes up, or when the window loses focus mid-peek
+    this.keyupHandler = (e) => {
+      if (e.key === 'v' || e.key === 'V') this.brushEngine?.setOverlayVisible(true);
+    };
+    document.addEventListener('keyup', this.keyupHandler);
+    this.blurHandler = () => this.brushEngine?.setOverlayVisible(true);
+    window.addEventListener('blur', this.blurHandler);
 
     // =========================================================================
     // Toolbar Controls
@@ -509,6 +634,62 @@ class AnnotationModule extends BaseModule {
     if (toolEraser) {
       toolEraser.addEventListener('click', () => this.setTool('eraser'));
     }
+    const toolFill = this.container.querySelector('#toolFill');
+    if (toolFill) {
+      toolFill.addEventListener('click', () => this.setTool('fill'));
+    }
+
+    // Overlay opacity slider
+    const overlaySlider = this.container.querySelector('#overlayOpacitySlider');
+    if (overlaySlider) {
+      overlaySlider.addEventListener('input', (e) => {
+        this.setOverlayOpacity(parseInt(e.target.value, 10));
+      });
+    }
+
+    // Batch visibility / lock
+    this.container.querySelector('#toggleAllVisibleBtn')?.addEventListener('click', () => this.toggleAllVisible());
+    this.container.querySelector('#toggleAllLockedBtn')?.addEventListener('click', () => this.toggleAllLocked());
+
+    // Suggest (pixel classifier)
+    this.container.querySelector('#suggestBtn')?.addEventListener('click', () => this.suggestSlices([this.currentSlice]));
+    this.container.querySelector('#suggestRangeBtn')?.addEventListener('click', () => {
+      const from = parseInt(this.container.querySelector('#suggestFrom')?.value, 10);
+      const to = parseInt(this.container.querySelector('#suggestTo')?.value, 10);
+      if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+      const a = Math.max(1, Math.min(from, to)), b = Math.min(this.totalSlices, Math.max(from, to));
+      const slices = [];
+      for (let i = a; i <= b; i++) slices.push(i - 1);
+      this.suggestSlices(slices);
+    });
+    this.container.querySelector('#acceptSuggestionBtn')?.addEventListener('click', () => this.acceptSuggestion());
+    this.container.querySelector('#discardSuggestionBtn')?.addEventListener('click', () => this.discardSuggestion());
+    this.container.querySelector('#acceptAllSuggestionsBtn')?.addEventListener('click', () => this.acceptAllSuggestions());
+    this.container.querySelector('#suggestBackground')?.addEventListener('change', (e) => {
+      const v = parseInt(e.target.value, 10);
+      this.classifierBackground = Number.isInteger(v) ? v : null;
+      this.classifierTrainedVersion = -1;   // background choice is part of the model
+    });
+    const confSlider = this.container.querySelector('#suggestConfidence');
+    if (confSlider) {
+      confSlider.addEventListener('input', (e) => {
+        const v = this.container.querySelector('#suggestConfidenceValue');
+        if (v) v.textContent = `${e.target.value}%`;
+      });
+    }
+
+    // Colour picker (one persistent input; the swatch click sets its target class)
+    const colorInput = this.container.querySelector('#classColorInput');
+    if (colorInput) {
+      colorInput.addEventListener('input', (e) => {
+        const classId = parseInt(colorInput.dataset.classId, 10);
+        if (!Number.isNaN(classId) && this.brushEngine) {
+          this.brushEngine.setClassColor(classId, e.target.value);
+          this.renderClassList();
+          this.updateSliceMarks();
+        }
+      });
+    }
 
     // Brush size slider
     const brushSizeSlider = this.container.querySelector('#brushSizeSlider');
@@ -522,6 +703,12 @@ class AnnotationModule extends BaseModule {
     const addClassBtn = this.container.querySelector('#addClassBtn');
     if (addClassBtn) {
       addClassBtn.addEventListener('click', () => this.addClass());
+    }
+
+    // Revert last interpolation
+    const revertBtn = this.container.querySelector('#revertInterpolationBtn');
+    if (revertBtn) {
+      revertBtn.addEventListener('click', () => this.revertLastInterpolation());
     }
 
     // Undo/Redo buttons
@@ -668,6 +855,27 @@ class AnnotationModule extends BaseModule {
         this.brushEngine.onStrokeEnd = () => {
           // Update history buttons after stroke
           this.updateHistoryButtons();
+          // A painted slice counts as reviewed: drop its "interpolated" mark
+          this.interpolatedSlices.delete(this.canvas.currentSlice || 0);
+          this.refreshPresence(this.canvas.currentSlice || 0);
+          this.updateSliceMarks();
+          this.noteLabelsChanged();
+        };
+
+        // The engine may change a class itself (auto-showing a hidden active class)
+        this.brushEngine.onClassesChange = () => {
+          this.renderClassList();
+        };
+
+        // Alt+click eyedropper changed the active class
+        this.brushEngine.onClassPicked = () => {
+          this.renderClassList();
+          this.updateSliceMarks();
+        };
+
+        // Painting with a locked class is refused
+        this.brushEngine.onLockedStroke = (cls) => {
+          this.state?.notify?.('info', `${cls.name} is locked. Unlock it (padlock in the class list) to paint with it.`, 3000);
         };
 
         this.brushEngine.onAnnotationChange = () => {
@@ -761,6 +969,8 @@ class AnnotationModule extends BaseModule {
       if (this.brushEngine) {
         this.brushEngine.renderAnnotations();
       }
+      this.renderSuggestion();
+      this.updateSuggestActions();
 
       // Update history buttons for the new slice
       this.updateHistoryButtons();
@@ -843,13 +1053,22 @@ class AnnotationModule extends BaseModule {
     this.brushEngine.setTool(tool);
 
     // Update UI
-    const toolBrush = this.container.querySelector('#toolBrush');
-    const toolEraser = this.container.querySelector('#toolEraser');
-
-    if (toolBrush && toolEraser) {
-      toolBrush.classList.toggle('active', tool === 'brush');
-      toolEraser.classList.toggle('active', tool === 'eraser');
+    for (const [id, name] of [['#toolBrush', 'brush'], ['#toolEraser', 'eraser'], ['#toolFill', 'fill']]) {
+      this.container.querySelector(id)?.classList.toggle('active', tool === name);
     }
+  }
+
+  /**
+   * Set overlay opacity (slider + engine)
+   * @param {number} percent - 0-100
+   */
+  setOverlayOpacity(percent) {
+    if (!this.brushEngine) return;
+    this.brushEngine.setOverlayOpacity(percent);
+    const slider = this.container.querySelector('#overlayOpacitySlider');
+    const value = this.container.querySelector('#overlayOpacityValue');
+    if (slider) slider.value = percent;
+    if (value) value.textContent = `${Math.round(percent)}%`;
   }
 
   /**
@@ -893,6 +1112,7 @@ class AnnotationModule extends BaseModule {
 
     this.brushEngine.addClass();
     this.renderClassList();
+    this.updateSliceMarks();
   }
 
   /**
@@ -908,7 +1128,14 @@ class AnnotationModule extends BaseModule {
     }
 
     this.brushEngine.deleteClass(classId);
+    if (this.lastInterpolation?.classId === classId) {
+      this.lastInterpolation = null;
+      this.updateRevertButton();
+    }
+    this.refreshAllPresence();
     this.renderClassList();
+    this.updateSliceMarks();
+    this.noteLabelsChanged();
   }
 
   /**
@@ -920,6 +1147,7 @@ class AnnotationModule extends BaseModule {
 
     this.brushEngine.setActiveClass(classId);
     this.renderClassList();
+    this.updateSliceMarks();
   }
 
   /**
@@ -934,6 +1162,107 @@ class AnnotationModule extends BaseModule {
   }
 
   /**
+   * Toggle class lock
+   * @param {number} classId - Class ID to toggle
+   */
+  toggleClassLock(classId) {
+    if (!this.brushEngine) return;
+
+    this.brushEngine.toggleClassLock(classId);
+    this.renderClassList();
+  }
+
+  /**
+   * Open the colour picker for a class
+   * @param {number} classId
+   */
+  openColorPicker(classId) {
+    const cls = this.brushEngine?.getClasses().find(c => c.id === classId);
+    const input = this.container.querySelector('#classColorInput');
+    if (!cls || !input) return;
+    input.dataset.classId = String(classId);
+    input.value = cls.color;
+    input.click();
+  }
+
+  /**
+   * Replace a class name with an inline editor; Enter/blur commit, Escape cancels
+   * @param {number} classId
+   * @param {HTMLElement} nameEl - the .class-name span
+   */
+  startRenameClass(classId, nameEl) {
+    const cls = this.brushEngine?.getClasses().find(c => c.id === classId);
+    if (!cls) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'class-name-input';
+    input.value = cls.name;
+    input.maxLength = 40;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = (commit) => {
+      if (finished) return;
+      finished = true;
+      if (commit && this.brushEngine?.renameClass(classId, input.value)) {
+        this.isDirty = true;
+        this.updateSaveButtonState();
+      }
+      this.renderClassList();
+      this.updateSliceMarks();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();   // keep B/E/F/1-9 shortcuts out of the editor
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  /**
+   * Show every class if any is hidden, otherwise hide all
+   */
+  toggleAllVisible() {
+    if (!this.brushEngine) return;
+    const anyHidden = this.brushEngine.getClasses().some(c => !c.visible);
+    this.brushEngine.setAllVisible(anyHidden);
+    this.renderClassList();
+  }
+
+  /**
+   * Unlock every class if all are locked, otherwise lock all
+   */
+  toggleAllLocked() {
+    if (!this.brushEngine) return;
+    const classes = this.brushEngine.getClasses();
+    const allLocked = classes.length > 0 && classes.every(c => c.locked);
+    this.brushEngine.setAllLocked(!allLocked);
+    this.renderClassList();
+  }
+
+  /**
+   * The batch buttons show the action they will perform
+   * @param {Array} classes
+   */
+  updateBatchButtons(classes) {
+    const visBtn = this.container.querySelector('#toggleAllVisibleBtn');
+    const lockBtn = this.container.querySelector('#toggleAllLockedBtn');
+    const anyHidden = classes.some(c => !c.visible);
+    const allLocked = classes.length > 0 && classes.every(c => c.locked);
+    if (visBtn) {
+      visBtn.innerHTML = anyHidden ? icon('eye') : icon('eyeOff');
+      visBtn.title = anyHidden ? 'Show all classes' : 'Hide all classes';
+    }
+    if (lockBtn) {
+      lockBtn.innerHTML = allLocked ? icon('lockOpen') : icon('lock');
+      lockBtn.title = allLocked ? 'Unlock all classes' : 'Lock all classes';
+    }
+  }
+
+  /**
    * Render the class list UI
    */
   renderClassList() {
@@ -944,17 +1273,27 @@ class AnnotationModule extends BaseModule {
     const activeClass = this.brushEngine.getActiveClass();
 
     classList.innerHTML = classes.map(cls => `
-      <div class="class-item ${cls.id === activeClass?.id ? 'active' : ''}"
+      <div class="class-item ${cls.id === activeClass?.id ? 'active' : ''} ${cls.locked ? 'is-locked' : ''}"
            data-class-id="${cls.id}">
-        <span class="class-color" style="background: ${cls.color};"></span>
-        <span class="class-name">${cls.name}</span>
+        <span class="class-color" style="background: ${cls.color};" title="Change colour" data-action="color"></span>
+        <span class="class-name" title="${escapeHtml(cls.name)} (double-click to rename)" data-action="name">${escapeHtml(cls.name)}</span>
+        <button class="class-interpolate" title="${cls.locked ? 'Unlock the class to interpolate it' : 'Interpolate between annotated slices…'}" data-action="interpolate">
+          ${icon('layers')}
+        </button>
+        <button class="class-lock ${cls.locked ? 'is-locked' : 'is-unlocked'}"
+                title="${cls.locked ? 'Unlock class' : 'Lock class (no stroke can change its pixels, even when visible)'}" data-action="lock">
+          ${cls.locked ? icon('lock') : icon('lockOpen')}
+        </button>
         <button class="class-visibility ${cls.visible ? 'is-visible' : 'is-hidden'}"
-                title="${cls.visible ? 'Hide class' : 'Show class'}" data-action="visibility">
+                title="${cls.visible ? 'Hide class (hidden classes are protected from painting)' : 'Show class'}" data-action="visibility">
           ${cls.visible ? icon('eye') : icon('eyeOff')}
         </button>
         <button class="class-delete" title="Delete class" data-action="delete">×</button>
       </div>
     `).join('');
+
+    this.updateBatchButtons(classes);
+    this.populateBackgroundSelect(classes);
 
     // Attach event listeners to class items
     classList.querySelectorAll('.class-item').forEach(item => {
@@ -970,6 +1309,47 @@ class AnnotationModule extends BaseModule {
         });
       }
 
+      // Colour swatch: open the picker for this class
+      const swatch = item.querySelector('[data-action="color"]');
+      if (swatch) {
+        swatch.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.selectClass(classId);
+          this.openColorPicker(classId);
+        });
+      }
+
+      // Name: double-click to rename inline
+      const nameEl = item.querySelector('[data-action="name"]');
+      if (nameEl) {
+        nameEl.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.startRenameClass(classId, nameEl);
+        });
+      }
+
+      // Lock toggle button
+      const lockBtn = item.querySelector('[data-action="lock"]');
+      if (lockBtn) {
+        lockBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.toggleClassLock(classId);
+        });
+      }
+
+      // Interpolate button
+      const interpolateBtn = item.querySelector('[data-action="interpolate"]');
+      if (interpolateBtn) {
+        interpolateBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.openInterpolateDialog(classId);
+        });
+      }
+
       // Delete button
       const deleteBtn = item.querySelector('[data-action="delete"]');
       if (deleteBtn) {
@@ -982,8 +1362,10 @@ class AnnotationModule extends BaseModule {
 
       // Click anywhere on the item to select (except action buttons)
       item.addEventListener('click', (e) => {
-        // Don't select if clicking on visibility or delete buttons
-        if (e.target.closest('.class-visibility') || e.target.closest('.class-delete')) {
+        // Don't select if clicking on the action buttons
+        if (e.target.closest('.class-visibility') || e.target.closest('.class-delete') ||
+            e.target.closest('.class-interpolate') || e.target.closest('.class-lock') ||
+            e.target.closest('.class-color') || e.target.closest('.class-name-input')) {
           return;
         }
         this.selectClass(classId);
@@ -1018,6 +1400,9 @@ class AnnotationModule extends BaseModule {
       // Restore the previous state
       this.brushEngine.setAnnotationData(sliceIndex, previousState);
       this.brushEngine.renderAnnotations();
+      this.refreshPresence(sliceIndex);
+      this.updateSliceMarks();
+      this.noteLabelsChanged();
       console.log('[AnnotationModule] Undo applied');
     }
 
@@ -1047,6 +1432,9 @@ class AnnotationModule extends BaseModule {
       // Restore the next state
       this.brushEngine.setAnnotationData(sliceIndex, nextState);
       this.brushEngine.renderAnnotations();
+      this.refreshPresence(sliceIndex);
+      this.updateSliceMarks();
+      this.noteLabelsChanged();
       console.log('[AnnotationModule] Redo applied');
     }
 
@@ -1074,6 +1462,608 @@ class AnnotationModule extends BaseModule {
     if (redoBtn) {
       redoBtn.disabled = !this.historyManager.canRedo(sliceIndex);
     }
+  }
+
+  // ===========================================================================
+  // SLICE INTERPOLATION (ADR-013)
+  // ===========================================================================
+
+  /**
+   * Recompute which classes are present on one slice (cache for keyframe marks)
+   * @param {number} sliceIndex
+   */
+  refreshPresence(sliceIndex) {
+    const data = this.brushEngine?.getAllAnnotations().get(sliceIndex);
+    const present = new Set();
+    if (data) {
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] !== 0) present.add(data[i]);
+      }
+    }
+    if (present.size > 0) {
+      this.classPresence.set(sliceIndex, present);
+    } else {
+      this.classPresence.delete(sliceIndex);
+    }
+  }
+
+  /**
+   * Recompute class presence for every slice (after load, delete class, …)
+   */
+  refreshAllPresence() {
+    this.classPresence.clear();
+    if (!this.brushEngine) return;
+    for (const sliceIndex of this.brushEngine.getAllAnnotations().keys()) {
+      this.refreshPresence(sliceIndex);
+    }
+  }
+
+  /**
+   * Slices on which a class is present, ascending (from the presence cache)
+   * @param {number} classId
+   * @returns {number[]}
+   */
+  keyframesOf(classId) {
+    const slices = [];
+    for (const [sliceIndex, present] of this.classPresence) {
+      if (present.has(classId)) slices.push(sliceIndex);
+    }
+    return slices.sort((a, b) => a - b);
+  }
+
+  /**
+   * Show the active class's annotated slices (solid marks) and the slices the last
+   * interpolations filled for it (light marks) above the slice slider
+   */
+  updateSliceMarks() {
+    if (!this.chrome) return;
+    const active = this.brushEngine?.getActiveClass();
+    if (!active) {
+      this.chrome.setMarks([]);
+      return;
+    }
+    const marks = [];
+    for (const [sliceIndex, present] of this.classPresence) {
+      if (!present.has(active.id)) continue;
+      const auto = this.interpolatedSlices.get(sliceIndex)?.has(active.id);
+      marks.push({
+        index: sliceIndex,
+        kind: auto ? 'auto' : 'key',
+        color: active.color,
+        title: `Slice ${sliceIndex + 1}: ${escapeHtml(active.name)} ${auto ? '(auto-filled, not yet reviewed)' : '(annotated)'}`
+      });
+    }
+    for (const sliceIndex of this.suggestions.keys()) {
+      marks.push({ index: sliceIndex, kind: 'pending', title: `Slice ${sliceIndex + 1}: suggestion waiting for review` });
+    }
+    this.chrome.setMarks(marks);
+  }
+
+  /**
+   * Jump to the previous/next slice that carries the active class (keys , and .)
+   * @param {number} direction - -1 or +1
+   */
+  jumpToKeyframe(direction) {
+    const active = this.brushEngine?.getActiveClass();
+    if (!active) return;
+    const keyframes = this.keyframesOf(active.id);
+    const current = this.currentSlice;
+    const target = direction < 0
+      ? [...keyframes].reverse().find(k => k < current)
+      : keyframes.find(k => k > current);
+    if (target !== undefined) this.goToSlice(target);
+  }
+
+  /**
+   * Open the per-class interpolation dialog
+   * @param {number} classId
+   */
+  openInterpolateDialog(classId) {
+    const cls = this.brushEngine?.getClasses().find(c => c.id === classId);
+    if (!cls) return;
+    this.closeInterpolateDialog();
+
+    if (cls.locked) {
+      this.state?.notify?.('info', `${cls.name} is locked. Unlock it to interpolate it.`, 3000);
+      return;
+    }
+
+    if (this.totalSlices <= 1) {
+      this.state?.notify?.('info', 'Interpolation needs an image stack with more than one slice');
+      return;
+    }
+
+    this.refreshPresence(this.currentSlice);
+    const keyframes = this.keyframesOf(classId);
+    const keyframeText = keyframes.length
+      ? keyframes.map(k => k + 1).join(', ')
+      : 'none yet';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'annot-dialog-overlay';
+    overlay.innerHTML = `
+      <div class="annot-dialog" role="dialog" aria-modal="true" aria-labelledby="interpDialogTitle">
+        <div class="annot-dialog-header">
+          <h4 id="interpDialogTitle">
+            <span class="class-color" style="background: ${cls.color};"></span>
+            Interpolate ${escapeHtml(cls.name)}
+          </h4>
+          ${this.renderHelpIcon('annotation.step2.interpolation')}
+        </div>
+        <p class="annot-dialog-text">
+          Annotated on <strong>${keyframes.length}</strong> slice${keyframes.length === 1 ? '' : 's'}:
+          <span class="annot-dialog-keyframes">${keyframeText}</span>
+        </p>
+        <label class="annot-dialog-field">
+          <span>Max gap (slices between two annotated slices that still get connected)</span>
+          <input type="number" id="interpMaxGap" min="2" max="${Math.max(2, this.totalSlices - 1)}" step="1"
+                 value="${DEFAULT_MAX_GAP}">
+        </label>
+        <div id="interpPlan" class="annot-dialog-plan"></div>
+        <p class="annot-dialog-note">
+          Only empty pixels are filled. Pixels of other classes are never overwritten.
+          Every filled slice gets an undo step, and the whole run can be reverted from the History section.
+        </p>
+        <div class="annot-dialog-actions">
+          <button type="button" class="btn secondary" data-action="cancel">Cancel</button>
+          <button type="button" class="btn primary" data-action="run" disabled>Interpolate</button>
+        </div>
+      </div>
+    `;
+
+    const planEl = overlay.querySelector('#interpPlan');
+    const gapInput = overlay.querySelector('#interpMaxGap');
+    const runBtn = overlay.querySelector('[data-action="run"]');
+
+    const describeGap = (g) => `${g.from + 1} → ${g.to + 1} (${g.count} slice${g.count === 1 ? '' : 's'})`;
+    const updatePlan = () => {
+      const maxGap = Math.max(2, parseInt(gapInput.value, 10) || DEFAULT_MAX_GAP);
+      if (keyframes.length < 2) {
+        planEl.innerHTML = '<span class="annot-dialog-warn">Paint this class on at least two slices first.</span>';
+        runBtn.disabled = true;
+        return null;
+      }
+      const plan = planGaps(keyframes, maxGap);
+      const total = plan.fill.reduce((n, g) => n + g.count, 0);
+      const lines = [];
+      if (plan.fill.length) {
+        lines.push(`<div><strong>${plan.fill.length}</strong> gap${plan.fill.length === 1 ? '' : 's'} to fill, ` +
+          `<strong>${total}</strong> slice${total === 1 ? '' : 's'}: ${plan.fill.map(describeGap).join('; ')}</div>`);
+      } else {
+        lines.push('<div class="annot-dialog-warn">No gap within the max gap. Raise it or add annotated slices.</div>');
+      }
+      if (plan.skipped.length) {
+        lines.push(`<div class="annot-dialog-muted">Skipped (wider than max gap): ${plan.skipped.map(describeGap).join('; ')}</div>`);
+      }
+      planEl.innerHTML = lines.join('');
+      runBtn.disabled = plan.fill.length === 0;
+      return { plan, maxGap };
+    };
+    gapInput.addEventListener('input', updatePlan);
+    updatePlan();
+
+    overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => this.closeInterpolateDialog());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeInterpolateDialog(); });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); this.closeInterpolateDialog(); }
+      if (e.key === 'Enter' && !runBtn.disabled) { e.preventDefault(); runBtn.click(); }
+    });
+    runBtn.addEventListener('click', async () => {
+      const result = updatePlan();
+      if (!result) return;
+      this.closeInterpolateDialog();
+      await this.runInterpolation(classId, result.plan.fill);
+    });
+
+    // On <body>, like ResumeDialog, so no animated/transformed ancestor can trap the fixed overlay
+    document.body.appendChild(overlay);
+    this.interpolateDialog = overlay;
+    gapInput.focus();
+    gapInput.select();
+  }
+
+  /**
+   * Close the interpolation dialog if open
+   */
+  closeInterpolateDialog() {
+    if (this.interpolateDialog) {
+      this.interpolateDialog.remove();
+      this.interpolateDialog = null;
+    }
+  }
+
+  /**
+   * Fill the given gaps for one class. Only background pixels are written; every
+   * touched slice gets an undo step and a snapshot for "Revert interpolation".
+   * @param {number} classId
+   * @param {Array<{from:number,to:number,count:number}>} gaps - from planGaps().fill
+   */
+  async runInterpolation(classId, gaps) {
+    if (!this.brushEngine || !this.historyManager || gaps.length === 0) return;
+    const width = this.brushEngine.imageWidth;
+    const height = this.brushEngine.imageHeight;
+    if (width <= 0 || height <= 0) {
+      this.state?.notify?.('error', 'Image not loaded yet');
+      return;
+    }
+    const cls = this.brushEngine.getClasses().find(c => c.id === classId);
+    const className = cls ? cls.name : `class ${classId}`;
+    const total = gaps.reduce((n, g) => n + g.count, 0);
+
+    this.chrome?.setStatus(`Interpolating ${className}: 0 / ${total} slices…`);
+    // Let the status paint before the first gap is computed
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const all = this.brushEngine.getAllAnnotations();
+    const snapshots = new Map();
+    let done = 0, filledPixels = 0;
+    const t0 = performance.now();
+
+    try {
+      const runs = interpolateClass(all, classId, width, height, gaps);
+      for (const run of runs) {
+        run.masks.forEach((mask, i) => {
+          const sliceIndex = run.from + 1 + i;
+          const existing = all.get(sliceIndex);
+          // Remember the previous content once (null = slice had no data at all)
+          if (!snapshots.has(sliceIndex)) {
+            snapshots.set(sliceIndex, existing ? new Uint8Array(existing) : null);
+          }
+          const data = existing || new Uint8Array(width * height);
+          if (!existing) this.brushEngine.setAnnotationData(sliceIndex, data);
+          this.historyManager.saveState(sliceIndex, data);
+          for (let k = 0; k < mask.length; k++) {
+            if (mask[k] && data[k] === 0) { data[k] = classId; filledPixels++; }
+          }
+          this.refreshPresence(sliceIndex);
+          if (!this.interpolatedSlices.has(sliceIndex)) this.interpolatedSlices.set(sliceIndex, new Set());
+          this.interpolatedSlices.get(sliceIndex).add(classId);
+          done++;
+        });
+        this.chrome?.setStatus(`Interpolating ${className}: ${done} / ${total} slices…`);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    } catch (error) {
+      console.error('[AnnotationModule] Interpolation failed:', error);
+      this.state?.notify?.('error', `Interpolation failed: ${error.message}`);
+    } finally {
+      this.chrome?.setStatus(null);
+    }
+
+    this.lastInterpolation = { classId, snapshots };
+    this.noteLabelsChanged();
+    this.isDirty = true;
+    this.updateSaveButtonState();
+    this.updateHistoryButtons();
+    this.updateRevertButton();
+    this.updateSliceMarks();
+    this.brushEngine.renderAnnotations();
+
+    const seconds = ((performance.now() - t0) / 1000).toFixed(1);
+    console.log(`[AnnotationModule] Interpolated ${className}: ${done} slices, ${filledPixels} px, ${seconds}s`);
+    this.state?.notify?.('success',
+      `${className}: filled ${done} slice${done === 1 ? '' : 's'} in ${gaps.length} gap${gaps.length === 1 ? '' : 's'}. ` +
+      'Step through them with , and . to review.');
+  }
+
+  /**
+   * Restore every slice the last interpolation touched to its content before the run.
+   * The restore itself is an undo step on each of those slices.
+   */
+  revertLastInterpolation() {
+    const last = this.lastInterpolation;
+    if (!last || !this.brushEngine || !this.historyManager) return;
+
+    const all = this.brushEngine.getAllAnnotations();
+    for (const [sliceIndex, snapshot] of last.snapshots) {
+      const current = all.get(sliceIndex);
+      if (current) this.historyManager.saveState(sliceIndex, current);
+      if (snapshot) {
+        this.brushEngine.setAnnotationData(sliceIndex, new Uint8Array(snapshot));
+      } else {
+        this.brushEngine.clearSliceAnnotations(sliceIndex);
+      }
+      this.interpolatedSlices.get(sliceIndex)?.delete(last.classId);
+      if (this.interpolatedSlices.get(sliceIndex)?.size === 0) this.interpolatedSlices.delete(sliceIndex);
+      this.refreshPresence(sliceIndex);
+    }
+
+    const cls = this.brushEngine.getClasses().find(c => c.id === last.classId);
+    this.lastInterpolation = null;
+    this.noteLabelsChanged();
+    this.isDirty = true;
+    this.updateSaveButtonState();
+    this.updateHistoryButtons();
+    this.updateRevertButton();
+    this.updateSliceMarks();
+    this.brushEngine.renderAnnotations();
+    this.state?.notify?.('info', `Reverted the interpolation of ${cls ? cls.name : 'the class'} on ${last.snapshots.size} slices`);
+  }
+
+  /**
+   * Show the revert button only while a run can be reverted
+   */
+  updateRevertButton() {
+    const btn = this.container?.querySelector('#revertInterpolationBtn');
+    if (btn) btn.hidden = !this.lastInterpolation;
+  }
+
+  // ===========================================================================
+  // PIXEL CLASSIFIER SUGGESTIONS (ADR-013 §8)
+  // ===========================================================================
+
+  /**
+   * Labels changed: the trained model is stale and suggestions must be redrawn
+   * (accepting a suggestion fills pixels, so the visible remainder shrinks)
+   */
+  noteLabelsChanged() {
+    this.labelsVersion++;
+    this.renderSuggestion();
+  }
+
+  /**
+   * Fill the background-class dropdown; keeps the current choice, otherwise
+   * preselects a class whose name looks like "background"
+   * @param {Array} classes
+   */
+  populateBackgroundSelect(classes) {
+    const select = this.container?.querySelector('#suggestBackground');
+    if (!select) return;
+    if (this.classifierBackground !== null && !classes.some(c => c.id === this.classifierBackground)) {
+      this.classifierBackground = null;
+      this.classifierTrainedVersion = -1;
+    }
+    if (this.classifierBackground === null) {
+      const guess = classes.find(c => /\b(background|bg|rest|other)\b/i.test(c.name));
+      if (guess) this.classifierBackground = guess.id;
+    }
+    select.innerHTML = `<option value="">(none: every pixel gets a class)</option>` +
+      classes.map(c => `<option value="${c.id}" ${c.id === this.classifierBackground ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+  }
+
+  /**
+   * Status line under the Suggest buttons
+   * @param {string} text
+   * @param {boolean} [isError]
+   */
+  setSuggestStatus(text, isError = false) {
+    const el = this.container?.querySelector('#suggestStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('is-error', !!isError);
+  }
+
+  /**
+   * Show/hide Accept, Discard and Accept all depending on pending suggestions
+   */
+  updateSuggestActions() {
+    const actions = this.container?.querySelector('#suggestActions');
+    const acceptAll = this.container?.querySelector('#acceptAllSuggestionsBtn');
+    if (!actions) return;
+    const hasCurrent = this.suggestions.has(this.currentSlice);
+    const pending = this.suggestions.size;
+    actions.hidden = pending === 0;
+    actions.querySelector('#acceptSuggestionBtn').disabled = !hasCurrent;
+    actions.querySelector('#discardSuggestionBtn').disabled = !hasCurrent;
+    if (acceptAll) {
+      acceptAll.hidden = pending < 2;
+      acceptAll.textContent = `Accept all (${pending})`;
+    }
+    const from = this.container.querySelector('#suggestFrom');
+    const to = this.container.querySelector('#suggestTo');
+    if (from && to) {
+      from.max = this.totalSlices; to.max = this.totalSlices;
+      if (!from.dataset.touched) from.value = this.currentSlice + 1;
+      if (!to.dataset.touched) to.value = Math.min(this.totalSlices, this.currentSlice + 10);
+      from.addEventListener('input', () => { from.dataset.touched = '1'; }, { once: true });
+      to.addEventListener('input', () => { to.dataset.touched = '1'; }, { once: true });
+    }
+  }
+
+  /**
+   * Train the classifier on the current labels if the model is missing or stale.
+   * Auto-filled slices (interpolation / accepted suggestions the user has not
+   * painted on since) are excluded so the model learns from the user's strokes.
+   * @returns {Promise<boolean>} true when a usable model exists
+   */
+  async ensureClassifierTrained() {
+    if (this.classifierModelId && this.classifierTrainedVersion === this.labelsVersion) return true;
+    const payload = this.prepareAnnotationData();
+    if (!payload) return false;
+    const labels = {};
+    for (const [key, value] of Object.entries(payload.sliceData)) {
+      if (!this.interpolatedSlices.has(parseInt(key, 10))) labels[key] = value;
+    }
+    if (Object.keys(labels).length === 0) {
+      this.setSuggestStatus('Paint some strokes first (two classes at least, one of them background).', true);
+      return false;
+    }
+    const version = this.labelsVersion;
+    this.setSuggestStatus('Training on your strokes…');
+    const result = await this.api.trainClassifier({
+      sourceFileId: payload.sourceFileId,
+      labels,
+      classes: this.brushEngine.getClasses().map(c => c.id),
+      backgroundClass: this.classifierBackground
+    });
+    if (!result.success) {
+      this.setSuggestStatus(result.error || 'Training failed', true);
+      return false;
+    }
+    this.classifierModelId = result.modelId;
+    this.classifierTrainedVersion = version;
+    const oob = Number.isFinite(result.oobAccuracy) ? ` · est. accuracy ${Math.round(result.oobAccuracy * 100)}%` : '';
+    this.setSuggestStatus(`Trained on ${result.labelledSlices.length} slice${result.labelledSlices.length === 1 ? '' : 's'}${oob}`);
+    return true;
+  }
+
+  /**
+   * Predict suggestions for slices (trains first if needed), in chunks so the
+   * status line keeps moving
+   * @param {number[]} slices - 0-based
+   */
+  async suggestSlices(slices) {
+    if (this.suggestBusy || !this.brushEngine || !this.api) return;
+    const targets = [...new Set(slices)].filter(i => Number.isInteger(i) && i >= 0 && i < this.totalSlices);
+    if (targets.length === 0) return;
+    this.suggestBusy = true;
+    const btns = ['#suggestBtn', '#suggestRangeBtn'].map(id => this.container.querySelector(id));
+    btns.forEach(b => { if (b) b.disabled = true; });
+    try {
+      if (!(await this.ensureClassifierTrained())) return;
+      const minConfidence = (parseInt(this.container.querySelector('#suggestConfidence')?.value, 10) || 0) / 100;
+      const smooth = this.container.querySelector('#suggestSmooth')?.checked ? 1 : 0;
+      const sourceFileId = this.sourceFile?.id || this.sourceFile?.path;
+      const chunk = 6;
+      let done = 0;
+      for (let i = 0; i < targets.length; i += chunk) {
+        const part = targets.slice(i, i + chunk);
+        this.setSuggestStatus(`Suggesting slice ${done + 1} of ${targets.length}…`);
+        const result = await this.api.predictClassifier({
+          sourceFileId, modelId: this.classifierModelId, slices: part, minConfidence, smooth
+        });
+        if (!result.success) {
+          if (result.code === 'MODEL_MISSING') this.classifierModelId = null;
+          this.setSuggestStatus(result.error || 'Prediction failed', true);
+          return;
+        }
+        for (const [key, value] of Object.entries(result.slices)) {
+          this.suggestions.set(parseInt(key, 10), {
+            labels: this.base64ToUint8Array(value.labels),
+            confidence: this.base64ToUint8Array(value.confidence)
+          });
+        }
+        done += part.length;
+      }
+      const px = targets.reduce((n, i) => n + this.countSuggested(i), 0);
+      this.setSuggestStatus(`${targets.length} slice${targets.length === 1 ? '' : 's'} suggested (${px.toLocaleString()} px). Review, then Accept (A) or Discard.`);
+    } catch (error) {
+      console.error('[AnnotationModule] Suggest failed:', error);
+      this.setSuggestStatus(`Suggest failed: ${error.message}`, true);
+    } finally {
+      this.suggestBusy = false;
+      btns.forEach(b => { if (b) b.disabled = false; });
+      this.renderSuggestion();
+      this.updateSuggestActions();
+      this.updateSliceMarks();
+    }
+  }
+
+  /**
+   * Suggested pixels that would actually be written (label set, pixel still empty)
+   * @param {number} sliceIndex
+   */
+  countSuggested(sliceIndex) {
+    const s = this.suggestions.get(sliceIndex);
+    if (!s) return 0;
+    const data = this.brushEngine.getAllAnnotations().get(sliceIndex);
+    let n = 0;
+    for (let k = 0; k < s.labels.length; k++) {
+      if (s.labels[k] !== 0 && (!data || data[k] === 0)) n++;
+    }
+    return n;
+  }
+
+  /**
+   * Draw the current slice's suggestion under the annotations: class colours at
+   * reduced alpha, only where the pixel is still empty (what Accept would write)
+   */
+  renderSuggestion() {
+    const ctx = this.canvas?.suggestionCtx;
+    if (!ctx || !this.brushEngine) return;
+    const w = this.brushEngine.imageWidth, h = this.brushEngine.imageHeight;
+    if (w <= 0 || h <= 0) return;
+    ctx.clearRect(0, 0, w, h);
+    const s = this.suggestions.get(this.currentSlice);
+    if (!s || s.labels.length !== w * h) return;
+    const data = this.brushEngine.getAllAnnotations().get(this.currentSlice);
+    const lut = this.brushEngine.buildColorLUT();
+    const img = ctx.createImageData(w, h);
+    const px = img.data;
+    for (let k = 0; k < s.labels.length; k++) {
+      const cls = s.labels[k];
+      if (cls === 0 || (data && data[k] !== 0)) continue;
+      const c = lut[cls];
+      if (!c) continue;
+      const o = k * 4;
+      px[o] = c.r; px[o + 1] = c.g; px[o + 2] = c.b;
+      // Confidence shows through the alpha: 60 (barely) … 150 (certain)
+      px[o + 3] = 60 + Math.round(s.confidence[k] * 90 / 255);
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  /**
+   * Write a slice's suggestion into its empty pixels (locked classes excluded),
+   * as one undo step, and flag the slice as auto-filled until the user paints on it
+   * @param {number} [sliceIndex=currentSlice]
+   * @param {boolean} [render=true]
+   * @returns {number} pixels written
+   */
+  acceptSuggestion(sliceIndex = this.currentSlice, render = true) {
+    const s = this.suggestions.get(sliceIndex);
+    if (!s || !this.brushEngine || !this.historyManager) return 0;
+    const w = this.brushEngine.imageWidth, h = this.brushEngine.imageHeight;
+    if (s.labels.length !== w * h) { this.suggestions.delete(sliceIndex); return 0; }
+    const all = this.brushEngine.getAllAnnotations();
+    const data = all.get(sliceIndex) || new Uint8Array(w * h);
+    if (!all.has(sliceIndex)) this.brushEngine.setAnnotationData(sliceIndex, data);
+    this.historyManager.saveState(sliceIndex, data);
+    const locked = new Set(this.brushEngine.getClasses().filter(c => c.locked).map(c => c.id));
+    const known = new Set(this.brushEngine.getClasses().map(c => c.id));
+    const written = new Set();
+    let n = 0;
+    for (let k = 0; k < data.length; k++) {
+      const cls = s.labels[k];
+      if (cls === 0 || data[k] !== 0 || locked.has(cls) || !known.has(cls)) continue;
+      data[k] = cls; written.add(cls); n++;
+    }
+    this.suggestions.delete(sliceIndex);
+    if (n > 0) {
+      if (!this.interpolatedSlices.has(sliceIndex)) this.interpolatedSlices.set(sliceIndex, new Set());
+      for (const cls of written) this.interpolatedSlices.get(sliceIndex).add(cls);
+      this.refreshPresence(sliceIndex);
+      this.isDirty = true;
+    }
+    if (render) {
+      this.labelsVersion++;
+      this.updateSaveButtonState();
+      this.updateHistoryButtons();
+      this.updateSliceMarks();
+      this.brushEngine.renderAnnotations();
+      this.renderSuggestion();
+      this.updateSuggestActions();
+      this.setSuggestStatus(n > 0 ? `Accepted ${n.toLocaleString()} px on slice ${sliceIndex + 1}` : 'Nothing to accept on this slice');
+    }
+    return n;
+  }
+
+  /**
+   * Accept every pending suggestion
+   */
+  acceptAllSuggestions() {
+    const slices = [...this.suggestions.keys()];
+    let total = 0;
+    for (const i of slices) total += this.acceptSuggestion(i, false);
+    this.labelsVersion++;
+    this.updateSaveButtonState();
+    this.updateHistoryButtons();
+    this.updateSliceMarks();
+    this.brushEngine?.renderAnnotations();
+    this.renderSuggestion();
+    this.updateSuggestActions();
+    this.setSuggestStatus(`Accepted ${total.toLocaleString()} px on ${slices.length} slices`);
+  }
+
+  /**
+   * Drop the current slice's suggestion
+   */
+  discardSuggestion(sliceIndex = this.currentSlice) {
+    if (!this.suggestions.delete(sliceIndex)) return;
+    this.renderSuggestion();
+    this.updateSuggestActions();
+    this.updateSliceMarks();
+    this.setSuggestStatus(this.suggestions.size ? `${this.suggestions.size} suggestion(s) still pending` : '');
   }
 
   // ===========================================================================
@@ -1305,6 +2295,9 @@ class AnnotationModule extends BaseModule {
     // Re-render class list
     this.renderClassList();
     this.updateSaveButtonState();
+    this.refreshAllPresence();
+    this.updateSliceMarks();
+    this.noteLabelsChanged();
 
     // Only render annotations if brush engine has been initialized with dimensions
     // (onSliceLoaded will call renderAnnotations after image loads)
@@ -1916,6 +2909,14 @@ class AnnotationModule extends BaseModule {
       document.removeEventListener('keydown', this.keydownHandler);
       this.keydownHandler = null;
     }
+    if (this.keyupHandler) {
+      document.removeEventListener('keyup', this.keyupHandler);
+      this.keyupHandler = null;
+    }
+    if (this.blurHandler) {
+      window.removeEventListener('blur', this.blurHandler);
+      this.blurHandler = null;
+    }
     this.chrome?.destroy();
 
     // Remove beforeunload handler
@@ -1923,6 +2924,18 @@ class AnnotationModule extends BaseModule {
       window.removeEventListener('beforeunload', this.beforeUnloadHandler);
       this.beforeUnloadHandler = null;
     }
+
+    // Classifier state
+    this.suggestions.clear();
+    this.classifierModelId = null;
+    this.classifierTrainedVersion = -1;
+    this.suggestBusy = false;
+
+    // Interpolation state
+    this.closeInterpolateDialog();
+    this.classPresence.clear();
+    this.interpolatedSlices.clear();
+    this.lastInterpolation = null;
 
     // Clean up history manager
     if (this.historyManager) {

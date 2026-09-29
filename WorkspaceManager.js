@@ -767,7 +767,8 @@ class WorkspaceManager {
    * Clean up slice cache files for a given file
    * Handles all cache naming conventions:
    *   - Standard slices: {fileId}_{slice}_{size}.jpg
-   *   - Annotation slices: {fileHash}_{slice}_raw.png (fileHash = base64 of filePath)
+   *   - Annotation slices: raw_{sha1-16 of filePath}_{slice}.png
+   *     (legacy: {base64-32 of filePath}_{slice}_raw.png, a key that collided across files)
    *   - DL denoising slices: dl_{pathHash}_{slice}_{size}.jpg (pathHash = md5 of normalized path)
    * @param {string} workspacePath - Workspace path
    * @param {string} fileId - File ID
@@ -786,7 +787,10 @@ class WorkspaceManager {
       const prefixes = [`${fileId}_`];
 
       if (filePath) {
-        // Annotation slice cache prefix (base64 of filePath)
+        // Annotation raw-slice cache prefix (sha1 of the full path; see annotation.routes.js)
+        const rawHash = crypto.createHash('sha1').update(filePath).digest('hex').substring(0, 16);
+        prefixes.push(`raw_${rawHash}_`);
+        // Legacy annotation prefix (base64 of the path's first 24 bytes)
         const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32);
         prefixes.push(`${fileHash}_`);
 

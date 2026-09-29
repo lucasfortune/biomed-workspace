@@ -27,7 +27,17 @@ The Annotation module provides a browser-based painting interface for creating s
 
 - Multi-class support with color-coded labels
 
-- Brush and eraser tools with adjustable size (1-50 px)
+- Brush, eraser and fill tools with adjustable brush size (1-50 px)
+
+- Class rename and colour, number keys and an Alt+click eyedropper for switching classes
+
+- Overlay opacity slider and V-to-peek at the raw image
+
+- Per-class interpolation between annotated slices, with a revertable run
+
+- Pixel-classifier suggestions trained on your own strokes (Suggest section)
+
+- Hidden and locked classes are protected from brush and eraser strokes
 
 - Per-slice undo/redo history (up to 20 steps per slice)
 

@@ -146,6 +146,17 @@ class AnnotationCanvas {
     `;
     this.sourceImage.draggable = false;
 
+    // Create suggestion canvas (classifier proposals, drawn under the annotations)
+    this.suggestionCanvas = document.createElement('canvas');
+    this.suggestionCanvas.className = 'annotation-suggestion';
+    this.suggestionCanvas.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      image-rendering: pixelated;
+      pointer-events: none;
+    `;
+
     // Create annotation canvas (for painted annotations)
     this.annotationCanvas = document.createElement('canvas');
     this.annotationCanvas.className = 'annotation-layer';
@@ -182,11 +193,13 @@ class AnnotationCanvas {
     `;
 
     // Get contexts
+    this.suggestionCtx = this.suggestionCanvas.getContext('2d');
     this.annotationCtx = this.annotationCanvas.getContext('2d');
     this.previewCtx = this.previewCanvas.getContext('2d');
 
     // Assemble DOM
     this.transformContainer.appendChild(this.sourceImage);
+    this.transformContainer.appendChild(this.suggestionCanvas);
     this.transformContainer.appendChild(this.annotationCanvas);
     this.transformContainer.appendChild(this.previewCanvas);
     this.transformContainer.appendChild(this.interactionLayer);
@@ -266,6 +279,14 @@ class AnnotationCanvas {
         // Promote the freshly loaded (now-cached) image to the displayed element.
         this.sourceImage.src = loader.src;
 
+        // The view (zoom + pan) is kept across slices of the same geometry so
+        // the user stays on the region they zoomed into; only a first load or a
+        // change of file / dimensions fits the image to the viewport again.
+        const geometryChanged = !this.isLoaded ||
+          fileId !== this.currentFileId ||
+          loader.naturalWidth !== this.imageSize.width ||
+          loader.naturalHeight !== this.imageSize.height;
+
         // Update state
         this.imageSize.width = loader.naturalWidth;
         this.imageSize.height = loader.naturalHeight;
@@ -273,11 +294,12 @@ class AnnotationCanvas {
         this.currentSliceIndex = sliceIndex;
         this.isLoaded = true;
 
-        // Resize canvases to match image
+        // Resize canvases to match image (clears the annotation/preview layers)
         this.resizeCanvases();
 
-        // Fit to container on first load
-        this.zoomToFit();
+        if (geometryChanged) {
+          this.zoomToFit();
+        }
 
         // Notify
         if (this.onSliceLoaded) {
@@ -313,6 +335,8 @@ class AnnotationCanvas {
   resizeCanvases() {
     const { width, height } = this.imageSize;
 
+    this.suggestionCanvas.width = width;
+    this.suggestionCanvas.height = height;
     this.annotationCanvas.width = width;
     this.annotationCanvas.height = height;
     this.previewCanvas.width = width;
@@ -323,6 +347,7 @@ class AnnotationCanvas {
     this.interactionLayer.style.height = `${height}px`;
 
     // Reset transform for crisp rendering
+    this.suggestionCtx.imageSmoothingEnabled = false;
     this.annotationCtx.imageSmoothingEnabled = false;
     this.previewCtx.imageSmoothingEnabled = false;
   }

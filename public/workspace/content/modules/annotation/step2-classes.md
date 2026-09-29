@@ -10,6 +10,7 @@ tags:
   - multi-class
 seeAlsoManual:
   - annotation.step2.tools
+  - annotation.step2.interpolation
   - annotation
 seeAlsoTags:
   - classes
@@ -32,15 +33,25 @@ Classes represent different categories of structures you want to segment. For ex
 
 - Add Class (+): Creates a new class with an auto-assigned color
 
-- Select Class: Click a class to make it active for painting
+- Select Class: Click a class to make it active for painting, or press its number key (1 to 9), or Alt+click a painted pixel of it on the canvas
 
-- Toggle Visibility: Hide/show annotations of a specific class
+- Rename: Double-click the class name, type the new name, press Enter (Escape cancels). Names are saved with the annotation.
+
+- Colour: Click the colour swatch to open a colour picker
+
+- Toggle Visibility: Hide/show annotations of a specific class. A hidden class is protected: neither the brush nor the eraser changes its pixels, so hide a class to paint right up to and around it. Painting with a hidden class shows it again.
+
+- Lock (padlock icon): A locked class is protected even while visible. No brush or eraser stroke changes its pixels, painting with it is refused until you unlock it, and it cannot be interpolated. Use it once a structure is finished so later work on neighbouring classes cannot damage it. The lock is saved with the annotation.
+
+- Interpolate (layers icon): Fill the slices between the slices you annotated for this class. See Slice Interpolation.
 
 - Delete Class: Remove a class and all its annotations
 
+- Show/hide all and lock/unlock all: The two buttons in the section header act on every class at once. Hide all then show one class to inspect it alone; lock all then unlock one to work on a single structure safely.
+
 ## Class Colors
 
-Each class is assigned a distinct color for visibility. Colors are chosen automatically to maximize contrast between classes.
+Each class is assigned a distinct color for visibility. Colors are chosen automatically to maximize contrast between classes, and can be changed by clicking the swatch.
 
 ## Best Practices
 

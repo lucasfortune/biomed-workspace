@@ -307,9 +307,13 @@
 
 .annotation-module .classes-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 4px;
   margin-bottom: var(--module-spacing-xs);
+}
+
+.annotation-module .classes-section {
+  position: relative;
 }
 
 .annotation-module .classes-header h4 {
@@ -376,7 +380,70 @@
   border-radius: 4px;
   box-shadow: 0 0 0 1px var(--module-border);
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+.annotation-module .class-color:hover {
+  box-shadow: 0 0 0 2px var(--module-text-secondary);
+}
+
+/* Persistent colour input; opened programmatically from the swatch */
+.annotation-module .class-color-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
   pointer-events: none;
+}
+
+.annotation-module .class-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  font-size: var(--module-font-size-xs);
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-primary);
+  border-radius: 3px;
+}
+
+.annotation-module .classes-header-spacer {
+  flex: 1;
+}
+
+.annotation-module .btn-class-batch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--module-text-secondary);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.annotation-module .btn-class-batch:hover {
+  color: var(--module-primary);
+  border-color: var(--module-primary);
+}
+
+.annotation-module .overlay-hint {
+  margin-top: 4px;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.annotation-module .overlay-hint kbd {
+  padding: 0 4px;
+  font-family: monospace;
+  font-size: inherit;
+  border: 1px solid var(--module-border);
+  border-radius: 3px;
+  background: var(--module-bg);
 }
 
 .annotation-module .class-item.active .class-color {
@@ -394,6 +461,7 @@
 }
 
 .annotation-module .class-visibility,
+.annotation-module .class-lock,
 .annotation-module .class-delete {
   width: 20px;
   height: 20px;
@@ -411,9 +479,23 @@
 }
 
 .annotation-module .class-visibility:hover,
+.annotation-module .class-lock:hover,
 .annotation-module .class-delete:hover {
   opacity: 1;
   background: var(--module-border);
+}
+
+.annotation-module .class-lock.is-unlocked {
+  opacity: 0.4;
+}
+
+.annotation-module .class-lock.is-locked {
+  opacity: 1;
+  color: var(--module-primary);
+}
+
+.annotation-module .class-item.is-locked .class-name {
+  color: var(--module-text-secondary);
 }
 
 .annotation-module .class-visibility.is-hidden {
@@ -436,6 +518,242 @@
 
 .annotation-module .class-delete:hover {
   background: var(--module-error-bg);
+}
+
+/* Interpolate button in a class row (ADR-013) */
+.annotation-module .class-interpolate {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--module-text-secondary);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+}
+
+.annotation-module .class-interpolate:hover {
+  opacity: 1;
+  color: var(--module-primary);
+  background: var(--module-border);
+}
+
+/* Revert last interpolation (History section, shown only while available) */
+.annotation-module .btn-revert-interpolation[hidden] {
+  display: none;
+}
+
+.annotation-module .btn-revert-interpolation {
+  width: 100%;
+  margin-top: var(--module-spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--module-font-size-xs);
+}
+
+/* Suggest section (pixel classifier, ADR-013 §8) */
+.annotation-module .suggest-section {
+  flex-shrink: 0;
+}
+
+.annotation-module .suggest-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.annotation-module .suggest-field select,
+.annotation-module .suggest-range input {
+  padding: 3px 4px;
+  font-size: var(--module-font-size-xs);
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+}
+
+.annotation-module .suggest-inline-label {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  white-space: nowrap;
+}
+
+.annotation-module .suggest-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--module-spacing-xs) 0;
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.annotation-module .suggest-buttons .btn,
+.annotation-module .suggest-actions .btn {
+  width: 100%;
+  font-size: var(--module-font-size-xs);
+  padding: 4px 8px;
+}
+
+.annotation-module .suggest-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+}
+
+.annotation-module .suggest-range input {
+  width: 0;
+  flex: 1;
+  min-width: 36px;
+}
+
+.annotation-module .suggest-range .btn {
+  font-size: var(--module-font-size-xs);
+  padding: 3px 8px;
+}
+
+.annotation-module .suggest-status {
+  min-height: 1.2em;
+  margin-top: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  line-height: 1.3;
+}
+
+.annotation-module .suggest-status.is-error {
+  color: var(--module-error-text);
+}
+
+.annotation-module .suggest-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--module-spacing-xs);
+}
+
+.annotation-module .suggest-actions[hidden],
+.annotation-module .suggest-actions .btn[hidden] {
+  display: none;
+}
+
+/* ============================================
+   INTERPOLATION DIALOG (ADR-013)
+   ============================================ */
+
+.annot-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.annot-dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: var(--module-spacing-md);
+  background: var(--module-card-bg);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.annot-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.annot-dialog-header h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  flex: 1;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.annot-dialog-header .class-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px var(--module-border);
+  flex-shrink: 0;
+}
+
+.annot-dialog-text,
+.annot-dialog-note {
+  margin: 0 0 var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+.annot-dialog-keyframes {
+  font-family: monospace;
+  color: var(--module-text-primary);
+  word-break: break-word;
+}
+
+.annot-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+}
+
+.annot-dialog-field input {
+  width: 90px;
+  padding: 4px 6px;
+  font-size: var(--module-font-size-sm);
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+}
+
+.annot-dialog-plan {
+  margin-bottom: var(--module-spacing-sm);
+  padding: var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+  background: var(--module-bg);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  line-height: 1.5;
+}
+
+.annot-dialog-plan > div + div {
+  margin-top: 4px;
+}
+
+.annot-dialog-warn {
+  color: var(--module-error-text);
+}
+
+.annot-dialog-muted {
+  color: var(--module-text-secondary);
+}
+
+.annot-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--module-spacing-sm);
 }
 
 /* Navigation buttons should stay at bottom */

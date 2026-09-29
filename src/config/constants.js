@@ -48,7 +48,7 @@ const DIRECTORIES = {
 
 // Per-workspace cache directories: excluded from ZIP export and preserved
 // (not user data) by clearWorkspace on restore. One list, used by both.
-const CACHE_DIRS = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '.segcleanup'];
+const CACHE_DIRS = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '.segcleanup', '.classifier'];
 
 // File upload limits
 const UPLOAD_LIMITS = {

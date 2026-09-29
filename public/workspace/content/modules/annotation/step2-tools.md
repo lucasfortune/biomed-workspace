@@ -30,13 +30,37 @@ Paints with the currently selected class color. Click and drag to draw continuou
 
 Eraser (E)
 
-Removes annotations by painting back to background (value 0). The eraser only affects classes that are currently visible, so hiding a class protects its pixels while you clean up others.
+Removes annotations by painting back to background (value 0).
+
+Fill (F)
+
+Click inside a region to fill it with the active class. The region is the connected area that shares the clicked value: an enclosed patch of background, or a whole patch of another class. Outline a structure with the brush, then fill it with one click.
+
+Eyedropper (Alt+click)
+
+Alt+click a painted pixel to make its class the active class, with any tool.
+
+All tools only affect classes that are visible and unlocked. Hiding or locking a class protects its pixels, so you can paint another class right up to and over a protected structure without changing it.
+
+## Overlay
+
+The Overlay slider sets how opaque the painted classes are drawn over the image. Hold V to peek at the raw image with all overlays hidden; release to bring them back.
 
 ## Keyboard Shortcuts
 
 - B - Switch to brush tool
 
 - E - Switch to eraser tool
+
+- F - Switch to fill tool
+
+- 1 to 9 - Select the first to ninth class
+
+- Alt+click - Pick the class under the cursor
+
+- V (hold) - Peek at the raw image without overlays
+
+- S - Suggest the current slice with the pixel classifier; A - accept its suggestion
 
 - [ - Decrease brush size
 
@@ -47,6 +71,8 @@ Removes annotations by painting back to background (value 0). The eraser only af
 - Ctrl+Y / Ctrl+Shift+Z (Cmd equivalents) - Redo undone stroke
 
 - Left/Right arrows - Navigate between slices
+
+- , and . - Jump to the previous/next slice annotated with the active class
 
 ## Slice Navigation
 
@@ -61,6 +87,8 @@ Move through the stack with the Previous/Next buttons, the numeric slice field, 
 - Zoom range: 10% to 1000%
 
 - Pan: Right-drag, middle-drag, or hold Space and drag; on touch devices, use a two-finger pinch to pan and zoom
+
+- The zoom and position are kept when you change slices, so a region you zoomed into stays in view while you step through the stack. Fit to view resets it.
 
 ## Status Bar
 

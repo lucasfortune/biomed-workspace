@@ -267,6 +267,40 @@
   margin: 0;
 }
 
+/* Mark track above the slider: which slices carry something (see setMarks).
+   The 8px inset matches half the 16px range thumb so marks sit over the
+   thumb centre for the same slice. */
+.sv-slider-marks {
+  position: relative;
+  height: 8px;
+  margin-bottom: 2px;
+}
+
+.sv-mark {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 8px;
+  margin-left: -1.5px;
+  border-radius: 1px;
+  background: var(--module-primary);
+  cursor: pointer;
+}
+
+.sv-mark-auto {
+  top: 3px;
+  height: 5px;
+  opacity: 0.45;
+}
+
+.sv-mark-pending {
+  background: transparent;
+  border: 1px solid var(--module-primary);
+  box-sizing: border-box;
+  width: 5px;
+  margin-left: -2.5px;
+}
+
 .sv-footer {
   display: flex;
   justify-content: space-between;

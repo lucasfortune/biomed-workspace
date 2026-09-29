@@ -772,6 +772,24 @@ Get raw slice data for annotation canvas.
 
 ---
 
+### POST /api/annotation/classifier/train
+
+Train the pixel classifier (random forest) on the user's current labels (ADR-013 §8).
+
+**Body:** `{ sourceFileId, labels: { "<slice>": <sparse|dense encoding> }, classes: [ids], backgroundClass: id|null }`
+
+**Response:** `{ success, modelId, classes, samplesPerClass, labelledSlices, oobAccuracy, seconds }`
+
+The model is stored under the workspace's `.classifier/` directory; only the newest model per workspace is kept.
+
+### POST /api/annotation/classifier/predict
+
+Predict suggestions for slices with a trained model.
+
+**Body:** `{ sourceFileId, modelId, slices: [i, ...] (max 64), minConfidence: 0-1, smooth: 0-3 }`
+
+**Response:** `{ success, slices: { "<i>": { labels: base64 uint8, confidence: base64 uint8, suggested } }, width, height, seconds }`. Label 0 means "no suggestion" (background class or below the confidence threshold). A missing model answers 404 with `code: "MODEL_MISSING"`.
+
 ### POST /api/annotation/save-progress
 
 Save annotation progress (sparse encoding).

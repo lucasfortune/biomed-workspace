@@ -17,6 +17,30 @@ const { buildDisplayName } = require('../helpers/namingHelpers');
 const { createLineage } = require('../helpers/lineageHelpers');
 
 /**
+ * Cache key for a source file's raw slices: sha1 of the full path, 16 hex chars
+ * (also computed in WorkspaceManager.cleanupSliceCache; keep both in sync)
+ * @param {string} filePath
+ * @returns {string}
+ */
+function rawSliceHash(filePath) {
+  return require('crypto').createHash('sha1').update(filePath).digest('hex').substring(0, 16);
+}
+
+/** Legacy raw-slice cache names ({32 base64 chars}_{slice}_raw.png) collided across files: drop them once */
+const purgedRawSliceDirs = new Set();
+function purgeLegacyRawSliceCache(cacheDir) {
+  if (purgedRawSliceDirs.has(cacheDir)) return;
+  purgedRawSliceDirs.add(cacheDir);
+  try {
+    for (const name of fs.readdirSync(cacheDir)) {
+      if (/^[A-Za-z0-9_]{32}_\d+_raw\.png$/.test(name)) {
+        try { fs.unlinkSync(path.join(cacheDir, name)); } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+/**
  * Build an annotation display name chained from the source image. Collision
  * resolution happens inside addFileToMetadata, so this only builds the candidate.
  * @param {string} sourceFileName - Source image file name
@@ -114,9 +138,12 @@ function createAnnotationRoutes(dependencies) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }
 
-      // Generate cache filename with _raw suffix to distinguish from scaled slices
-      const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32);
-      const cacheFilename = `${fileHash}_${sliceIndex}_raw.png`;
+      // Cache key: a hash of the full path. (The previous key was the first 32
+      // base64 characters of the path, i.e. its first 24 bytes, which is the same
+      // for every file under one install: every stack shared one cache and the
+      // first stack loaded was shown for all others.)
+      purgeLegacyRawSliceCache(cacheDir);
+      const cacheFilename = `raw_${rawSliceHash(filePath)}_${sliceIndex}.png`;
       const cachePath = path.join(cacheDir, cacheFilename);
 
       // Check cache
@@ -750,6 +777,140 @@ function createAnnotationRoutes(dependencies) {
         success: false,
         error: error.message
       });
+    }
+  });
+
+  // ===========================================================================
+  // PIXEL CLASSIFIER (ADR-013 §8): train on the user's strokes, predict slices
+  // ===========================================================================
+
+  /** Resolve a source file id (metadata id or workspace-relative path) to a path */
+  function resolveSourcePath(sessionId, fileId) {
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+    if (path.isAbsolute(fileId)) return fileId;
+    const metadata = workspaceManager.loadMetadata(sessionId);
+    const file = metadata?.files?.find(f => f.id === fileId);
+    return path.join(workspacePath, file ? file.path : fileId);
+  }
+
+  /** Per-workspace cache dir for classifier models (untracked, like .slices) */
+  function classifierDir(sessionId) {
+    const dir = path.join(workspaceManager.getWorkspacePath(sessionId), '.classifier');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  /** Run pixel_classifier.py with a temp config; resolves with the PIXCLS_RESULT payload */
+  function runClassifier(mode, config) {
+    const { spawn } = require('child_process');
+    const os = require('os');
+    return new Promise((resolve, reject) => {
+      const configPath = path.join(os.tmpdir(), `pixcls_${mode}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`);
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      const proc = spawn(PYTHON_PATH, ['python/pixel_classifier.py', mode, '--config', configPath]);
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (d) => { stdout += d.toString(); });
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('error', (err) => reject(new Error(`Failed to spawn process: ${err.message}`)));
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(configPath); } catch (e) { /* ignore */ }
+        const find = (prefix) => {
+          const line = stdout.split('\n').find(l => l.startsWith(`${prefix}:`));
+          if (!line) return null;
+          try { return JSON.parse(line.substring(prefix.length + 1)); } catch (e) { return null; }
+        };
+        const result = find('PIXCLS_RESULT');
+        if (code === 0 && result) return resolve(result);
+        const err = find('PIXCLS_ERROR');
+        reject(new Error(err?.message || stderr.split('\n').slice(-3).join(' ').trim() || `Classifier ${mode} failed`));
+      });
+    });
+  }
+
+  /**
+   * POST /api/annotation/classifier/train
+   * Body: { sourceFileId, labels: {slice: encoding}, classes: [ids], backgroundClass }
+   * Trains a random forest on the labelled pixels and stores it in the workspace.
+   */
+  router.post('/classifier/train', requireAuth, async (req, res) => {
+    try {
+      const { sourceFileId, labels, classes, backgroundClass } = req.body;
+      if (!sourceFileId || !labels || Object.keys(labels).length === 0) {
+        return res.status(400).json({ success: false, error: 'Missing sourceFileId or labels' });
+      }
+      const sessionId = req.session.id;
+      const source = resolveSourcePath(sessionId, sourceFileId);
+      if (!fs.existsSync(source)) {
+        return res.status(404).json({ success: false, error: 'Source image not found' });
+      }
+      const modelId = `model_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const modelPath = path.join(classifierDir(sessionId), `${modelId}.pkl`);
+
+      const result = await runClassifier('train', {
+        source, labels, classes: classes || [],
+        backgroundClass: backgroundClass ?? null,
+        modelPath
+      });
+
+      // Keep only the newest model per workspace
+      for (const name of fs.readdirSync(classifierDir(sessionId))) {
+        if (name.endsWith('.pkl') && name !== `${modelId}.pkl`) {
+          try { fs.unlinkSync(path.join(classifierDir(sessionId), name)); } catch (e) { /* ignore */ }
+        }
+      }
+      if (activityLogger && req.session.user) {
+        activityLogger.logActivity(req.session.user.username, 'annotation_classifier_train',
+          { sourceFileId, classes: result.classes, oob: result.oobAccuracy });
+      }
+      res.json({
+        success: true,
+        modelId,
+        classes: result.classes,
+        samplesPerClass: result.samplesPerClass,
+        labelledSlices: result.labelledSlices,
+        oobAccuracy: result.oobAccuracy,
+        seconds: result.seconds
+      });
+    } catch (error) {
+      if (logger) logger.error('[Annotation] Classifier train error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * POST /api/annotation/classifier/predict
+   * Body: { sourceFileId, modelId, slices: [i], minConfidence, smooth }
+   * Returns dense base64 labels + confidence per slice (0 = no suggestion).
+   */
+  router.post('/classifier/predict', requireAuth, async (req, res) => {
+    try {
+      const { sourceFileId, modelId, slices, minConfidence, smooth } = req.body;
+      if (!sourceFileId || !modelId || !Array.isArray(slices) || slices.length === 0) {
+        return res.status(400).json({ success: false, error: 'Missing sourceFileId, modelId or slices' });
+      }
+      if (!/^model_[0-9]+_[a-z0-9]+$/.test(modelId)) {
+        return res.status(400).json({ success: false, error: 'Invalid modelId' });
+      }
+      const sessionId = req.session.id;
+      const source = resolveSourcePath(sessionId, sourceFileId);
+      const modelPath = path.join(classifierDir(sessionId), `${modelId}.pkl`);
+      if (!fs.existsSync(source)) {
+        return res.status(404).json({ success: false, error: 'Source image not found' });
+      }
+      if (!fs.existsSync(modelPath)) {
+        return res.status(404).json({ success: false, error: 'Model not found, train again', code: 'MODEL_MISSING' });
+      }
+      const result = await runClassifier('predict', {
+        source, modelPath,
+        slices: slices.slice(0, 64).map(i => parseInt(i, 10)).filter(Number.isInteger),
+        minConfidence: Math.max(0, Math.min(1, Number(minConfidence) || 0)),
+        smooth: Math.max(0, Math.min(3, parseInt(smooth, 10) || 0))
+      });
+      res.json({ success: true, slices: result.slices, width: result.width, height: result.height, seconds: result.seconds });
+    } catch (error) {
+      if (logger) logger.error('[Annotation] Classifier predict error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

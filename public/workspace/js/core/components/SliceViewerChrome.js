@@ -117,6 +117,7 @@ class SliceViewerChrome {
 
     const strip = o.showSlider ? `
       <div class="sv-slider-strip">
+        <div class="sv-slider-marks" data-sv="marks" hidden></div>
         <input type="range" class="range-slider sv-slider" data-sv="slider"
                min="0" max="${this.slices - 1}" value="${this.slice}"
                title="Drag to change slice" aria-label="Slice">
@@ -161,6 +162,7 @@ class SliceViewerChrome {
     this.el = {
       prev: q('prev'), next: q('next'), num: q('num'), total: q('total'),
       slider: q('slider'),
+      marks: q('marks'),
       zoomIn: q('zoom-in'), zoomOut: q('zoom-out'), zoomFit: q('zoom-fit'),
       zoomReset: q('zoom-reset'), zoomReadout: q('zoom-readout'),
       undo: q('undo'), redo: q('redo'),
@@ -184,6 +186,10 @@ class SliceViewerChrome {
     });
     on(this.el.slider, 'input', (e) => this._request(parseInt(e.target.value, 10)));
     // While the user drags, a completing load must not snap the thumb back
+    on(this.el.marks, 'click', (e) => {
+      const mark = e.target.closest('.sv-mark');
+      if (mark) this._request(parseInt(mark.dataset.index, 10));
+    });
     on(this.el.slider, 'pointerdown', () => { this.sliderScrubbing = true; });
     on(this.el.slider, 'change', () => { this.sliderScrubbing = false; });
 
@@ -265,6 +271,39 @@ class SliceViewerChrome {
   /** Change the total slice count, clamping the current slice */
   setSlices(total) {
     this.setSlice(this.slice, total);
+  }
+
+  /**
+   * Show marks above the slider strip (e.g. which slices carry annotations of the
+   * active class). Pass an empty array to hide the mark track. Clicking a mark
+   * navigates to its slice.
+   * @param {Array<{index:number, kind?:'key'|'auto', color?:string, title?:string}>} marks
+   *   index is 0-based; kind 'key' draws a solid bar, 'auto' a lighter one,
+   *   'pending' a hollow one (something waiting for review)
+   */
+  setMarks(marks) {
+    const track = this.el?.marks;
+    if (!track) return;
+    this.marks = Array.isArray(marks) ? marks : [];
+    if (this.marks.length === 0 || this.slices <= 1) {
+      track.hidden = true;
+      track.innerHTML = '';
+      return;
+    }
+    const span = Math.max(1, this.slices - 1);
+    track.innerHTML = this.marks
+      .filter(m => Number.isInteger(m.index) && m.index >= 0 && m.index < this.slices)
+      .map(m => {
+        const pct = (m.index / span * 100).toFixed(3);
+        const style = `left: calc(8px + (100% - 16px) * ${pct} / 100);` +
+          (m.color ? ` background: ${m.color};` : '');
+        const title = m.title || `Slice ${m.index + 1}`;
+        const kind = (m.kind === 'auto' || m.kind === 'pending') ? m.kind : 'key';
+        return `<span class="sv-mark sv-mark-${kind}" ` +
+          `data-index="${m.index}" style="${style}" title="${title}"></span>`;
+      })
+      .join('');
+    track.hidden = false;
   }
 
   /** @param {number} zoom - scale factor (1 = 100 %) */

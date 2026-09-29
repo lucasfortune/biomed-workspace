@@ -6,6 +6,7 @@
  * - Saving annotation progress
  * - Creating final annotations
  * - Loading unfinished annotations
+ * - Pixel classifier: train on the user's strokes, predict slices (ADR-013 §8)
  *
  * @module AnnotationAPI
  */
@@ -109,6 +110,43 @@ class AnnotationAPI {
       return await response.json();
     } catch (error) {
       console.error('[AnnotationAPI] loadAnnotation error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Train the pixel classifier on the current labels
+   * @param {object} data - { sourceFileId, labels, classes, backgroundClass }
+   * @returns {Promise<{success:boolean, modelId?:string, samplesPerClass?:object, oobAccuracy?:number, error?:string}>}
+   */
+  async trainClassifier(data) {
+    return this.postJson('/api/annotation/classifier/train', data, 'trainClassifier');
+  }
+
+  /**
+   * Predict slices with a trained classifier
+   * @param {object} data - { sourceFileId, modelId, slices, minConfidence, smooth }
+   * @returns {Promise<{success:boolean, slices?:object, error?:string, code?:string}>}
+   */
+  async predictClassifier(data) {
+    return this.postJson('/api/annotation/classifier/predict', data, 'predictClassifier');
+  }
+
+  /**
+   * POST JSON and parse the JSON reply
+   * @private
+   */
+  async postJson(route, data, label) {
+    try {
+      const response = await fetch(`${this.baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error(`[AnnotationAPI] ${label} error:`, error);
       return { success: false, error: error.message };
     }
   }

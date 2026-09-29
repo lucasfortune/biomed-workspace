@@ -5,10 +5,13 @@
  * Works with AnnotationCanvas for coordinate transformation and rendering.
  *
  * Features:
- * - Brush and eraser tools
+ * - Brush, eraser and flood-fill tools
+ * - Alt+click eyedropper (pick the class under the cursor)
+ * - Overlay opacity and a temporary "peek" that hides all overlays
  * - Configurable brush size
  * - Smooth stroke interpolation
  * - Multi-class painting support
+ * - Hidden and locked classes are protected from brush and eraser strokes
  * - Preview cursor display
  *
  * @module BrushEngine
@@ -42,7 +45,9 @@ class BrushEngine {
     // STATE
     // =========================================================================
 
-    this.tool = 'brush';           // 'brush' | 'eraser'
+    this.tool = 'brush';           // 'brush' | 'eraser' | 'fill'
+    this.overlayAlpha = 179;       // 0-255 alpha of painted pixels (70 %, matches the slider default)
+    this.overlayVisible = true;    // false while the user peeks at the raw image
     this.brushSize = this.options.defaultBrushSize;
     this.activeClassId = 1;        // Current class ID for painting
     this.isDrawing = false;        // Whether currently in a stroke
@@ -63,7 +68,7 @@ class BrushEngine {
     // =========================================================================
 
     this.classes = [
-      { id: 1, name: 'Class 1', color: '#FF6B6B', visible: true }
+      { id: 1, name: 'Class 1', color: '#FF6B6B', visible: true, locked: false }
     ];
     this.nextClassId = 2;
 
@@ -81,6 +86,13 @@ class BrushEngine {
     this.onStrokeEnd = null;       // Called when stroke ends
     this.onAnnotationChange = null; // Called when annotation data changes
     this.onStrokeCancel = null;    // Called when stroke is cancelled (e.g., two-finger gesture)
+    this.onClassesChange = null;   // Called when a class definition changes outside the UI (e.g. auto-shown)
+    this.onLockedStroke = null;    // Called with the class when a stroke is refused because it is locked
+    this.onClassPicked = null;     // Called with the class ID picked by the Alt+click eyedropper
+
+    // Class IDs whose pixels must not be touched by the current stroke
+    // (rebuilt at stroke start from the hidden classes; see drawCircle)
+    this.protectedClassIds = new Set();
 
     // =========================================================================
     // POINTER TRACKING
@@ -167,7 +179,7 @@ class BrushEngine {
    * @param {'brush' | 'eraser'} tool - Tool to activate
    */
   setTool(tool) {
-    if (tool === 'brush' || tool === 'eraser') {
+    if (tool === 'brush' || tool === 'eraser' || tool === 'fill') {
       this.tool = tool;
       this.updateCursor();
       console.log(`[BrushEngine] Tool set to: ${tool}`);
@@ -249,6 +261,18 @@ class BrushEngine {
     if (!inBounds) return;
 
     e.preventDefault();
+
+    // Alt+click: eyedropper, pick the class under the cursor (any tool)
+    if (e.altKey) {
+      this.pickClassAt(source.x, source.y);
+      return;
+    }
+
+    // Fill: one click, no stroke
+    if (this.tool === 'fill') {
+      this.floodFill(source.x, source.y);
+      return;
+    }
 
     // Track this pointer as the drawing pointer
     this.drawingPointerId = e.pointerId;
@@ -412,6 +436,29 @@ class BrushEngine {
     this.isDrawing = true;
     this.lastPoint = { x, y };
 
+    if (this.tool === 'brush') {
+      const active = this.getActiveClass();
+      // A locked class cannot gain pixels either: refuse the stroke
+      if (active && active.locked) {
+        this.isDrawing = false;
+        this.lastPoint = null;
+        this.onLockedStroke?.(active);
+        return;
+      }
+      // Painting an invisible class would be confusing: show it again first
+      if (active && !active.visible) {
+        active.visible = true;
+        this.onClassesChange?.();
+      }
+    }
+
+    // Hidden and locked classes are protected: neither the brush nor the
+    // eraser may touch their pixels, so the user can hide or lock a class
+    // and paint around it
+    this.protectedClassIds = new Set(
+      this.classes.filter(c => !c.visible || c.locked).map(c => c.id)
+    );
+
     // Notify stroke start (for history management)
     if (this.onStrokeStart) {
       this.onStrokeStart();
@@ -475,6 +522,8 @@ class BrushEngine {
 
     const isEraser = this.tool === 'eraser';
     const value = isEraser ? 0 : this.activeClassId;
+    const protectedIds = this.protectedClassIds;
+    const hasProtected = protectedIds.size > 0;
 
     // Get the pixels that would be painted
     const pixels = this.getBrushPixels(cx, cy);
@@ -483,15 +532,11 @@ class BrushEngine {
       if (x >= 0 && x < this.imageWidth && y >= 0 && y < this.imageHeight) {
         const index = y * this.imageWidth + x;
 
-        // For eraser: only erase if the pixel's class is visible
-        if (isEraser) {
+        // Pixels of a hidden class are left alone by brush and eraser alike
+        if (hasProtected) {
           const currentClassId = data[index];
-          if (currentClassId !== 0) {
-            const currentClass = this.classes.find(c => c.id === currentClassId);
-            // Skip if class is hidden
-            if (currentClass && !currentClass.visible) {
-              continue;
-            }
+          if (currentClassId !== 0 && protectedIds.has(currentClassId)) {
+            continue;
           }
         }
 
@@ -572,6 +617,97 @@ class BrushEngine {
       const y = y0 + dy * t;
       this.drawCircle(x, y);
     }
+  }
+
+  /**
+   * Flood-fill the connected region under (x, y) with the active class.
+   * The region is the 4-connected set of pixels sharing the clicked value
+   * (background or another class). Regions of hidden or locked classes are
+   * protected, and a locked active class cannot fill (same rules as strokes).
+   * @param {number} x - X in source pixels
+   * @param {number} y - Y in source pixels
+   * @returns {number} number of pixels changed
+   */
+  floodFill(x, y) {
+    const data = this.getAnnotationData();
+    if (!data) return 0;
+    const w = this.imageWidth, h = this.imageHeight;
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    if (x0 < 0 || y0 < 0 || x0 >= w || y0 >= h) return 0;
+
+    const active = this.getActiveClass();
+    if (!active) return 0;
+    if (active.locked) {
+      this.onLockedStroke?.(active);
+      return 0;
+    }
+    if (!active.visible) {
+      active.visible = true;
+      this.onClassesChange?.();
+    }
+
+    const target = data[y0 * w + x0];
+    const replacement = active.id;
+    if (target === replacement) return 0;
+    if (target !== 0) {
+      const targetClass = this.classes.find(c => c.id === target);
+      if (targetClass && (!targetClass.visible || targetClass.locked)) return 0;
+    }
+
+    // History snapshot and stroke bookkeeping as for a brush stroke
+    this.onStrokeStart?.();
+
+    // Scanline flood fill of the connected `target` region
+    let changed = 0;
+    const stack = [[x0, y0]];
+    while (stack.length) {
+      const [px, py] = stack.pop();
+      let cx = px;
+      while (cx >= 0 && data[py * w + cx] === target) cx--;
+      cx++;
+      let above = false, below = false;
+      while (cx < w && data[py * w + cx] === target) {
+        data[py * w + cx] = replacement;
+        changed++;
+        if (py > 0) {
+          if (data[(py - 1) * w + cx] === target) {
+            if (!above) { stack.push([cx, py - 1]); above = true; }
+          } else above = false;
+        }
+        if (py < h - 1) {
+          if (data[(py + 1) * w + cx] === target) {
+            if (!below) { stack.push([cx, py + 1]); below = true; }
+          } else below = false;
+        }
+        cx++;
+      }
+    }
+
+    this.renderAnnotations();
+    this.onStrokeEnd?.();
+    this.onAnnotationChange?.();
+    console.log(`[BrushEngine] Filled ${changed} px with class ${replacement}`);
+    return changed;
+  }
+
+  /**
+   * Eyedropper: make the class under (x, y) the active class
+   * @param {number} x - X in source pixels
+   * @param {number} y - Y in source pixels
+   * @returns {number} the picked class ID, or 0 if background
+   */
+  pickClassAt(x, y) {
+    const data = this.getAnnotationData();
+    if (!data) return 0;
+    const px = Math.floor(x), py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= this.imageWidth || py >= this.imageHeight) return 0;
+    const classId = data[py * this.imageWidth + px];
+    if (classId !== 0 && this.classes.some(c => c.id === classId)) {
+      this.setActiveClass(classId);
+      this.onClassPicked?.(classId);
+      return classId;
+    }
+    return 0;
   }
 
   // ===========================================================================
@@ -666,6 +802,13 @@ class BrushEngine {
     // Guard: don't render if dimensions not set (image not loaded yet)
     if (width <= 0 || height <= 0) return;
 
+    // Peek: the raw image only
+    if (!this.overlayVisible) {
+      ctx.clearRect(0, 0, width, height);
+      return;
+    }
+    const alpha = this.overlayAlpha;
+
     // Create ImageData for efficient pixel manipulation
     const imageData = ctx.createImageData(width, height);
     const pixels = imageData.data;
@@ -691,7 +834,7 @@ class BrushEngine {
           pixels[pixelIndex] = color.r;
           pixels[pixelIndex + 1] = color.g;
           pixels[pixelIndex + 2] = color.b;
-          pixels[pixelIndex + 3] = 180;  // Semi-transparent
+          pixels[pixelIndex + 3] = alpha;
         } else {
           // Class hidden or not found
           pixels[pixelIndex + 3] = 0;
@@ -776,8 +919,10 @@ class BrushEngine {
       previewColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
     }
 
-    // Get the exact pixels that would be painted
-    const pixels = this.getBrushPixels(x, y);
+    // Get the exact pixels that would be painted (fill: mark the seed pixel only)
+    const pixels = this.tool === 'fill'
+      ? [{ x: Math.floor(x), y: Math.floor(y) }]
+      : this.getBrushPixels(x, y);
 
     // Use ImageData for pixel-perfect rendering without anti-aliasing
     if (pixels.length > 0) {
@@ -829,7 +974,8 @@ class BrushEngine {
       id,
       name: name || `Class ${id}`,
       color: color || this.getNextColor(),
-      visible: true
+      visible: true,
+      locked: false
     };
 
     this.classes.push(newClass);
@@ -882,6 +1028,81 @@ class BrushEngine {
       cls.visible = !cls.visible;
       this.renderAnnotations();
       console.log(`[BrushEngine] Class ${classId} visibility: ${cls.visible}`);
+    }
+  }
+
+  /**
+   * Rename a class
+   * @param {number} classId
+   * @param {string} name - trimmed; empty names are ignored
+   * @returns {boolean} true if changed
+   */
+  renameClass(classId, name) {
+    const cls = this.classes.find(c => c.id === classId);
+    const trimmed = String(name ?? '').trim();
+    if (!cls || !trimmed || trimmed === cls.name) return false;
+    cls.name = trimmed;
+    return true;
+  }
+
+  /**
+   * Change a class colour
+   * @param {number} classId
+   * @param {string} color - #rrggbb
+   */
+  setClassColor(classId, color) {
+    const cls = this.classes.find(c => c.id === classId);
+    if (!cls || !/^#[0-9a-f]{6}$/i.test(color)) return;
+    cls.color = color;
+    this.renderAnnotations();
+  }
+
+  /**
+   * Show or hide every class at once
+   * @param {boolean} visible
+   */
+  setAllVisible(visible) {
+    for (const cls of this.classes) cls.visible = !!visible;
+    this.renderAnnotations();
+  }
+
+  /**
+   * Lock or unlock every class at once
+   * @param {boolean} locked
+   */
+  setAllLocked(locked) {
+    for (const cls of this.classes) cls.locked = !!locked;
+  }
+
+  /**
+   * Overlay opacity of painted pixels
+   * @param {number} percent - 0-100
+   */
+  setOverlayOpacity(percent) {
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    this.overlayAlpha = Math.round(p * 255 / 100);
+    this.renderAnnotations();
+  }
+
+  /**
+   * Temporarily hide (peek) or show all overlays without touching class state
+   * @param {boolean} visible
+   */
+  setOverlayVisible(visible) {
+    if (this.overlayVisible === !!visible) return;
+    this.overlayVisible = !!visible;
+    this.renderAnnotations();
+  }
+
+  /**
+   * Toggle class lock (a locked class is protected from all strokes, even when visible)
+   * @param {number} classId - Class ID to toggle
+   */
+  toggleClassLock(classId) {
+    const cls = this.classes.find(c => c.id === classId);
+    if (cls) {
+      cls.locked = !cls.locked;
+      console.log(`[BrushEngine] Class ${classId} locked: ${cls.locked}`);
     }
   }
 
