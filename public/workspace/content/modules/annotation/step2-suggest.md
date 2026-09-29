@@ -21,13 +21,17 @@ seeAlsoTags:
 
 Let a classifier propose the annotation of a slice from a few strokes, the way ilastik and Labkit do. You paint examples, the module trains a random forest on per-pixel texture features, and the prediction appears as a translucent suggestion you can accept or correct.
 
+## Background examples
+
+In this workspace the background is never a label: pixels you do not paint stay 0. The classifier still needs examples of what to leave empty, so one class is marked as the background class. Its strokes are training examples only. When you create the final annotation, its pixels are written as 0, and the class is left out of the class list, so the segmentation module never sees it. Save Progress keeps the strokes so you can continue later. The class shows a "bg" badge in the class list.
+
 ## Getting a suggestion
 
-1. Create a background class (any name containing "background" is picked up automatically) and paint a few strokes on it: cytoplasm, resin, anything that is not a structure you want.
+1. Open the Suggest section and click Add background class, or pick an existing class in the dropdown. Paint a few strokes on it: cytoplasm, resin, anything that is not a structure you want.
 
 2. Paint a few strokes of each structure class. Strokes on several slices help, and the strokes do not need to cover whole objects.
 
-3. Choose the background class in the Suggest section and click Suggest slice (or press S). Training takes a few seconds the first time and again whenever you change the labels; predicting a slice takes about a second.
+3. Click Suggest slice (or press S). Training takes a few seconds the first time and again whenever you change the labels; predicting a slice takes about a second.
 
 4. The suggestion appears under your annotations at reduced opacity, stronger where the classifier is confident. It is only drawn where the slice is still empty, so it shows exactly what Accept would write.
 
@@ -35,7 +39,7 @@ Let a classifier propose the annotation of a slice from a few strokes, the way i
 
 ## Settings
 
-- Background class: strokes of this class teach the classifier what to leave empty. Without one every pixel gets some class, which is rarely what you want.
+- Background class: strokes of this class teach the classifier what to leave empty. Suggest refuses to run without one.
 
 - Min confidence: pixels predicted with lower confidence are left empty. Raise it for cleaner but sparser suggestions, lower it to fill more.
 

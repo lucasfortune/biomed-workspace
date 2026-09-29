@@ -128,7 +128,6 @@ class AnnotationModule extends BaseModule {
     this.classifierModelId = null;       // server-side model trained on the current labels
     this.labelsVersion = 0;              // bumped on every label change; the model remembers the version it saw
     this.classifierTrainedVersion = -1;
-    this.classifierBackground = null;    // class id treated as background by the classifier (or null)
     this.suggestBusy = false;
 
     // Autosave
@@ -236,6 +235,14 @@ class AnnotationModule extends BaseModule {
               <div class="annotation-header">
                 <h3>Annotation Interface</h3>
                 <div class="annotation-actions">
+                  <div class="autosave-toggle" title="Save progress automatically every 2 minutes">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="autosaveToggle" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label">Autosave</span>
+                    <span id="autosaveStatus" class="autosave-status"></span>
+                  </div>
                   <button id="saveProgressBtn" class="btn secondary" disabled>
                     Save Progress
                   </button>
@@ -246,9 +253,9 @@ class AnnotationModule extends BaseModule {
               <div class="sv-main">
                 ${this.chrome.render()}
 
-                <!-- Toolbar -->
+                <!-- Toolbar: three sections, the whole column scrolls -->
                 <div id="toolbar" class="sv-toolbar">
-                  <!-- Tools Section -->
+                  <!-- Tools: tool buttons, history, brush size -->
                   <div class="sv-section">
                     <div class="sv-section-header">
                       <h4>Tools</h4>
@@ -268,104 +275,23 @@ class AnnotationModule extends BaseModule {
                         <span class="tool-label">Fill</span>
                       </button>
                     </div>
-                  </div>
-
-                  <!-- Brush Size Section -->
-                  <div class="sv-section">
-                    <div class="sv-section-header">
-                      <h4>Brush Size</h4>
-                      ${this.renderHelpIcon('annotation.step2.brush-size')}
+                    <div class="history-row">
+                      <button id="undoBtn" class="btn-icon-sm" title="Undo (Ctrl+Z)" disabled>${icon('undo')}</button>
+                      <button id="redoBtn" class="btn-icon-sm" title="Redo (Ctrl+Y)" disabled>${icon('redo')}</button>
+                      <button id="revertInterpolationBtn" class="btn-icon-sm btn-revert-interpolation"
+                              title="Restore every slice the last interpolation wrote to its previous content" hidden>
+                        ${icon('layers')}<span>Revert interpolation</span>
+                      </button>
                     </div>
-                    <div class="brush-size-control">
+                    <div class="brush-size-control" title="Brush size ([ and ] to change)">
+                      <span class="control-label">Size</span>
                       <input type="range" id="brushSizeSlider" min="1" max="50" value="10"
                              class="brush-slider range-slider" title="Brush size">
                       <span id="brushSizeValue" class="brush-size-value">10px</span>
                     </div>
                   </div>
 
-                  <!-- Overlay Section -->
-                  <div class="sv-section">
-                    <div class="sv-section-header">
-                      <h4>Overlay</h4>
-                      ${this.renderHelpIcon('annotation.step2.tools')}
-                    </div>
-                    <div class="brush-size-control" title="Opacity of the painted classes. Hold V to peek at the raw image.">
-                      <input type="range" id="overlayOpacitySlider" min="0" max="100" value="70"
-                             class="brush-slider range-slider" title="Overlay opacity">
-                      <span id="overlayOpacityValue" class="brush-size-value">70%</span>
-                    </div>
-                    <div class="overlay-hint">Hold <kbd>V</kbd> to peek at the image</div>
-                  </div>
-
-                  <!-- Suggest Section (pixel classifier) -->
-                  <div class="sv-section suggest-section">
-                    <div class="sv-section-header">
-                      <h4>Suggest</h4>
-                      ${this.renderHelpIcon('annotation.step2.suggest')}
-                    </div>
-                    <label class="suggest-field" title="Strokes of this class teach the classifier what is NOT a structure; its predictions are left empty">
-                      <span>Background class</span>
-                      <select id="suggestBackground"></select>
-                    </label>
-                    <div class="brush-size-control" title="Pixels predicted with lower confidence are left empty">
-                      <span class="suggest-inline-label">Min conf.</span>
-                      <input type="range" id="suggestConfidence" min="0" max="100" value="60"
-                             class="brush-slider range-slider" title="Minimum confidence">
-                      <span id="suggestConfidenceValue" class="brush-size-value">60%</span>
-                    </div>
-                    <label class="suggest-check" title="Median filter on the prediction to remove speckles">
-                      <input type="checkbox" id="suggestSmooth" checked> Smooth result
-                    </label>
-                    <div class="suggest-buttons">
-                      <button id="suggestBtn" class="btn primary" title="Train on your strokes and suggest the current slice (S)">
-                        Suggest slice
-                      </button>
-                    </div>
-                    <div class="suggest-range">
-                      <input type="number" id="suggestFrom" min="1" value="1" title="First slice">
-                      <span>to</span>
-                      <input type="number" id="suggestTo" min="1" value="1" title="Last slice">
-                      <button id="suggestRangeBtn" class="btn secondary" title="Suggest every slice in the range">Range</button>
-                    </div>
-                    <div id="suggestStatus" class="suggest-status"></div>
-                    <div id="suggestActions" class="suggest-actions" hidden>
-                      <button id="acceptSuggestionBtn" class="btn primary" title="Write the suggestion into empty pixels of this slice (A)">Accept</button>
-                      <button id="discardSuggestionBtn" class="btn secondary" title="Drop the suggestion for this slice">Discard</button>
-                      <button id="acceptAllSuggestionsBtn" class="btn secondary" title="Accept every pending suggestion" hidden>Accept all</button>
-                    </div>
-                  </div>
-
-                  <!-- History Section -->
-                  <div class="sv-section">
-                    <div class="sv-section-header">
-                      <h4>History</h4>
-                      ${this.renderHelpIcon('annotation.step2.history')}
-                    </div>
-                    <div class="history-buttons">
-                      <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)" disabled>
-                        <span class="tool-icon">${icon('undo')}</span>
-                        <span class="tool-label">Undo</span>
-                      </button>
-                      <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)" disabled>
-                        <span class="tool-icon">${icon('redo')}</span>
-                        <span class="tool-label">Redo</span>
-                      </button>
-                    </div>
-                    <button id="revertInterpolationBtn" class="btn secondary btn-revert-interpolation"
-                            title="Restore every slice the last interpolation wrote to its previous content" hidden>
-                      ${icon('layers')} Revert interpolation
-                    </button>
-                    <div class="autosave-toggle">
-                      <label class="toggle-switch">
-                        <input type="checkbox" id="autosaveToggle" checked>
-                        <span class="toggle-slider"></span>
-                      </label>
-                      <span class="toggle-label">Autosave</span>
-                      <span id="autosaveStatus" class="autosave-status"></span>
-                    </div>
-                  </div>
-
-                  <!-- Classes Section -->
+                  <!-- Classes and overlay -->
                   <div class="sv-section classes-section">
                     <div class="classes-header">
                       <h4>Classes</h4>
@@ -375,9 +301,58 @@ class AnnotationModule extends BaseModule {
                       <button id="toggleAllLockedBtn" class="btn-class-batch" title="Lock all classes">${icon('lock')}</button>
                       <button id="addClassBtn" class="btn-add-class" title="Add class">+</button>
                     </div>
+                    <div class="brush-size-control" title="Opacity of the painted classes. Hold V to peek at the raw image.">
+                      <span class="control-label">Overlay</span>
+                      <input type="range" id="overlayOpacitySlider" min="0" max="100" value="70"
+                             class="brush-slider range-slider" title="Overlay opacity">
+                      <span id="overlayOpacityValue" class="brush-size-value">70%</span>
+                    </div>
+                    <div class="overlay-hint">Hold <kbd>V</kbd> to peek at the image</div>
                     <input type="color" id="classColorInput" class="class-color-input" aria-label="Class colour">
                     <div id="classList" class="class-list">
                       <!-- Classes will be rendered dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Suggest (pixel classifier), collapsible -->
+                  <div class="sv-section suggest-section" id="suggestSection">
+                    <div class="sv-section-header suggest-header" id="suggestHeader" title="Show / hide">
+                      <span class="suggest-caret">${icon('caretRight')}</span>
+                      <h4>Suggest</h4>
+                      ${this.renderHelpIcon('annotation.step2.suggest')}
+                    </div>
+                    <div class="suggest-body" id="suggestBody">
+                      <label class="suggest-field" title="Strokes of this class are background examples. Its pixels are written as unlabeled (0) when you create the annotation.">
+                        <span>Background class (examples of what to leave empty)</span>
+                        <select id="suggestBackground"></select>
+                      </label>
+                      <button id="addBackgroundClassBtn" class="btn secondary suggest-add-bg" title="Add a class named Background and mark it as the background class">+ Add background class</button>
+                      <div class="brush-size-control" title="Pixels predicted with lower confidence are left empty">
+                        <span class="control-label">Min conf.</span>
+                        <input type="range" id="suggestConfidence" min="0" max="100" value="60"
+                               class="brush-slider range-slider" title="Minimum confidence">
+                        <span id="suggestConfidenceValue" class="brush-size-value">60%</span>
+                      </div>
+                      <label class="suggest-check" title="Median filter on the prediction to remove speckles">
+                        <input type="checkbox" id="suggestSmooth" checked> Smooth result
+                      </label>
+                      <div class="suggest-buttons">
+                        <button id="suggestBtn" class="btn primary" title="Train on your strokes and suggest the current slice (S)">
+                          Suggest slice
+                        </button>
+                      </div>
+                      <div class="suggest-range">
+                        <input type="number" id="suggestFrom" min="1" value="1" title="First slice">
+                        <span>to</span>
+                        <input type="number" id="suggestTo" min="1" value="1" title="Last slice">
+                        <button id="suggestRangeBtn" class="btn secondary" title="Suggest every slice in the range">Range</button>
+                      </div>
+                      <div id="suggestStatus" class="suggest-status"></div>
+                      <div id="suggestActions" class="suggest-actions" hidden>
+                        <button id="acceptSuggestionBtn" class="btn primary" title="Write the suggestion into empty pixels of this slice (A)">Accept</button>
+                        <button id="discardSuggestionBtn" class="btn secondary" title="Drop the suggestion for this slice">Discard</button>
+                        <button id="acceptAllSuggestionsBtn" class="btn secondary" title="Accept every pending suggestion" hidden>Accept all</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -651,7 +626,17 @@ class AnnotationModule extends BaseModule {
     this.container.querySelector('#toggleAllVisibleBtn')?.addEventListener('click', () => this.toggleAllVisible());
     this.container.querySelector('#toggleAllLockedBtn')?.addEventListener('click', () => this.toggleAllLocked());
 
-    // Suggest (pixel classifier)
+    // Suggest (pixel classifier): collapsible section, state remembered per browser
+    const suggestHeader = this.container.querySelector('#suggestHeader');
+    if (suggestHeader) {
+      suggestHeader.addEventListener('click', (e) => {
+        if (e.target.closest('.help-icon')) return;
+        this.setSuggestCollapsed(!this.isSuggestCollapsed());
+      });
+    }
+    let collapsed = true;
+    try { collapsed = localStorage.getItem('annotation.suggestCollapsed') !== '0'; } catch (e) { /* ignore */ }
+    this.setSuggestCollapsed(collapsed, false);
     this.container.querySelector('#suggestBtn')?.addEventListener('click', () => this.suggestSlices([this.currentSlice]));
     this.container.querySelector('#suggestRangeBtn')?.addEventListener('click', () => {
       const from = parseInt(this.container.querySelector('#suggestFrom')?.value, 10);
@@ -667,14 +652,40 @@ class AnnotationModule extends BaseModule {
     this.container.querySelector('#acceptAllSuggestionsBtn')?.addEventListener('click', () => this.acceptAllSuggestions());
     this.container.querySelector('#suggestBackground')?.addEventListener('change', (e) => {
       const v = parseInt(e.target.value, 10);
-      this.classifierBackground = Number.isInteger(v) ? v : null;
-      this.classifierTrainedVersion = -1;   // background choice is part of the model
+      this.brushEngine?.setClassRole(Number.isInteger(v) ? v : null, Number.isInteger(v) ? 'background' : null);
+      this.classifierTrainedVersion = -1;   // the background choice is part of the model
+      this.isDirty = true;
+      this.updateSaveButtonState();
+      this.renderClassList();
+    });
+    this.container.querySelector('#addBackgroundClassBtn')?.addEventListener('click', () => {
+      if (!this.brushEngine) return;
+      const cls = this.brushEngine.addClass('Background', '#9E9E9E', 'background');
+      this.classifierTrainedVersion = -1;
+      this.renderClassList();
+      this.updateSliceMarks();
+      this.setSuggestStatus(`"${cls.name}" added and selected: paint a few strokes on cytoplasm, resin or anything that is not a structure.`);
     });
     const confSlider = this.container.querySelector('#suggestConfidence');
     if (confSlider) {
       confSlider.addEventListener('input', (e) => {
         const v = this.container.querySelector('#suggestConfidenceValue');
         if (v) v.textContent = `${e.target.value}%`;
+      });
+    }
+
+    // Rename: double-click on a class name. Delegated to the list container
+    // because the list is re-rendered on selection and per-item listeners
+    // would sit on a replaced node by the time dblclick fires.
+    const classListEl = this.container.querySelector('#classList');
+    if (classListEl) {
+      classListEl.addEventListener('dblclick', (e) => {
+        const item = e.target.closest('.class-item');
+        if (!item || e.target.closest('button') || e.target.closest('.class-name-input')) return;
+        e.preventDefault();
+        const classId = parseInt(item.dataset.classId, 10);
+        const nameEl = item.querySelector('[data-action="name"]');
+        if (nameEl) this.startRenameClass(classId, nameEl);
       });
     }
 
@@ -1144,6 +1155,7 @@ class AnnotationModule extends BaseModule {
    */
   selectClass(classId) {
     if (!this.brushEngine) return;
+    if (this.brushEngine.activeClassId === classId) return;
 
     this.brushEngine.setActiveClass(classId);
     this.renderClassList();
@@ -1277,6 +1289,7 @@ class AnnotationModule extends BaseModule {
            data-class-id="${cls.id}">
         <span class="class-color" style="background: ${cls.color};" title="Change colour" data-action="color"></span>
         <span class="class-name" title="${escapeHtml(cls.name)} (double-click to rename)" data-action="name">${escapeHtml(cls.name)}</span>
+        ${cls.role === 'background' ? `<span class="class-badge" title="Background examples for the classifier; written as 0 (unlabeled) on Create Annotation">bg</span>` : ''}
         <button class="class-interpolate" title="${cls.locked ? 'Unlock the class to interpolate it' : 'Interpolate between annotated slices…'}" data-action="interpolate">
           ${icon('layers')}
         </button>
@@ -1317,16 +1330,6 @@ class AnnotationModule extends BaseModule {
           e.stopPropagation();
           this.selectClass(classId);
           this.openColorPicker(classId);
-        });
-      }
-
-      // Name: double-click to rename inline
-      const nameEl = item.querySelector('[data-action="name"]');
-      if (nameEl) {
-        nameEl.addEventListener('dblclick', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this.startRenameClass(classId, nameEl);
         });
       }
 
@@ -1809,16 +1812,34 @@ class AnnotationModule extends BaseModule {
   populateBackgroundSelect(classes) {
     const select = this.container?.querySelector('#suggestBackground');
     if (!select) return;
-    if (this.classifierBackground !== null && !classes.some(c => c.id === this.classifierBackground)) {
-      this.classifierBackground = null;
-      this.classifierTrainedVersion = -1;
+    const background = classes.find(c => c.role === 'background') || null;
+    select.innerHTML = `<option value="">(none yet)</option>` +
+      classes.map(c => `<option value="${c.id}" ${background && c.id === background.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    const addBtn = this.container.querySelector('#addBackgroundClassBtn');
+    if (addBtn) addBtn.hidden = !!background;
+  }
+
+  /**
+   * Is the Suggest section collapsed?
+   */
+  isSuggestCollapsed() {
+    return !!this.container?.querySelector('#suggestSection')?.classList.contains('is-collapsed');
+  }
+
+  /**
+   * Collapse or expand the Suggest section
+   * @param {boolean} collapsed
+   * @param {boolean} [persist=true] - remember the choice in localStorage
+   */
+  setSuggestCollapsed(collapsed, persist = true) {
+    const section = this.container?.querySelector('#suggestSection');
+    const body = this.container?.querySelector('#suggestBody');
+    if (!section || !body) return;
+    section.classList.toggle('is-collapsed', collapsed);
+    body.hidden = collapsed;
+    if (persist) {
+      try { localStorage.setItem('annotation.suggestCollapsed', collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
     }
-    if (this.classifierBackground === null) {
-      const guess = classes.find(c => /\b(background|bg|rest|other)\b/i.test(c.name));
-      if (guess) this.classifierBackground = guess.id;
-    }
-    select.innerHTML = `<option value="">(none: every pixel gets a class)</option>` +
-      classes.map(c => `<option value="${c.id}" ${c.id === this.classifierBackground ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
   }
 
   /**
@@ -1874,8 +1895,13 @@ class AnnotationModule extends BaseModule {
     for (const [key, value] of Object.entries(payload.sliceData)) {
       if (!this.interpolatedSlices.has(parseInt(key, 10))) labels[key] = value;
     }
+    const background = this.brushEngine.getBackgroundClass();
+    if (!background) {
+      this.setSuggestStatus('Mark a class as background first (or add one). Its strokes tell the classifier what to leave empty.', true);
+      return false;
+    }
     if (Object.keys(labels).length === 0) {
-      this.setSuggestStatus('Paint some strokes first (two classes at least, one of them background).', true);
+      this.setSuggestStatus('Paint some strokes first: a structure class and the background class.', true);
       return false;
     }
     const version = this.labelsVersion;
@@ -1884,7 +1910,7 @@ class AnnotationModule extends BaseModule {
       sourceFileId: payload.sourceFileId,
       labels,
       classes: this.brushEngine.getClasses().map(c => c.id),
-      backgroundClass: this.classifierBackground
+      backgroundClass: background.id
     });
     if (!result.success) {
       this.setSuggestStatus(result.error || 'Training failed', true);
@@ -1906,6 +1932,7 @@ class AnnotationModule extends BaseModule {
     if (this.suggestBusy || !this.brushEngine || !this.api) return;
     const targets = [...new Set(slices)].filter(i => Number.isInteger(i) && i >= 0 && i < this.totalSlices);
     if (targets.length === 0) return;
+    if (this.isSuggestCollapsed()) this.setSuggestCollapsed(false, false);
     this.suggestBusy = true;
     const btns = ['#suggestBtn', '#suggestRangeBtn'].map(id => this.container.querySelector(id));
     btns.forEach(b => { if (b) b.disabled = true; });
@@ -2075,7 +2102,7 @@ class AnnotationModule extends BaseModule {
    * Converts slice annotations to base64-encoded format
    * @returns {object} Data ready for API
    */
-  prepareAnnotationData() {
+  prepareAnnotationData(options = {}) {
     if (!this.brushEngine || !this.tiffInfo) {
       return null;
     }
@@ -2084,11 +2111,21 @@ class AnnotationModule extends BaseModule {
     const sliceData = {};
     const width = this.tiffInfo.width;
 
+    // The background class (classifier examples) is written as 0 for the final
+    // annotation: the platform's convention is that background is unlabeled
+    const background = this.brushEngine.getBackgroundClass();
+    const stripId = options.stripBackground && background ? background.id : 0;
+
     let sparseCount = 0;
     let denseCount = 0;
 
     // Convert each annotated slice using sparse or dense encoding
-    for (const [sliceIndex, data] of sliceAnnotations) {
+    for (const [sliceIndex, rawData] of sliceAnnotations) {
+      let data = rawData;
+      if (stripId && rawData.includes(stripId)) {
+        data = new Uint8Array(rawData);
+        for (let i = 0; i < data.length; i++) if (data[i] === stripId) data[i] = 0;
+      }
       // Only include slices that have non-zero pixels
       let hasContent = false;
       for (let i = 0; i < data.length; i++) {
@@ -2127,7 +2164,8 @@ class AnnotationModule extends BaseModule {
       height: this.tiffInfo.height,
       slices: this.tiffInfo.sliceCount,
       sliceData,
-      classes: this.brushEngine.getClasses(),
+      classes: this.brushEngine.getClasses().filter(c => c.id !== stripId),
+      strippedBackgroundClass: stripId ? background.name : null,
       existingAnnotationId: this.currentAnnotationId  // For updating existing annotations
     };
   }
@@ -2459,7 +2497,7 @@ class AnnotationModule extends BaseModule {
     }
 
     // Prepare data
-    const data = this.prepareAnnotationData();
+    const data = this.prepareAnnotationData({ stripBackground: true });
     if (!data) {
       if (this.state?.notify) {
         this.state.notify('error', 'Cannot create: no source file loaded');
@@ -2474,6 +2512,9 @@ class AnnotationModule extends BaseModule {
       );
       if (!confirmed) return;
     }
+    const strippedNote = data.strippedBackgroundClass
+      ? ` The background class "${data.strippedBackgroundClass}" was written as unlabeled (0).`
+      : '';
 
     // Validate classes
     if (!data.classes || data.classes.length === 0) {
@@ -2495,7 +2536,7 @@ class AnnotationModule extends BaseModule {
 
       if (result.success) {
         if (this.state?.notify) {
-          this.state.notify('success', 'Annotation created successfully');
+          this.state.notify('success', `Annotation created successfully.${strippedNote}`, strippedNote ? 8000 : 5000);
         }
         console.log('[AnnotationModule] Annotation created:', result);
 

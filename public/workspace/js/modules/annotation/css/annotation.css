@@ -93,7 +93,8 @@
 
 .annotation-module .annotation-actions {
   display: flex;
-  gap: var(--module-spacing-sm);
+  align-items: center;
+  gap: var(--module-spacing-md);
 }
 
 /* ============================================
@@ -245,16 +246,13 @@
 }
 
 /* ============================================
-   AUTOSAVE TOGGLE
+   AUTOSAVE TOGGLE (in the step header, next to Save Progress)
    ============================================ */
 
 .annotation-module .autosave-toggle {
   display: flex;
   align-items: center;
   gap: var(--module-spacing-xs);
-  margin-top: var(--module-spacing-sm);
-  padding-top: var(--module-spacing-sm);
-  border-top: 1px solid var(--module-border);
 }
 
 /* .toggle-switch / .toggle-slider / .toggle-label come from module-base.css */
@@ -263,7 +261,51 @@
   font-size: 11px;
   color: var(--module-primary);
   font-style: italic;
-  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ============================================
+   HISTORY ROW (small icon buttons under the tools)
+   ============================================ */
+
+.annotation-module .history-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--module-spacing-xs);
+}
+
+.annotation-module .btn-icon-sm {
+  height: 26px;
+  min-width: 30px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  font-size: var(--module-font-size-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.annotation-module .btn-icon-sm:hover:not(:disabled) {
+  border-color: var(--module-primary);
+  background: var(--module-primary-light);
+}
+
+.annotation-module .btn-icon-sm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.annotation-module .control-label {
+  font-size: var(--module-font-size-xs);
+  color: var(--module-text-secondary);
+  white-space: nowrap;
 }
 
 /* ============================================
@@ -277,6 +319,7 @@
   width: 100%;
   max-width: 100%;
   overflow: hidden;
+  margin-top: var(--module-spacing-xs);
 }
 
 .annotation-module .brush-slider {
@@ -299,8 +342,6 @@
    ============================================ */
 
 .annotation-module .classes-section {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -345,11 +386,10 @@
 }
 
 .annotation-module .class-list {
-  flex: 1;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-top: var(--module-spacing-xs);
 }
 
 .annotation-module .class-item {
@@ -396,6 +436,19 @@
   pointer-events: none;
 }
 
+.annotation-module .class-badge {
+  flex-shrink: 0;
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--module-text-secondary);
+  background: var(--module-bg);
+  border: 1px solid var(--module-border);
+  border-radius: 8px;
+}
+
 .annotation-module .class-name-input {
   flex: 1;
   min-width: 0;
@@ -432,7 +485,7 @@
 }
 
 .annotation-module .overlay-hint {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: var(--module-font-size-xs);
   color: var(--module-text-secondary);
 }
@@ -543,24 +596,51 @@
   background: var(--module-border);
 }
 
-/* Revert last interpolation (History section, shown only while available) */
+/* Revert last interpolation (history row, shown only while available) */
 .annotation-module .btn-revert-interpolation[hidden] {
   display: none;
 }
 
 .annotation-module .btn-revert-interpolation {
-  width: 100%;
-  margin-top: var(--module-spacing-xs);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: var(--module-font-size-xs);
+  flex: 1;
+  min-width: 0;
 }
 
-/* Suggest section (pixel classifier, ADR-013 §8) */
+.annotation-module .btn-revert-interpolation span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Suggest section (pixel classifier, ADR-013 §8), collapsible */
 .annotation-module .suggest-section {
   flex-shrink: 0;
+}
+
+.annotation-module .suggest-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.annotation-module .suggest-section.is-collapsed .suggest-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.annotation-module .suggest-caret {
+  display: inline-flex;
+  width: 1em;
+  color: var(--module-text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.annotation-module .suggest-section:not(.is-collapsed) .suggest-caret {
+  transform: rotate(90deg);
+}
+
+.annotation-module .suggest-body[hidden] {
+  display: none;
 }
 
 .annotation-module .suggest-field {
@@ -595,6 +675,17 @@
   margin: var(--module-spacing-xs) 0;
   font-size: var(--module-font-size-xs);
   color: var(--module-text-secondary);
+}
+
+.annotation-module .suggest-add-bg {
+  width: 100%;
+  margin-bottom: var(--module-spacing-xs);
+  font-size: var(--module-font-size-xs);
+  padding: 3px 8px;
+}
+
+.annotation-module .suggest-add-bg[hidden] {
+  display: none;
 }
 
 .annotation-module .suggest-buttons .btn,

@@ -82,7 +82,8 @@
       "path": "modules/annotation/step2-tools.md",
       "seeAlsoManual": [
         "annotation.step2.brush-size",
-        "annotation.step2.classes"
+        "annotation.step2.classes",
+        "annotation.step2.history"
       ],
       "seeAlsoTags": [
         "tools",

@@ -132,7 +132,12 @@ polygon, magic wand, in-viewer contrast.
   keyup or window blur restores). Class visibility flags are untouched
   by the peek.
 - **Rename** by double-clicking the name (inline input, Enter commits,
-  Escape cancels, key events stopped so shortcuts don't fire); **colour**
+  Escape cancels, key events stopped so shortcuts don't fire). The
+  first version never fired: the first click of the double-click
+  selected the class and re-rendered the list, so the second click and
+  the dblclick landed on a replaced node. Now `selectClass` skips the
+  re-render when the class is already active and the dblclick handler is
+  delegated to the persistent list container; **colour**
   by clicking the swatch (one persistent hidden `<input type="color">`
   per module, retargeted per click). Names are now HTML-escaped in the
   list. Both are already part of the saved class list.
@@ -178,6 +183,20 @@ needs no model download and fits the existing Python side.
   so marks and the training exclusion below apply). Pending suggestions
   are hollow marks on the slider (`kind: 'pending'` in `setMarks`).
   Keys: S suggest, A accept.
+- **Background is not a label** (Lucas, after first use: "the workspace
+  entirely works with the background being unlabeled"). Options weighed:
+  (1) a class with a `role: 'background'` flag that is stripped to 0 on
+  Create Annotation, (2) a separate background-example layer outside the
+  label array, (3) unlabeled pixels of slices marked complete count as
+  background. Chosen: (1), for reuse of every painting tool and ~2 h of
+  work; (3) may follow as an option for whole-slice annotators. The
+  role lives on the class object (sidecar), at most one class carries
+  it, the Suggest dropdown sets it and an "Add background class" button
+  creates a grey "Background" class with the role. `prepareAnnotationData
+  ({ stripBackground: true })` (Create only; Save Progress keeps the
+  strokes) rewrites that id to 0 and drops the class from the list; the
+  success notice says so. Suggest refuses to run without a background
+  class.
 - **Staleness**: `labelsVersion` is bumped on every label change
   (stroke, fill, undo/redo, interpolation, revert, class delete, load);
   Suggest retrains when the model's version differs. Auto-filled slices

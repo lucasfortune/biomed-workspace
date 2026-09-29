@@ -68,7 +68,7 @@ class BrushEngine {
     // =========================================================================
 
     this.classes = [
-      { id: 1, name: 'Class 1', color: '#FF6B6B', visible: true, locked: false }
+      { id: 1, name: 'Class 1', color: '#FF6B6B', visible: true, locked: false, role: null }
     ];
     this.nextClassId = 2;
 
@@ -968,15 +968,20 @@ class BrushEngine {
    * @param {string} color - Optional color
    * @returns {object} The new class
    */
-  addClass(name = null, color = null) {
+  addClass(name = null, color = null, role = null) {
     const id = this.nextClassId++;
     const newClass = {
       id,
       name: name || `Class ${id}`,
       color: color || this.getNextColor(),
       visible: true,
-      locked: false
+      locked: false,
+      role: null
     };
+    if (role === 'background') {
+      for (const c of this.classes) if (c.role === 'background') c.role = null;
+      newClass.role = 'background';
+    }
 
     this.classes.push(newClass);
     this.activeClassId = id;
@@ -1029,6 +1034,29 @@ class BrushEngine {
       this.renderAnnotations();
       console.log(`[BrushEngine] Class ${classId} visibility: ${cls.visible}`);
     }
+  }
+
+  /**
+   * Give a class a role. 'background' marks the class whose strokes are
+   * background examples for the classifier; it is written as 0 on Create
+   * Annotation. At most one class carries it.
+   * @param {number|null} classId - class to mark, or null to clear the role everywhere
+   * @param {'background'|null} role
+   */
+  setClassRole(classId, role) {
+    if (classId === null || role === 'background') {
+      for (const c of this.classes) if (c.role === 'background') c.role = null;
+    }
+    const cls = this.classes.find(c => c.id === classId);
+    if (cls) cls.role = role || null;
+  }
+
+  /**
+   * The class marked as background, if any
+   * @returns {object|null}
+   */
+  getBackgroundClass() {
+    return this.classes.find(c => c.role === 'background') || null;
   }
 
   /**

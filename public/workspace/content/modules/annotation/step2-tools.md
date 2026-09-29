@@ -12,6 +12,7 @@ tags:
   - zoom
 seeAlsoManual:
   - annotation.step2.brush-size
+  - annotation.step2.history
   - annotation.step2.classes
 seeAlsoTags:
   - tools
@@ -42,9 +43,13 @@ Alt+click a painted pixel to make its class the active class, with any tool.
 
 All tools only affect classes that are visible and unlocked. Hiding or locking a class protects its pixels, so you can paint another class right up to and over a protected structure without changing it.
 
-## Overlay
+## Brush Size
 
-The Overlay slider sets how opaque the painted classes are drawn over the image. Hold V to peek at the raw image with all overlays hidden; release to bring them back.
+The Size slider under the tools sets the brush diameter in image pixels (1 to 50). The [ and ] keys change it in steps of 5. The brush preview on the canvas shows exactly which pixels a click would paint. See Brush Size for guidance on choosing a size.
+
+## History
+
+The row of small buttons under the tools holds Undo and Redo (Ctrl+Z, Ctrl+Y) and, after an interpolation run, Revert interpolation. History is kept per slice, up to 20 steps. Autosave lives in the header next to Save Progress. See History & Autosave for details.
 
 ## Keyboard Shortcuts
 

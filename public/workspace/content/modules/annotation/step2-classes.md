@@ -47,7 +47,13 @@ Classes represent different categories of structures you want to segment. For ex
 
 - Delete Class: Remove a class and all its annotations
 
+- Background class ("bg" badge): the class marked in the Suggest section as background examples for the classifier. It behaves like any other class while you work, but Create Annotation writes its pixels as unlabeled (0) and leaves it out of the class list, because the background is never a label in this workspace. See Suggestions.
+
 - Show/hide all and lock/unlock all: The two buttons in the section header act on every class at once. Hide all then show one class to inspect it alone; lock all then unlock one to work on a single structure safely.
+
+## Overlay
+
+The Overlay slider at the top of the section sets how opaque the painted classes are drawn over the image. Hold V to peek at the raw image with all overlays hidden; release to bring them back. This changes only the display, not the annotation.
 
 ## Class Colors
 
