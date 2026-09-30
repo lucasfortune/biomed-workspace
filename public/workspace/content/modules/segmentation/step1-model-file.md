@@ -41,3 +41,5 @@ After training completes, the best-performing model is saved as 'best_model.pth'
 - The model file and config file must come from the same training run
 
 - Model files can be shared between users as long as the matching config file is included
+
+- A bioimage.io package (.zip) is not imported here: use the "Use a bioimage.io Model" section instead

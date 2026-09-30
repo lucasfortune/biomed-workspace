@@ -24,6 +24,9 @@ const DATA_PATHS = {
   // Scratch space for streamed uploads (e.g. workspace-restore ZIPs);
   // sibling of workspaces so the cleanup service never mistakes it for one
   tmp: path.join(DATA_DIR, 'tmp'),
+  // Shared cache for bioimage.io model descriptions and weights (ADR-015):
+  // one copy per server, not per workspace, so downloads are shared
+  bioimageioCache: path.join(DATA_DIR, 'bioimageio_cache'),
   usersFile: path.join(DATA_DIR, 'users.json')
 };
 
@@ -91,7 +94,9 @@ const PYTHON_SCRIPTS = {
   validateTiff: 'python/validate_tiff.py',
   validateInferenceTiff: 'python/validate_inference_tiff.py',
   validateImportedModel: 'python/validate_imported_model.py',
-  generateThumbnail: 'python/generate_thumbnail.py'
+  generateThumbnail: 'python/generate_thumbnail.py',
+  describeBioimageio: 'python/bioimageio_utils.py',
+  runBioimageioInference: 'python/run_bioimageio_inference.py'
 };
 
 // Training configuration validation ranges
@@ -156,7 +161,8 @@ function ensureDataDirectories() {
     DATA_PATHS.workspaces,
     DATA_PATHS.sessions,
     DATA_PATHS.logs,
-    DATA_PATHS.tmp
+    DATA_PATHS.tmp,
+    DATA_PATHS.bioimageioCache
   ];
 
   dataDirs.forEach(dir => {

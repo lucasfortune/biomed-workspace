@@ -208,6 +208,37 @@ class SegmentationAPI {
   }
 
   // ============================================================================
+  // bioimage.io model zoo (ADR-015)
+  // ============================================================================
+
+  /**
+   * List runnable zoo models
+   * @param {boolean} [all=false] - include models outside the segmentation-like filter
+   */
+  async listBioimageioModels(all = false) {
+    return this._get(`/api/bioimageio/models${all ? '?all=1' : ''}`);
+  }
+
+  /**
+   * Select a zoo model or an uploaded package for this session
+   * @param {{type: 'zoo', id: string} | {type: 'upload', fileId: string}} source
+   */
+  async selectBioimageioModel(source) {
+    return this._post('/api/bioimageio/select', { source });
+  }
+
+  /** The model selected in this session, if any */
+  async getSelectedBioimageioModel() {
+    return this._get('/api/bioimageio/selected');
+  }
+
+  /** Clear the session's zoo model selection */
+  async clearBioimageioModel() {
+    const response = await fetch('/api/bioimageio/select', { method: 'DELETE' });
+    return this._handleResponse(response);
+  }
+
+  // ============================================================================
   // Session Management
   // ============================================================================
 

@@ -57,7 +57,7 @@ class Templates {
       <div class="step-content active" id="step1">
         <div class="step-inner">
           <h3>Training Data or Model ${this.renderHelpIcon('segmentation.step1')}</h3>
-          <p class="step-description">Either upload training data to train a new model, or import a previously trained model.</p>
+          <p class="step-description">Train a new model on your annotations, import a model trained here before, or run a model from the bioimage.io model zoo.</p>
 
           <!-- Workflow Selection Section -->
           <div class="workflow-selection-section">
@@ -107,6 +107,22 @@ class Templates {
               <div class="workflow-body">
                 <div id="importModelContent">
                   <!-- Import selectors will be initialized dynamically -->
+                </div>
+              </div>
+            </div>
+
+            <!-- bioimage.io Model Section (ADR-015) -->
+            <div class="workflow-section" id="bioimageioSection">
+              <div class="workflow-header" data-workflow="bioimageio">
+                <span class="workflow-icon">${icon('caretRight')}</span>
+                <div class="workflow-header-content">
+                  <span class="workflow-title">Use a bioimage.io Model ${this.renderHelpIcon('segmentation.step1.bioimageio')}</span>
+                  <span class="workflow-subtitle">Run a model from the model zoo or an uploaded package, with tiled inference</span>
+                </div>
+              </div>
+              <div class="workflow-body">
+                <div id="bioimageioContent">
+                  <!-- Zoo picker and package selector are initialized dynamically -->
                 </div>
               </div>
             </div>
@@ -322,6 +338,26 @@ class Templates {
 
             <!-- Compatibility warnings are inserted here -->
             <div id="inferenceWarningSlot"></div>
+
+            <!-- bioimage.io run settings (ADR-015): only shown for a zoo model -->
+            <div class="section-card bio-conversion" id="bioimageioConversion" style="display: none;">
+              <h4>Output conversion ${this.renderHelpIcon('segmentation.step4.output-conversion')}</h4>
+              <p class="bio-conversion-model" id="bioimageioConversionModel"></p>
+              <div class="bio-conversion-rules" id="bioimageioConversionRules">
+                <label class="bio-conversion-rule">
+                  <input type="radio" name="bioConversion" value="per_channel">
+                  <span>One class per channel: each channel above the threshold becomes its own class</span>
+                </label>
+                <label class="bio-conversion-rule">
+                  <input type="radio" name="bioConversion" value="argmax">
+                  <span>Argmax: every pixel takes the channel with the highest value</span>
+                </label>
+              </div>
+              <div class="bio-conversion-threshold" id="bioimageioThresholdRow">
+                <label for="bioThreshold">Threshold</label>
+                <input type="number" id="bioThreshold" min="0.05" max="0.95" step="0.05" value="0.5">
+              </div>
+            </div>
 
             <!-- Inference Progress Display -->
             <div class="section-card" id="inferenceProgressContainer" style="display: none;">

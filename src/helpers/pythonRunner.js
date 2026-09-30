@@ -349,14 +349,19 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
  */
 function runInferenceWithProgress(pythonPath, modelPath, dataPath, outputPath, inferenceId, io, inferenceSessions, options = {}) {
   const { logger } = options;
+  // ADR-015: a bioimage.io run uses its own script with the same protocol;
+  // `script` and `extraArgs` default to the workspace U-Net path.
+  const script = options.script || 'python/run_inference.py';
+  const extraArgs = Array.isArray(options.extraArgs) ? options.extraArgs : [];
 
   return new Promise((resolve, reject) => {
     const pythonScript = spawn(pythonPath, [
-      'python/run_inference.py',
+      script,
       '--model', modelPath,
       '--input', dataPath,
       '--output', outputPath,
-      '--inference_id', inferenceId
+      '--inference_id', inferenceId,
+      ...extraArgs
     ]);
 
     // Attach unified error handler
@@ -397,9 +402,15 @@ function runInferenceWithProgress(pythonPath, modelPath, dataPath, outputPath, i
             // Update inference session
             const inference = inferenceSessions.get(inferenceId);
             if (inference) {
-              inference.currentSlice = progress.current_slice;
-              inference.totalSlices = progress.total_slices;
-              inference.progress = progress.progress_percent;
+              if (progress.type === 'download') {
+                inference.phase = 'downloading';
+              } else if (progress.current_slice !== undefined) {
+                inference.phase = 'running';
+                inference.currentSlice = progress.current_slice;
+                inference.totalSlices = progress.total_slices;
+                inference.progress = progress.progress_percent;
+                if (progress.unit) inference.progressUnit = progress.unit;
+              }
             }
 
             // Send real-time update to clients
@@ -537,7 +548,7 @@ function runInferenceWithProgress(pythonPath, modelPath, dataPath, outputPath, i
  * @param {function} options.onError - Error callback
  */
 function startInferenceProcess(pythonPath, modelPath, dataPath, outputPath, inferenceId, io, inferenceSessions, options = {}) {
-  const { logger, onSuccess, onError } = options;
+  const { logger, onSuccess, onError, script, extraArgs } = options;
 
   // Update inference session status
   const inference = inferenceSessions.get(inferenceId);
@@ -546,7 +557,7 @@ function startInferenceProcess(pythonPath, modelPath, dataPath, outputPath, infe
   }
 
   // Start the inference process
-  runInferenceWithProgress(pythonPath, modelPath, dataPath, outputPath, inferenceId, io, inferenceSessions, { logger })
+  runInferenceWithProgress(pythonPath, modelPath, dataPath, outputPath, inferenceId, io, inferenceSessions, { logger, script, extraArgs })
     .then(async ({ result, resultSource, inference }) => {
       if (logger) {
         logger.info('Inference completed successfully');

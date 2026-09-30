@@ -2481,6 +2481,77 @@
         "validation"
       ],
       "parameterImpact": "A larger split gives a more reliable validation Dice but leaves fewer slices for training. 15% suits most stacks; go lower only when very few slices are labelled, higher when you have many.\n"
+    },
+    "segmentation.step1.bioimageio": {
+      "id": "segmentation.step1.bioimageio",
+      "title": "bioimage.io Models",
+      "displayTitle": "bioimage.io Models (Segmentation)",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "bioimageio",
+        "model zoo",
+        "pretrained",
+        "inference"
+      ],
+      "path": "modules/segmentation/step1-bioimageio.md",
+      "seeAlsoManual": [
+        "segmentation.step1.bioimageio-package",
+        "segmentation.step4.output-conversion",
+        "segmentation.step1.workflow-choice"
+      ],
+      "seeAlsoTags": [
+        "pretrained",
+        "inference"
+      ]
+    },
+    "segmentation.step1.bioimageio-package": {
+      "id": "segmentation.step1.bioimageio-package",
+      "title": "bioimage.io Package Upload",
+      "displayTitle": "bioimage.io Package Upload (Segmentation)",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "bioimageio",
+        "package",
+        "upload",
+        "zip"
+      ],
+      "path": "modules/segmentation/step1-bioimageio-package.md",
+      "seeAlsoManual": [
+        "segmentation.step1.bioimageio",
+        "segmentation.step1.model-file"
+      ],
+      "seeAlsoTags": [
+        "bioimageio",
+        "upload"
+      ]
+    },
+    "segmentation.step4.output-conversion": {
+      "id": "segmentation.step4.output-conversion",
+      "title": "Output Conversion",
+      "displayTitle": "Output Conversion (bioimage.io)",
+      "category": "process",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "bioimageio",
+        "inference",
+        "threshold",
+        "argmax",
+        "classes"
+      ],
+      "path": "modules/segmentation/step4-output-conversion.md",
+      "seeAlsoManual": [
+        "segmentation.step1.bioimageio",
+        "segmentation.step4"
+      ],
+      "seeAlsoTags": [
+        "bioimageio",
+        "inference"
+      ]
     }
   },
   "glossary": {

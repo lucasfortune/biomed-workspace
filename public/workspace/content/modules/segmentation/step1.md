@@ -23,11 +23,11 @@ Step 1 is where you provide what the pipeline works from. Start by choosing a wo
 
 ## What This Step Does
 
-- Pick a workflow — train a new model, or import one you already have; the "Choose Workflow" help explains how to decide
+- Pick a workflow — train a new model, import one you already have, or use a bioimage.io model; the "Choose Workflow" help explains how to decide
 
 - Provide the matching inputs for that workflow using the file selectors below the choice
 
-- Advance when the required inputs are in place: training continues to Step 2 (Configure), import jumps to Step 4 (Inference)
+- Advance when the required inputs are in place: training continues to Step 2 (Configure), import and bioimage.io jump to Step 4 (Inference)
 
 ## Inputs by Workflow
 

@@ -186,6 +186,18 @@ function createWorkspaceRoutes(dependencies) {
         tags = ['raw'];
       } else if (uploadCategory === 'annotations') {
         tags = ['annotation'];
+      } else if (uploadCategory === 'imported_models') {
+        // Model files: .zip is a bioimage.io package (ADR-015), .pth weights
+        // and .json configs are workspace U-Net files of unspecified method
+        category = 'models';
+        const firstName = (req.files && req.files[0] && req.files[0].originalname || '').toLowerCase();
+        if (firstName.endsWith('.zip')) {
+          tags = ['bioimageio', 'weights'];
+        } else if (firstName.endsWith('.json')) {
+          tags = ['unspecified', 'config'];
+        } else {
+          tags = ['unspecified', 'weights'];
+        }
       } else {
         // Default to raw for unspecified uploads
         tags = ['raw'];

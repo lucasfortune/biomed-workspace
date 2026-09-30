@@ -32,7 +32,8 @@ class StateHandler {
       workflowMode: this.module.workflowMode,
       importFiles: this.module.importFiles,
       importValidated: this.module.importValidated,
-      importedModelConfig: this.module.importedModelConfig
+      importedModelConfig: this.module.importedModelConfig,
+      bioimageioModel: this.module.bioimageioModel
     };
 
     // Preserve currentTask if it exists
@@ -58,6 +59,7 @@ class StateHandler {
     this.module.state.update('modules.segmentation.importFiles', this.module.importFiles);
     this.module.state.update('modules.segmentation.importValidated', this.module.importValidated);
     this.module.state.update('modules.segmentation.importedModelConfig', this.module.importedModelConfig);
+    this.module.state.update('modules.segmentation.bioimageioModel', this.module.bioimageioModel);
     if (state.currentTask) {
       this.module.state.update('modules.segmentation.currentTask', state.currentTask);
     }
@@ -128,6 +130,9 @@ class StateHandler {
     if (segmentationState.importedModelConfig) {
       this.module.importedModelConfig = segmentationState.importedModelConfig;
     }
+    if (segmentationState.bioimageioModel) {
+      this.module.bioimageioModel = segmentationState.bioimageioModel;
+    }
     console.log('[StateHandler] Restored workflow state:', {
       workflowMode: this.module.workflowMode,
       importValidated: this.module.importValidated
@@ -168,6 +173,12 @@ class StateHandler {
       this.restoreStep1Validation();
     }
 
+    // Re-open the workflow section the user had chosen (Step 1 only shows
+    // its sections collapsed after a rebuild)
+    if (this.module.currentStep === 1 && this.module.workflowMode) {
+      this.restoreWorkflowSection();
+    }
+
     // Restore training UI state if training is in progress
     if (segmentationState.currentTask?.type === 'training') {
       console.log('[StateHandler] Restoring training UI state');
@@ -179,6 +190,26 @@ class StateHandler {
       console.log('[StateHandler] Restoring step 4 inference UI');
       this.restoreStep4InferenceUI();
     }
+  }
+
+  /**
+   * Re-open the chosen workflow section after a resume
+   */
+  restoreWorkflowSection() {
+    const ids = {
+      train: 'trainFromScratchSection',
+      import: 'importModelSection',
+      bioimageio: 'bioimageioSection'
+    };
+    const section = document.getElementById(ids[this.module.workflowMode]);
+    if (!section || section.classList.contains('active')) return;
+    section.classList.add('active');
+    if (this.module.workflowMode === 'import') {
+      this.module.importHandler.initializeImportSelectors();
+    } else if (this.module.workflowMode === 'bioimageio') {
+      this.module.bioimageioHandler.initialize();
+    }
+    this.module.updateStep1NextButton();
   }
 
   /**

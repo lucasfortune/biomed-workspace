@@ -33,6 +33,8 @@ const createStitchingRoutes = require('./routes/stitching.routes');
 const createPreprocessRoutes = require('./routes/preprocess.routes');
 const createSegcleanupRoutes = require('./routes/segcleanup.routes');
 const createAdminRoutes = require('./routes/admin.routes');
+const createBioimageioRoutes = require('./routes/bioimageio.routes');
+const BioimageioService = require('./services/BioimageioService');
 
 // Python runner wrappers
 const {
@@ -157,9 +159,11 @@ function configureApp(app, dependencies) {
     });
   }
 
-  function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, ioInstance) {
+  function startInferenceProcess(modelPath, dataPath, outputPath, inferenceId, ioInstance, runOptions = {}) {
     return startInferenceProcessPython(PYTHON_PATH, modelPath, dataPath, outputPath, inferenceId, ioInstance, inferenceSessions, {
       logger,
+      script: runOptions.script,
+      extraArgs: runOptions.extraArgs,
       onSuccess: async (result, resultSource, inf) => {
         if (inf && result) {
           // Build lineage from inference session's input file IDs
@@ -225,7 +229,8 @@ function configureApp(app, dependencies) {
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://unpkg.com"],
         scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, etc.)
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
+        // bioimage.io model covers in the Segmentation module's zoo list (ADR-015)
+        imgSrc: ["'self'", "data:", "blob:", "https://hypha.aicell.io"],
         connectSrc: ["'self'", "ws:", "wss:"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
@@ -319,6 +324,20 @@ function configureApp(app, dependencies) {
     validateTrainingConfig,
     startTrainingProcess,
     startInferenceProcess
+  }));
+
+  // bioimage.io model zoo routes (ADR-015)
+  const bioimageioService = services.bioimageioService || new BioimageioService({
+    pythonPath: PYTHON_PATH,
+    workspaceManager,
+    fileService,
+    logger
+  });
+  app.use('/api/bioimageio', createBioimageioRoutes({
+    bioimageioService,
+    workspaceManager,
+    activityLogger,
+    logger
   }));
 
   // Mesh generation routes

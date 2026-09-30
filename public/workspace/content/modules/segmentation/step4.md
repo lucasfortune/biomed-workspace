@@ -10,6 +10,7 @@ tags:
   - output
 seeAlsoManual:
   - segmentation.step4.inference-data
+  - segmentation.step4.output-conversion
   - segmentation.step3
   - annotation.step1.source-image
 seeAlsoTags:
@@ -40,6 +41,10 @@ Because each slice is segmented as a whole image, the slice dimensions must be c
 The output segmentation mask has the same dimensions as your input and contains integer values corresponding to class labels (0 for background, 1+ for detected objects).
 
 Inference is much faster than training since no gradient computation or weight updates are needed.
+
+## bioimage.io models
+
+A bioimage.io model runs differently: each slice (or the whole stack, for a 3D model) is split into overlapping tiles of the size the model declares, the tiles are predicted and stitched back, so any slice size works. The model's channels are turned into class labels by the Output conversion rule shown above the Run button. On the first run the weights are downloaded; the progress line says so.
 
 ## After the run
 

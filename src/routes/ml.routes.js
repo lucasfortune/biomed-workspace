@@ -91,6 +91,9 @@ function createMLRoutes(dependencies) {
         delete req.session.importedModel;
         if (logger) logger.info('Cleared importedModel from session - uploading training data');
       }
+      if (req.session.bioimageioModel) {
+        delete req.session.bioimageioModel;
+      }
 
       const skipUpload = req.body.skipUpload === 'true';
 
@@ -386,6 +389,9 @@ function createMLRoutes(dependencies) {
       if (req.session.importedModel) {
         delete req.session.importedModel;
         if (logger) logger.info('Cleared importedModel from session - training from scratch');
+      }
+      if (req.session.bioimageioModel) {
+        delete req.session.bioimageioModel;
       }
 
       // Add num_classes from validation
@@ -986,7 +992,7 @@ function createMLRoutes(dependencies) {
    */
   router.post('/run-inference', async (req, res) => {
     try {
-      const { model_path, data_path, output_path, training_id, inputFileIds } = req.body;
+      const { model_path, data_path, output_path, training_id, inputFileIds, conversion, threshold } = req.body;
 
       if (logger) logger.info('Inference request received:', { model_path, data_path, output_path, training_id });
 
@@ -1009,9 +1015,36 @@ function createMLRoutes(dependencies) {
       let actualModelPath;
       let modelConfig;
       let inferenceId;
+      let runOptions = {};
 
-      // Check if using imported model
-      if (req.session.importedModel && req.session.importedModel.validated) {
+      // ADR-015: a selected bioimage.io model takes precedence; it runs
+      // through run_bioimageio_inference.py (tiled) with the same protocol
+      const bioModel = req.session.bioimageioModel;
+      const usingBioimageio = !!(bioModel && bioModel.summary && bioModel.pythonSource);
+      if (usingBioimageio) {
+        actualModelPath = bioModel.pythonSource;
+        const summary = bioModel.summary;
+        const rule = ['argmax', 'per_channel'].includes(conversion) ? conversion : summary.default_conversion;
+        let thr = Number(threshold);
+        if (!Number.isFinite(thr) || thr <= 0 || thr >= 1) thr = 0.5;
+        modelConfig = {
+          type: 'bioimageio',
+          id: summary.id,
+          name: summary.name,
+          version: summary.version,
+          weight_format: summary.weight_format,
+          dims: summary.dims,
+          conversion: rule,
+          threshold: thr
+        };
+        runOptions = {
+          script: 'python/run_bioimageio_inference.py',
+          extraArgs: ['--conversion', rule, '--threshold', String(thr)]
+        };
+        if (bioModel.source && bioModel.source.type === 'upload' && !fs.existsSync(actualModelPath)) {
+          return res.status(400).json({ error: 'Selected bioimage.io package no longer exists: ' + bioModel.source.name });
+        }
+      } else if (req.session.importedModel && req.session.importedModel.validated) {
         actualModelPath = req.session.importedModel.modelPath;
 
         try {
@@ -1056,10 +1089,12 @@ function createMLRoutes(dependencies) {
       // Resolve the model's tracked file id (if the model lives in the workspace)
       // so output lineage can record which model produced the segmentation.
       // Imported models without a tracked entry resolve to null.
-      const modelFileId = workspaceManager.getFileIdByPath(
-        sessionId,
-        path.relative(workspacePath, actualModelPath)
-      );
+      const modelFileId = usingBioimageio
+        ? (bioModel.modelFileId || null)
+        : workspaceManager.getFileIdByPath(
+          sessionId,
+          path.relative(workspacePath, actualModelPath)
+        );
 
       // Initialize imported model results directories tracking
       if (!req.session.importedModelResultsDirs) {
@@ -1068,7 +1103,9 @@ function createMLRoutes(dependencies) {
 
       // Generate output directory path (Python script will generate filename)
       let outputDir;
-      if (req.session.importedModel && req.session.importedModel.validated) {
+      if (usingBioimageio) {
+        outputDir = path.join(workspacePath, 'results', 'segmentation', `bioimageio_${Date.now()}`);
+      } else if (req.session.importedModel && req.session.importedModel.validated) {
         const timestamp = Date.now();
         const importedModelDir = `imported_model_${timestamp}`;
         outputDir = path.join(workspacePath, 'results', 'segmentation', importedModelDir);
@@ -1094,6 +1131,8 @@ function createMLRoutes(dependencies) {
         currentSlice: 0,
         totalSlices: 0,
         usingImportedModel: !!(req.session.importedModel && req.session.importedModel.validated),
+        usingBioimageio,
+        modelName: usingBioimageio ? bioModel.summary.name : null,
         // Lineage tracking: store input file IDs for provenance
         inputFileIds: inputFileIds || [],
         // Lineage tracking: model that runs this inference (null when untracked)
@@ -1113,12 +1152,14 @@ function createMLRoutes(dependencies) {
         inference_id: inferenceId,
         status: 'starting',
         message: 'Inference request accepted. Join the WebSocket room for progress updates.',
-        model_info: req.session.importedModel ? 'Using imported model' : 'Using trained model'
+        model_info: usingBioimageio
+          ? `Using bioimage.io model ${bioModel.summary.name}`
+          : (req.session.importedModel ? 'Using imported model' : 'Using trained model')
       });
 
       // Start inference after delay to allow frontend to join room
       setTimeout(() => {
-        startInferenceProcess(actualModelPath, actualDataPath, actualOutputPath, inferenceId, io);
+        startInferenceProcess(actualModelPath, actualDataPath, actualOutputPath, inferenceId, io, runOptions);
       }, 1000);
 
     } catch (error) {

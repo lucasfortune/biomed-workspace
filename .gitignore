@@ -287,3 +287,6 @@ docs/templates/
 # Unused sample stacks (kept locally as development reference)
 test_data/trypB_testData_inference.tif
 test_data/trypB_testData_denoising.tif
+
+# bioimage.io shared download cache (ADR-015; lives in DATA_DIR)
+bioimageio_cache/

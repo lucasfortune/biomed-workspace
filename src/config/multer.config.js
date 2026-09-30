@@ -79,10 +79,10 @@ function tiffFileFilter(req, file, cb) {
  */
 function modelFileFilter(req, file, cb) {
   const fileName = file.originalname.toLowerCase();
-  if (fileName.endsWith('.pth') || fileName.endsWith('.json')) {
+  if (fileName.endsWith('.pth') || fileName.endsWith('.json') || fileName.endsWith('.zip')) {
     cb(null, true);
   } else {
-    cb(new Error('Only .pth (model) and .json (config) files are allowed for import!'), false);
+    cb(new Error('Only .pth (model), .json (config) and .zip (bioimage.io package) files are allowed for import!'), false);
   }
 }
 

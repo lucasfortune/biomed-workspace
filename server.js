@@ -64,6 +64,14 @@ logger.info('Python interpreter found at:', PYTHON_PATH);
 ensureDataDirectories();
 logger.info('Data directory:', DATA_DIR);
 
+// bioimage.io downloads (descriptions, weights) go to a server-wide cache.
+// bioimageio.spec reads this variable at import time; spawned Python
+// processes inherit process.env, so setting it once here covers them all.
+if (!process.env.BIOIMAGEIO_CACHE_PATH) {
+  process.env.BIOIMAGEIO_CACHE_PATH = DATA_PATHS.bioimageioCache;
+}
+logger.info('bioimage.io cache:', process.env.BIOIMAGEIO_CACHE_PATH);
+
 // =============================================================================
 // INITIALIZE CORE MODULES
 // =============================================================================

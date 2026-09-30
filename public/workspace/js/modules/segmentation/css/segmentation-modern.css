@@ -629,3 +629,221 @@
 .segmentation-module .training-data-summary[hidden] {
   display: none;
 }
+
+
+/* ============================================
+   BIOIMAGE.IO MODEL SECTION (ADR-015)
+   ============================================ */
+
+.segmentation-module .bio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.segmentation-module .bio-search {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  background: var(--module-bg);
+  color: var(--module-text-primary);
+  font-size: var(--module-font-size-sm);
+}
+
+.segmentation-module .bio-show-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+  white-space: nowrap;
+}
+
+.segmentation-module .bio-model-list {
+  list-style: none;
+  margin: 0 0 var(--module-spacing-md);
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-md);
+  background: var(--module-bg);
+}
+
+.segmentation-module .bio-model-row {
+  display: flex;
+  gap: var(--module-spacing-sm);
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--module-border);
+  cursor: pointer;
+}
+
+.segmentation-module .bio-model-row:last-child {
+  border-bottom: none;
+}
+
+.segmentation-module .bio-model-row:hover {
+  background: var(--module-primary-light);
+}
+
+.segmentation-module .bio-model-row.selected {
+  background: color-mix(in srgb, var(--module-primary) 16%, transparent);
+}
+
+.segmentation-module .bio-model-row.empty,
+.segmentation-module .bio-model-row.error {
+  cursor: default;
+  color: var(--module-text-secondary);
+  font-style: italic;
+}
+
+.segmentation-module .bio-model-cover {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--module-radius-sm);
+  object-fit: cover;
+  background: var(--module-card-bg);
+  flex-shrink: 0;
+}
+
+.segmentation-module .bio-model-cover.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.segmentation-module .bio-model-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.segmentation-module .bio-model-name {
+  font-weight: 600;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmentation-module .bio-model-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.segmentation-module .bio-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  background: var(--module-card-bg);
+  border: 1px solid var(--module-border);
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .bio-badge.dims {
+  background: color-mix(in srgb, var(--module-primary) 14%, transparent);
+  border-color: transparent;
+  color: var(--module-primary);
+  font-weight: 600;
+}
+
+.segmentation-module .bio-card {
+  margin-top: var(--module-spacing-md);
+  padding: var(--module-spacing-md);
+  border: 1px solid var(--module-border);
+  border-left: 4px solid var(--module-primary);
+  border-radius: var(--module-radius-md);
+  background: var(--module-card-bg);
+}
+
+.segmentation-module .bio-card h5 {
+  margin: 0 0 4px;
+  font-size: var(--module-font-size-md);
+}
+
+.segmentation-module .bio-card p {
+  margin: 0 0 6px;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .bio-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 6px 0 0;
+  font-size: var(--module-font-size-sm);
+}
+
+.segmentation-module .bio-card dt {
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .bio-card dd {
+  margin: 0;
+  color: var(--module-text-primary);
+}
+
+.segmentation-module .bio-card .bio-note {
+  margin-top: 6px;
+  font-size: var(--module-font-size-sm);
+  color: var(--module-warning, #b7791f);
+}
+
+.segmentation-module .bio-card-error {
+  border-left-color: var(--danger-color, #c53030);
+}
+
+.segmentation-module .bio-conversion h4 {
+  margin-top: 0;
+}
+
+.segmentation-module .bio-conversion-model {
+  margin: 0 0 var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .bio-conversion-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--module-spacing-sm);
+}
+
+.segmentation-module .bio-conversion-rule {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: var(--module-font-size-sm);
+  cursor: pointer;
+}
+
+.segmentation-module .bio-conversion-threshold {
+  display: flex;
+  align-items: center;
+  gap: var(--module-spacing-sm);
+  font-size: var(--module-font-size-sm);
+}
+
+.segmentation-module .bio-conversion-threshold input {
+  width: 80px;
+}
+
+.segmentation-module .bio-conversion-rules.disabled,
+.segmentation-module .bio-conversion-threshold.disabled {
+  opacity: 0.5;
+}
+
+.segmentation-module .bio-conversion-rules.disabled .bio-conversion-rule {
+  cursor: default;
+}

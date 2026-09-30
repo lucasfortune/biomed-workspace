@@ -104,8 +104,8 @@ class WorkspaceManager {
         break;
 
       case 'models':
-        // Ensure method tag exists (denoising, segmentation, or unspecified)
-        if (!hasTag('denoising') && !hasTag('segmentation') && !hasTag('unspecified')) {
+        // Ensure method tag exists (denoising, segmentation, bioimageio, or unspecified)
+        if (!hasTag('denoising') && !hasTag('segmentation') && !hasTag('bioimageio') && !hasTag('unspecified')) {
           // Try to infer from existing tags or default to unspecified
           addTag('unspecified');
         }
@@ -114,7 +114,7 @@ class WorkspaceManager {
           // Infer from filename
           if (fileName) {
             const ext = path.extname(fileName).toLowerCase();
-            if (ext === '.pth' || ext === '.pt') {
+            if (ext === '.pth' || ext === '.pt' || ext === '.zip') {
               addTag('weights');
             } else if (ext === '.json' && fileName.includes('config')) {
               addTag('config');

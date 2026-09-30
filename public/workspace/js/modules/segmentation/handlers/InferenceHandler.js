@@ -24,11 +24,14 @@ class InferenceHandler {
       return;
     }
 
-    // Check if we're using imported model OR have training session
-    const usingImportedModel = window.importedModelInfo;
+    // Model source: a trained session, an imported workspace U-Net, or a
+    // bioimage.io model (ADR-015). The server resolves the actual model from
+    // the session; the flags only decide what this request looks like.
+    const bioModel = this.module.bioimageioModel;
+    const usingImportedModel = !bioModel && (this.module.hasImportedModel || window.importedModelInfo);
     const trainingId = this.module.currentTrainingId;
-    if (!trainingId && !usingImportedModel) {
-      this.showError('No training session found and no imported model. Please complete training or import a model first.');
+    if (!trainingId && !usingImportedModel && !bioModel) {
+      this.showError('No model available. Train a model, import one, or pick a bioimage.io model first.');
       return;
     }
 
@@ -54,7 +57,17 @@ class InferenceHandler {
       // Build inference request based on model type
       let inferenceRequestBody;
 
-      if (usingImportedModel) {
+      if (bioModel) {
+        const params = this.module.bioimageioHandler.getConversionParams();
+        console.log('[InferenceHandler] Running inference with bioimage.io model', bioModel.summary.name, params);
+        inferenceRequestBody = {
+          data_path: uploadResult.file_path,
+          output_path: `results/segmentation/bioimageio_${Date.now()}/segmented/inference_result.tif`,
+          inputFileIds: uploadResult.file_id ? [uploadResult.file_id] : [],
+          conversion: params.conversion,
+          threshold: params.threshold
+        };
+      } else if (usingImportedModel) {
         console.log('[InferenceHandler] Running inference with imported model');
         inferenceRequestBody = {
           data_path: uploadResult.file_path,
@@ -165,7 +178,24 @@ class InferenceHandler {
       return;
     }
 
+    // bioimage.io: weights are fetched into the server cache on first use
+    if (data.type === 'download') {
+      const loadingText = document.getElementById('loadingText');
+      if (loadingText) loadingText.textContent = 'Preparing model...';
+      const hint = document.querySelector('#inferenceProgressContainer .inference-loading-hint div');
+      if (hint) hint.textContent = 'Loading model weights (downloaded from bioimage.io on first use)';
+      return;
+    }
+
     const { current_slice, total_slices, progress_percent } = data;
+
+    // 3D zoo models report blocks instead of slices
+    const unitLabel = document.getElementById('inferenceUnitLabel');
+    if (unitLabel) unitLabel.textContent = data.unit === 'blocks' ? 'Block' : 'Slice';
+    const loadingText = document.getElementById('loadingText');
+    if (loadingText && loadingText.textContent === 'Preparing model...') {
+      loadingText.textContent = data.unit === 'blocks' ? 'Processing blocks...' : 'Processing slices...';
+    }
 
     // Validate data
     if (current_slice === undefined || total_slices === undefined || progress_percent === undefined) {
@@ -247,12 +277,14 @@ class InferenceHandler {
       } else {
         console.log('[InferenceHandler] No data.result found, creating fallback result');
 
-        // Handle both training and imported model cases
-        const usingImportedModel = window.importedModelInfo;
+        // Handle training, imported and bioimage.io model cases
+        const usingImportedModel = this.module.hasImportedModel || window.importedModelInfo;
         const trainingId = this.module.currentTrainingId;
-        const baseResultPath = usingImportedModel
-          ? `/results/segmentation/imported_model_${Date.now()}`
-          : `/results/segmentation/${trainingId}`;
+        const baseResultPath = this.module.bioimageioModel
+          ? `/results/segmentation/bioimageio_${Date.now()}`
+          : (usingImportedModel
+            ? `/results/segmentation/imported_model_${Date.now()}`
+            : `/results/segmentation/${trainingId}`);
 
         window.inferenceResult = {
           success: true,
@@ -307,7 +339,7 @@ class InferenceHandler {
       loadingDescription.innerHTML = `
         <div id="inferenceProgressContainer" class="segmentation-inference-loading">
           <div class="inference-loading-count">
-            Slice <span id="currentSlice" class="inference-loading-value">0</span>
+            <span id="inferenceUnitLabel">Slice</span> <span id="currentSlice" class="inference-loading-value">0</span>
             of <span id="totalSlices" class="inference-loading-value">...</span>
           </div>
           <div class="progress-bar-container">

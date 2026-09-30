@@ -19,6 +19,10 @@ PyWavelets>=1.4.0     # Required for skimage.restoration.estimate_sigma
 scipy>=1.9.0,<2.0.0
 scikit-learn>=1.3.0  # Annotation pixel classifier (random forest, ADR-013 §8)
 
+# bioimage.io model zoo: import and tiled inference (ADR-015). Plain install
+# on purpose: the [pytorch] extra would pull in keras 3, which is not needed.
+bioimageio.core>=0.11.0
+
 # For specific CUDA versions, uncomment and modify as needed:
 # torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
 # torchvision==0.16.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html

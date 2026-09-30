@@ -1765,6 +1765,8 @@ Run inference on uploaded data using trained or imported model.
 | data_path | string | Yes | Path to inference data |
 | output_path | string | No | Path for output (auto-generated if not provided) |
 | training_id | string | No* | Training session ID (for trained models) |
+| conversion | string | No | bioimage.io models only: `argmax` or `per_channel` (default from the model description) |
+| threshold | number | No | bioimage.io models only: per-channel threshold in (0, 1), default 0.5 |
 
 *Required only if no imported model in session
 
@@ -1790,7 +1792,7 @@ const response = await fetch('/run-inference', {
   "inference_id": "x1y2z3...",
   "status": "starting",
   "message": "Inference request accepted. Join the WebSocket room for progress updates.",
-  "model_info": "Using trained model"  // or "Using imported model"
+  "model_info": "Using trained model"  // or "Using imported model" / "Using bioimage.io model <name>"
 }
 ```
 
@@ -1807,6 +1809,7 @@ const response = await fetch('/run-inference', {
 **Model Selection:**
 1. Checks `req.session.importedModel` first (imported model takes precedence)
 2. If no imported model, uses trained model from `training_id`
+0. A bioimage.io model selected via `/api/bioimageio/select` takes precedence over both and runs `python/run_bioimageio_inference.py` (tiled); output dir `results/segmentation/bioimageio_<timestamp>`
 3. Verifies model file exists before starting
 
 **Output Path Generation:**
@@ -2020,6 +2023,78 @@ Serve downsampled original data for visualization overlay.
 - Downsampled data generated during inference by Python script
 - Used for "Original Data Overlay" toggle in 3D visualization
 - File is much smaller than original (downsampled for web performance)
+
+---
+
+## bioimage.io API Endpoints
+
+bioimage.io model zoo integration (ADR-015). All routes require `requireAuth`.
+
+### GET /api/bioimageio/models
+
+Runnable zoo models: torch weights, one single-channel input, 2 or 3 space axes; without `all=1` models tagged denoising, restoration, super-resolution, classification or in-silico-labeling are left out. The hub list is cached server-side for one hour.
+
+**Query:** `all=1` lifts the tag filter.
+
+**Response (200):**
+```javascript
+{
+  "success": true,
+  "fetchedAt": "2026-09-30T11:00:00.000Z",
+  "stale": false,            // true when the hub refresh failed and a cached list is served
+  "models": [
+    { "id": "shivering-raccoon", "name": "MitchondriaEMSegmentation2D", "description": "...",
+      "tags": ["unet", "mitochondria", "electron-microscopy"], "license": "CC-BY-4.0",
+      "version": "1", "emoji": "🦝", "dims": 2, "weights": ["torchscript", "pytorch_state_dict"],
+      "cover": "https://hypha.aicell.io/bioimage-io/artifacts/shivering-raccoon/files/cover.thumbnail.jpg",
+      "page": "https://bioimage.io/#/?id=shivering-raccoon" }
+  ]
+}
+```
+
+| Status | Condition |
+|--------|-----------|
+| 502 | Hub unreachable and no cached list |
+
+### POST /api/bioimageio/select
+
+Select a model for this session. Loads only the description (weights are fetched at the first run), writes `models/bioimageio/<id>/model_card.json` (zoo models) and stores `req.session.bioimageioModel`; clears `req.session.importedModel`.
+
+**Body:** `{ "source": { "type": "zoo", "id": "shivering-raccoon" } }` or `{ "source": { "type": "upload", "fileId": "<workspace file id of a .zip package>" } }` (`path` is accepted instead of `fileId`).
+
+**Response (200):**
+```javascript
+{
+  "success": true,
+  "modelFileId": "…",          // model card id (zoo) or the zip's file id (upload)
+  "source": { "type": "zoo", "id": "shivering-raccoon" },
+  "summary": {
+    "id": "10.5281/zenodo.6406803/6406804", "name": "MitchondriaEMSegmentation2D", "version": "1",
+    "source": "shivering-raccoon", "description": "…", "license": "CC-BY-4.0", "cite": [...],
+    "format_version": "0.5.12", "weight_format": "torchscript", "dims": 2,
+    "input": { "id": "input0", "axes": ["batch","channel","y","x"],
+               "space": { "y": { "kind": "parameterized", "min": 32, "step": 16 }, "x": { … } },
+               "preprocessing": ["ensure_dtype", "zero_mean_unit_variance", "ensure_dtype"] },
+    "output": { "id": "output0", "axes": [...], "channels": 2, "channel_names": ["channel0","channel1"],
+                "halo": { "y": 8, "x": 8 }, "postprocessing": ["ensure_dtype"] },
+    "default_conversion": "per_channel",
+    "notes": []                  // e.g. "fixed-size output axes y, x patched to follow the input size"
+  }
+}
+```
+
+| Status | Condition |
+|--------|-----------|
+| 400 | Missing or invalid source, package not a .zip, model not runnable (message from `bioimageio_utils.py describe`) |
+| 404 | Upload file id not in the workspace |
+
+### GET /api/bioimageio/selected
+
+Returns `{ success: true, selected: <session selection or null> }`.
+
+### DELETE /api/bioimageio/select
+
+Clears the selection. `/upload-data` and `/start-training` clear it as well.
 
 ---
 

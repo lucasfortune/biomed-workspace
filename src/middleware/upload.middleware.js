@@ -70,7 +70,7 @@ function createStorage(workspaceManager, logger) {
 /**
  * Workspace file filter - accepts files based on category/fieldname
  * - meshes: JSON files
- * - imported_models: PTH and JSON files
+ * - imported_models: PTH, JSON and bioimage.io ZIP package files
  * - all others: TIFF files
  */
 function workspaceFileFilter(req, file, cb) {
@@ -89,10 +89,10 @@ function workspaceFileFilter(req, file, cb) {
 
   // Model imports accept PTH and JSON files
   if (fieldname === 'imported_models') {
-    if (filename.endsWith('.pth') || filename.endsWith('.json')) {
+    if (filename.endsWith('.pth') || filename.endsWith('.json') || filename.endsWith('.zip')) {
       cb(null, true);
     } else {
-      cb(new Error('Only .pth and .json files are allowed for models!'), false);
+      cb(new Error('Only .pth, .json and bioimage.io .zip files are allowed for models!'), false);
     }
     return;
   }
@@ -123,10 +123,10 @@ function tiffFileFilter(req, file, cb) {
  */
 function modelFileFilter(req, file, cb) {
   const fileName = file.originalname.toLowerCase();
-  if (fileName.endsWith('.pth') || fileName.endsWith('.json')) {
+  if (fileName.endsWith('.pth') || fileName.endsWith('.json') || fileName.endsWith('.zip')) {
     cb(null, true);
   } else {
-    cb(new Error('Only .pth (model) and .json (config) files are allowed for import!'), false);
+    cb(new Error('Only .pth (model), .json (config) and .zip (bioimage.io package) files are allowed for import!'), false);
   }
 }
 

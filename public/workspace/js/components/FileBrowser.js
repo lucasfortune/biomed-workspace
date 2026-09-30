@@ -1732,7 +1732,7 @@ class FileBrowser {
       fileInput.accept = '.zip';
       fileInput.multiple = false; // Only one workspace zip at a time
     } else if (category === 'imported_models') {
-      fileInput.accept = '.pth,.json';
+      fileInput.accept = '.pth,.json,.zip';
       fileInput.multiple = true;
     } else {
       // Image categories: TIFF, plus MRC (converted to TIFF on import, ADR-010)
@@ -2028,13 +2028,13 @@ class FileBrowser {
     if (category === 'imported_models') {
       const invalidFiles = fileArray.filter(file => {
         const ext = file.name.toLowerCase().split('.').pop();
-        return !['pth', 'json'].includes(ext);
+        return !['pth', 'json', 'zip'].includes(ext);
       });
 
       if (invalidFiles.length > 0) {
         return {
           valid: false,
-          error: `Invalid file type(s). Only .pth and .json files allowed for models.`
+          error: `Invalid file type(s). Only .pth, .json and bioimage.io .zip files allowed for models.`
         };
       }
 

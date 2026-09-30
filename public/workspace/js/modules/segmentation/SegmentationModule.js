@@ -16,6 +16,7 @@ import ChartHandler from './handlers/ChartHandler.js';
 import NavigationHandler from './handlers/NavigationHandler.js';
 import FileHandler from './handlers/FileHandler.js';
 import ImportHandler from './handlers/ImportHandler.js';
+import BioimageioHandler from './handlers/BioimageioHandler.js';
 import StateHandler from './handlers/StateHandler.js';
 
 class SegmentationModule extends BaseModule {
@@ -62,6 +63,7 @@ class SegmentationModule extends BaseModule {
     this.navigationHandler = new NavigationHandler(this);
     this.fileHandler = new FileHandler(this);
     this.importHandler = new ImportHandler(this);
+    this.bioimageioHandler = new BioimageioHandler(this);
     this.stateHandler = new StateHandler(this);
 
     // Module-specific state
@@ -92,6 +94,10 @@ class SegmentationModule extends BaseModule {
     };
     this.importValidated = false;
     this.importedModelConfig = null;
+
+    // bioimage.io model selected for this session (ADR-015):
+    // { summary, source: {type:'zoo', id} | {type:'upload', fileId, path, name}, modelFileId }
+    this.bioimageioModel = null;
 
     // File uploads. `pairs` holds the training pairs kept in the Step 1 list
     // (ADR-014); raw_images/annotations is the pair currently in the selectors.
@@ -813,30 +819,29 @@ class SegmentationModule extends BaseModule {
   // ===========================================================================
 
   /**
-   * Handle workflow section toggle (train vs import)
-   * @param {string} workflow - 'train' or 'import'
+   * Handle workflow section toggle (train, import or bioimageio). Opening one
+   * section closes the others; clicking the open one closes it.
+   * @param {string} workflow - 'train', 'import' or 'bioimageio'
    */
   onWorkflowSectionToggle(workflow) {
-    const trainSection = document.getElementById('trainFromScratchSection');
-    const importSection = document.getElementById('importModelSection');
+    const sections = {
+      train: document.getElementById('trainFromScratchSection'),
+      import: document.getElementById('importModelSection'),
+      bioimageio: document.getElementById('bioimageioSection')
+    };
+    const target = sections[workflow];
+    if (!target) return;
 
-    if (!trainSection || !importSection) return;
+    const isActive = target.classList.contains('active');
+    Object.values(sections).forEach(section => section && section.classList.remove('active'));
+    target.classList.toggle('active', !isActive);
+    this.workflowMode = !isActive ? workflow : null;
 
-    if (workflow === 'train') {
-      const isActive = trainSection.classList.contains('active');
-      importSection.classList.remove('active');
-      trainSection.classList.toggle('active', !isActive);
-      this.workflowMode = !isActive ? 'train' : null;
-    } else if (workflow === 'import') {
-      const isActive = importSection.classList.contains('active');
-      trainSection.classList.remove('active');
-      importSection.classList.toggle('active', !isActive);
-      this.workflowMode = !isActive ? 'import' : null;
-
-      // Initialize import selectors when first opened
-      if (this.workflowMode === 'import') {
-        this.importHandler.initializeImportSelectors();
-      }
+    // Lazily build the section contents the first time they open
+    if (this.workflowMode === 'import') {
+      this.importHandler.initializeImportSelectors();
+    } else if (this.workflowMode === 'bioimageio') {
+      this.bioimageioHandler.initialize();
     }
 
     this.updateStep1NextButton();
@@ -862,6 +867,9 @@ class SegmentationModule extends BaseModule {
     } else if (this.workflowMode === 'import') {
       step1Next.disabled = !this.importValidated;
       step1Next.textContent = 'Next: Run Inference';
+    } else if (this.workflowMode === 'bioimageio') {
+      step1Next.disabled = !this.bioimageioModel;
+      step1Next.textContent = 'Next: Run Inference';
     }
   }
 
@@ -877,6 +885,12 @@ class SegmentationModule extends BaseModule {
       // Store imported model in session
       await this.importHandler.storeImportedModelInSession();
       // Skip to Step 4
+      this.goToStep(4);
+    } else if (this.workflowMode === 'bioimageio') {
+      if (!this.bioimageioModel) return;
+      // A zoo model is "a model ready for inference" like an import:
+      // steps 2 and 3 are skipped (ADR-015)
+      this.hasImportedModel = true;
       this.goToStep(4);
     }
   }
@@ -1209,6 +1223,8 @@ class SegmentationModule extends BaseModule {
           completionSection.style.display = 'block';
         }
       }
+      // bioimage.io conversion controls (hidden unless a zoo model is selected)
+      this.bioimageioHandler.renderConversionControls();
       // Re-run compatibility check on entry (in case model/file changed)
       this._validateInferenceCompatibility();
     }
@@ -1309,6 +1325,15 @@ class SegmentationModule extends BaseModule {
     const warningId = 'inferenceCompatibilityWarning';
     const existing = document.getElementById(warningId);
     if (existing) existing.remove();
+
+    // A bioimage.io model runs tiled with halos, so the 2^layers rule of the
+    // workspace U-Net does not apply (ADR-015)
+    if (this.bioimageioModel) {
+      if (runInferenceBtn && this.uploadedFiles.inference_data) {
+        runInferenceBtn.disabled = false;
+      }
+      return;
+    }
 
     if (!dims || numLayers == null) return;
 
@@ -1678,8 +1703,16 @@ class SegmentationModule extends BaseModule {
       this.workflowMode = null;
       const trainSection = document.getElementById('trainFromScratchSection');
       const importSection = document.getElementById('importModelSection');
+      const bioSection = document.getElementById('bioimageioSection');
       if (trainSection) trainSection.classList.remove('active');
       if (importSection) importSection.classList.remove('active');
+      if (bioSection) bioSection.classList.remove('active');
+
+      // Drop the bioimage.io selection (session and UI)
+      if (this.bioimageioModel || this.bioimageioHandler.initialized) {
+        await this.bioimageioHandler.clearSelection({ remote: true });
+      }
+      this.bioimageioHandler.renderConversionControls();
 
       // Reset configuration to defaults (Step 2)
       this.resetConfigToDefaults();
@@ -1940,6 +1973,8 @@ class SegmentationModule extends BaseModule {
     };
     this.importValidated = false;
     this.importedModelConfig = null;
+    this.bioimageioModel = null;
+    this.bioimageioHandler.reset();
 
     // Reset cached configuration / dimensions used by validation
     this.trainingConfig = null;
@@ -1976,6 +2011,7 @@ class SegmentationModule extends BaseModule {
     this.state.update('modules.segmentation.importFiles', this.importFiles);
     this.state.update('modules.segmentation.importValidated', false);
     this.state.update('modules.segmentation.importedModelConfig', null);
+    this.state.update('modules.segmentation.bioimageioModel', null);
 
     // Clear container
     if (this.container) {
