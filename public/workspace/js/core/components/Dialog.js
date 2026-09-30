@@ -57,14 +57,15 @@
         resolve(result);
       };
       const confirm = () => {
-        const result = onConfirm ? onConfirm(modal) : true;
-        // A string from onConfirm is a validation error: keep the dialog open
-        if (typeof result === 'string' && result) {
+        if (!onConfirm) return close(true);
+        // onConfirm returns { error } to keep the dialog open, or { value }
+        const result = onConfirm(modal) || {};
+        if (result.error) {
           const err = modal.querySelector('.dialog-error');
-          if (err) { err.textContent = result; err.hidden = false; }
+          if (err) { err.textContent = result.error; err.hidden = false; }
           return;
         }
-        close(result === undefined ? true : result);
+        close(result.value);
       };
       const onKey = (e) => {
         if (e.key === 'Escape') { e.preventDefault(); close(onConfirm ? null : false); }
@@ -141,9 +142,9 @@
           const value = modal.querySelector('#dialog-input').value;
           if (o.validate) {
             const error = o.validate(value);
-            if (error) return String(error);
+            if (error) return { error: String(error) };
           }
-          return value;
+          return { value };
         }
       });
     },
