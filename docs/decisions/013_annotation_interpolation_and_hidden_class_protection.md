@@ -1,5 +1,6 @@
 # ADR-013: Annotation Slice Interpolation and Hidden-Class Protection
 
+**Release:** v1.6.0
 **Status:** Accepted, implemented and browser-tested by Lucas (2026-09-29);
 class lock added the same day (decision 6)
 **Context:** Lucas (2026-09-29): "i want it to be possible to only annotate
