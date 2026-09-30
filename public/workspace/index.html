@@ -117,13 +117,14 @@
             </div>
 
             <div class="workspace-info">
-              <small>Workspace Version 1.10.0</small>
+              <small>Workspace Version 1.11.0</small>
               <details class="whats-new">
-                <summary>What's new in 1.10.0</summary>
+                <summary>What's new in 1.11.0</summary>
                 <ul>
-                  <li>Fine-tuning: a training run can start from a workspace model or from a bioimage.io model (a package in your workspace or a zoo model). Choose the starting point in Step 2 of the Segmentation module; a fine-tuned zoo model comes back as a new package that runs tiled in Step 4.</li>
-                  <li>From 1.9.0: export a trained U-Net as a bioimage.io package from the file browser (right-click a model file).</li>
-                  <li>From 1.8.0: run bioimage.io model zoo models and uploaded packages in the Segmentation module, with a class-map conversion you choose.</li>
+                  <li>Readable workspace: every run gets a numbered folder (seg1, prep2, annot3) and files carry their names on disk; uploads keep their original names.</li>
+                  <li>Upload without choosing a kind: drop images, annotations, models, packages or a backup and the workspace detects what they are (right-click to correct a guess).</li>
+                  <li>Annotations made here live in one folder each and are completed in place; deleting an output removes its companion files; the file info names the model that produced a file.</li>
+                  <li>From 1.10.0: fine-tuning from a workspace model or a bioimage.io model in Step 2 of the Segmentation module.</li>
                 </ul>
                 <a href="https://lucasfortune.github.io/the-virtual-parasite/workspace/" class="resource-link" target="_blank" rel="noopener noreferrer">Full changelog &amp; docs</a>
               </details>
@@ -177,6 +178,7 @@
   <script src="/workspace/js/core/StateManager.js"></script>
   <script src="/workspace/js/core/ModuleLoader.js"></script>
   <script src="/workspace/js/core/WorkspaceAPI.js"></script>
+  <script src="/workspace/js/core/components/Dialog.js"></script>
   <script src="/workspace/js/components/ContextMenu.js"></script>
   <script src="/workspace/js/components/FileBrowser.js"></script>
   <script src="/workspace/js/services/InfoContentService.js"></script>
