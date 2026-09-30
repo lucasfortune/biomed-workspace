@@ -117,14 +117,14 @@
             </div>
 
             <div class="workspace-info">
-              <small>Workspace Version 1.6.0</small>
+              <small>Workspace Version 1.7.0</small>
               <details class="whats-new">
-                <summary>What's new in 1.6.0</summary>
+                <summary>What's new in 1.7.0</summary>
                 <ul>
-                  <li>Annotation: interpolate a class between the slices you painted, and let a pixel classifier trained on your strokes suggest labels for the remaining slices.</li>
-                  <li>Annotation: hidden or locked classes can no longer be painted over. New fill tool, eyedropper, class shortcuts, overlay opacity, renaming and recolouring, batch show and lock.</li>
-                  <li>Zoom and pan stay where they are when you move between slices.</li>
-                  <li>Fixed: opening a second file for annotation could still show the previous stack.</li>
+                  <li>Segmentation training uses only the slices you labelled, so partially annotated stacks train correctly, and several raw and annotation pairs can be combined in one run.</li>
+                  <li>A validation split you choose replaces the fixed split, and no labels are lost to a test set any more.</li>
+                  <li>Correct a segmentation result in the Annotation module and train on it again; results can also be picked as training masks directly.</li>
+                  <li>From 1.6.0: slice interpolation, classifier suggestions and class protection in the Annotation module.</li>
                 </ul>
                 <a href="https://lucasfortune.github.io/the-virtual-parasite/workspace/" class="resource-link" target="_blank" rel="noopener noreferrer">Full changelog &amp; docs</a>
               </details>

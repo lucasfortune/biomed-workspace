@@ -1,6 +1,6 @@
 # Developer Documentation
 
-Technical documentation for the BioMed Workspace (version 1.6.0). For using
+Technical documentation for the BioMed Workspace (version 1.7.0). For using
 the platform, see the
 [user documentation](https://lucasfortune.github.io/the-virtual-parasite/workspace/);
 the in-app help articles live in `public/workspace/content/` and are synced
@@ -59,6 +59,7 @@ A starting point for new modules is the template in
 | [ADR-011](decisions/011_shared_viewer_chrome_and_conventions.md) | Shared viewer chrome and UI conventions |
 | [ADR-012](decisions/012_workspace_data_model_consolidation.md) | Workspace data model consolidation |
 | [ADR-013](decisions/013_annotation_interpolation_and_hidden_class_protection.md) | Annotation slice interpolation and hidden-class protection |
+| [ADR-014](decisions/014_training_data_partial_annotations_and_pairs.md) | Training data: partial annotations, multiple pairs, correction loop |
 
 ---
 
