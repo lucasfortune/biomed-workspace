@@ -35,7 +35,7 @@ Each slice keeps its own history stack of up to 20 states. Use undo to revert th
 
 When enabled, your work is automatically saved every 2 minutes if changes have been made. This protects against browser crashes or accidental navigation.
 
-- Toggle autosave on/off using the switch in the History section
+- Toggle autosave on/off using the switch in the header, next to Save Progress
 
 - The status indicator shows when autosave is in progress
 
