@@ -363,12 +363,6 @@ body {
   flex-shrink: 0;
 }
 
-.fb-upload-hint {
-  font-size: 11px;
-  color: var(--text-secondary);
-  text-align: center;
-}
-
 .fb-btn-upload {
   width: 100%;
   display: flex;
@@ -397,10 +391,6 @@ body {
 
 .fb-btn-upload.uploading {
   background-color: var(--accent-muted);
-}
-
-.fb-upload-icon {
-  font-size: 13px;
 }
 
 .fb-upload-text {

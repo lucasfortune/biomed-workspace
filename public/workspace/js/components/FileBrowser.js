@@ -286,10 +286,8 @@ class FileBrowser {
 
         <div class="fb-upload-section">
           <button class="fb-btn-upload" id="fb-upload-btn" title="Upload images, annotations, models, bioimage.io packages or a workspace backup. The kind is detected from the file.">
-            <span class="fb-upload-icon">⬆️</span>
             <span class="fb-upload-text">Upload</span>
           </button>
-          <span class="fb-upload-hint">TIFF, MRC, .pth, .json, .zip</span>
         </div>
 
         <input type="file" id="fb-file-input" class="fb-file-input-hidden"
