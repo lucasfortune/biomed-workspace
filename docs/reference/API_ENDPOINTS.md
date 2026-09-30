@@ -1266,7 +1266,28 @@ These endpoints handle the training workflow of the Workspace segmentation modul
 
 ### POST /upload-data
 
-Upload and validate training data (images + annotations).
+Upload and validate training data (images + annotations). Since 1.7.0
+(ADR-014) a training run covers one or more raw/annotation **pairs**: with
+`skipUpload=true` the form field `pairs` holds a JSON array of
+`{ raw_images_path, annotations_path }` (workspace-relative paths). The
+legacy fields `raw_images_path` + `annotations_path` describe a single pair.
+All pairs are validated in one Python run (`validate_tiff.py --pairs`),
+which builds one class map over all of them, counts the labelled slices per
+pair and reports the smallest slice dimension. The response carries
+`validation.pairs[]` (`slice_dimensions`, `num_slices`, `labelled_slices`,
+`unique_values`), `validation.num_classes`, `validation.class_map`,
+`validation.min_dimension`, `validation.totals`, `validation.warnings[]` and
+`pairs[]` with the canonical paths and file ids. Paths outside the
+workspace are refused (400).
+
+`POST /configure-training` additionally accepts `val_fraction` (0.05 to
+0.4, default 0.15) and refuses a `patch_size` larger than
+`validation.min_dimension`. `POST /start-training` writes
+`training_pairs.json` next to the model, spawns the trainer with
+`--pairs`, records lineage to every raw and annotation file, and the
+training session (and `GET /training-status/:id`) carries `dataSummary`
+(`pairs[]`, `totals: {train, val, labelled, slices}`) once the trainer has
+reported which slices take part.
 
 **Authentication:** None (but checks approval status inline)
 **Status:** ✅ Stable

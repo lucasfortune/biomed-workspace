@@ -37,6 +37,7 @@ const createAdminRoutes = require('./routes/admin.routes');
 // Python runner wrappers
 const {
   validateTiffStacks: validateTiffStacksPython,
+  validateTrainingPairs: validateTrainingPairsPython,
   validateImportedModel: validateImportedModelPython,
   validateInferenceTiff: validateInferenceTiffPython,
   startTrainingProcess: startTrainingProcessPython,
@@ -92,6 +93,10 @@ function configureApp(app, dependencies) {
 
   function validateTiffStacks(rawPath, annotationPath) {
     return validateTiffStacksPython(PYTHON_PATH, rawPath, annotationPath, { logger });
+  }
+
+  function validateTrainingPairs(pairsFile) {
+    return validateTrainingPairsPython(PYTHON_PATH, pairsFile, { logger });
   }
 
   function validateImportedModel(modelPath, configPath) {
@@ -308,6 +313,7 @@ function configureApp(app, dependencies) {
     upload,
     uploadImport,
     validateTiffStacks,
+    validateTrainingPairs,
     validateImportedModel,
     validateInferenceTiff,
     validateTrainingConfig,

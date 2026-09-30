@@ -97,7 +97,9 @@ const PYTHON_SCRIPTS = {
 // Training configuration validation ranges
 const TRAINING_CONFIG_RANGES = {
   patchSize: { min: 32, max: 1024, multipleOf: 16 },
-  learningRate: { min: 0, max: 1 }
+  learningRate: { min: 0, max: 1 },
+  // Share of each pair's labelled slices held out for validation (ADR-014)
+  valFraction: { min: 0.05, max: 0.4 }
 };
 
 // Required training configuration fields

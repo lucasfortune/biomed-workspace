@@ -45,6 +45,12 @@ class FileHandler {
       title: 'Annotations',
       icon: 'tag',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.annotations'),
+      // Segmentation results (inference output, cleanup output) are label
+      // maps too: they pass the same validator and close the
+      // "correct, then retrain" loop (ADR-014)
+      showRecentResults: true,
+      resultTags: ['segmentation', 'data'],
+      resultCategoryLabels: { results: 'Segmentation' },
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('annotations', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('annotations', file, uploadedInfo)
@@ -84,7 +90,109 @@ class FileHandler {
       await this.module.inferenceSelector.init();
     }
 
+    this.renderPairList();
+    this.updateAddPairButton();
+
     console.log('[FileHandler] FileSelectors initialized');
+  }
+
+  // ===========================================================================
+  // TRAINING PAIRS (ADR-014)
+  // ===========================================================================
+
+  /** Pairs kept in the list (not counting the pair currently in the selectors) */
+  get pairs() {
+    if (!Array.isArray(this.module.uploadedFiles.pairs)) {
+      this.module.uploadedFiles.pairs = [];
+    }
+    return this.module.uploadedFiles.pairs;
+  }
+
+  /** The pair composed in the two selectors, if both are chosen */
+  currentPair() {
+    const raw = this.module.uploadedFiles.raw_images;
+    const ann = this.module.uploadedFiles.annotations;
+    if (!raw?.path || !ann?.path) return null;
+    return { raw_images: raw, annotations: ann };
+  }
+
+  /** All pairs that a validation / training run covers */
+  allPairs() {
+    const current = this.currentPair();
+    return current ? [...this.pairs, current] : [...this.pairs];
+  }
+
+  updateAddPairButton() {
+    const btn = document.getElementById('addPairBtn');
+    if (btn) btn.disabled = !this.currentPair();
+  }
+
+  /** Move the selected pair into the list and free the selectors for the next one */
+  async addPair() {
+    const current = this.currentPair();
+    if (!current) return;
+    const duplicate = this.pairs.some(p =>
+      p.raw_images?.path === current.raw_images.path && p.annotations?.path === current.annotations.path);
+    if (duplicate) {
+      this.module.state.notify('error', 'This pair is already in the list');
+      return;
+    }
+    this.pairs.push(current);
+    this.module.uploadedFiles.raw_images = null;
+    this.module.uploadedFiles.annotations = null;
+    this.module.rawImageSelector?.clearSelection();
+    this.module.annotationsSelector?.clearSelection();
+    this.renderPairList();
+    this.updateAddPairButton();
+    await this.validateUploadedFiles();
+  }
+
+  async removePair(index) {
+    if (index < 0 || index >= this.pairs.length) return;
+    this.pairs.splice(index, 1);
+    this.renderPairList();
+    if (this.allPairs().length > 0) {
+      await this.validateUploadedFiles();
+    } else {
+      this.module.filesValidated = false;
+      this.module.trainingData = null;
+      this.module.updateStep1NextButton();
+      this.validationDisplay?.hide?.();
+      this.module.stateHandler.saveState();
+    }
+  }
+
+  /** Render the pair list; facts per pair come from the last validation */
+  renderPairList() {
+    const list = document.getElementById('trainingPairList');
+    if (!list) return;
+    const facts = this.module.trainingData?.pairs || [];
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    if (this.pairs.length === 0) {
+      list.innerHTML = '<li class="pair-item empty">No pairs added yet. A single selected pair is enough to train.</li>';
+      return;
+    }
+    list.innerHTML = this.pairs.map((pair, i) => {
+      const f = facts[i];
+      const dims = f
+        ? `${f.slice_dimensions[1]}x${f.slice_dimensions[0]}, ${f.labelled_slices} of ${f.num_slices} slices labelled`
+        : 'not validated yet';
+      return `
+        <li class="pair-item" data-index="${i}">
+          <span class="pair-order">${i + 1}</span>
+          <span class="pair-names">
+            <span class="pair-name" title="${esc(pair.raw_images.path)}">${esc(pair.raw_images.displayName || pair.raw_images.name)}</span>
+            <span class="pair-sep">+</span>
+            <span class="pair-name" title="${esc(pair.annotations.path)}">${esc(pair.annotations.displayName || pair.annotations.name)}</span>
+          </span>
+          <span class="pair-dims">${esc(dims)}</span>
+          <button type="button" class="btn-icon-sm pair-remove" data-index="${i}" title="Remove pair">${icon('cross')}</button>
+        </li>`;
+    }).join('');
+    list.querySelectorAll('.pair-remove').forEach(btn => {
+      btn.addEventListener('click', () => this.removePair(parseInt(btn.dataset.index, 10)));
+    });
   }
 
   /**
@@ -100,6 +208,7 @@ class FileHandler {
 
     // Handle based on file type
     if (type === 'raw_images' || type === 'annotations') {
+      this.updateAddPairButton();
       if (this.module.uploadedFiles.raw_images && this.module.uploadedFiles.annotations) {
         await this.validateUploadedFiles();
       }
@@ -163,18 +272,23 @@ class FileHandler {
   }
 
   /**
-   * Validate uploaded custom files
+   * Validate the training pairs (the list plus the pair in the selectors)
+   * in one server call; the server builds one class map over all of them.
    */
   async validateUploadedFiles() {
-    console.log('[FileHandler] Validating uploaded files...');
+    const pairs = this.allPairs();
+    if (pairs.length === 0) return;
+    console.log(`[FileHandler] Validating ${pairs.length} training pair(s)...`);
 
     try {
       this.module.state.update('ui.loading', true);
 
       const formData = new FormData();
       formData.append('skipUpload', 'true');
-      formData.append('raw_images_path', this.module.uploadedFiles.raw_images?.path || '');
-      formData.append('annotations_path', this.module.uploadedFiles.annotations?.path || '');
+      formData.append('pairs', JSON.stringify(pairs.map(p => ({
+        raw_images_path: p.raw_images.path,
+        annotations_path: p.annotations.path
+      }))));
 
       const response = await fetch('/upload-data', {
         method: 'POST',
@@ -184,16 +298,22 @@ class FileHandler {
       const result = await response.json();
 
       if (result.success) {
-        this.module.uploadedFiles.raw_images = {
-          path: result.raw_images_path,
-          name: this.module.pendingFiles?.raw_images?.name || this.module.uploadedFiles.raw_images?.name || 'Raw Images'
-        };
-        this.module.uploadedFiles.annotations = {
-          path: result.annotations_path,
-          name: this.module.pendingFiles?.annotations?.name || this.module.uploadedFiles.annotations?.name || 'Annotations'
-        };
+        // Adopt the server's canonical paths / ids
+        (result.pairs || []).forEach((srv, i) => {
+          const pair = pairs[i];
+          if (!pair) return;
+          pair.raw_images = { ...pair.raw_images, path: srv.raw_images_path, id: srv.raw_images_id || pair.raw_images.id };
+          pair.annotations = { ...pair.annotations, path: srv.annotations_path, id: srv.annotations_id || pair.annotations.id };
+        });
+        const current = this.currentPair();
+        if (current) {
+          this.module.uploadedFiles.raw_images = pairs[pairs.length - 1].raw_images;
+          this.module.uploadedFiles.annotations = pairs[pairs.length - 1].annotations;
+        }
 
+        this.module.trainingData = result.validation;
         this.displayValidationResults(result.validation);
+        this.renderPairList();
 
         this.module.filesValidated = true;
         this.module.updateStep1NextButton();
@@ -208,13 +328,17 @@ class FileHandler {
         this.module.pendingFiles = {};
         this.module.stateHandler.saveState();
 
-        this.module.state.notify('success', 'Files validated successfully');
+        this.module.state.notify('success', pairs.length === 1
+          ? 'Files validated successfully'
+          : `${pairs.length} training pairs validated`);
       } else {
         const detail = result.details || result.error || 'Validation failed';
         throw new Error(detail);
       }
     } catch (error) {
       console.error('[FileHandler] Validation error:', error);
+      this.module.filesValidated = false;
+      this.module.updateStep1NextButton();
       this.module.state.notify('error', `Validation failed: ${error.message}`);
       this.displayValidationError(error.message);
     } finally {
@@ -288,37 +412,54 @@ class FileHandler {
       this.validationDisplay = new ValidationDisplay('validationResult');
     }
 
-    if (validation && validation.success !== false) {
-      // Store image dimensions for parameter validation
-      if (validation.info?.slice_dimensions) {
+    if (validation && validation.valid !== false && validation.success !== false) {
+      const pairs = validation.pairs || [];
+      const details = [];
+
+      // Smallest slice over all pairs bounds the patch size (step 2)
+      if (pairs.length) {
+        const minW = Math.min(...pairs.map(p => p.slice_dimensions[1]));
+        const minH = Math.min(...pairs.map(p => p.slice_dimensions[0]));
+        this.module.imageDimensions = { width: minW, height: minH };
+      } else if (validation.info?.slice_dimensions) {
         const [h, w] = validation.info.slice_dimensions;
         this.module.imageDimensions = { width: w, height: h };
       }
 
-      const details = [];
-      if (validation.info?.slice_dimensions) {
-        const [h, w] = validation.info.slice_dimensions;
-        details.push({ label: 'Raw Images', value: `${w}x${h} (${validation.info.num_slices} slices)` });
-      } else if (validation.raw_dims) {
-        details.push({ label: 'Raw Images', value: `${validation.raw_dims} (${validation.raw_slices} slices)` });
+      pairs.forEach((p, i) => {
+        const [h, w] = p.slice_dimensions;
+        details.push({
+          label: pairs.length > 1 ? `Pair ${i + 1}` : 'Training data',
+          value: `${w}x${h}, ${p.labelled_slices} of ${p.num_slices} slices labelled`
+        });
+      });
+      if (validation.totals) {
+        details.push({
+          label: 'Used for training',
+          value: `${validation.totals.labelled_slices} labelled slices of ${validation.totals.slices}`
+            + (pairs.length > 1 ? ` in ${pairs.length} pairs` : '')
+        });
       }
-      if (validation.ann_dims) {
-        details.push({ label: 'Annotations', value: `${validation.ann_dims} (${validation.ann_slices} slices)` });
-      }
-      if (validation.classes) {
-        details.push({ label: 'Classes detected', value: validation.classes.join(', ') });
+      if (validation.num_classes) {
+        const foreground = validation.num_classes - 1;
+        details.push({ label: 'Classes', value: `${foreground} (background + ${foreground} labelled)` });
       }
 
       this.validationDisplay.showSuccess('Validation Successful', details);
 
-      if (validation.warnings) {
+      const warnings = Array.isArray(validation.warnings)
+        ? validation.warnings
+        : (validation.warnings ? [validation.warnings] : []);
+      if (warnings.length) {
         const container = this.validationDisplay.getContainer();
-        if (container) {
+        const host = container?.querySelector('.validation-success');
+        warnings.forEach(text => {
           const warningDiv = document.createElement('p');
           warningDiv.className = 'warning';
-          warningDiv.innerHTML = `${icon('warning')} <span>${validation.warnings}</span>`;
-          container.querySelector('.validation-success')?.appendChild(warningDiv);
-        }
+          warningDiv.innerHTML = `${icon('warning')} <span></span>`;
+          warningDiv.querySelector('span').textContent = text;
+          host?.appendChild(warningDiv);
+        });
       }
     } else {
       this.validationDisplay.showError('Validation Failed', validation?.error || 'Unknown error');

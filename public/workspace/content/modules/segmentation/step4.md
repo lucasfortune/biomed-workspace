@@ -11,6 +11,7 @@ tags:
 seeAlsoManual:
   - segmentation.step4.inference-data
   - segmentation.step3
+  - annotation.step1.source-image
 seeAlsoTags:
   - inference
   - output
@@ -39,3 +40,9 @@ Because each slice is segmented as a whole image, the slice dimensions must be c
 The output segmentation mask has the same dimensions as your input and contains integer values corresponding to class labels (0 for background, 1+ for detected objects).
 
 Inference is much faster than training since no gradient computation or weight updates are needed.
+
+## After the run
+
+- Open in Image Viewer shows the result next to the input stack.
+
+- Correct in Annotation opens the result in the Annotation module as labels over the raw stack. Fix the prediction with brush, eraser and fill, then Create Annotation. The corrected annotation appears in the Annotations selector of Step 1 and can be trained on, together with your other pairs. Repeating this loop is usually the fastest way to improve a model.

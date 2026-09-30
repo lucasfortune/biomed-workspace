@@ -93,12 +93,16 @@ class SegmentationModule extends BaseModule {
     this.importValidated = false;
     this.importedModelConfig = null;
 
-    // File uploads
+    // File uploads. `pairs` holds the training pairs kept in the Step 1 list
+    // (ADR-014); raw_images/annotations is the pair currently in the selectors.
     this.uploadedFiles = {
       raw_images: null,
       annotations: null,
+      pairs: [],
       inference_data: null
     };
+    // Last training-data validation (per-pair facts, class count, warnings)
+    this.trainingData = null;
 
     // File selectors
     this.rawImageSelector = null;
@@ -765,17 +769,21 @@ class SegmentationModule extends BaseModule {
    */
   checkStep1Validation() {
     const step1Next = document.getElementById('step1Next');
+    const hasPairs = (this.uploadedFiles.pairs?.length > 0)
+      || (this.uploadedFiles.raw_images && this.uploadedFiles.annotations);
 
-    if (this.uploadedFiles.raw_images && this.uploadedFiles.annotations) {
+    if (hasPairs && this.filesValidated) {
       if (step1Next) {
         step1Next.disabled = false;
       }
-
-      // Show validation success using ValidationDisplay
-      if (!this.validationDisplay) {
-        this.validationDisplay = new ValidationDisplay('validationResult');
+      if (this.trainingData) {
+        this.fileHandler.displayValidationResults(this.trainingData);
+      } else {
+        if (!this.validationDisplay) {
+          this.validationDisplay = new ValidationDisplay('validationResult');
+        }
+        this.validationDisplay.showSuccess('Files Ready', 'Training pairs validated and ready for training');
       }
-      this.validationDisplay.showSuccess('Files Ready', 'Both files selected and ready for training');
     } else {
       if (step1Next) {
         step1Next.disabled = true;
@@ -1122,8 +1130,9 @@ class SegmentationModule extends BaseModule {
       });
     }
 
-    // Step 1: Navigation
+    // Step 1: Navigation + training pairs
     on('step1Next', () => this.handleStep1Next());
+    on('addPairBtn', () => this.fileHandler.addPair());
 
     // Step 2: Configuration
     on('step2Back', () => this.goToStep(1));
@@ -1139,8 +1148,9 @@ class SegmentationModule extends BaseModule {
     on('runInferenceBtn', () => this.runInference());
     on('step4Back', () => this.goToStep(3));
 
-    // Step 4 Completion: Image Viewer and Reset
+    // Step 4 Completion: Image Viewer, correction loop and Reset
     on('openInViewerBtn', () => this.openInImageViewer());
+    on('correctInAnnotationBtn', () => this.correctInAnnotation());
     on('resetWorkflowBtn', () => this.resetWorkflow());
 
     console.log('[SegmentationModule] Event listeners set up');
@@ -1262,6 +1272,9 @@ class SegmentationModule extends BaseModule {
     this.formValidationController.addFieldRule('numLayers', (value) => {
       return this.paramValidator.validateRange(parseInt(value), 2, 6, 'Number of layers');
     });
+    this.formValidationController.addFieldRule('valFraction', (value) => {
+      return this.paramValidator.validateRange(parseInt(value), 5, 40, 'Validation split');
+    });
     this.formValidationController.addFieldRule('numEpochs', (value) => {
       return this.paramValidator.validateRange(parseInt(value), 10, 500, 'Number of epochs');
     });
@@ -1350,7 +1363,8 @@ class SegmentationModule extends BaseModule {
       features: parseInt(document.getElementById('numFeatures').value),
       num_layers: parseInt(document.getElementById('numLayers').value),
       learning_rate: parseFloat(document.getElementById('learningRate').value),
-      num_epochs: parseInt(document.getElementById('numEpochs').value)
+      num_epochs: parseInt(document.getElementById('numEpochs').value),
+      val_fraction: parseInt(document.getElementById('valFraction')?.value || '15', 10) / 100
     };
 
     try {
@@ -1590,6 +1604,25 @@ class SegmentationModule extends BaseModule {
   }
 
   /**
+   * Hand the inference result to the Annotation module, which opens it as
+   * labels to correct over the raw stack (ADR-014). The corrected annotation
+   * is then selectable as a training mask here.
+   */
+  correctInAnnotation() {
+    const outputPath = window.inferenceResult?.output_path;
+    if (!outputPath) {
+      this.state.notify('error', 'No inference result to correct');
+      return;
+    }
+    this.state.update('modules.segmentation.correctionFile', {
+      path: outputPath,
+      inferenceId: this.currentInferenceId,
+      timestamp: Date.now()
+    });
+    window.workspace.loadModule('annotation');
+  }
+
+  /**
    * Reset entire workflow (frontend only - files are preserved in workspace)
    */
   async resetWorkflow() {
@@ -1620,8 +1653,10 @@ class SegmentationModule extends BaseModule {
       this.uploadedFiles = {
         raw_images: null,
         annotations: null,
+        pairs: [],
         inference_data: null
       };
+      this.trainingData = null;
 
       // Reset step condition flags
       this.filesValidated = false;
@@ -1710,6 +1745,8 @@ class SegmentationModule extends BaseModule {
     if (patchesPerImage) patchesPerImage.value = '50';
     if (batchSize) batchSize.value = '8';
     if (augmentation) augmentation.checked = true;
+    const valFraction = document.getElementById('valFraction');
+    if (valFraction) valFraction.value = '15';
 
     // Model Architecture
     const numFeatures = document.getElementById('numFeatures');
@@ -1881,8 +1918,10 @@ class SegmentationModule extends BaseModule {
     this.uploadedFiles = {
       raw_images: null,
       annotations: null,
+      pairs: [],
       inference_data: null
     };
+    this.trainingData = null;
 
     // Reset step condition flags
     this.filesValidated = false;

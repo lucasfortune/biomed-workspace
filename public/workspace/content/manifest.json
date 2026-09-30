@@ -1350,6 +1350,7 @@
       "path": "modules/segmentation/step1-raw-images.md",
       "seeAlsoManual": [
         "segmentation.step1.annotations",
+        "segmentation.step1.training-pairs",
         "segmentation.step1"
       ],
       "seeAlsoTags": [
@@ -1373,6 +1374,7 @@
       "path": "modules/segmentation/step1-annotations.md",
       "seeAlsoManual": [
         "segmentation.step1.raw-images",
+        "segmentation.step1.training-pairs",
         "segmentation.step1"
       ],
       "seeAlsoTags": [
@@ -1712,7 +1714,8 @@
       "path": "modules/segmentation/step4.md",
       "seeAlsoManual": [
         "segmentation.step4.inference-data",
-        "segmentation.step3"
+        "segmentation.step3",
+        "annotation.step1.source-image"
       ],
       "seeAlsoTags": [
         "inference",
@@ -2430,6 +2433,54 @@
         "classes",
         "labels"
       ]
+    },
+    "segmentation.step1.training-pairs": {
+      "id": "segmentation.step1.training-pairs",
+      "title": "Training Pairs",
+      "displayTitle": "Training Pairs",
+      "category": "data",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training-data",
+        "pairs",
+        "partial-annotation",
+        "labelled-slices"
+      ],
+      "path": "modules/segmentation/step1-training-pairs.md",
+      "seeAlsoManual": [
+        "segmentation.step1.raw-images",
+        "segmentation.step1.annotations",
+        "segmentation.config.validation-split"
+      ],
+      "seeAlsoTags": [
+        "training-data",
+        "annotations"
+      ]
+    },
+    "segmentation.config.validation-split": {
+      "id": "segmentation.config.validation-split",
+      "title": "Validation Split",
+      "displayTitle": "Validation Split (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "validation",
+        "configuration",
+        "dataset"
+      ],
+      "path": "modules/segmentation/config-validation-split.md",
+      "seeAlsoManual": [
+        "segmentation.step1.training-pairs",
+        "segmentation.step3.dice-score"
+      ],
+      "seeAlsoTags": [
+        "training",
+        "validation"
+      ],
+      "parameterImpact": "A larger split gives a more reliable validation Dice but leaves fewer slices for training. 15% suits most stacks; go lower only when very few slices are labelled, higher when you have many.\n"
     }
   },
   "glossary": {

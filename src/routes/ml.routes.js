@@ -13,6 +13,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const uuid = require('uuid');
 const archiver = require('archiver');
 const { spawn } = require('child_process');
@@ -33,6 +34,7 @@ const { PYTHON_PATH } = require('../config/constants');
  * @param {function} dependencies.upload - Multer upload middleware
  * @param {function} dependencies.uploadImport - Multer upload middleware for imports
  * @param {function} dependencies.validateTiffStacks - TIFF validation function
+ * @param {function} dependencies.validateTrainingPairs - Multi-pair training data validation
  * @param {function} dependencies.validateImportedModel - Model validation function
  * @param {function} dependencies.validateInferenceTiff - Inference TIFF validation function
  * @param {function} dependencies.validateTrainingConfig - Config validation function
@@ -54,6 +56,7 @@ function createMLRoutes(dependencies) {
     upload,
     uploadImport,
     validateTiffStacks,
+    validateTrainingPairs,
     validateImportedModel,
     validateInferenceTiff,
     validateTrainingConfig,
@@ -101,48 +104,121 @@ function createMLRoutes(dependencies) {
         });
       }
 
-      // Case 1: Files already uploaded via FileSelector
+      // Case 1: Files already in the workspace (FileSelector). One or more
+      // raw/annotation pairs (ADR-014): `pairs` is a JSON array of
+      // { raw_images_path, annotations_path }; the legacy two fields describe
+      // a single pair. All paths are workspace-relative.
       if (skipUpload) {
-        if (logger) logger.debug('Validating pre-uploaded files...');
+        if (logger) logger.debug('Validating training pairs...');
 
-        const rawImagesPath = req.body.raw_images_path;
-        const annotationsPath = req.body.annotations_path;
-
-        if (!rawImagesPath || !annotationsPath) {
+        let pairSpecs = [];
+        if (req.body.pairs) {
+          try {
+            pairSpecs = JSON.parse(req.body.pairs);
+          } catch (e) {
+            return res.status(400).json({ error: 'pairs must be a JSON array' });
+          }
+        } else if (req.body.raw_images_path && req.body.annotations_path) {
+          pairSpecs = [{
+            raw_images_path: req.body.raw_images_path,
+            annotations_path: req.body.annotations_path
+          }];
+        }
+        if (!Array.isArray(pairSpecs) || pairSpecs.length === 0) {
           return res.status(400).json({
-            error: 'File paths are required when skipUpload is true'
+            error: 'At least one raw/annotation pair is required'
           });
         }
 
-        const rawFullPath = path.join(workspacePath, rawImagesPath);
-        const annFullPath = path.join(workspacePath, annotationsPath);
-
-        if (!fs.existsSync(rawFullPath)) {
-          return res.status(400).json({ error: 'Raw images file not found', path: rawImagesPath });
+        // Resolve every path inside the workspace and check it exists
+        const resolveInWorkspace = (rel) => {
+          if (typeof rel !== 'string' || !rel) return null;
+          const full = path.resolve(workspacePath, rel);
+          if (!full.startsWith(workspacePath + path.sep)) return null;
+          return full;
+        };
+        const pairs = [];
+        for (let i = 0; i < pairSpecs.length; i++) {
+          const spec = pairSpecs[i] || {};
+          const rawFull = resolveInWorkspace(spec.raw_images_path);
+          const annFull = resolveInWorkspace(spec.annotations_path);
+          if (!rawFull || !fs.existsSync(rawFull)) {
+            return res.status(400).json({ error: `Pair ${i + 1}: raw images file not found`, path: spec.raw_images_path });
+          }
+          if (!annFull || !fs.existsSync(annFull)) {
+            return res.status(400).json({ error: `Pair ${i + 1}: annotations file not found`, path: spec.annotations_path });
+          }
+          const rawRel = path.relative(workspacePath, rawFull);
+          const annRel = path.relative(workspacePath, annFull);
+          pairs.push({
+            raw_images: rawFull,
+            annotations: annFull,
+            raw_images_rel: rawRel,
+            annotations_rel: annRel,
+            raw_images_id: workspaceManager.getFileIdByPath(sessionId, rawRel) || null,
+            annotations_id: workspaceManager.getFileIdByPath(sessionId, annRel) || null
+          });
         }
-        if (!fs.existsSync(annFullPath)) {
-          return res.status(400).json({ error: 'Annotations file not found', path: annotationsPath });
+
+        // Validate all pairs in one Python run (global class map)
+        const pairsFile = path.join(os.tmpdir(), `training_pairs_${sessionId}_${Date.now()}.json`);
+        fs.writeFileSync(pairsFile, JSON.stringify(
+          pairs.map(p => ({ raw: p.raw_images, annotations: p.annotations }))
+        ));
+        let validationResult;
+        try {
+          validationResult = await validateTrainingPairs(pairsFile);
+        } finally {
+          try { fs.unlinkSync(pairsFile); } catch (e) { /* temp file */ }
         }
 
-        rawFile = {
-          path: rawFullPath,
-          filename: path.basename(rawFullPath),
-          originalname: path.basename(rawFullPath),
-          size: fs.statSync(rawFullPath).size,
-          mimetype: 'image/tiff'
+        if (!validationResult.valid) {
+          return res.status(400).json({
+            error: 'TIFF validation failed',
+            details: validationResult.error
+          });
+        }
+
+        // Store in session: the pair list plus the legacy single-pair keys
+        // (first pair) for code that still reads them
+        req.session.uploadedFiles = {
+          pairs: pairs.map(p => ({
+            raw_images: p.raw_images,
+            annotations: p.annotations,
+            raw_images_id: p.raw_images_id,
+            annotations_id: p.annotations_id
+          })),
+          raw_images: pairs[0].raw_images,
+          annotations: pairs[0].annotations,
+          raw_images_id: pairs[0].raw_images_id,
+          annotations_id: pairs[0].annotations_id,
+          validation: validationResult
         };
 
-        annotationFile = {
-          path: annFullPath,
-          filename: path.basename(annFullPath),
-          originalname: path.basename(annFullPath),
-          size: fs.statSync(annFullPath).size,
-          mimetype: 'image/tiff'
-        };
+        // Validation may rewrite annotation stacks in place (label remap,
+        // 8-bit conversion): drop their stale thumbnail/slice caches
+        for (const p of pairs) {
+          if (p.annotations_id) workspaceManager.invalidateFileCaches(sessionId, p.annotations_id);
+        }
+
+        return res.json({
+          success: true,
+          message: 'Files validated successfully',
+          validation: validationResult,
+          pairs: pairs.map(p => ({
+            raw_images_path: p.raw_images_rel,
+            annotations_path: p.annotations_rel,
+            raw_images_id: p.raw_images_id,
+            annotations_id: p.annotations_id
+          })),
+          raw_images_path: pairs[0].raw_images_rel,
+          annotations_path: pairs[0].annotations_rel
+        });
       }
-      // Case 2: Regular file upload
-      else {
-        if (!req.files.raw_images || !req.files.annotations) {
+
+      // Case 2: Regular file upload (single pair)
+      {
+        if (!req.files || !req.files.raw_images || !req.files.annotations) {
           return res.status(400).json({
             error: 'Both raw images and annotations are required'
           });
@@ -259,6 +335,15 @@ function createMLRoutes(dependencies) {
         });
       }
 
+      // The patch must fit the smallest slice of every training pair
+      const minDim = req.session.uploadedFiles?.validation?.min_dimension;
+      if (minDim && config.patch_size > minDim) {
+        return res.status(400).json({
+          error: 'Invalid configuration',
+          details: [`patch_size ${config.patch_size} exceeds the smallest slice dimension (${minDim}) of the training pairs`]
+        });
+      }
+
       req.session.trainingConfig = config;
 
       res.json({
@@ -325,6 +410,19 @@ function createMLRoutes(dependencies) {
         fs.mkdirSync(trainingParams.output_dir, { recursive: true });
       }
 
+      // Training pairs (ADR-014): written next to the model so the run is
+      // reproducible; the legacy single pair becomes a one-entry list
+      const pairs = req.session.uploadedFiles.pairs || [{
+        raw_images: req.session.uploadedFiles.raw_images,
+        annotations: req.session.uploadedFiles.annotations,
+        raw_images_id: req.session.uploadedFiles.raw_images_id,
+        annotations_id: req.session.uploadedFiles.annotations_id
+      }];
+      trainingParams.pairs_file = path.join(trainingParams.output_dir, 'training_pairs.json');
+      fs.writeFileSync(trainingParams.pairs_file, JSON.stringify(
+        pairs.map(p => ({ raw: p.raw_images, annotations: p.annotations })), null, 2
+      ));
+
       // Store training session with history array for chart restoration
       trainingSessions.set(trainingId, {
         sessionId: sessionId,
@@ -336,11 +434,8 @@ function createMLRoutes(dependencies) {
         current_epoch: 0,
         total_epochs: config.num_epochs,
         params: trainingParams,
-        // Lineage tracking: raw + annotation input file ids for training outputs
-        inputFileIds: [
-          req.session.uploadedFiles.raw_images_id,
-          req.session.uploadedFiles.annotations_id
-        ].filter(Boolean),
+        // Lineage tracking: every raw + annotation input file id (all pairs)
+        inputFileIds: pairs.flatMap(p => [p.raw_images_id, p.annotations_id]).filter(Boolean),
         history: [] // Array of {epoch, train_loss, val_loss, train_dice, val_dice}
       });
 

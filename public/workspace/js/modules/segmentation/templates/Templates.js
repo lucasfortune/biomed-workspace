@@ -78,6 +78,18 @@ class Templates {
                   <!-- FileSelector components will be inserted here -->
                   <div id="rawImagesSelectorContainer"></div>
                   <div id="annotationsSelectorContainer"></div>
+
+                  <!-- Training pairs (ADR-014): the selected pair is validated at
+                       once; "Add pair" keeps it and frees the selectors for another -->
+                  <div class="training-pairs">
+                    <div class="training-pairs-header">
+                      <h4>Training pairs ${this.renderHelpIcon('segmentation.step1.training-pairs')}</h4>
+                      <button type="button" class="btn small" id="addPairBtn" disabled>Add pair</button>
+                    </div>
+                    <ul class="pair-list" id="trainingPairList">
+                      <li class="pair-item empty">No pairs added yet. A single selected pair is enough to train.</li>
+                    </ul>
+                  </div>
                   ${ValidationDisplay.renderContainer('validationResult')}
                 </div>
               </div>
@@ -137,6 +149,10 @@ class Templates {
               <div class="form-field">
                 <label for="patchesPerImage">Patches per Image${this.renderHelpIcon('segmentation.config.patches-per-image')}</label>
                 <input type="number" id="patchesPerImage" value="50" min="1" max="100">
+              </div>
+              <div class="form-field">
+                <label for="valFraction">Validation Split (%)${this.renderHelpIcon('segmentation.config.validation-split')}</label>
+                <input type="number" id="valFraction" value="15" min="5" max="40">
               </div>
               <div class="form-field">
                 <label for="batchSize">Batch Size${this.renderHelpIcon('segmentation.config.batch-size')}</label>
@@ -231,6 +247,7 @@ class Templates {
               </div>
               <div class="training-progress">
                 <div class="epoch-info">Epoch <span id="currentEpoch">0</span> of <span id="totalEpochs">0</span></div>
+                <div class="training-data-summary" id="trainingDataSummary" hidden></div>
                 <div class="training-progress-bar">
                   <div class="training-progress-fill" id="trainingProgressFill"></div>
                 </div>
@@ -328,10 +345,12 @@ class Templates {
                 <span class="success-title">Segmentation Complete</span>
               </div>
               <div class="validation-details" id="inferenceCompletionDetails">
-                Your segmentation results are ready. View them in the Image Viewer or start a new run.
+                Your segmentation results are ready. View them in the Image Viewer, correct them in the
+                Annotation module to train again, or start a new run.
               </div>
               <div class="success-actions">
                 <button class="btn primary" id="openInViewerBtn">Open in Image Viewer</button>
+                <button class="btn" id="correctInAnnotationBtn">Correct in Annotation</button>
                 <button class="btn secondary" id="resetWorkflowBtn">Start New Run</button>
               </div>
             </div>

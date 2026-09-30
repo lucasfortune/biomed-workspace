@@ -92,6 +92,23 @@ async function validateTiffStacks(pythonPath, rawPath, annotationPath, options =
 }
 
 /**
+ * Validate several raw/annotation training pairs in one run
+ * (python/validate_tiff.py --pairs <json>). The JSON file holds
+ * [{ raw, annotations }] with absolute paths.
+ * @param {string} pythonPath - Path to Python interpreter
+ * @param {string} pairsFile - Path to the pairs JSON file
+ * @param {object} options - Options
+ * @returns {Promise<object>} Validation result (num_classes, class_map, pairs, totals, warnings)
+ */
+async function validateTrainingPairs(pythonPath, pairsFile, options = {}) {
+  return runPythonScript(pythonPath, [
+    'python/validate_tiff.py',
+    '--pairs',
+    pairsFile
+  ], options);
+}
+
+/**
  * Validate imported model files
  * @param {string} pythonPath - Path to Python interpreter
  * @param {string} modelPath - Path to .pth model file
@@ -179,11 +196,15 @@ function generateThumbnail(pythonPath, inputPath, outputPath, options = {}) {
 function startTrainingProcess(pythonPath, params, io, trainingSessions, options = {}) {
   const { logger, onComplete, onProcessStart, onProcessEnd } = options;
 
+  // Training data: a pairs file (several raw/annotation pairs, ADR-014) or
+  // the legacy single pair
+  const dataArgs = params.pairs_file
+    ? ['--pairs', params.pairs_file]
+    : ['--raw_images', params.raw_images, '--annotations', params.annotations];
   const pythonScript = spawn(pythonPath, [
     'python/train_model.py',
     '--config', JSON.stringify(params.config),
-    '--raw_images', params.raw_images,
-    '--annotations', params.annotations,
+    ...dataArgs,
     '--output_dir', params.output_dir,
     '--training_id', params.training_id
   ]);
@@ -225,6 +246,10 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
 
           // Update training session
           const training = trainingSessions.get(params.training_id);
+          if (training && progress.type === 'data') {
+            // Which slices take part (labelled slices per pair, ADR-014)
+            training.dataSummary = { pairs: progress.pairs, totals: progress.totals };
+          }
           if (training) {
             training.status = 'training';
             training.current_epoch = progress.epoch;
@@ -556,6 +581,7 @@ function startInferenceProcess(pythonPath, modelPath, dataPath, outputPath, infe
 module.exports = {
   runPythonScript,
   validateTiffStacks,
+  validateTrainingPairs,
   validateImportedModel,
   validateInferenceTiff,
   generateThumbnail,

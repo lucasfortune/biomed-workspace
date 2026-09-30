@@ -519,3 +519,113 @@
     flex-wrap: wrap;
   }
 }
+
+
+/* ============================================
+   TRAINING PAIRS (Step 1, ADR-014)
+   ============================================ */
+
+.segmentation-module .training-pairs {
+  margin: var(--module-spacing-sm, 12px) 0;
+}
+
+.segmentation-module .training-pairs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.segmentation-module .training-pairs-header h4 {
+  margin: 0;
+}
+
+.segmentation-module .pair-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.segmentation-module .pair-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--module-spacing-xs, 6px) 10px;
+  border: 1px solid var(--module-border);
+  border-radius: var(--module-radius-sm);
+  margin-bottom: 6px;
+  background: var(--module-surface);
+}
+
+.segmentation-module .pair-item.empty {
+  color: var(--module-text-secondary);
+  font-style: italic;
+  border-style: dashed;
+}
+
+.segmentation-module .pair-order {
+  font-weight: 700;
+  min-width: 1.4em;
+  text-align: center;
+  color: var(--module-primary);
+}
+
+.segmentation-module .pair-names {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow: hidden;
+}
+
+.segmentation-module .pair-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmentation-module .pair-sep {
+  color: var(--module-text-secondary);
+}
+
+.segmentation-module .pair-dims {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+  white-space: nowrap;
+}
+
+.segmentation-module .pair-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--module-text-secondary);
+  cursor: pointer;
+  border-radius: var(--module-radius-sm);
+}
+
+.segmentation-module .pair-remove:hover {
+  color: var(--module-danger, #c0392b);
+  background: var(--module-surface-hover, rgba(0, 0, 0, 0.05));
+}
+
+.segmentation-module .pair-remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Step 3: which slices take part */
+.segmentation-module .training-data-summary {
+  color: var(--module-text-secondary);
+  font-size: var(--module-font-size-sm);
+  margin-top: 4px;
+}
+
+.segmentation-module .training-data-summary[hidden] {
+  display: none;
+}

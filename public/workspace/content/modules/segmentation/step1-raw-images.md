@@ -11,6 +11,7 @@ tags:
   - images
 seeAlsoManual:
   - segmentation.step1.annotations
+  - segmentation.step1.training-pairs
   - segmentation.step1
 seeAlsoTags:
   - upload
@@ -31,11 +32,13 @@ Raw training images are the microscopy images you want the model to learn to seg
 
 - Dimensions: Must match your annotation images exactly (same width, height, and number of slices)
 
+- Several stacks: add one raw stack with its annotations as a pair, then the next; pairs may differ in width and height (see Training Pairs)
+
 ## Best Practices
 
 - Include diverse examples that cover the range of conditions in your data (different staining intensities, object sizes, background variations)
 
-- More training images generally lead to better model generalization
+- More training images generally lead to better model generalization; stacks from different acquisitions are best combined as separate pairs rather than stitched
 
 - Ensure images are properly focused and representative of your typical acquisition conditions
 

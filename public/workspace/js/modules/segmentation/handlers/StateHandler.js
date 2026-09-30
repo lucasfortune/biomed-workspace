@@ -45,6 +45,7 @@ class StateHandler {
     // Update state in StateManager
     this.module.state.update('modules.segmentation.currentStep', this.module.currentStep);
     this.module.state.update('modules.segmentation.uploadedFiles', this.module.uploadedFiles);
+    this.module.state.update('modules.segmentation.trainingData', this.module.trainingData);
     this.module.state.update('modules.segmentation.currentTrainingId', this.module.currentTrainingId);
     this.module.state.update('modules.segmentation.currentInferenceId', this.module.currentInferenceId);
     // Persist step condition flags
@@ -87,7 +88,11 @@ class StateHandler {
     // Restore uploaded files
     if (segmentationState.uploadedFiles) {
       this.module.uploadedFiles = segmentationState.uploadedFiles;
+      if (!Array.isArray(this.module.uploadedFiles.pairs)) this.module.uploadedFiles.pairs = [];
       console.log('[StateHandler] Restored uploaded files:', this.module.uploadedFiles);
+    }
+    if (segmentationState.trainingData) {
+      this.module.trainingData = segmentationState.trainingData;
     }
 
     // Restore step condition flags
@@ -157,7 +162,8 @@ class StateHandler {
     }
 
     // If we have uploaded files on step 1, restore the validation UI
-    if (this.module.currentStep === 1 && (this.module.uploadedFiles.raw_images || this.module.uploadedFiles.annotations)) {
+    if (this.module.currentStep === 1 && (this.module.uploadedFiles.raw_images || this.module.uploadedFiles.annotations
+        || this.module.uploadedFiles.pairs?.length)) {
       console.log('[StateHandler] Restoring step 1 validation UI');
       this.restoreStep1Validation();
     }
@@ -179,29 +185,29 @@ class StateHandler {
    * Restore Step 1 validation UI after resume
    */
   restoreStep1Validation() {
-    // Check if both files are present
-    if (this.module.uploadedFiles.raw_images && this.module.uploadedFiles.annotations) {
+    const files = this.module.uploadedFiles;
+    const hasPairs = (files.pairs?.length > 0) || (files.raw_images && files.annotations);
+    if (!hasPairs) return;
+
+    // Pair list + the pair still in the selectors
+    this.module.fileHandler?.renderPairList();
+    this.module.fileHandler?.updateAddPairButton();
+    if (this.module.rawImageSelector && files.raw_images) {
+      this.module.rawImageSelector.setSelectedFile(files.raw_images);
+    }
+    if (this.module.annotationsSelector && files.annotations) {
+      this.module.annotationsSelector.setSelectedFile(files.annotations);
+    }
+
+    if (this.module.filesValidated) {
       const step1Next = document.getElementById('step1Next');
-      if (step1Next) {
-        step1Next.disabled = false;
-      }
-
-      // Show validation success using ValidationDisplay component
-      if (this.module.validationDisplay) {
-        const details = [
-          { label: 'Raw Images', value: this.module.uploadedFiles.raw_images.name || 'Selected file' },
-          { label: 'Annotations', value: this.module.uploadedFiles.annotations.name || 'Selected file' },
-          { label: 'Status', value: 'Files are ready. Click Next to configure training.' }
-        ];
-        this.module.validationDisplay.showSuccess('Files Loaded', details);
-      }
-
-      // Update FileSelector UI to show selected files
-      if (this.module.rawImageSelector && this.module.uploadedFiles.raw_images) {
-        this.module.rawImageSelector.setSelectedFile(this.module.uploadedFiles.raw_images);
-      }
-      if (this.module.annotationsSelector && this.module.uploadedFiles.annotations) {
-        this.module.annotationsSelector.setSelectedFile(this.module.uploadedFiles.annotations);
+      if (step1Next) step1Next.disabled = false;
+      if (this.module.trainingData) {
+        this.module.fileHandler.displayValidationResults(this.module.trainingData);
+      } else if (this.module.validationDisplay) {
+        this.module.validationDisplay.showSuccess('Files Loaded', [
+          { label: 'Status', value: 'Training pairs are ready. Click Next to configure training.' }
+        ]);
       }
     }
   }

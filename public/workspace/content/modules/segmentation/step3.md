@@ -32,3 +32,7 @@ Backward Pass: The error is propagated back through the network to compute gradi
 Weight Update: Parameters are adjusted in the direction that reduces the loss, controlled by the learning rate.
 
 This cycle repeats for every batch of patches in each epoch. Over time, the loss should decrease as the model learns to produce predictions that match your annotations more closely.
+
+## Which slices take part
+
+When the run starts, the progress panel states how many labelled slices it trains on, out of how many slices in total, and how many of them are held back for validation. Unlabelled slices are skipped. After each epoch the model is scored on the validation slices, and the checkpoint with the best validation Dice is the one you keep; there is no separate test split.

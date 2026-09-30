@@ -31,10 +31,17 @@ const hasTag = (f, tag) => Array.isArray(f.tags) && f.tags.includes(tag);
 const isRawImageFile = (f) =>
   (f.category === 'uploads' && hasTag(f, 'raw')) ||
   f.category === 'raw' || f.category === 'raw_images' || f.category === 'inference_data';
-/** Processed image stack (denoised / segmented) that can also be annotated */
+/** Processed image stack (denoised) that can also be annotated */
 const isImageResultFile = (f) =>
-  (f.category === 'results' && hasTag(f, 'data') && (hasTag(f, 'denoising') || hasTag(f, 'segmentation'))) ||
-  f.category === 'denoised_images' || f.category === 'segmentations';
+  (f.category === 'results' && hasTag(f, 'data') && hasTag(f, 'denoising')) ||
+  f.category === 'denoised_images';
+/**
+ * Segmentation result (U-Net inference or Segmentation Cleanup output): a label
+ * map, opened for correction in edit mode over its raw stack (ADR-014)
+ */
+const isSegmentationResult = (f) =>
+  (f.category === 'results' && hasTag(f, 'data') && hasTag(f, 'segmentation')) ||
+  f.category === 'segmentations';
 /** Unfinished annotation saved with "Save Progress" */
 const isUnfinishedAnnotation = (f) =>
   f.category === 'results' && hasTag(f, 'annotation') && hasTag(f, 'wip');
@@ -422,22 +429,23 @@ class AnnotationModule extends BaseModule {
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
-        // Recent Results: show denoising and segmentation results (TIFF files users might want to annotate)
-        resultCategories: ['results', 'denoised_images', 'segmentations'],
+        // Recent Results: denoised stacks users might want to annotate
+        resultCategories: ['results', 'denoised_images'],
         resultCategoryLabels: {
           'results': 'Result',
-          'denoised_images': 'Denoised',
-          'segmentations': 'Segmentation'
+          'denoised_images': 'Denoised'
         },
-        // Recent results: only image data (denoising or segmentation output), not info/wip files
+        // Recent results: only denoised image data, not info/wip files
         filterRecentResults: (files) => files.filter(isImageResultFile),
         // Workspace files: raw image stacks (new annotation)
         filterFiles: (files) => files.filter(isRawImageFile),
-        // Resume / edit: WIP results and finished annotations are not raw images, so they
-        // get their own groups (the mode is decided from the tags in onFileSelected)
+        // Resume / edit / correct: WIP results, finished annotations and segmentation
+        // results are not raw images, so they get their own groups (the mode is
+        // decided from the tags in onFileSelected)
         extraGroups: [
           { label: 'Unfinished annotations (resume)', filter: (files) => files.filter(isUnfinishedAnnotation) },
-          { label: 'Existing annotations (edit)', filter: (files) => files.filter(isFinishedAnnotation) }
+          { label: 'Existing annotations (edit)', filter: (files) => files.filter(isFinishedAnnotation) },
+          { label: 'Segmentation results (correct)', filter: (files) => files.filter(isSegmentationResult) }
         ]
       });
 
@@ -455,7 +463,38 @@ class AnnotationModule extends BaseModule {
 
     window.annotationModule = this;
 
+    await this.consumeCorrectionHandoff();
+
     console.log('[AnnotationModule] Initialized');
+  }
+
+  /**
+   * "Correct in Annotation" from the segmentation module leaves the inference
+   * result in state; open it as a segmentation result to correct (ADR-014).
+   */
+  async consumeCorrectionHandoff() {
+    const incoming = this.state?.get?.('modules.segmentation.correctionFile');
+    if (!incoming?.path) return;
+    this.state.update('modules.segmentation.correctionFile', null);
+
+    try {
+      const files = await this.fetchWorkspaceFiles();
+      // Inference results carry a web path (/workspaces/<session>/results/...);
+      // workspace entries are workspace-relative (results/...)
+      const rel = String(incoming.path).replace(/^\/?workspaces\/[^/]+\//, '').replace(/^\/+/, '');
+      const file = files.find(f => f.path === rel || f.path === incoming.path || f.id === incoming.id)
+        || files.find(f => rel.endsWith(f.path));
+      if (!file) {
+        this.state.notify?.('error', 'The segmentation result was not found in the workspace');
+        return;
+      }
+      if (this.currentStep !== 1) this.goToStep(1);
+      this.fileSelector?.setSelectedFile(file);
+      await this.onFileSelected(file);
+      this.state.notify?.('info', 'Correct the segmentation, then create the annotation to train on it');
+    } catch (error) {
+      console.error('[AnnotationModule] Correction hand-off failed:', error);
+    }
   }
 
   // ===========================================================================
@@ -2693,8 +2732,9 @@ class AnnotationModule extends BaseModule {
       if (isUnfinishedAnnotation(file)) {
         // Resume unfinished annotation (saves keep updating the same WIP file)
         await this.handleResumeAnnotation(file);
-      } else if (isFinishedAnnotation(file)) {
-        // Edit existing annotation (saves create a new file)
+      } else if (isFinishedAnnotation(file) || isSegmentationResult(file)) {
+        // Edit existing annotation or correct a segmentation result
+        // (saves create a new annotation file; the original is never touched)
         await this.handleEditAnnotation(file);
       } else {
         // New annotation from raw image
@@ -2822,11 +2862,23 @@ class AnnotationModule extends BaseModule {
    * @returns {Promise<{id: string, name: string, path: string}|null>}
    */
   async resolveAnnotationSource(file) {
-    const sourceId = file.lineage?.inputs?.[0];
-    if (!sourceId) return null;
+    if (!file.lineage?.inputs?.[0]) return null;
     const files = await this.fetchWorkspaceFiles();
-    const src = files.find(f => f.id === sourceId);
-    return src ? { id: src.id, name: src.name, path: src.path } : null;
+    // Walk the provenance chain until an image stack: an annotation points at
+    // its raw stack directly, an inference result at the stack it segmented,
+    // a cleanup output at the segmentation it cleaned (then one step further).
+    let current = file;
+    for (let depth = 0; depth < 10; depth++) {
+      const parentId = current.lineage?.inputs?.[0];
+      if (!parentId) return null;
+      const parent = files.find(f => f.id === parentId);
+      if (!parent) return null;
+      if (isRawImageFile(parent) || isImageResultFile(parent)) {
+        return { id: parent.id, name: parent.name, path: parent.path };
+      }
+      current = parent;
+    }
+    return null;
   }
 
   /**

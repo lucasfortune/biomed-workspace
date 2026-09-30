@@ -37,7 +37,8 @@ class TrainingHandler {
       features: parseInt(document.getElementById('numFeatures').value),
       num_layers: parseInt(document.getElementById('numLayers').value),
       learning_rate: parseFloat(document.getElementById('learningRate').value),
-      num_epochs: parseInt(document.getElementById('numEpochs').value)
+      num_epochs: parseInt(document.getElementById('numEpochs').value),
+      val_fraction: parseInt(document.getElementById('valFraction')?.value || '15', 10) / 100
     };
 
     // Validate configuration
@@ -152,6 +153,21 @@ class TrainingHandler {
   }
 
   /**
+   * Show "trained on X labelled slices" under the epoch counter
+   * @param {{pairs: Array, totals: Object}} data
+   */
+  showDataSummary(data) {
+    const el = document.getElementById('trainingDataSummary');
+    if (!el || !data?.totals) return;
+    const t = data.totals;
+    const pairs = data.pairs?.length || 1;
+    el.textContent = `Training on ${t.labelled} labelled slices of ${t.slices}`
+      + (pairs > 1 ? ` from ${pairs} pairs` : '')
+      + ` (${t.train} training, ${t.val} validation)`;
+    el.hidden = false;
+  }
+
+  /**
    * Update training progress display
    * @param {Object} data - Progress data from socket
    */
@@ -159,6 +175,11 @@ class TrainingHandler {
     // Device init message (parity with DL denoising) — surface resolved device
     if (data.type === 'init') {
       this.handleInitProgress(data, 'Training');
+      return;
+    }
+    // Which slices take part (labelled slices per pair, ADR-014)
+    if (data.type === 'data') {
+      this.showDataSummary(data);
       return;
     }
 
@@ -309,6 +330,10 @@ class TrainingHandler {
       try {
         const response = await fetch(`/training-status/${trainingId}`);
         const status = await response.json();
+
+        if (status.dataSummary) {
+          this.showDataSummary(status.dataSummary);
+        }
 
         // Update UI if we have progress data
         if (status.current_epoch && status.total_epochs && status.metrics) {

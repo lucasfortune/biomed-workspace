@@ -291,60 +291,123 @@ def send_progress(epoch, total_epochs, train_loss, train_dice, val_loss, val_dic
     # Send as JSON with PROGRESS: prefix for easy parsing
     print(f"PROGRESS:{json.dumps(progress_data)}", flush=True)
 
-def prepare_data_from_tiff_stacks(raw_images_path, annotations_path, output_dir, config):
-    """Extract individual images from TIFF stacks and organize them"""
+def labelled_slice_indices(annotation_stack):
+    """Indices of slices that carry at least one non-zero label (rule R1)."""
+    flat = annotation_stack.reshape(annotation_stack.shape[0], -1)
+    return [int(i) for i in np.flatnonzero(flat.any(axis=1))]
 
-    # Read TIFF stacks
-    raw_stack = safe_imread(raw_images_path)
-    annotation_stack = safe_imread(annotations_path)
 
-    # Use /tmp directory for temporary split images (not in output_dir)
+def split_labelled_slices(labelled, val_fraction):
+    """
+    Split one pair's labelled slice indices into train and validation.
+
+    The validation slices are a contiguous block at the END of the labelled
+    slices (rule R3): neighbouring EM slices are near-identical, so an
+    interleaved split would leak training content into validation. A pair
+    with two or more labelled slices contributes at least one validation
+    slice; a pair with a single labelled slice contributes it to training.
+    """
+    n = len(labelled)
+    if n < 2:
+        return list(labelled), []
+    n_val = int(round(n * val_fraction))
+    n_val = max(1, min(n_val, n - 1))
+    return list(labelled[:n - n_val]), list(labelled[n - n_val:])
+
+
+def apply_label_map(annotation_stack, label_map):
+    """Remap label values with {original: new} (values absent from the map become 0)."""
+    if not label_map:
+        return annotation_stack
+    lut = np.zeros(int(max(int(k) for k in label_map)) + 1, dtype=np.uint8)
+    for orig, new in label_map.items():
+        lut[int(orig)] = int(new)
+    clipped = np.clip(annotation_stack, 0, len(lut) - 1).astype(np.int64)
+    return lut[clipped]
+
+
+def prepare_pairs(pairs, val_fraction, num_classes):
+    """
+    Write the labelled slices of every raw/annotation pair to per-slice TIFF
+    files in a temporary directory (the Imagedataset works on directories).
+
+    pairs: [{"raw": path, "annotations": path, "labelMap": {orig: new} | None}]
+    Returns the directory layout plus per-pair counts for the UI.
+    """
     import tempfile
     temp_dir = tempfile.mkdtemp(prefix='training_data_')
-
-    # Create directories in temp location
-    train_imgs_dir = os.path.join(temp_dir, 'train_images')
-    train_masks_dir = os.path.join(temp_dir, 'train_masks')
-    val_imgs_dir = os.path.join(temp_dir, 'val_images')
-    val_masks_dir = os.path.join(temp_dir, 'val_masks')
-    test_imgs_dir = os.path.join(temp_dir, 'test_images')
-    test_masks_dir = os.path.join(temp_dir, 'test_masks')
-    
-    for dir_path in [train_imgs_dir, train_masks_dir, val_imgs_dir, val_masks_dir, test_imgs_dir, test_masks_dir]:
-        os.makedirs(dir_path, exist_ok=True)
-    
-    # Split data (70% train, 15% val, 15% test)
-    num_images = raw_stack.shape[0]
-    train_split = int(0.7 * num_images)
-    val_split = int(0.85 * num_images)
-    
-    # Save individual images
-    for i in range(num_images):
-        img_name = f"image_{i:04d}.tif"
-        mask_name = f"image_{i:04d}_mask.tif"
-        
-        if i < train_split:
-            tifffile.imwrite(os.path.join(train_imgs_dir, img_name), raw_stack[i])
-            tifffile.imwrite(os.path.join(train_masks_dir, mask_name), annotation_stack[i])
-        elif i < val_split:
-            tifffile.imwrite(os.path.join(val_imgs_dir, img_name), raw_stack[i])
-            tifffile.imwrite(os.path.join(val_masks_dir, mask_name), annotation_stack[i])
-        else:
-            tifffile.imwrite(os.path.join(test_imgs_dir, img_name), raw_stack[i])
-            tifffile.imwrite(os.path.join(test_masks_dir, mask_name), annotation_stack[i])
-    
-    return {
-        'train_imgs_dir': train_imgs_dir,
-        'train_masks_dir': train_masks_dir,
-        'val_imgs_dir': val_imgs_dir,
-        'val_masks_dir': val_masks_dir,
-        'test_imgs_dir': test_imgs_dir,
-        'test_masks_dir': test_masks_dir,
-        'temp_dir': temp_dir  # Return temp dir for cleanup
+    dirs = {
+        'train_imgs_dir': os.path.join(temp_dir, 'train_images'),
+        'train_masks_dir': os.path.join(temp_dir, 'train_masks'),
+        'val_imgs_dir': os.path.join(temp_dir, 'val_images'),
+        'val_masks_dir': os.path.join(temp_dir, 'val_masks'),
     }
+    for d in dirs.values():
+        os.makedirs(d, exist_ok=True)
 
-def train_model_with_progress(model, train_loader, val_loader, test_loader, 
-                             criterion, optimizer, num_epochs, device, 
+    summary = []
+    total_train = total_val = 0
+    for pair_idx, pair in enumerate(pairs):
+        raw_stack = safe_imread(pair['raw'])
+        annotation_stack = safe_imread(pair['annotations'])
+        if raw_stack.ndim == 2:
+            raw_stack = raw_stack[np.newaxis, ...]
+        if annotation_stack.ndim == 2:
+            annotation_stack = annotation_stack[np.newaxis, ...]
+        if raw_stack.shape != annotation_stack.shape:
+            raise ValueError(
+                f"Pair {pair_idx + 1}: shape mismatch raw={raw_stack.shape} "
+                f"annotations={annotation_stack.shape}")
+
+        annotation_stack = apply_label_map(annotation_stack, pair.get('labelMap'))
+        max_label = int(annotation_stack.max()) if annotation_stack.size else 0
+        if max_label >= num_classes:
+            raise ValueError(
+                f"Pair {pair_idx + 1}: label value {max_label} exceeds the "
+                f"{num_classes} classes of this training run")
+
+        labelled = labelled_slice_indices(annotation_stack)
+        if not labelled:
+            raise ValueError(
+                f"Pair {pair_idx + 1} ({os.path.basename(pair['annotations'])}) "
+                f"has no labelled slices")
+        train_idx, val_idx = split_labelled_slices(labelled, val_fraction)
+
+        for subset, indices in (('train', train_idx), ('val', val_idx)):
+            for i in indices:
+                name = f"p{pair_idx:02d}_s{i:04d}.tif"
+                tifffile.imwrite(os.path.join(dirs[f'{subset}_imgs_dir'], name), raw_stack[i])
+                tifffile.imwrite(os.path.join(dirs[f'{subset}_masks_dir'], name.replace('.tif', '_mask.tif')),
+                                 annotation_stack[i].astype(np.uint8))
+
+        total_train += len(train_idx)
+        total_val += len(val_idx)
+        summary.append({
+            'pair': pair_idx,
+            'raw': os.path.basename(pair['raw']),
+            'annotations': os.path.basename(pair['annotations']),
+            'slices': int(raw_stack.shape[0]),
+            'labelled': len(labelled),
+            'train': len(train_idx),
+            'val': len(val_idx),
+            'width': int(raw_stack.shape[2]),
+            'height': int(raw_stack.shape[1]),
+        })
+
+    if total_train < 1 or total_val < 1:
+        raise ValueError(
+            "Need at least two labelled slices in total (one for training, "
+            "one for validation)")
+
+    dirs['temp_dir'] = temp_dir
+    dirs['summary'] = summary
+    dirs['totals'] = {'train': total_train, 'val': total_val,
+                      'labelled': total_train + total_val,
+                      'slices': int(sum(p['slices'] for p in summary))}
+    return dirs
+
+def train_model_with_progress(model, train_loader, val_loader,
+                             criterion, optimizer, num_epochs, device,
                              save_dir, training_id, config):
     """
     Train the model with real-time progress reporting.
@@ -433,43 +496,27 @@ def train_model_with_progress(model, train_loader, val_loader, test_loader,
             torch.save(model_save_dict, model_save_path, _use_new_zipfile_serialization=False)
             print(f"Best model saved with validation Dice: {epoch_val_dice:.4f}", flush=True)
     
-    # Final testing phase
-    model.eval()
-    test_loss = 0.0
-    test_dice = 0.0
-    
-    with torch.no_grad():
-        for inputs, masks in test_loader:
-            inputs = inputs.to(device)
-            masks = masks.to(device)
-            
-            outputs = model(inputs)
-            loss = criterion(outputs, masks.argmax(dim=1))
-            
-            test_loss += loss.item()
-            test_dice += calculate_dice_score(outputs, masks, config.get('num_classes', 3))
-    
-    final_test_loss = test_loss / len(test_loader)
-    final_test_dice = test_dice / len(test_loader)
-    
-    # Save final results
+    # No held-out test split (rule R3): the validation Dice of the kept
+    # checkpoint is the reported number. test_* keys stay for compatibility.
     results = {
-        'test_loss': final_test_loss,
-        'test_dice': final_test_dice,
+        'test_loss': None,
+        'test_dice': None,
         'best_val_dice': best_val_dice
     }
-    
+
     with open(os.path.join(save_dir, 'results.json'), 'w') as f:
         json.dump(results, f, indent=2)
-    
-    print(f"Training completed. Test Dice: {final_test_dice:.4f}", flush=True)
+
+    print(f"Training completed. Best validation Dice: {best_val_dice:.4f}", flush=True)
     return results
 
 def main():
     parser = argparse.ArgumentParser(description='Train UNet model for biomedical segmentation')
     parser.add_argument('--config', type=str, required=True, help='JSON configuration string')
-    parser.add_argument('--raw_images', type=str, required=True, help='Path to raw images TIFF stack')
-    parser.add_argument('--annotations', type=str, required=True, help='Path to annotations TIFF stack')
+    parser.add_argument('--pairs', type=str, default=None,
+                        help='JSON file: [{"raw": path, "annotations": path, "labelMap": {...}}, ...]')
+    parser.add_argument('--raw_images', type=str, default=None, help='Single pair: raw images TIFF stack')
+    parser.add_argument('--annotations', type=str, default=None, help='Single pair: annotations TIFF stack')
     parser.add_argument('--output_dir', type=str, required=True, help='Output directory')
     parser.add_argument('--training_id', type=str, required=True, help='Training session ID')
     
@@ -477,6 +524,19 @@ def main():
     
     # Parse configuration
     config = json.loads(args.config)
+
+    # Training pairs: a JSON file, or the legacy single pair
+    if args.pairs:
+        with open(args.pairs) as fh:
+            pairs = json.load(fh)
+    elif args.raw_images and args.annotations:
+        pairs = [{'raw': args.raw_images, 'annotations': args.annotations}]
+    else:
+        print("Error: provide --pairs or both --raw_images and --annotations", file=sys.stderr, flush=True)
+        sys.exit(1)
+    if not isinstance(pairs, list) or not pairs:
+        print("Error: no training pairs", file=sys.stderr, flush=True)
+        sys.exit(1)
     
     # Debug: Print configuration
     print("Training configuration:", flush=True)
@@ -500,15 +560,21 @@ def main():
     print(f"PROGRESS:{json.dumps({'type': 'init', 'device': str(device), 'gpuAvailable': torch.cuda.is_available(), 'training_id': args.training_id})}", flush=True)
 
     try:
-        # Prepare data from TIFF stacks
-        print("Preparing data from TIFF stacks...", flush=True)
-        data_dirs = prepare_data_from_tiff_stacks(args.raw_images, args.annotations, args.output_dir, config)
-        
+        # Prepare data: labelled slices of every pair, split per pair
+        num_classes = config.get('num_classes', 3)
+        val_fraction = float(config.get('val_fraction', 0.15))
+        val_fraction = min(0.4, max(0.05, val_fraction))
+        print(f"Preparing {len(pairs)} training pair(s), validation fraction {val_fraction:.2f}...", flush=True)
+        data_dirs = prepare_pairs(pairs, val_fraction, num_classes)
+        for p in data_dirs['summary']:
+            print(f"  pair {p['pair'] + 1}: {p['labelled']}/{p['slices']} labelled slices "
+                  f"({p['train']} train, {p['val']} val)", flush=True)
+        print(f"PROGRESS:{json.dumps({'type': 'data', 'pairs': data_dirs['summary'], 'totals': data_dirs['totals'], 'training_id': args.training_id})}", flush=True)
+
         # Create datasets
         print("Creating datasets...", flush=True)
-        num_classes = config.get('num_classes', 3)
         print(f"Using {num_classes} classes for segmentation", flush=True)
-        
+
         train_dataset = Imagedataset(
             image_dir=data_dirs['train_imgs_dir'],
             mask_dir=data_dirs['train_masks_dir'],
@@ -529,20 +595,9 @@ def main():
             num_classes=num_classes
         )
 
-        test_dataset = Imagedataset(
-            image_dir=data_dirs['test_imgs_dir'],
-            mask_dir=data_dirs['test_masks_dir'],
-            transform=True,
-            patch_size=config['patch_size'],
-            patches_per_image=max(1, config.get('patches_per_image', 10) // 3),
-            augment=False,
-            num_classes=num_classes
-        )
-
         # Create data loaders
         train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=2)
         val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=2)
-        test_loader = DataLoader(test_dataset, batch_size=config.get('test_batch_size', 3), shuffle=False, num_workers=2)
 
         # Create model
         print("Creating model...", flush=True)
@@ -567,7 +622,6 @@ def main():
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,
-            test_loader=test_loader,
             criterion=criterion,
             optimizer=optimizer,
             num_epochs=config['num_epochs'],

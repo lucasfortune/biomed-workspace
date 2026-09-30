@@ -124,11 +124,13 @@ class TrainingService {
       return;
     }
 
+    const dataArgs = params.pairs_file
+      ? ['--pairs', params.pairs_file]
+      : ['--raw_images', params.raw_images, '--annotations', params.annotations];
     const pythonScript = spawn(this.pythonPath, [
       'python/train_model.py',
       '--config', JSON.stringify(params.config),
-      '--raw_images', params.raw_images,
-      '--annotations', params.annotations,
+      ...dataArgs,
       '--output_dir', params.output_dir,
       '--training_id', params.training_id
     ]);

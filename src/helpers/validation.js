@@ -39,6 +39,14 @@ function validateTrainingConfig(config) {
     }
   }
 
+  if (config.val_fraction !== undefined && config.val_fraction !== null) {
+    const { min, max } = TRAINING_CONFIG_RANGES.valFraction;
+    const v = Number(config.val_fraction);
+    if (!Number.isFinite(v) || v < min || v > max) {
+      errors.push(`val_fraction must be between ${min} and ${max}`);
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors: errors
