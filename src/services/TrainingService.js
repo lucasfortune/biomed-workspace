@@ -415,7 +415,16 @@ class TrainingService {
       }
 
       // Files that might have been created during cancelled training
-      const filesToRemove = ['best_model.pth', 'config.json', 'results.json'];
+      // (plus a fine-tuned package and its build directory, ADR-017)
+      const filesToRemove = ['best_model.pth', 'config.json', 'results.json', 'training_pairs.json',
+        'training_meta.json', 'finetuned_state_dict.pt'];
+      for (const name of fs.readdirSync(outputDir)) {
+        if (/_finetuned\.zip$/i.test(name)) filesToRemove.push(name);
+      }
+      const buildDir = path.join(outputDir, 'build');
+      if (fs.existsSync(buildDir)) {
+        try { fs.rmSync(buildDir, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+      }
 
       for (const fileName of filesToRemove) {
         const filePath = path.join(outputDir, fileName);

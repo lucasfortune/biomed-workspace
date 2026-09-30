@@ -201,10 +201,16 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
   const dataArgs = params.pairs_file
     ? ['--pairs', params.pairs_file]
     : ['--raw_images', params.raw_images, '--annotations', params.annotations];
+  // Starting point (ADR-017): a workspace checkpoint or a bioimage.io model
+  const startArgs = [];
+  if (params.init_from) startArgs.push('--init_from', params.init_from);
+  if (params.bioimageio) startArgs.push('--bioimageio', params.bioimageio);
+  if (params.meta_file) startArgs.push('--meta', params.meta_file);
   const pythonScript = spawn(pythonPath, [
     'python/train_model.py',
     '--config', JSON.stringify(params.config),
     ...dataArgs,
+    ...startArgs,
     '--output_dir', params.output_dir,
     '--training_id', params.training_id
   ]);
@@ -249,6 +255,18 @@ function startTrainingProcess(pythonPath, params, io, trainingSessions, options 
           if (training && progress.type === 'data') {
             // Which slices take part (labelled slices per pair, ADR-014)
             training.dataSummary = { pairs: progress.pairs, totals: progress.totals };
+          }
+          if (training && progress.type === 'stage') {
+            // Non-epoch stage of a fine-tuning run (ADR-017): loading the
+            // parent, packaging, self-testing. Forwarded, no epoch update.
+            training.stage = progress.stage;
+            io.to(`training-${params.training_id}`).emit('training-progress', progress);
+            continue;
+          }
+          if (training && progress.type === 'output') {
+            // Fine-tuned bioimage.io package written by the script (ADR-017)
+            training.outputPackage = progress.package || null;
+            continue;
           }
           if (training) {
             training.status = 'training';

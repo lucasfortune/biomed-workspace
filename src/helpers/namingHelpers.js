@@ -23,6 +23,8 @@ const OPERATION_TOKENS = {
   'denoising-autostructn2v-stage2': 'asn2v2',
   // Segmentation / inference
   segmentation: 'seg',
+  // Training continued from a parent model (ADR-017)
+  finetune: 'ft',
   // Mesh generation
   meshGeneration: 'mesh',
   mesh: 'mesh',

@@ -2382,6 +2382,7 @@
       ],
       "path": "modules/segmentation/step2.md",
       "seeAlsoManual": [
+        "segmentation.config.starting-point",
         "segmentation.config.patch-size",
         "segmentation.config.num-layers",
         "segmentation.step3"
@@ -2509,6 +2510,33 @@
       ],
       "parameterImpact": "A larger split gives a more reliable validation Dice but leaves fewer slices for training. 15% suits most stacks; go lower only when very few slices are labelled, higher when you have many.\n"
     },
+    "segmentation.config.starting-point": {
+      "id": "segmentation.config.starting-point",
+      "title": "Starting Point",
+      "displayTitle": "Starting Point (Segmentation)",
+      "category": "parameter",
+      "module": "segmentation",
+      "tags": [
+        "segmentation",
+        "training",
+        "fine-tuning",
+        "bioimageio",
+        "configuration",
+        "pretrained"
+      ],
+      "path": "modules/segmentation/config-starting-point.md",
+      "seeAlsoManual": [
+        "segmentation.step2",
+        "segmentation.step1.bioimageio",
+        "segmentation.step1.bioimageio-package",
+        "file-browser.bioimageio-export"
+      ],
+      "seeAlsoTags": [
+        "fine-tuning",
+        "training"
+      ],
+      "parameterImpact": "Starting from a trained model usually reaches a good result in far fewer epochs than a new model, and it is the way to adapt a zoo model to your data. Keep the learning rate low (1e-4 is the default here) so the pretrained weights are refined, not overwritten.\n"
+    },
     "segmentation.step1.bioimageio": {
       "id": "segmentation.step1.bioimageio",
       "title": "bioimage.io Models",
@@ -2526,7 +2554,8 @@
       "seeAlsoManual": [
         "segmentation.step1.bioimageio-package",
         "segmentation.step4.output-conversion",
-        "segmentation.step1.workflow-choice"
+        "segmentation.step1.workflow-choice",
+        "segmentation.config.starting-point"
       ],
       "seeAlsoTags": [
         "pretrained",

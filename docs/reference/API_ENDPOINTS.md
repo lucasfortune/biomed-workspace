@@ -1289,6 +1289,10 @@ training session (and `GET /training-status/:id`) carries `dataSummary`
 (`pairs[]`, `totals: {train, val, labelled, slices}`) once the trainer has
 reported which slices take part.
 
+Since 1.10.0 (ADR-017) a run can start from an existing model, chosen with
+`POST /api/segmentation/start-model` (below). `/upload-data` clears that
+choice (new pairs may change the class count).
+
 **Authentication:** None (but checks approval status inline)
 **Status:** ✅ Stable
 
@@ -1470,9 +1474,49 @@ const response = await fetch('/configure-training', {
 
 ---
 
+### POST /api/segmentation/start-model
+
+Choose the starting point of the next training run (ADR-017, `requireAuth`).
+Body `{ kind: 'none' | 'checkpoint' | 'package' | 'zoo', fileId?, path?, id? }`.
+`checkpoint` names a workspace `.pth` file, `package` a bioimage.io zip in
+the workspace, `zoo` a zoo model id. The training pairs must be validated
+first: the parent is checked against `validation.num_classes` (a softmax
+head needs exactly as many classes, background included; a single sigmoid
+channel needs two) and, for bioimage.io models, against the fine-tuning
+rules of `bioimageio_utils.py` (`summary.finetune`: 2D, `pytorch_state_dict`
+weights, pixel-aligned output, a softmax / sigmoid / probability head).
+A zoo parent gets a model card as in `POST /api/bioimageio/select`.
+
+Response `{ success, startModel }` with `startModel = { kind, fileId,
+displayName, name, id, architecture: {features, num_layers} | null,
+classes, head: 'softmax' | 'sigmoid_logits' | 'sigmoid_probs', valDice,
+allowedPatchSizes, notes }`, or `startModel: null` for `kind: 'none'`.
+The choice is stored in `req.session.startModel`.
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Pairs not validated, wrong file type, ineligible model, class mismatch |
+| 404 | File not in the workspace or not on disk |
+| 503 | bioimage.io service not configured |
+
+`POST /configure-training` then refuses a `patch_size` outside
+`allowedPatchSizes` and, for a checkpoint, forces `features` and
+`num_layers` to the checkpoint's values.
+
+---
+
 ### POST /start-training
 
-Start model training with configured parameters.
+Start model training with configured parameters. With a starting point
+set (ADR-017) the trainer is spawned with `--init_from <pth>` or
+`--bioimageio <zip | zoo id>` plus `--meta training_meta.json` (parent,
+author, workspace version, pair names); the training record carries
+`startModel`, `stage` and, for bioimage.io parents, `outputPackage` once
+the script has written the fine-tuned package. Outputs of such runs are
+tracked with lineage `segmentation-finetune` (inputs: pairs and parent),
+display names use the `ft` token (`trypB_ft_model.pth`,
+`<parent>_ft.zip`), and the package zip is tracked in `models` with tags
+`bioimageio`, `weights`, `segmentation`.
 
 **Authentication:** `requireAuth`
 **Status:** ✅ Stable
@@ -1566,7 +1610,10 @@ Get current status of training session.
     "val_accuracy": 0.93
   },
   "params": { /* training parameters */ },
-  "isTestData": false
+  "isTestData": false,
+  "startModel": null,          // ADR-017: { kind, fileId, displayName, name, head, classes } when set
+  "stage": null,               // 'loading' | 'packaging' | 'testing' during non-epoch stages
+  "outputPackage": null        // { zip_path, relPath, fileId, fileName, name, tests, torchscript, notes, size }
 }
 ```
 
@@ -2047,7 +2094,9 @@ Runnable zoo models: torch weights, one single-channel input, 2 or 3 space axes;
       "tags": ["unet", "mitochondria", "electron-microscopy"], "license": "CC-BY-4.0",
       "version": "1", "emoji": "🦝", "dims": 2, "weights": ["torchscript", "pytorch_state_dict"],
       "cover": "https://hypha.aicell.io/bioimage-io/artifacts/shivering-raccoon/files/cover.thumbnail.jpg",
-      "page": "https://bioimage.io/#/?id=shivering-raccoon" }
+      "page": "https://bioimage.io/#/?id=shivering-raccoon",
+      "finetunable": false, "finetuneClasses": null }   // ADR-017: fine-tuning candidate and the annotation
+                                                       // class count it needs (background included), or null
   ]
 }
 ```
@@ -2136,6 +2185,9 @@ socket.on('disconnect', () => {
 ```
 
 ### Training Events
+
+`training-progress` also carries `{ type: 'stage', stage: 'loading' | 'packaging' | 'testing' }`
+messages for runs that start from a model (ADR-017); they have no epoch fields.
 
 **Join training room:**
 ```javascript

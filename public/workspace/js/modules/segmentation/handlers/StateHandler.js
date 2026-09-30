@@ -33,7 +33,8 @@ class StateHandler {
       importFiles: this.module.importFiles,
       importValidated: this.module.importValidated,
       importedModelConfig: this.module.importedModelConfig,
-      bioimageioModel: this.module.bioimageioModel
+      bioimageioModel: this.module.bioimageioModel,
+      startModel: this.module.startModel
     };
 
     // Preserve currentTask if it exists
@@ -60,6 +61,7 @@ class StateHandler {
     this.module.state.update('modules.segmentation.importValidated', this.module.importValidated);
     this.module.state.update('modules.segmentation.importedModelConfig', this.module.importedModelConfig);
     this.module.state.update('modules.segmentation.bioimageioModel', this.module.bioimageioModel);
+    this.module.state.update('modules.segmentation.startModel', this.module.startModel);
     if (state.currentTask) {
       this.module.state.update('modules.segmentation.currentTask', state.currentTask);
     }
@@ -132,6 +134,9 @@ class StateHandler {
     }
     if (segmentationState.bioimageioModel) {
       this.module.bioimageioModel = segmentationState.bioimageioModel;
+    }
+    if (segmentationState.startModel) {
+      this.module.startModel = segmentationState.startModel;
     }
     console.log('[StateHandler] Restored workflow state:', {
       workflowMode: this.module.workflowMode,

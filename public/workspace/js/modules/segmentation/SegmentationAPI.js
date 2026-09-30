@@ -215,6 +215,14 @@ class SegmentationAPI {
    * List runnable zoo models
    * @param {boolean} [all=false] - include models outside the segmentation-like filter
    */
+  /**
+   * Choose the starting point of the next training run (ADR-017)
+   * @param {{kind: 'none'|'checkpoint'|'package'|'zoo', fileId?: string, path?: string, id?: string}} start
+   */
+  async setStartModel(start) {
+    return this._post('/api/segmentation/start-model', start);
+  }
+
   async listBioimageioModels(all = false) {
     return this._get(`/api/bioimageio/models${all ? '?all=1' : ''}`);
   }

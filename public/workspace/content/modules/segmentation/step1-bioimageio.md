@@ -14,6 +14,7 @@ seeAlsoManual:
   - segmentation.step1.bioimageio-package
   - segmentation.step4.output-conversion
   - segmentation.step1.workflow-choice
+  - segmentation.config.starting-point
 seeAlsoTags:
   - pretrained
   - inference
@@ -62,3 +63,7 @@ Zoo models were trained on specific datasets. On unlike data the result can be p
 If tile edges show in a result, the model is not confident anywhere on that data: its outputs sit close to the threshold, so the tiny differences between neighbouring tiles flip pixels from one class to the other. On data the model handles, the tiled and the whole-image prediction agree to well under a percent, and the edges disappear.
 
 3D models load the whole stack into memory as float values. Runs above 1.5 billion voxels are refused; crop or downsample such stacks first.
+
+## Fine-tuning a zoo model
+
+A zoo model whose output is a softmax over classes or a single sigmoid channel can also be trained further on your annotations: choose Train from Scratch in Step 1, validate your pairs, and pick the model under Starting Point in Step 2. The result is a new bioimage.io package in your workspace.

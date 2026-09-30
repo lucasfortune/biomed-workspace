@@ -17,6 +17,7 @@ import NavigationHandler from './handlers/NavigationHandler.js';
 import FileHandler from './handlers/FileHandler.js';
 import ImportHandler from './handlers/ImportHandler.js';
 import BioimageioHandler from './handlers/BioimageioHandler.js';
+import StartModelHandler from './handlers/StartModelHandler.js';
 import StateHandler from './handlers/StateHandler.js';
 
 class SegmentationModule extends BaseModule {
@@ -64,6 +65,7 @@ class SegmentationModule extends BaseModule {
     this.fileHandler = new FileHandler(this);
     this.importHandler = new ImportHandler(this);
     this.bioimageioHandler = new BioimageioHandler(this);
+    this.startModelHandler = new StartModelHandler(this);
     this.stateHandler = new StateHandler(this);
 
     // Module-specific state
@@ -98,6 +100,11 @@ class SegmentationModule extends BaseModule {
     // bioimage.io model selected for this session (ADR-015):
     // { summary, source: {type:'zoo', id} | {type:'upload', fileId, path, name}, modelFileId }
     this.bioimageioModel = null;
+
+    // Starting point of the next training run (ADR-017), as returned by
+    // POST /api/segmentation/start-model: { kind, fileId, name, head,
+    // classes, allowedPatchSizes, architecture | null, ... } or null
+    this.startModel = null;
 
     // File uploads. `pairs` holds the training pairs kept in the Step 1 list
     // (ADR-014); raw_images/annotations is the pair currently in the selectors.
@@ -408,6 +415,7 @@ class SegmentationModule extends BaseModule {
           this.showTrainingCompleteUI(status);
           TrainingSessionPersistence.clearAll();
           this.state.notify('info', 'Training completed. You can proceed to inference.');
+          await this.trainingHandler.adoptOutputPackage(status);
         } else if (status.status === 'failed') {
           // Training failed
           this.state.notify('error', 'Training failed while you were away.');
@@ -1198,6 +1206,10 @@ class SegmentationModule extends BaseModule {
     } else if (stepNumber === 2) {
       // Initialize parameter validation for config form
       this._initConfigValidation();
+      // Starting point controls (ADR-017); constraints re-applied after the
+      // validator rebuilt the patch-size options
+      this.startModelHandler.initialize();
+      this.startModelHandler.applyConstraints();
     } else if (stepNumber === 3) {
       // Step 3: Initialize charts now that canvas is visible
       // Use setTimeout to ensure DOM is fully rendered after step visibility change
@@ -1271,14 +1283,24 @@ class SegmentationModule extends BaseModule {
     }
 
     // Patch size: must be <= min(image width, height) AND divisible by 2^num_layers
-    // (otherwise an odd intermediate dim breaks the U-Net's decoder skip connections)
+    // (otherwise an odd intermediate dim breaks the U-Net's decoder skip connections).
+    // A bioimage.io parent (ADR-017) replaces the layers rule by its own
+    // input size rule (allowed patch sizes from the server).
     this.formValidationController.addFieldRule('patchSize', (value) => {
+      const sm = this.startModel;
+      const foreign = sm && sm.kind !== 'checkpoint';
       const layersEl = document.getElementById('numLayers');
       const layers = layersEl ? parseInt(layersEl.value) : null;
-      return this.paramValidator.validatePatchSize(parseInt(value), {
+      const base = this.paramValidator.validatePatchSize(parseInt(value), {
         overlapTilePad: 0,
-        numLayers: layers
+        numLayers: foreign ? null : layers
       });
+      if (!base.valid) return base;
+      const allowed = sm && Array.isArray(sm.allowedPatchSizes) ? sm.allowedPatchSizes : null;
+      if (allowed && !allowed.includes(parseInt(value))) {
+        return { valid: false, error: `The starting model accepts patch sizes ${allowed.join(', ')}` };
+      }
+      return base;
     });
 
     // Numeric range rules
@@ -1714,6 +1736,13 @@ class SegmentationModule extends BaseModule {
       }
       this.bioimageioHandler.renderConversionControls();
 
+      // Drop the starting point (session and UI, ADR-017)
+      if (this.startModel || this.startModelHandler.initialized) {
+        this.startModelHandler.edited = new Set();
+        await this.startModelHandler.clear({ remote: true });
+        this.startModelHandler.restoreUI();
+      }
+
       // Reset configuration to defaults (Step 2)
       this.resetConfigToDefaults();
 
@@ -1975,6 +2004,8 @@ class SegmentationModule extends BaseModule {
     this.importedModelConfig = null;
     this.bioimageioModel = null;
     this.bioimageioHandler.reset();
+    this.startModel = null;
+    this.startModelHandler.reset();
 
     // Reset cached configuration / dimensions used by validation
     this.trainingConfig = null;
@@ -2012,6 +2043,7 @@ class SegmentationModule extends BaseModule {
     this.state.update('modules.segmentation.importValidated', false);
     this.state.update('modules.segmentation.importedModelConfig', null);
     this.state.update('modules.segmentation.bioimageioModel', null);
+    this.state.update('modules.segmentation.startModel', null);
 
     // Clear container
     if (this.container) {

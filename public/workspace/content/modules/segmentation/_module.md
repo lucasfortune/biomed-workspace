@@ -28,7 +28,7 @@ U-Net is a convolutional neural network architecture designed specifically for b
 
 Step 1: Select one or more training pairs (a raw stack with its annotation mask), choose a pretrained workspace model if you already have one, or pick a model from the bioimage.io model zoo. Only labelled slices are used, so partially annotated stacks train correctly.
 
-Step 2: Configure training parameters like patch size, batch size, learning rate, and number of epochs. These settings control how the model learns from your data.
+Step 2: Choose the starting point (a new model, a workspace model to continue, or a bioimage.io model to fine-tune) and configure training parameters like patch size, batch size, learning rate, and number of epochs. These settings control how the model learns from your data.
 
 Step 3: Monitor training progress with real-time loss charts and Dice score metrics. Watch for convergence and potential overfitting.
 

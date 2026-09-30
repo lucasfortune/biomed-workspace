@@ -35,7 +35,7 @@ A state dict package runs its own architecture code on the server when the model
 
 ## Your own models
 
-A package exported from a workspace `.pth` model (right-click the model file under Model Files) is listed here as well. Running it this way gives the model tiled inference with a halo, so the stack size no longer has to be a multiple of 2 to the number of layers, and the output conversion defaults to argmax, which reproduces the model's ordinary class map.
+A package exported from a workspace `.pth` model (right-click the model file under Model Files) is listed here as well, and so is a package produced by fine-tuning in Step 2. Running it this way gives the model tiled inference with a halo, so the stack size no longer has to be a multiple of 2 to the number of layers, and the output conversion defaults to argmax, which reproduces the model's ordinary class map.
 
 ## Provenance
 

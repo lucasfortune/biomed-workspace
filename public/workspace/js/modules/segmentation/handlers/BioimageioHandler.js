@@ -11,8 +11,7 @@ import { FileSelector } from '/workspace/js/core/components/index.js';
 import { icon } from '/workspace/js/core/icons.js';
 import Templates from '../templates/Templates.js';
 import SegmentationAPI from '../SegmentationAPI.js';
-
-const MAX_TAGS = 3;
+import ZooModelList from './ZooModelList.js';
 
 class BioimageioHandler {
   /**
@@ -21,21 +20,16 @@ class BioimageioHandler {
   constructor(module) {
     this.module = module;
     this.api = new SegmentationAPI();
-    this.models = [];
-    this.showAll = false;
-    this.query = '';
-    this.listError = null;
-    this.listLoading = false;
-    this.hiddenCount = 0;
     this.initialized = false;
     this.packageSelector = null;
+    this.zooList = null;
   }
 
   /** Forget DOM state (the module rebuilds its DOM on every activate) */
   reset() {
     this.initialized = false;
     this.packageSelector = null;
-    this.query = '';
+    this.zooList = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -64,28 +58,14 @@ class BioimageioHandler {
       </div>
     `;
 
-    const search = document.getElementById('bioSearch');
-    if (search) {
-      search.addEventListener('input', () => {
-        this.query = search.value.trim().toLowerCase();
-        this.renderList();
-      });
-    }
-    const showAll = document.getElementById('bioShowAll');
-    if (showAll) {
-      showAll.checked = this.showAll;
-      showAll.addEventListener('change', () => {
-        this.showAll = showAll.checked;
-        this.loadList();
-      });
-    }
-    const list = document.getElementById('bioModelList');
-    if (list) {
-      list.addEventListener('click', (event) => {
-        const row = event.target.closest('.bio-model-row[data-id]');
-        if (row && list.contains(row)) this.selectZoo(row.dataset.id);
-      });
-    }
+    this.zooList = new ZooModelList({
+      listId: 'bioModelList',
+      searchId: 'bioSearch',
+      showAllId: 'bioShowAll',
+      onSelect: (id) => this.selectZoo(id),
+      notify: (type, message, ms) => this.module.state?.notify(type, message, ms)
+    });
+    this.zooList.init();
 
     const selectorContainer = document.getElementById('bioPackageSelector');
     if (selectorContainer) {
@@ -114,80 +94,16 @@ class BioimageioHandler {
       }
     }
 
-    await this.loadList();
+    this.syncListSelection();
+    await this.zooList.load();
   }
 
-  async loadList() {
-    this.listLoading = true;
-    this.listError = null;
-    this.renderList();
-    try {
-      const result = await this.api.listBioimageioModels(this.showAll);
-      this.models = result.models || [];
-      this.hiddenCount = result.hidden || 0;
-      if (result.stale && this.module.state) {
-        this.module.state.notify('warning', 'The model zoo could not be refreshed; showing a cached list.', 6000);
-      }
-    } catch (error) {
-      console.error('[BioimageioHandler] Zoo list failed:', error);
-      this.models = [];
-      this.listError = error.message;
-    }
-    this.listLoading = false;
-    this.renderList();
-  }
-
-  filteredModels() {
-    if (!this.query) return this.models;
-    const q = this.query;
-    return this.models.filter(m =>
-      m.name.toLowerCase().includes(q)
-      || m.id.toLowerCase().includes(q)
-      || (m.description || '').toLowerCase().includes(q)
-      || m.tags.some(t => t.toLowerCase().includes(q))
-    );
-  }
-
-  renderList() {
-    const list = document.getElementById('bioModelList');
-    if (!list) return;
-    if (this.listLoading) {
-      list.innerHTML = '<li class="bio-model-row empty">Loading the model zoo...</li>';
-      return;
-    }
-    if (this.listError) {
-      list.innerHTML = `<li class="bio-model-row error">${icon('cross')} ${this.escape(this.listError)}
-        You can still run an uploaded package.</li>`;
-      return;
-    }
-    const models = this.filteredModels();
-    if (models.length === 0) {
-      list.innerHTML = '<li class="bio-model-row empty">No models match.</li>';
-      return;
-    }
+  /** Highlight the selected zoo model in the list (if any) */
+  syncListSelection() {
+    if (!this.zooList) return;
     const selectedId = this.module.bioimageioModel?.source?.type === 'zoo'
       ? this.module.bioimageioModel.source.id : null;
-    const footnote = this.hiddenCount
-      ? `<li class="bio-model-row empty">${this.hiddenCount} zoo model${this.hiddenCount === 1 ? '' : 's'} not listed: their architecture code needs Python packages this server does not have.</li>`
-      : '';
-    list.innerHTML = models.map(m => {
-      const cover = m.cover
-        ? `<img class="bio-model-cover" src="${this.escape(m.cover)}" alt="" loading="lazy">`
-        : `<span class="bio-model-cover placeholder">${m.emoji || ''}</span>`;
-      const tags = m.tags.slice(0, MAX_TAGS).map(t => `<span class="bio-badge">${this.escape(t)}</span>`).join('');
-      return `
-        <li class="bio-model-row${m.id === selectedId ? ' selected' : ''}" data-id="${this.escape(m.id)}" title="${this.escape(m.description || '')}">
-          ${cover}
-          <div class="bio-model-main">
-            <div class="bio-model-name">${this.escape(m.name)}</div>
-            <div class="bio-model-meta">
-              <span class="bio-badge dims">${m.dims}D</span>
-              ${tags}
-              ${m.license ? `<span class="bio-badge">${this.escape(m.license)}</span>` : ''}
-            </div>
-          </div>
-        </li>`;
-    }).join('') + footnote;
+    this.zooList.setSelected(selectedId);
   }
 
   async selectZoo(id) {
@@ -229,7 +145,7 @@ class BioimageioHandler {
       modelFileId: result.modelFileId || null
     };
     this.renderCard(result.summary);
-    this.renderList();
+    this.syncListSelection();
     this.module.updateStep1NextButton();
     this.module.stateHandler.saveState();
     if (this.module.state) {
@@ -240,7 +156,7 @@ class BioimageioHandler {
   applyFailure(message) {
     this.module.bioimageioModel = null;
     this.renderCard(null, message);
-    this.renderList();
+    this.syncListSelection();
     this.module.updateStep1NextButton();
     this.module.stateHandler.saveState();
   }
@@ -253,7 +169,7 @@ class BioimageioHandler {
   async clearSelection({ remote = true } = {}) {
     this.module.bioimageioModel = null;
     this.renderCard(null);
-    this.renderList();
+    this.syncListSelection();
     this.module.updateStep1NextButton();
     if (remote) {
       try { await this.api.clearBioimageioModel(); } catch (e) { /* session may be gone */ }

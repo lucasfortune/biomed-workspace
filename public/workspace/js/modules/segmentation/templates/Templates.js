@@ -149,6 +149,39 @@ class Templates {
           <p class="step-description">Configure your model and training parameters.</p>
 
           <div class="config-form">
+            <!-- Starting point (ADR-017): new model, workspace checkpoint or bioimage.io model -->
+            <div class="config-group start-model-group" id="startModelGroup">
+              <h4>Starting Point ${this.renderHelpIcon('segmentation.config.starting-point')}</h4>
+              <div class="start-model-options">
+                <label class="start-model-option">
+                  <input type="radio" name="startModelKind" value="none" checked>
+                  <span>New model: random weights, architecture as set below</span>
+                </label>
+                <label class="start-model-option">
+                  <input type="radio" name="startModelKind" value="checkpoint">
+                  <span>Continue from a workspace model (.pth): same architecture, trained further</span>
+                </label>
+                <label class="start-model-option">
+                  <input type="radio" name="startModelKind" value="bioimageio">
+                  <span>Fine-tune a bioimage.io model: a package in the workspace or a zoo model</span>
+                </label>
+              </div>
+              <div class="start-model-slot" id="startCheckpointSlot" hidden>
+                <div id="startCheckpointSelector"></div>
+              </div>
+              <div class="start-model-slot" id="startPackageSlot" hidden>
+                <div id="startPackageSelector"></div>
+                <p class="start-model-hint" id="startZooHint">Zoo models with a fine-tunable head.</p>
+                <div class="bio-toolbar">
+                  <input type="search" class="bio-search" id="startZooSearch" placeholder="Or pick a zoo model to fine-tune (search)">
+                </div>
+                <ul class="bio-model-list" id="startZooList">
+                  <li class="bio-model-row empty">Loading the model zoo...</li>
+                </ul>
+              </div>
+              <div class="start-model-status" id="startModelStatus" hidden></div>
+            </div>
+
             <div class="config-group">
               <h4>Dataset Configuration</h4>
               <div class="form-field">
@@ -187,8 +220,9 @@ class Templates {
               </div>
             </div>
 
-            <div class="config-group">
+            <div class="config-group" id="architectureGroup">
               <h4>Model Architecture</h4>
+              <p class="config-group-note" id="architectureNote" hidden></p>
               <div class="form-field">
                 <label for="numFeatures">Number of Features${this.renderHelpIcon('segmentation.config.num-features')}</label>
                 <select id="numFeatures">

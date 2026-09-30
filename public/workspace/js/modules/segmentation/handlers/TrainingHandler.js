@@ -6,6 +6,14 @@
  */
 
 import TrainingSessionPersistence from '/workspace/js/services/TrainingSessionPersistence.js';
+import SegmentationAPI from '../SegmentationAPI.js';
+
+// Non-epoch stages of a run that continues from a parent model (ADR-017)
+const STAGE_TEXT = {
+  loading: 'Loading the starting model...',
+  packaging: 'Writing the fine-tuned package...',
+  testing: 'Self-testing the fine-tuned package...'
+};
 
 class TrainingHandler {
   /**
@@ -168,6 +176,57 @@ class TrainingHandler {
   }
 
   /**
+   * Show a non-epoch stage in the status line
+   * @param {string} stage - loading | packaging | testing
+   */
+  showStage(stage) {
+    const statusText = document.getElementById('trainingStatusText');
+    if (statusText && STAGE_TEXT[stage]) {
+      statusText.textContent = STAGE_TEXT[stage];
+      this.module.setTrainingStatusTone?.(null, statusText);
+    }
+  }
+
+  /**
+   * A run that fine-tuned a bioimage.io model wrote a package (ADR-017,
+   * rule F8): select it as the session's bioimage.io model so Step 4 runs
+   * it tiled, exactly as a package picked in Step 1.
+   * @param {Object} [status] - training status (fetched when omitted)
+   */
+  async adoptOutputPackage(status = null) {
+    const sm = this.module.startModel;
+    if (!sm || sm.kind === 'checkpoint') return;
+    const trainingId = this.module.currentTrainingId;
+    if (!trainingId) return;
+    try {
+      if (!status) {
+        status = await new SegmentationAPI().getTrainingStatus(trainingId);
+      }
+      const pkg = status && status.outputPackage;
+      if (!pkg || !pkg.fileId) {
+        this.module.state?.notify('warning', 'The fine-tuned package was not registered in the workspace; select it under Step 1 if it appears in Model Files.', 8000);
+        return;
+      }
+      const result = await this.module.api.selectBioimageioModel({ type: 'upload', fileId: pkg.fileId });
+      this.module.bioimageioModel = {
+        summary: result.summary,
+        source: result.source,
+        modelFileId: result.modelFileId || null
+      };
+      this.module.stateHandler.saveState();
+      const statusText = document.getElementById('trainingStatusText');
+      if (statusText) {
+        statusText.textContent = `Fine-tuned package ready: ${pkg.fileName || result.summary.name}`;
+        this.module.setTrainingStatusTone?.('success', statusText);
+      }
+      this.module.state?.notify('success', `${pkg.fileName || result.summary.name} is selected for Step 4 and listed under Model Files.`, 8000);
+    } catch (error) {
+      console.error('[TrainingHandler] Could not adopt the fine-tuned package:', error);
+      this.module.state?.notify('warning', 'The fine-tuned package could not be selected: ' + error.message, 8000);
+    }
+  }
+
+  /**
    * Update training progress display
    * @param {Object} data - Progress data from socket
    */
@@ -180,6 +239,11 @@ class TrainingHandler {
     // Which slices take part (labelled slices per pair, ADR-014)
     if (data.type === 'data') {
       this.showDataSummary(data);
+      return;
+    }
+    // Loading the parent, packaging, self-testing (ADR-017)
+    if (data.type === 'stage') {
+      this.showStage(data.stage);
       return;
     }
 
@@ -287,6 +351,9 @@ class TrainingHandler {
         window.workspace.fileBrowser.refresh();
       }
 
+      // A fine-tuned bioimage.io package becomes the Step 4 model (ADR-017)
+      this.adoptOutputPackage();
+
     } else {
       if (statusText) {
         statusText.textContent = 'Training failed!';
@@ -333,6 +400,9 @@ class TrainingHandler {
 
         if (status.dataSummary) {
           this.showDataSummary(status.dataSummary);
+        }
+        if (status.stage && status.status !== 'completed' && status.status !== 'failed') {
+          this.showStage(status.stage);
         }
 
         // Update UI if we have progress data

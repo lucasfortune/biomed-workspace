@@ -43,6 +43,7 @@ The result is a zip under Model Files, tagged `bioimageio`, with a processing hi
 ## Using the package
 
 - **In the workspace**: select it in the Segmentation module under Step 1, *Use a bioimage.io Model*, as an uploaded package. It then runs with tiled inference and a halo, so the image size no longer has to be a multiple of 2 to the number of layers. The output conversion defaults to argmax, which gives the same class map as the model's ordinary run.
+- **As a starting point**: pick it under Starting Point in Step 2 of a training run to fine-tune it on corrected annotations; the result is another package.
 - **Elsewhere**: download the zip and open it in any tool that reads bioimage.io packages (for example ilastik, deepImageJ, QuPath or napari), or upload it to [bioimage.io](https://bioimage.io) for publication.
 
 ## Normalisation note

@@ -147,6 +147,8 @@ class BioimageioService {
       weights: weights.filter(w => RUNNABLE_WEIGHTS.includes(w)),
       cover: coverUrl,
       page: `${HUB_PAGE_BASE}${id}`,
+      finetunable: BioimageioService.finetuneFacts(artifact).candidate,
+      finetuneClasses: BioimageioService.finetuneFacts(artifact).classes,
       // set by checkArchitectures for state-dict-only models
       missing: [],
       architecture: weights.includes('torchscript') ? null : BioimageioService.architectureSource(artifact, id)
@@ -193,6 +195,60 @@ class BioimageioService {
       proc.on('error', finish);
       proc.on('close', finish);
     });
+  }
+
+  /**
+   * Output channel count of a manifest's first output, or null when the
+   * manifest does not say. Format 0.5 lists axes; format 0.4 gives an axes
+   * string with either a shape list or a reference shape
+   * ({reference_tensor, scale, offset}: size = input * scale + 2 * offset).
+   */
+  static outputChannels(manifest) {
+    const out = (manifest.outputs || [])[0];
+    if (!out) return null;
+    const direct = BioimageioService.inputSummary(out);
+    if (direct && direct.channels != null) return direct.channels;
+    const axes = out.axes;
+    if (typeof axes !== 'string') return null;
+    const cIdx = axes.indexOf('c');
+    if (cIdx < 0) return 1;
+    const shape = out.shape;
+    if (shape && Array.isArray(shape.scale) && Array.isArray(shape.offset)) {
+      const inp = BioimageioService.inputSummary((manifest.inputs || [])[0]);
+      const inChannels = inp && inp.channels != null ? inp.channels : 1;
+      const value = inChannels * shape.scale[cIdx] + 2 * shape.offset[cIdx];
+      return Number.isInteger(value) && value > 0 ? value : null;
+    }
+    return null;
+  }
+
+  /**
+   * Fine-tuning facts of a manifest (ADR-017, rule F12): whether the model
+   * is a candidate and how many annotation classes it needs. A candidate
+   * needs pytorch_state_dict weights, a 2D input and an output head that
+   * is a softmax over channels (classes = channels), a single sigmoid
+   * channel or a single channel without a declared activation (classes =
+   * 2). Unknown channel counts stay candidates with classes null; the
+   * definitive check is the Python `describe` at selection time.
+   * @returns {{candidate: boolean, classes: number|null}}
+   */
+  static finetuneFacts(artifact) {
+    const m = artifact && artifact.manifest;
+    const no = { candidate: false, classes: null };
+    if (!m || !(m.weights || {}).pytorch_state_dict) return no;
+    const inp = BioimageioService.inputSummary((m.inputs || [])[0]);
+    if (!inp || inp.spaceDims !== 2) return no;
+    const out = (m.outputs || [])[0];
+    if (!out) return no;
+    const channels = BioimageioService.outputChannels(m);
+    const post = (out.postprocessing || []).map(p => p && (p.id || p.name)).filter(Boolean);
+    if (channels == null) return { candidate: true, classes: null };
+    if (channels >= 2) return post.includes('softmax') ? { candidate: true, classes: channels } : no;
+    return { candidate: true, classes: 2 };
+  }
+
+  static isFinetuneCandidate(artifact) {
+    return BioimageioService.finetuneFacts(artifact).candidate;
   }
 
   static isSegmentationLike(entry) {
@@ -255,8 +311,22 @@ class BioimageioService {
    * @returns {Promise<{success: boolean, summary?: object, error?: string}>}
    */
   describe(source) {
+    return this.runUtils(['describe', '--source', source]);
+  }
+
+  /**
+   * Model config, validation Dice and allowed patch sizes of a workspace
+   * checkpoint (ADR-017): `bioimageio_utils.py describe-checkpoint`.
+   * @param {string} modelPath - absolute .pth path
+   * @returns {Promise<{success: boolean, checkpoint?: object, error?: string}>}
+   */
+  describeCheckpoint(modelPath) {
+    return this.runUtils(['describe-checkpoint', '--model', modelPath]);
+  }
+
+  runUtils(args) {
     return new Promise((resolve) => {
-      const proc = spawn(this.pythonPath, ['python/bioimageio_utils.py', 'describe', '--source', source]);
+      const proc = spawn(this.pythonPath, ['python/bioimageio_utils.py', ...args]);
       let stdout = '';
       let stderr = '';
       proc.stdout.on('data', (d) => { stdout += d.toString(); });

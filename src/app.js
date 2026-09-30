@@ -127,23 +127,43 @@ function configureApp(app, dependencies) {
 
         // Chain model display names from the training raw image so they're unique and
         // self-documenting (e.g. trypB_seg_model.pth) instead of duplicate best_model.pth.
+        // A run that continued from a parent model (ADR-017) carries the
+        // fine-tune token instead (trypB_ft_model.pth).
+        const start = training.startModel || null;
         const trainSource = params.raw_images ? path.basename(params.raw_images) : 'training';
         const modelName = (qualifier, ext) => buildDisplayName({
-          sourceName: trainSource, operation: 'segmentation', ext, qualifier
+          sourceName: trainSource, operation: start ? 'finetune' : 'segmentation', ext, qualifier
         });
 
-        // Training outputs record lineage to the raw + annotation input files.
-        // A fresh record per output; empty inputs when the ids are unavailable
-        // (never a lineage object without an inputs array).
+        // Training outputs record lineage to the raw + annotation input files
+        // (and the parent model for fine-tuning runs). A fresh record per
+        // output; empty inputs when the ids are unavailable (never a lineage
+        // object without an inputs array).
+        const processType = start ? 'segmentation-finetune' : 'segmentation-training';
         const inputIds = (training.inputFileIds || []).filter(Boolean);
         const trainingLineage = () => inputIds.length
-          ? createLineage('segmentation-training', inputIds, params.training_id)
+          ? createLineage(processType, inputIds, params.training_id)
           : {
-              processType: 'segmentation-training',
+              processType,
               processedAt: new Date().toISOString(),
               inputs: [],
               processId: params.training_id
             };
+
+        // Fine-tuned bioimage.io package (ADR-017): tracked like an export so
+        // Step 1's package selector and Step 4 pick it up
+        const pkg = training.outputPackage;
+        if (pkg && pkg.zip_path && fs.existsSync(pkg.zip_path)) {
+          const parentName = (start && (start.displayName || start.name)) || 'model';
+          const entry = await fileService.trackModuleOutput(training.sessionId, pkg.zip_path, 'models', {
+            tags: ['bioimageio', 'weights', 'segmentation'],
+            displayName: buildDisplayName({ sourceName: parentName, operation: 'finetune', ext: '.zip' }),
+            lineage: trainingLineage()
+          });
+          pkg.fileId = entry ? entry.id : null;
+          pkg.fileName = entry ? (entry.displayName || entry.name) : path.basename(pkg.zip_path);
+          pkg.relPath = entry ? entry.path : null;
+        }
 
         // Track model files with appropriate tags
         if (fs.existsSync(modelPath)) {
@@ -305,6 +325,14 @@ function configureApp(app, dependencies) {
     uploadWorkspaceZip
   }));
 
+  // bioimage.io service (ADR-015 zoo, ADR-016 export, ADR-017 starting points)
+  const bioimageioService = services.bioimageioService || new BioimageioService({
+    pythonPath: PYTHON_PATH,
+    workspaceManager,
+    fileService,
+    logger
+  });
+
   // ML pipeline routes
   app.use(createMLRoutes({
     workspaceManager,
@@ -323,16 +351,11 @@ function configureApp(app, dependencies) {
     validateInferenceTiff,
     validateTrainingConfig,
     startTrainingProcess,
-    startInferenceProcess
+    startInferenceProcess,
+    bioimageioService
   }));
 
   // bioimage.io model zoo routes (ADR-015)
-  const bioimageioService = services.bioimageioService || new BioimageioService({
-    pythonPath: PYTHON_PATH,
-    workspaceManager,
-    fileService,
-    logger
-  });
   app.use('/api/bioimageio', createBioimageioRoutes({
     bioimageioService,
     workspaceManager,

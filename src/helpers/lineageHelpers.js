@@ -170,7 +170,8 @@ function getProcessingHistoryString(fileId, allFiles) {
     'preprocess': 'Preprocessing',
     'segcleanup': 'Segmentation Cleanup',
     'convert': 'Format Conversion',
-    'bioimageio-export': 'bioimage.io Export'
+    'bioimageio-export': 'bioimage.io Export',
+    'segmentation-finetune': 'Fine-tuning'
   };
 
   const steps = chain.map(entry => displayNames[entry.processType] || entry.processType);

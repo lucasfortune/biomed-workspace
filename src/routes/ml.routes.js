@@ -19,6 +19,7 @@ const archiver = require('archiver');
 const { spawn } = require('child_process');
 const { requireAuth, requireApproved } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
+const PACKAGE_VERSION = require('../../package.json').version;
 
 /**
  * Create ML routes router
@@ -40,6 +41,7 @@ const { PYTHON_PATH } = require('../config/constants');
  * @param {function} dependencies.validateTrainingConfig - Config validation function
  * @param {function} dependencies.startTrainingProcess - Training process starter
  * @param {function} dependencies.startInferenceProcess - Inference process starter
+ * @param {object} [dependencies.bioimageioService] - Starting-point checks (ADR-017)
  * @returns {Router} Express router
  */
 function createMLRoutes(dependencies) {
@@ -61,7 +63,8 @@ function createMLRoutes(dependencies) {
     validateInferenceTiff,
     validateTrainingConfig,
     startTrainingProcess,
-    startInferenceProcess
+    startInferenceProcess,
+    bioimageioService
   } = dependencies;
 
   // Aliases for backward compatibility
@@ -93,6 +96,11 @@ function createMLRoutes(dependencies) {
       }
       if (req.session.bioimageioModel) {
         delete req.session.bioimageioModel;
+      }
+      // New pairs may change the class count: the starting point (ADR-017)
+      // is chosen again in Step 2
+      if (req.session.startModel) {
+        delete req.session.startModel;
       }
 
       const skipUpload = req.body.skipUpload === 'true';
@@ -347,6 +355,23 @@ function createMLRoutes(dependencies) {
         });
       }
 
+      // Starting point (ADR-017): the parent fixes the architecture and the
+      // patch sizes its input rule accepts
+      const start = req.session.startModel;
+      if (start) {
+        const allowed = Array.isArray(start.allowedPatchSizes) ? start.allowedPatchSizes : [];
+        if (allowed.length && !allowed.includes(Number(config.patch_size))) {
+          return res.status(400).json({
+            error: 'Invalid configuration',
+            details: [`patch_size ${config.patch_size} is not accepted by the starting model (allowed: ${allowed.join(', ')})`]
+          });
+        }
+        if (start.kind === 'checkpoint' && start.modelConfig) {
+          config.features = start.modelConfig.features;
+          config.num_layers = start.modelConfig.num_layers;
+        }
+      }
+
       req.session.trainingConfig = config;
 
       res.json({
@@ -429,6 +454,50 @@ function createMLRoutes(dependencies) {
         pairs.map(p => ({ raw: p.raw_images, annotations: p.annotations })), null, 2
       ));
 
+      // Starting point (ADR-017): a workspace checkpoint or a bioimage.io
+      // model; its details go to the script for the package README
+      const start = req.session.startModel || null;
+      let startRecord = null;
+      if (start) {
+        if (start.kind === 'checkpoint') {
+          if (!start.path || !fs.existsSync(start.path)) {
+            return res.status(400).json({ error: 'The starting checkpoint no longer exists: ' + (start.displayName || '') });
+          }
+          trainingParams.init_from = start.path;
+        } else {
+          if (start.kind === 'package' && (!start.path || !fs.existsSync(start.path))) {
+            return res.status(400).json({ error: 'The starting package no longer exists: ' + (start.displayName || '') });
+          }
+          trainingParams.bioimageio = start.source;
+        }
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        const nameOf = (id) => {
+          const f = (metadata.files || []).find(x => x.id === id);
+          return f ? (f.displayName || f.name) : null;
+        };
+        const dataLine = pairs
+          .map(p => [nameOf(p.raw_images_id) || path.basename(p.raw_images), nameOf(p.annotations_id) || path.basename(p.annotations)].join(' + '))
+          .join('; ');
+        startRecord = {
+          kind: start.kind,
+          fileId: start.fileId || null,
+          displayName: start.displayName || null,
+          id: start.id || null,
+          name: start.name || start.displayName || null,
+          head: start.head || 'softmax',
+          classes: start.classes || config.num_classes
+        };
+        const meta = {
+          parent: { kind: start.kind, fileId: start.fileId || null, displayName: start.displayName || null, id: start.id || null },
+          parent_display: start.displayName || start.name || start.id || null,
+          author: req.session.user.fullName || req.session.user.username,
+          workspace_version: PACKAGE_VERSION,
+          data: dataLine
+        };
+        trainingParams.meta_file = path.join(trainingParams.output_dir, 'training_meta.json');
+        fs.writeFileSync(trainingParams.meta_file, JSON.stringify(meta, null, 2));
+      }
+
       // Store training session with history array for chart restoration
       trainingSessions.set(trainingId, {
         sessionId: sessionId,
@@ -440,8 +509,13 @@ function createMLRoutes(dependencies) {
         current_epoch: 0,
         total_epochs: config.num_epochs,
         params: trainingParams,
-        // Lineage tracking: every raw + annotation input file id (all pairs)
-        inputFileIds: pairs.flatMap(p => [p.raw_images_id, p.annotations_id]).filter(Boolean),
+        // Lineage tracking: every raw + annotation input file id (all pairs),
+        // plus the parent model when training continues from one (ADR-017)
+        inputFileIds: pairs.flatMap(p => [p.raw_images_id, p.annotations_id])
+          .concat(startRecord && startRecord.fileId ? [startRecord.fileId] : []).filter(Boolean),
+        startModel: startRecord,
+        stage: null,
+        outputPackage: null,
         history: [] // Array of {epoch, train_loss, val_loss, train_dice, val_dice}
       });
 
@@ -449,7 +523,7 @@ function createMLRoutes(dependencies) {
         activityLogger.logTrainingStart(
           req.session.user.username,
           trainingId,
-          config
+          startRecord ? { ...config, fine_tuned_from: startRecord.name || startRecord.kind } : config
         );
       }
 
@@ -467,6 +541,144 @@ function createMLRoutes(dependencies) {
     } catch (error) {
       if (logger) logger.error('Training start error:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Choose the starting point of the next training run (ADR-017)
+   * POST /api/segmentation/start-model
+   * body: { kind: 'none' | 'checkpoint' | 'package' | 'zoo', fileId?, id? }
+   *
+   * Checks the parent against the validated training pairs (class count,
+   * eligibility of a bioimage.io head) and stores it on the session; the
+   * response carries what Step 2 locks (architecture, patch sizes).
+   */
+  router.post('/api/segmentation/start-model', requireAuth, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const kind = String(body.kind || 'none');
+      if (kind === 'none') {
+        delete req.session.startModel;
+        return res.json({ success: true, startModel: null });
+      }
+      if (!['checkpoint', 'package', 'zoo'].includes(kind)) {
+        return res.status(400).json({ success: false, error: `Unknown starting point kind '${kind}'` });
+      }
+      if (!bioimageioService) {
+        return res.status(503).json({ success: false, error: 'Starting points are not available on this server' });
+      }
+      const numClasses = req.session.uploadedFiles?.validation?.num_classes;
+      if (!numClasses) {
+        return res.status(400).json({ success: false, error: 'Validate the training pairs in Step 1 first' });
+      }
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+
+      // Workspace file (checkpoint or package): confined to the workspace
+      let file = null;
+      let absolute = null;
+      if (kind !== 'zoo') {
+        const fileId = body.fileId ? String(body.fileId) : null;
+        const relPath = body.path ? String(body.path).replace(/^\/?workspaces\/[^/]+\//, '') : null;
+        const metadata = workspaceManager.loadMetadata(sessionId);
+        file = (metadata.files || []).find(f => (fileId && f.id === fileId) || (relPath && f.path === relPath));
+        if (!file) {
+          return res.status(404).json({ success: false, error: 'Model file not found in workspace' });
+        }
+        absolute = path.resolve(workspacePath, file.path);
+        if (!absolute.startsWith(workspacePath + path.sep) || !fs.existsSync(absolute)) {
+          return res.status(404).json({ success: false, error: 'Model file not found on disk' });
+        }
+        const expectExt = kind === 'checkpoint' ? /\.pth$/i : /\.zip$/i;
+        if (!expectExt.test(absolute)) {
+          return res.status(400).json({
+            success: false,
+            error: kind === 'checkpoint' ? 'A workspace checkpoint must be a .pth file' : 'A bioimage.io package must be a .zip file'
+          });
+        }
+      }
+
+      let startModel;
+      let publicView;
+      if (kind === 'checkpoint') {
+        const described = await bioimageioService.describeCheckpoint(absolute);
+        if (!described.success) {
+          return res.status(400).json({ success: false, error: described.error || 'Checkpoint could not be read' });
+        }
+        const ck = described.checkpoint;
+        if (ck.model_config.num_classes !== numClasses) {
+          return res.status(400).json({
+            success: false,
+            error: `This checkpoint was trained for ${ck.model_config.num_classes} classes (background included); the training pairs have ${numClasses}. Pick a model with the same classes or change the annotations.`
+          });
+        }
+        startModel = {
+          kind, fileId: file.id, displayName: file.displayName || file.name, path: absolute, relPath: file.path,
+          modelConfig: ck.model_config, valDice: ck.val_dice, allowedPatchSizes: ck.allowed_patch_sizes,
+          classes: numClasses, head: 'softmax', name: file.displayName || file.name
+        };
+        publicView = {
+          kind, fileId: file.id, displayName: startModel.displayName, name: startModel.name,
+          architecture: { features: ck.model_config.features, num_layers: ck.model_config.num_layers },
+          classes: numClasses, head: 'softmax', valDice: ck.val_dice,
+          allowedPatchSizes: ck.allowed_patch_sizes, notes: []
+        };
+      } else {
+        let source;
+        let zooId = null;
+        if (kind === 'zoo') {
+          zooId = String(body.id || '').trim();
+          if (!/^[A-Za-z0-9._\/-]{1,120}$/.test(zooId)) {
+            return res.status(400).json({ success: false, error: 'Invalid zoo model id' });
+          }
+          source = zooId;
+        } else {
+          source = absolute;
+        }
+        const described = await bioimageioService.describe(source);
+        if (!described.success) {
+          return res.status(400).json({ success: false, error: described.error || 'Model could not be loaded' });
+        }
+        const summary = described.summary;
+        const fi = summary.finetune || { eligible: false, reason: 'no fine-tuning information' };
+        if (!fi.eligible) {
+          return res.status(400).json({ success: false, error: `This model cannot be fine-tuned: ${fi.reason}` });
+        }
+        if (fi.classes !== numClasses) {
+          return res.status(400).json({
+            success: false,
+            error: `This model expects ${fi.classes} annotation classes (background included); the training pairs have ${numClasses}. Pick a model with the same classes or change the annotations.`
+          });
+        }
+        let modelFileId = file ? file.id : null;
+        if (kind === 'zoo') {
+          const card = await bioimageioService.writeModelCard(sessionId, zooId, summary);
+          modelFileId = card.fileId;
+        }
+        const displayName = file ? (file.displayName || file.name) : summary.name;
+        startModel = {
+          kind, fileId: modelFileId, displayName, name: summary.name, id: zooId || summary.id || null,
+          path: file ? absolute : null, relPath: file ? file.path : null, source,
+          head: fi.head, classes: fi.classes, allowedPatchSizes: fi.allowed_patch_sizes, channels: fi.channels
+        };
+        publicView = {
+          kind, fileId: modelFileId, displayName, name: summary.name, id: startModel.id,
+          architecture: null, classes: fi.classes, head: fi.head, channels: fi.channels,
+          allowedPatchSizes: fi.allowed_patch_sizes, notes: summary.notes || [],
+          weightFormat: summary.weight_format, license: summary.license || null
+        };
+      }
+
+      req.session.startModel = startModel;
+      if (activityLogger && req.session.user) {
+        activityLogger.logActivity(req.session.user.username, 'segmentation_start_model', {
+          kind, name: startModel.name || startModel.displayName
+        });
+      }
+      res.json({ success: true, startModel: publicView });
+    } catch (error) {
+      if (logger) logger.error('[ML] start-model failed:', error);
+      res.status(500).json({ success: false, error: 'Starting point could not be set: ' + error.message });
     }
   });
 
