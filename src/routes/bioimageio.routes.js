@@ -5,6 +5,9 @@
  *   GET    /api/bioimageio/selected       the model selected in this session
  *   POST   /api/bioimageio/select         { source: {type:'zoo', id} | {type:'upload', fileId} }
  *   DELETE /api/bioimageio/select         clear the selection
+ *   GET    /api/bioimageio/export-options/:fileId  defaults for the export dialog of a .pth file
+ *   POST   /api/bioimageio/export         { fileId, name, license, sampleFileId } -> { exportId }
+ *   GET    /api/bioimageio/export/:id     status of an export job (ADR-016)
  *
  * Selecting a model describes it (downloads only the description), writes
  * the workspace model card and stores the choice in the session, where
@@ -126,6 +129,121 @@ function createBioimageioRoutes({ bioimageioService, workspaceManager, activityL
       delete req.session.bioimageioModel;
     }
     res.json({ success: true });
+  });
+
+
+  // ---------------------------------------------------------------------------
+  // Export of workspace U-Nets (ADR-016): a file action on .pth model files
+  // ---------------------------------------------------------------------------
+
+  const isPth = (f) => /\.pth$/i.test(f.name || '');
+  const isTiff = (f) => /\.tiff?$/i.test(f.name || '');
+  const NON_SAMPLE_TAGS = ['annotation', 'segmentation', 'mask', 'result', 'mesh'];
+  const MAX_NAME = 100;
+
+  function workspaceFiles(sessionId) {
+    const metadata = workspaceManager.loadMetadata(sessionId);
+    return metadata.files || [];
+  }
+
+  function confinedPath(workspacePath, file) {
+    const absolute = path.resolve(workspacePath, file.path);
+    if (!absolute.startsWith(workspacePath + path.sep) || !fs.existsSync(absolute)) return null;
+    return absolute;
+  }
+
+  function sampleCandidates(files) {
+    const rank = (f) => ((f.tags || []).includes('raw') ? 0 : 1);
+    return files
+      .filter(isTiff)
+      .filter(f => !(f.tags || []).some(t => NON_SAMPLE_TAGS.includes(t)))
+      .sort((a, b) => rank(a) - rank(b) || String(a.displayName || a.name).localeCompare(String(b.displayName || b.name)));
+  }
+
+  router.get('/export-options/:fileId', requireAuth, (req, res) => {
+    try {
+      const sessionId = req.session.id;
+      const files = workspaceFiles(sessionId);
+      const model = files.find(f => f.id === req.params.fileId);
+      if (!model) return res.status(404).json({ success: false, error: 'Model file not found in workspace' });
+      if (!isPth(model)) return res.status(400).json({ success: false, error: 'Only .pth model files can be exported' });
+
+      const samples = sampleCandidates(files);
+      const lineageInputs = model.lineage && Array.isArray(model.lineage.inputs) ? model.lineage.inputs : [];
+      const preferred = lineageInputs.map(id => samples.find(f => f.id === id)).find(Boolean) || samples[0] || null;
+      const base = String(model.displayName || model.name).replace(/\.pth$/i, '').replace(/_segmentation_model$/i, '');
+      const user = req.session.user || {};
+      res.json({
+        success: true,
+        model: { id: model.id, name: model.displayName || model.name },
+        defaultName: `${base} segmentation U-Net`.slice(0, MAX_NAME),
+        defaultSampleId: preferred ? preferred.id : null,
+        samples: samples.map(f => ({ id: f.id, name: f.displayName || f.name })),
+        licenses: bioimageioService.constructor.EXPORT_LICENSES,
+        defaultLicense: 'CC-BY-4.0',
+        author: user.fullName || user.username || ''
+      });
+    } catch (error) {
+      if (logger) logger.error('[bioimageio] Export options failed:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.post('/export', requireAuth, (req, res) => {
+    try {
+      const sessionId = req.session.id;
+      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      const body = req.body || {};
+      const name = String(body.name || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+      const license = String(body.license || 'CC-BY-4.0');
+      if (!name) return res.status(400).json({ success: false, error: 'A package name is required' });
+      if (!bioimageioService.constructor.EXPORT_LICENSES.includes(license)) {
+        return res.status(400).json({ success: false, error: 'Unknown license' });
+      }
+
+      const files = workspaceFiles(sessionId);
+      const model = files.find(f => f.id === String(body.fileId || ''));
+      if (!model) return res.status(404).json({ success: false, error: 'Model file not found in workspace' });
+      if (!isPth(model)) return res.status(400).json({ success: false, error: 'Only .pth model files can be exported' });
+      if (!confinedPath(workspacePath, model)) {
+        return res.status(404).json({ success: false, error: 'Model file not found on disk' });
+      }
+      const sample = files.find(f => f.id === String(body.sampleFileId || ''));
+      if (!sample || !isTiff(sample)) {
+        return res.status(400).json({ success: false, error: 'A sample TIFF image is required' });
+      }
+      const samplePath = confinedPath(workspacePath, sample);
+      if (!samplePath) return res.status(404).json({ success: false, error: 'Sample image not found on disk' });
+
+      const user = req.session.user || {};
+      const trainingId = model.lineage && model.lineage.processType === 'segmentation-training'
+        ? (model.lineage.processId || null) : null;
+      const exportId = bioimageioService.startExport({
+        sessionId,
+        modelFile: model,
+        samplePath,
+        sampleFileId: sample.id,
+        sampleName: sample.displayName || sample.name,
+        name,
+        license,
+        author: user.fullName || user.username || '',
+        trainingId
+      });
+
+      if (activityLogger && user.username) {
+        activityLogger.logActivity(user.username, 'bioimageio_export', { fileId: model.id, exportId, name });
+      }
+      res.json({ success: true, exportId });
+    } catch (error) {
+      if (logger) logger.error('[bioimageio] Export start failed:', error);
+      res.status(500).json({ success: false, error: 'Export could not be started: ' + error.message });
+    }
+  });
+
+  router.get('/export/:exportId', requireAuth, (req, res) => {
+    const status = bioimageioService.exportStatus(req.params.exportId, req.session.id);
+    if (!status) return res.status(404).json({ success: false, error: 'Export not found' });
+    res.json({ success: true, export: status });
   });
 
   return router;

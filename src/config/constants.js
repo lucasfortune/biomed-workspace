@@ -96,7 +96,8 @@ const PYTHON_SCRIPTS = {
   validateImportedModel: 'python/validate_imported_model.py',
   generateThumbnail: 'python/generate_thumbnail.py',
   describeBioimageio: 'python/bioimageio_utils.py',
-  runBioimageioInference: 'python/run_bioimageio_inference.py'
+  runBioimageioInference: 'python/run_bioimageio_inference.py',
+  exportBioimageio: 'python/export_bioimageio.py'
 };
 
 // Training configuration validation ranges

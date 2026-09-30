@@ -1134,6 +1134,16 @@ class FileBrowser {
       });
     }
 
+    // Model file action (ADR-016): export a workspace U-Net as a bioimage.io package
+    if (ext === 'pth') {
+      menuItems.push({ separator: true });
+      menuItems.push({
+        icon: '📦',
+        label: 'Export as bioimage.io package...',
+        onClick: () => this.showBioimageioExportDialog(fileId)
+      });
+    }
+
     // Add TIFF-specific operations if applicable
     if (isTiff) {
       let sliceCount = 1;
@@ -2315,6 +2325,187 @@ class FileBrowser {
       this.state.notify('error', `Split failed: ${error.message}`);
     } finally {
       this.setLoading(false);
+    }
+  }
+
+  // ===========================================================================
+  // BIOIMAGE.IO EXPORT (ADR-016)
+  // ===========================================================================
+
+  /**
+   * Export dialog for a .pth model file: name, license and sample image, then
+   * a polled export job. The package lands in Model Files (tag bioimageio).
+   * @param {string} fileId - File ID of the .pth model
+   */
+  async showBioimageioExportDialog(fileId) {
+    let options;
+    try {
+      options = await this.api.request(`/api/bioimageio/export-options/${fileId}`);
+      if (!options.success) throw new Error(options.error || 'Could not prepare the export');
+    } catch (error) {
+      this.state.notify('error', `Export not possible: ${error.message}`);
+      return;
+    }
+
+    const esc = (t) => this.escapeHtml(String(t == null ? '' : t));
+    const samples = options.samples || [];
+    const licenses = options.licenses || ['CC-BY-4.0'];
+    const modal = document.createElement('div');
+    modal.className = 'workspace-confirm-modal';
+    modal.innerHTML = `
+      <div class="workspace-confirm-overlay"></div>
+      <div class="workspace-confirm-content bio-export-dialog" style="max-width: 540px;">
+        <h3>Export as bioimage.io package</h3>
+        <p>Package <strong>${esc(options.model.name)}</strong> as a bioimage.io model (format 0.5)
+          with TorchScript and state-dict weights, test tensors, a cover image and a README.
+          The package appears under Model Files and can be selected in the Segmentation module
+          under Step 1, bioimage.io model.</p>
+
+        <div class="split-form bio-export-form">
+          <div class="split-input-row">
+            <label for="bio-export-name">Name</label>
+            <input type="text" id="bio-export-name" class="split-input bio-export-input" maxlength="100"
+                   value="${esc(options.defaultName)}">
+          </div>
+          <div class="split-input-row">
+            <label for="bio-export-license">License</label>
+            <select id="bio-export-license" class="split-input bio-export-input">
+              ${licenses.map(l => `<option value="${esc(l)}" ${l === options.defaultLicense ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="split-input-row">
+            <label for="bio-export-sample">Sample image</label>
+            <select id="bio-export-sample" class="split-input bio-export-input" ${samples.length ? '' : 'disabled'}>
+              ${samples.length
+                ? samples.map(f => `<option value="${esc(f.id)}" ${f.id === options.defaultSampleId ? 'selected' : ''}>${esc(f.name)}</option>`).join('')
+                : '<option value="">No raw TIFF image in the workspace</option>'}
+            </select>
+          </div>
+          <p class="bio-export-note">The sample image provides the test tensors and the cover picture;
+            the image the model was trained on is preselected when known.
+            Author: ${esc(options.author || 'not set')}.</p>
+          <div class="bio-export-status" id="bio-export-status" hidden></div>
+        </div>
+
+        <div class="workspace-confirm-actions">
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-confirm" ${samples.length ? '' : 'disabled'}>Export</button>
+        </div>
+      </div>
+    `;
+
+    const nameInput = modal.querySelector('#bio-export-name');
+    const licenseSelect = modal.querySelector('#bio-export-license');
+    const sampleSelect = modal.querySelector('#bio-export-sample');
+    const statusBox = modal.querySelector('#bio-export-status');
+    const cancelBtn = modal.querySelector('.btn-cancel');
+    const confirmBtn = modal.querySelector('.btn-confirm');
+
+    let pollTimer = null;
+    const closeModal = () => {
+      if (pollTimer) clearInterval(pollTimer);
+      modal.remove();
+      document.removeEventListener('keydown', handleEsc);
+    };
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && !cancelBtn.disabled) closeModal();
+    };
+    const setStatus = (text, isError = false) => {
+      statusBox.hidden = false;
+      statusBox.textContent = text;
+      statusBox.classList.toggle('error', isError);
+    };
+    const setBusy = (busy) => {
+      cancelBtn.disabled = busy;
+      confirmBtn.disabled = busy;
+      nameInput.disabled = busy;
+      licenseSelect.disabled = busy;
+      sampleSelect.disabled = busy || !samples.length;
+    };
+
+    modal.querySelector('.workspace-confirm-overlay').addEventListener('click', () => {
+      if (!cancelBtn.disabled) closeModal();
+    });
+    cancelBtn.addEventListener('click', closeModal);
+    confirmBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) {
+        setStatus('Please enter a package name.', true);
+        nameInput.focus();
+        return;
+      }
+      setBusy(true);
+      setStatus('Starting the export...');
+      try {
+        const started = await this.api.request('/api/bioimageio/export', {
+          method: 'POST',
+          body: JSON.stringify({
+            fileId,
+            name,
+            license: licenseSelect.value,
+            sampleFileId: sampleSelect.value
+          })
+        });
+        if (!started.success) throw new Error(started.error || 'Export could not be started');
+        pollTimer = setInterval(() => this.pollBioimageioExport(started.exportId, {
+          onStage: (stage) => setStatus(this.bioimageioStageLabel(stage)),
+          onDone: async (result) => {
+            closeModal();
+            await this.refresh();
+            if (result.fileId) this.markAsRecent(result.fileId);
+            this.state.notify('success', `Exported ${result.fileName}. Select it in Segmentation, Step 1, bioimage.io model.`, 8000);
+          },
+          onFail: (message) => {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = null;
+            setBusy(false);
+            setStatus(`Export failed: ${message}`, true);
+          }
+        }), 1500);
+      } catch (error) {
+        setBusy(false);
+        setStatus(`Export failed: ${error.message}`, true);
+      }
+    });
+
+    document.addEventListener('keydown', handleEsc);
+    document.body.appendChild(modal);
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  bioimageioStageLabel(stage) {
+    const labels = {
+      starting: 'Starting the export...',
+      loading: 'Loading the model...',
+      tracing: 'Tracing the model to TorchScript...',
+      packaging: 'Writing the package...',
+      testing: 'Running the package self-test (both weight formats)...'
+    };
+    return labels[stage] || 'Exporting...';
+  }
+
+  /**
+   * One poll of an export job; the callbacks decide what to do.
+   */
+  async pollBioimageioExport(exportId, { onStage, onDone, onFail }) {
+    if (this._bioExportPolling) return; // skip overlapping polls
+    this._bioExportPolling = true;
+    try {
+      const response = await this.api.request(`/api/bioimageio/export/${exportId}`);
+      if (!response.success) throw new Error(response.error || 'Export status unavailable');
+      const job = response.export;
+      if (job.status === 'done') {
+        await onDone(job.result || {});
+      } else if (job.status === 'failed') {
+        onFail(job.error || 'unknown error');
+      } else {
+        onStage(job.stage);
+      }
+    } catch (error) {
+      onFail(error.message);
+    } finally {
+      this._bioExportPolling = false;
     }
   }
 

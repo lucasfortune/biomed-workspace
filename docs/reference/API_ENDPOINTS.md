@@ -2096,6 +2096,23 @@ Returns `{ success: true, selected: <session selection or null> }`.
 
 Clears the selection. `/upload-data` and `/start-training` clear it as well.
 
+### GET /api/bioimageio/export-options/:fileId
+
+Defaults for the export dialog of a `.pth` model file (ADR-016). Returns `{ success, model: {id, name}, defaultName, defaultSampleId, samples: [{id, name}], licenses, defaultLicense, author }`. Sample candidates are the workspace's TIFF files that are not tagged annotation, segmentation, mask, result or mesh, raw uploads first; the model's training raw image (from its lineage) is the default. 400 for files that are not `.pth`, 404 when unknown.
+
+### POST /api/bioimageio/export
+
+Start an export job (`requireAuth`). Body `{ fileId, name, license, sampleFileId }`; `name` is trimmed to 100 characters, `license` must be one of CC-BY-4.0, MIT, BSD-3-Clause, CC0-1.0. Spawns `python/export_bioimageio.py`, which writes `models/bioimageio/exports/<slug>_<timestamp>/<slug>.zip` and self-tests it. Returns `{ success, exportId }` at once.
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Missing name, unknown license, file not `.pth`, sample missing or not a TIFF |
+| 404 | Model or sample not in the workspace or not on disk |
+
+### GET /api/bioimageio/export/:exportId
+
+Status of an export job owned by this session: `{ success, export: { id, status: 'running'|'done'|'failed', stage: 'starting'|'loading'|'tracing'|'packaging'|'testing', name, modelFileId, startedAt, finishedAt, result, error } }`. On success `result` holds `zip_path`, `relPath`, `fileId`, `fileName`, `model_config`, `class_names`, `halo`, `min_size`, `step`, `tests` (per weight format) and `val_dice`. The zip is tracked in `models` with tags `bioimageio`, `weights`, `segmentation` and lineage `bioimageio-export` (inputs: model file, sample image). 404 for unknown ids or another session's job.
+
 ---
 
 ## Socket.IO Events

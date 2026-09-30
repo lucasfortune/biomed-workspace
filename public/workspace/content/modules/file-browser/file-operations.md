@@ -13,8 +13,10 @@ tags:
   - convert
   - voxel-size
   - json
+  - bioimageio
 seeAlsoManual:
   - file-browser.batch-operations
+  - file-browser.bioimageio-export
   - file-browser
 seeAlsoTags:
   - file-operations
@@ -50,6 +52,8 @@ Right-click any file for the full set of operations. Which entries appear depend
 
 - Convert to… — format conversion offered per type: TIFF ↔ MRC, and mesh .obj to STL, PLY, or glTF (GLB). Converting a TIFF to MRC carries its voxel size through (ADR-010)
 
+- Export as bioimage.io package… — for .pth model files; packages a workspace U-Net for other tools, the model zoo and tiled inference in the workspace (see bioimage.io Export)
+
 - Delete — always shown (shortcut: Del)
 
 ## TIFF Stack Operations
@@ -84,7 +88,7 @@ The result is two new files shown as `<original>_split_part1.tif` and `<original
 
 - ID (the internal file identifier)
 
-- Processing history — the lineage chain, showing steps such as Original Upload, Denoising, Segmentation, Mesh Generation, Preprocessing, Stitching, Segmentation Cleanup, Format Conversion, Duplicated, or Split
+- Processing history — the lineage chain, showing steps such as Original Upload, Denoising, Segmentation, Mesh Generation, Preprocessing, Stitching, Segmentation Cleanup, Format Conversion, bioimage.io Export, Duplicated, or Split
 
 ## Voxel Size
 
@@ -93,3 +97,7 @@ For TIFF stacks, File Info shows a voxel-size row. The physical voxel size is re
 ## Convert To
 
 Use Convert to… in the context menu to write a new file in another format. TIFF converts to MRC (and MRC back to TIFF), and mesh .obj files convert to STL, PLY, or glTF (GLB). The converted file is added to the workspace tagged `converted` and shown as `<original>_conv.<format>` (e.g. `stack_conv.stl`), and a TIFF's voxel size is passed to the MRC output.
+
+## Export as bioimage.io Package
+
+Right-click a `.pth` model file and choose Export as bioimage.io package… to write a bioimage.io model package (zip) from a workspace U-Net. The dialog asks for a name, a license and a sample image; the package is self-tested on the server and then appears under Model Files tagged `bioimageio`, ready for the Segmentation module's bioimage.io workflow or for download. Details in the bioimage.io Export article.

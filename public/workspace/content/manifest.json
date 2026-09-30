@@ -1024,15 +1024,42 @@
         "split",
         "convert",
         "voxel-size",
-        "json"
+        "json",
+        "bioimageio"
       ],
       "path": "modules/file-browser/file-operations.md",
       "seeAlsoManual": [
         "file-browser.batch-operations",
-        "file-browser"
+        "file-browser",
+        "file-browser.bioimageio-export"
       ],
       "seeAlsoTags": [
         "file-operations"
+      ]
+    },
+    "file-browser.bioimageio-export": {
+      "id": "file-browser.bioimageio-export",
+      "title": "bioimage.io Export",
+      "displayTitle": "bioimage.io Export",
+      "category": "feature",
+      "module": "file-browser",
+      "tags": [
+        "file-browser",
+        "bioimageio",
+        "export",
+        "model",
+        "package",
+        "segmentation"
+      ],
+      "path": "modules/file-browser/bioimageio-export.md",
+      "seeAlsoManual": [
+        "file-browser.file-operations",
+        "segmentation.step1.bioimageio-package",
+        "segmentation.step1.bioimageio"
+      ],
+      "seeAlsoTags": [
+        "bioimageio",
+        "export"
       ]
     },
     "file-browser.batch-operations": {

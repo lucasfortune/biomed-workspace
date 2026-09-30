@@ -7,12 +7,17 @@
  * - Describes a model (zoo id or uploaded package) through
  *   python/bioimageio_utils.py.
  * - Writes the per-workspace model card that lineage points at.
+ * - Exports workspace U-Net checkpoints as packages (ADR-016) through
+ *   python/export_bioimageio.py, as polled jobs.
  */
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
+const { createLineage } = require('../helpers/lineageHelpers');
+const PACKAGE_VERSION = require('../../package.json').version;
 
 const HUB_URL = 'https://hypha.aicell.io/bioimage-io/artifacts/bioimage.io/children'
   + '?filters=%7B%22type%22%3A%22model%22%7D&limit=1000';
@@ -21,6 +26,8 @@ const HUB_PAGE_BASE = 'https://bioimage.io/#/?id=';
 const LIST_TTL_MS = 60 * 60 * 1000;
 const RUNNABLE_WEIGHTS = ['torchscript', 'pytorch_state_dict'];
 const EXCLUDED_TAGS = ['denoising', 'restoration', 'super-resolution', 'classification', 'in-silico-labeling'];
+const EXPORT_LICENSES = ['CC-BY-4.0', 'MIT', 'BSD-3-Clause', 'CC0-1.0'];
+const MAX_EXPORT_RECORDS = 100;
 
 class BioimageioService {
   /**
@@ -38,6 +45,7 @@ class BioimageioService {
     this.logger = logger;
     this.fetchImpl = fetchImpl || globalThis.fetch;
     this.listCache = null; // { fetchedAt, items }
+    this.exports = new Map(); // exportId -> job record (ADR-016)
   }
 
   // ---------------------------------------------------------------------------
@@ -320,6 +328,184 @@ class BioimageioService {
       fileId = entry ? entry.id : null;
     }
     return { cardPath, fileId };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export of workspace U-Nets as packages (ADR-016)
+  // ---------------------------------------------------------------------------
+
+  static get EXPORT_LICENSES() {
+    return EXPORT_LICENSES.slice();
+  }
+
+  static slugify(name) {
+    return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+      || 'workspace-unet';
+  }
+
+  /**
+   * Start an export job (returns immediately; poll exportStatus()).
+   * @param {object} job
+   * @param {string} job.sessionId
+   * @param {object} job.modelFile   workspace file entry of the .pth
+   * @param {string} job.samplePath  absolute path of the sample TIFF
+   * @param {string} [job.sampleFileId]
+   * @param {string} [job.sampleName]
+   * @param {string} job.name        package name
+   * @param {string} job.license
+   * @param {string} [job.author]
+   * @param {string} [job.trainingId]
+   * @returns {string} exportId
+   */
+  startExport(job) {
+    const exportId = crypto.randomUUID();
+    const workspacePath = this.workspaceManager.getWorkspacePath(job.sessionId);
+    const modelPath = path.resolve(workspacePath, job.modelFile.path);
+    const slug = BioimageioService.slugify(job.name);
+    const outDir = path.join(workspacePath, 'models', 'bioimageio', 'exports', `${slug}_${Date.now()}`);
+    const record = {
+      id: exportId,
+      sessionId: job.sessionId,
+      status: 'running',
+      stage: 'starting',
+      name: job.name,
+      modelFileId: job.modelFile.id,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      result: null,
+      error: null
+    };
+    this.exports.set(exportId, record);
+    this.pruneExports();
+
+    const finish = (error, result) => {
+      record.finishedAt = new Date().toISOString();
+      if (error) {
+        record.status = 'failed';
+        record.error = error;
+        fs.rmSync(outDir, { recursive: true, force: true });
+        if (this.logger) this.logger.error(`[bioimageio] Export ${exportId} failed: ${error}`);
+      } else {
+        record.status = 'done';
+        record.result = result;
+        if (this.logger) this.logger.info(`[bioimageio] Export ${exportId} done: ${result.relPath}`);
+      }
+    };
+
+    try {
+      fs.mkdirSync(outDir, { recursive: true });
+    } catch (err) {
+      finish(`Could not create the export directory: ${err.message}`);
+      return exportId;
+    }
+
+    const meta = {
+      training_id: job.trainingId || null,
+      workspace_version: PACKAGE_VERSION,
+      model_file: job.modelFile.displayName || job.modelFile.name
+    };
+    const args = [
+      'python/export_bioimageio.py',
+      '--model', modelPath,
+      '--sample', job.samplePath,
+      '--output_dir', outDir,
+      '--name', job.name,
+      '--license', job.license,
+      '--author', job.author || '',
+      '--meta', JSON.stringify(meta),
+      '--sample_name', job.sampleName || ''
+    ];
+
+    let proc;
+    try {
+      proc = spawn(this.pythonPath, args);
+    } catch (err) {
+      finish(`Failed to start Python: ${err.message}`);
+      return exportId;
+    }
+
+    let stdout = '';
+    let stderr = '';
+    let pending = '';
+    proc.stdout.on('data', (d) => {
+      const text = d.toString();
+      stdout += text;
+      pending += text;
+      const lines = pending.split('\n');
+      pending = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith('BIOIMAGEIO_PROGRESS:')) {
+          try {
+            record.stage = JSON.parse(line.substring('BIOIMAGEIO_PROGRESS:'.length)).stage || record.stage;
+          } catch (e) { /* ignore malformed progress */ }
+        }
+      }
+    });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => finish(`Failed to start Python: ${err.message}`));
+    proc.on('close', async (code) => {
+      const lines = stdout.split('\n');
+      const resultLine = lines.find(l => l.startsWith('BIOIMAGEIO_RESULT:'));
+      let result = null;
+      if (resultLine) {
+        try { result = JSON.parse(resultLine.substring('BIOIMAGEIO_RESULT:'.length)); } catch (e) { result = null; }
+      }
+      if (!result || !result.zip_path) {
+        const errLine = lines.find(l => l.startsWith('BIOIMAGEIO_ERROR:'));
+        let message = null;
+        if (errLine) {
+          try { message = JSON.parse(errLine.substring('BIOIMAGEIO_ERROR:'.length)).message; } catch (e) { message = null; }
+        }
+        if (!message) {
+          const tail = stderr.trim().split('\n').filter(l => l && !/warn/i.test(l)).slice(-2).join(' ').trim();
+          message = tail || `Export failed without output (exit code ${code})`;
+        }
+        return finish(message);
+      }
+
+      try {
+        const inputs = [job.modelFile.id, job.sampleFileId].filter(Boolean);
+        const lineage = createLineage('bioimageio-export', inputs, exportId);
+        let entry = null;
+        if (this.fileService) {
+          entry = await this.fileService.trackModuleOutput(job.sessionId, result.zip_path, 'models', {
+            tags: ['bioimageio', 'weights', 'segmentation'],
+            displayName: `${job.name}.zip`,
+            lineage
+          });
+        }
+        finish(null, {
+          ...result,
+          fileId: entry ? entry.id : null,
+          fileName: entry ? (entry.displayName || entry.name) : path.basename(result.zip_path),
+          relPath: path.relative(workspacePath, result.zip_path)
+        });
+      } catch (err) {
+        finish(`Package written but could not be added to the workspace: ${err.message}`);
+      }
+    });
+
+    return exportId;
+  }
+
+  /**
+   * Public view of an export job, or null when unknown or owned by another session.
+   */
+  exportStatus(exportId, sessionId) {
+    const record = this.exports.get(exportId);
+    if (!record || record.sessionId !== sessionId) return null;
+    const { sessionId: _owner, ...view } = record;
+    return view;
+  }
+
+  pruneExports() {
+    if (this.exports.size <= MAX_EXPORT_RECORDS) return;
+    const finished = [...this.exports.values()].filter(r => r.status !== 'running')
+      .sort((a, b) => (a.finishedAt || '').localeCompare(b.finishedAt || ''));
+    for (const r of finished) {
+      if (this.exports.size <= MAX_EXPORT_RECORDS) break;
+      this.exports.delete(r.id);
+    }
   }
 }
 
