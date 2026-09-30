@@ -12,7 +12,7 @@ The workspace is developed within the DFG priority programme SPP 2332
 documentation at
 **[lucasfortune.github.io/the-virtual-parasite](https://lucasfortune.github.io/the-virtual-parasite/workspace/)**.
 
-![Version](https://img.shields.io/badge/version-1.9.0-blue)
+![Version](https://img.shields.io/badge/version-1.10.0-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-18+-339933)
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-green)
@@ -30,7 +30,7 @@ Modules are listed in pipeline order, as they appear on the workspace hub.
 | **Denoising: Deep Learning** | Self-supervised denoising with Noise2Void and [AutoStructN2V](https://github.com/lucasfortune/asn2v), which detects structured noise and routes each stack to the matching training recipe |
 | **Denoising: Filter-Based** | Gaussian and non-local-means filtering with automatic noise estimation |
 | **Annotation** | Paint multi-class labels on image stacks to create training data; interpolate a class between annotated slices and let a pixel classifier trained on your strokes suggest labels for the rest |
-| **U-Net Segmentation** | Train a U-Net on one or more annotated stacks, using only the slices you labelled, with live training curves; segment new volumes, or run a bioimage.io model zoo model with tiled inference, export a trained model as a bioimage.io package, and send a result back to Annotation for correction |
+| **U-Net Segmentation** | Train a U-Net on one or more annotated stacks, using only the slices you labelled, with live training curves; segment new volumes, or run a bioimage.io model zoo model with tiled inference, export a trained model as a bioimage.io package, fine-tune a workspace or zoo model on your annotations, and send a result back to Annotation for correction |
 | **Segmentation Cleanup** | Fill holes, remove specks, smooth, merge classes, touch up by hand, and export per-class quantification as CSV |
 | **Stack Stitching** | Join stacks along z or as mosaics using overlay alignment; alignments are saved as reusable recipes |
 | **Surface Mesh Generation** | Convert segmented volumes to 3D surface meshes with physical voxel scaling |
@@ -43,7 +43,7 @@ Across all modules:
 - **Provenance.** Every file records its full processing history, including
   the trained model behind a result, and outputs get readable, chained names.
 - **Physical metadata.** Voxel sizes travel with the data from upload to mesh.
-- **Built-in help.** 112 context-sensitive help articles and a glossary,
+- **Built-in help.** 113 context-sensitive help articles and a glossary,
   reachable from the help icon next to each control. The same content is
   published to the documentation site.
 - **Sample data.** Every new workspace is seeded with a matched raw stack and

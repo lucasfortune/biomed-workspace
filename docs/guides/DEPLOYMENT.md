@@ -298,7 +298,7 @@ python -c "import torch; print(torch.__version__)"
 deactivate
 ```
 
-**bioimage.io (since 1.8.0, export since 1.9.0):** `requirements.txt` installs `bioimageio.core`.
+**bioimage.io (since 1.8.0, export since 1.9.0, fine-tuning since 1.10.0):** `requirements.txt` installs `bioimageio.core`.
 The Segmentation module lists the model zoo from `https://hypha.aicell.io`
 and downloads model weights on first use, so the server needs outbound
 HTTPS. Downloads go to a server-wide cache, `$DATA_DIR/bioimageio_cache`
