@@ -26,7 +26,24 @@ class WorkspaceManager {
    */
   constructor(options = {}) {
     this.workspacesBaseDir = options.workspacesBaseDir || 'workspaces';
+    // Optional hook (set by the server) called whenever a workspace's file
+    // list changes, so connected clients can refresh their file browser
+    this.onFilesChanged = options.onFilesChanged || null;
     this.ensureWorkspacesDirectory();
+  }
+
+  /**
+   * Tell listeners that the file list of a workspace changed (a row was
+   * added, removed, renamed or rewritten). Best-effort, never throws.
+   * @param {string} sessionId - Session/workspace ID
+   */
+  notifyFilesChanged(sessionId) {
+    if (typeof this.onFilesChanged !== 'function') return;
+    try {
+      this.onFilesChanged(sessionId);
+    } catch (e) {
+      // Listeners are advisory
+    }
   }
 
   /**
@@ -720,6 +737,7 @@ class WorkspaceManager {
     this.saveMetadata(sessionId, metadata);
 
     console.log('[WorkspaceManager] File tracked:', fileEntry.id, fileEntry.path);
+    this.notifyFilesChanged(sessionId);
     return fileEntry;
   }
 
@@ -781,6 +799,7 @@ class WorkspaceManager {
       delete file.voxelSize;
     }
     this.saveMetadata(sessionId, metadata);
+    this.notifyFilesChanged(sessionId);
     return file;
   }
 
@@ -836,6 +855,7 @@ class WorkspaceManager {
     this.saveMetadata(sessionId, metadata);
 
     console.log(`[WorkspaceManager] File display name updated: ${currentDisplay} -> ${file.displayName} (path unchanged)`);
+    this.notifyFilesChanged(sessionId);
 
     return file;
   }
@@ -917,6 +937,7 @@ class WorkspaceManager {
     // Remove from metadata (file + its sidecars)
     metadata.files = metadata.files.filter(f => f.id !== fileId && f.parentId !== fileId);
     this.saveMetadata(sessionId, metadata);
+    this.notifyFilesChanged(sessionId);
 
     return { success: true, message: 'File deleted' };
   }

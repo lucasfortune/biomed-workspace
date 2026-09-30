@@ -904,7 +904,6 @@ class FileBrowser {
     const oldExt = currentName.includes('.') ? currentName.split('.').pop().toLowerCase() : '';
     const newName = await Dialog.prompt({
       title: 'Rename',
-      message: 'The name shown in the workspace and used for downloads. The file on disk keeps its name.',
       label: 'New name',
       value: currentName,
       confirmLabel: 'Rename',

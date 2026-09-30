@@ -168,6 +168,12 @@ io.engine.use(sessionMiddleware);
 // Initialize Socket.IO handlers
 initializeSocketHandlers(io, logger);
 
+// Push file-list changes to the owning session's clients (the file browser
+// refreshes itself whenever a module tracks, renames or deletes a file)
+workspaceManager.onFilesChanged = (sessionId) => {
+  io.to(`session-${sessionId}`).emit('workspace-files-changed', { sessionId });
+};
+
 // =============================================================================
 // CONFIGURE EXPRESS APP
 // =============================================================================

@@ -2347,6 +2347,22 @@ body {
   min-width: 110px;
 }
 
+/* Dialog helper (core/components/Dialog.js): the text input spans the dialog */
+.dialog-form .dialog-input-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.dialog-form .dialog-input-row label {
+  min-width: 0;
+}
+
+.dialog-form .dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .split-input {
   width: 80px;
   padding: 6px 8px;

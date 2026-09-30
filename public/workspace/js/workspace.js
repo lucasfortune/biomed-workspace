@@ -96,6 +96,10 @@ class Workspace {
       this.fileBrowser = new FileBrowser(this.state, this.api);
       await this.fileBrowser.initialize('file-tree-container');
 
+      // Keep the file browser in step with the server: every tracked,
+      // renamed or deleted file triggers a (debounced) refresh
+      this.connectFileEvents();
+
       // Initialize info panel
       this.infoPanel = new InfoPanel(this.state);
       await this.infoPanel.initialize('info-panel-container');
@@ -539,6 +543,30 @@ class Workspace {
       console.log('[Workspace] Returned to hub');
     } catch (error) {
       console.error('[Workspace] Error returning to hub:', error);
+    }
+  }
+
+  /**
+   * Subscribe to the server's workspace-files-changed events (one socket for
+   * the whole session; modules keep their own job sockets). Changes arrive in
+   * bursts (a run tracks several files), so refreshes are debounced.
+   */
+  connectFileEvents() {
+    if (typeof io !== 'function' || this.socket) return;
+    try {
+      this.socket = io();
+      let timer = null;
+      this.socket.on('workspace-files-changed', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          if (this.fileBrowser) this.fileBrowser.refresh();
+        }, 400);
+      });
+      this.socket.on('connect_error', (err) => {
+        console.warn('[Workspace] File events unavailable:', err.message);
+      });
+    } catch (error) {
+      console.warn('[Workspace] Could not connect file events:', error);
     }
   }
 

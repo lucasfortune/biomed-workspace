@@ -98,6 +98,14 @@ function initializeSocketHandlers(io, logger) {
       return originalJoin(room);
     };
 
+    // Every socket of an authenticated session sits in that session's own
+    // room, so the server can tell the client's file browser about changes
+    // to the workspace file list (workspace-files-changed)
+    const ownSession = socket.request?.session?.id;
+    if (ownSession && socket.request?.session?.user) {
+      originalJoin(`session-${ownSession}`);
+    }
+
     // Register training event handlers
     registerTrainingHandlers(socket, logger);
 

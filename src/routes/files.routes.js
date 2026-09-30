@@ -242,6 +242,7 @@ function createFilesRoutes(dependencies) {
       const others = (file.tags || []).filter(t => t !== 'raw' && t !== 'annotation');
       file.tags = [kind, ...others];
       workspaceManager.saveMetadata(sessionId, metadata);
+      workspaceManager.notifyFilesChanged(sessionId);
 
       if (activityLogger) {
         activityLogger.logActivity(req.session.user.username, 'file_kind_changed', { fileId, kind });

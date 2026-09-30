@@ -354,6 +354,7 @@ function createAnnotationRoutes(dependencies) {
       }
       workspaceManager.saveMetadata(sessionId, fresh);
       workspaceManager.invalidateFileCaches(sessionId, fileId);
+      workspaceManager.notifyFilesChanged(sessionId);
 
       if (!sidecarRow) {
         workspaceManager.addFileToMetadata(sessionId, {
