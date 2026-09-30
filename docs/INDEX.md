@@ -1,6 +1,6 @@
 # Developer Documentation
 
-Technical documentation for the BioMed Workspace (version 1.8.0). For using
+Technical documentation for the BioMed Workspace (version 1.9.0). For using
 the platform, see the
 [user documentation](https://lucasfortune.github.io/the-virtual-parasite/workspace/);
 the in-app help articles live in `public/workspace/content/` and are synced
@@ -61,6 +61,7 @@ A starting point for new modules is the template in
 | [ADR-013](decisions/013_annotation_interpolation_and_hidden_class_protection.md) | Annotation slice interpolation and hidden-class protection |
 | [ADR-014](decisions/014_training_data_partial_annotations_and_pairs.md) | Training data: partial annotations, multiple pairs, correction loop |
 | [ADR-015](decisions/015_bioimageio_import_and_tiled_inference.md) | bioimage.io model import and tiled inference |
+| [ADR-016](decisions/016_bioimageio_export.md) | Export of workspace U-Nets as bioimage.io packages |
 
 ---
 
