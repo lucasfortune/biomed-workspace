@@ -117,6 +117,35 @@ class FileSelector {
   }
 
   /**
+   * A label map usable as a mask: an uploaded annotation, an annotation made
+   * in the workspace (results, ADR-018) or a segmentation result. Never a
+   * work-in-progress annotation or a sidecar.
+   * @param {Object} f - Workspace file row
+   * @returns {boolean}
+   */
+  static isLabelMask(f) {
+    const tags = (f && f.tags) || [];
+    if (tags.includes('wip') || tags.includes('info') || tags.includes('recipe') || tags.includes('report')) return false;
+    if (f.category === 'uploads') return tags.includes('annotation');
+    if (f.category === 'results') return tags.includes('data') && (tags.includes('annotation') || tags.includes('segmentation'));
+    return false;
+  }
+
+  /**
+   * Image data usable as a raw stack: an uploaded raw image, or a result
+   * that is still raw data (preprocessed, stitched or denoised stacks).
+   * @param {Object} f - Workspace file row
+   * @returns {boolean}
+   */
+  static isImageStack(f) {
+    const tags = (f && f.tags) || [];
+    if (tags.includes('wip') || tags.includes('info')) return false;
+    if (f.category === 'uploads') return tags.includes('raw');
+    if (f.category === 'results') return tags.includes('data') && (tags.includes('raw') || tags.includes('denoising'));
+    return false;
+  }
+
+  /**
    * Render the file selector HTML
    * @returns {string} HTML string
    */
@@ -668,8 +697,11 @@ class FileSelector {
    */
   async uploadFile(file) {
     const formData = new FormData();
-    formData.append(this.uploadCategory, file);
-    formData.append('category', this.uploadCategory);
+    formData.append('file', file);
+    // The selector knows what it asked for: pass it as the kind hint, which
+    // wins over the server's content probe for images (ADR-018)
+    const hint = this.uploadKindHint();
+    if (hint) formData.append('kind', hint);
 
     const response = await fetch(this.uploadEndpoint, {
       method: 'POST',
@@ -683,6 +715,23 @@ class FileSelector {
 
     const result = await response.json();
     return result.file;
+  }
+
+  /**
+   * Kind hint for uploads made through this selector, from its configuration
+   * (uploadCategory / filterTags / fileType). Null when unknown.
+   * @returns {string|null} 'raw' | 'annotation' | 'model' | null
+   */
+  uploadKindHint() {
+    const cat = String(this.uploadCategory || '').toLowerCase();
+    if (['annotations', 'annotation'].includes(cat)) return 'annotation';
+    if (['raw_images', 'raw', 'inference_data'].includes(cat)) return 'raw';
+    if (['imported_models', 'models', 'model'].includes(cat)) return 'model';
+    const tags = this.filterTags || [];
+    if (tags.includes('annotation')) return 'annotation';
+    if (tags.includes('raw')) return 'raw';
+    if (this.fileType === 'models') return 'model';
+    return null;
   }
 
   /**

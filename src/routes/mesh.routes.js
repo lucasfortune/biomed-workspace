@@ -229,14 +229,17 @@ function createMeshRoutes(dependencies) {
 
       // Resolve file path
       let filePath;
+      let cacheKey = null;
       if (path.isAbsolute(fileId)) {
         filePath = fileId;
       } else {
         const metadata = workspaceManager.loadMetadata(sessionId);
-        const file = metadata?.files?.find(f => f.id === fileId);
+        const file = metadata?.files?.find(f => f.id === fileId)
+          || metadata?.files?.find(f => f.path === fileId);
 
         if (file) {
           filePath = path.join(workspacePath, file.path);
+          cacheKey = file.id;
         } else {
           filePath = path.join(workspacePath, fileId);
         }
@@ -255,8 +258,11 @@ function createMeshRoutes(dependencies) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }
 
-      // Generate cache filename
-      const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32);
+      // Cache key: the tracked file id (ADR-018). The legacy key (first 32
+      // base64 characters of the absolute path) was identical for every file
+      // of a workspace; it stays only as the fallback for untracked paths.
+      const fileHash = cacheKey
+        || require('crypto').createHash('sha1').update(filePath).digest('hex').substring(0, 16);
       const cacheFilename = `${fileHash}_${sliceIndex}_${size}.jpg`;
       const cachePath = path.join(cacheDir, cacheFilename);
 
@@ -361,12 +367,13 @@ function createMeshRoutes(dependencies) {
         });
       }
 
-      // Generate mesh ID
+      // Generate mesh ID (job key for the session map and socket room)
       const meshId = `mesh_${Date.now()}_${uuid.v4().substring(0, 8)}`;
 
-      // Create output directory
-      const outputDir = path.join(workspacePath, 'results', 'meshes', meshId);
-      fs.mkdirSync(outputDir, { recursive: true });
+      // Run folder results/meshes/mesh<n>/ (ADR-018). The mesh files keep
+      // their conventional names inside it (mesh.obj references mesh.mtl by
+      // name, and the visualization loads mesh_data.json).
+      const outputDir = workspaceManager.allocateRun(sessionId, 'mesh', ['results/meshes']).dirs['results/meshes'];
 
       // Store mesh session
       sessionTracker.meshSessions.set(meshId, {
@@ -485,14 +492,27 @@ function createMeshRoutes(dependencies) {
               meshSession.endTime = new Date();
               meshSession.result = result;
 
-              // Track output files in workspace metadata with lineage
-              trackMeshOutputs(meshSession.sessionId, outputDir, result, meshSession.sourceFileId, meshId);
+              // Track output files in workspace metadata with lineage; the
+              // tracked ids let the client hand the mesh to the visualization
+              // module without rebuilding a path from the job id
+              trackMeshOutputs(meshSession.sessionId, outputDir, result, meshSession.sourceFileId, meshId)
+                .then((tracked) => {
+                  result.output_rel_dir = path.relative(
+                    workspaceManager.getWorkspacePath(meshSession.sessionId), outputDir
+                  ).replace(/\\/g, '/');
+                  result.files = tracked;
+                  const json = tracked.find(t => t.name === 'mesh_data.json');
+                  if (json) {
+                    result.json_file_id = json.id;
+                    result.json_file_path = json.path;
+                  }
 
-              // Emit completion
-              io.to(`mesh-${meshId}`).emit('mesh-complete', {
-                mesh_id: meshId,
-                ...result
-              });
+                  // Emit completion
+                  io.to(`mesh-${meshId}`).emit('mesh-complete', {
+                    mesh_id: meshId,
+                    ...result
+                  });
+                });
 
               if (activityLogger) {
                 activityLogger.logActivity(
@@ -568,14 +588,18 @@ function createMeshRoutes(dependencies) {
       // Track each output file
       // New metadata system: results category with mesh/data or mesh/info tags
       // Format tag (json, obj, mtl, stl) added for filtering in visualization module
+      // The .mtl and the metadata are companions of the .obj / the mesh data
+      // (parentId): deleting the main file removes them too
       const filesToTrack = [
-        { name: 'mesh_data.json', tags: ['mesh', 'data', 'json'], ext: '.json' },
-        { name: 'mesh.obj', tags: ['mesh', 'data', 'obj'], ext: '.obj' },
-        { name: 'mesh.mtl', tags: ['mesh', 'data', 'mtl'], ext: '.mtl' },
-        { name: 'mesh.stl', tags: ['mesh', 'data', 'stl'], ext: '.stl' },
-        { name: 'metadata.json', tags: ['mesh', 'info'], ext: '.json', info: true }
+        { name: 'mesh_data.json', tags: ['mesh', 'data', 'json'], ext: '.json', main: true },
+        { name: 'mesh.obj', tags: ['mesh', 'data', 'obj'], ext: '.obj', main: true },
+        { name: 'mesh.mtl', tags: ['mesh', 'data', 'mtl'], ext: '.mtl', parent: 'mesh.obj' },
+        { name: 'mesh.stl', tags: ['mesh', 'data', 'stl'], ext: '.stl', main: true },
+        { name: 'metadata.json', tags: ['mesh', 'info'], ext: '.json', info: true, parent: 'mesh_data.json' }
       ];
 
+      const tracked = [];
+      const idByName = {};
       for (const file of filesToTrack) {
         const filePath = path.join(outputDir, file.name);
         if (fs.existsSync(filePath)) {
@@ -589,7 +613,8 @@ function createMeshRoutes(dependencies) {
             qualifier: file.info ? 'info' : undefined
           });
 
-          workspaceManager.addFileToMetadata(sessionId, {
+          const parentId = file.parent ? (idByName[file.parent] || idByName['mesh.obj'] || idByName['mesh_data.json'] || null) : null;
+          const entry = workspaceManager.addFileToMetadata(sessionId, {
             name: file.name,
             path: relativePath,
             category: 'results',
@@ -597,13 +622,20 @@ function createMeshRoutes(dependencies) {
             size: stats.size,
             folderId: null,
             displayName,
-            // Include lineage if available
-            ...(lineage && { lineage })
+            ...(parentId && { parentId }),
+            // Include lineage if available (a fresh record per row)
+            ...(lineage && { lineage: { ...lineage, inputs: [...lineage.inputs] } })
           });
+          if (entry) {
+            idByName[file.name] = entry.id;
+            tracked.push({ id: entry.id, name: file.name, path: entry.path, displayName: entry.displayName || entry.name });
+          }
         }
       }
+      return tracked;
     } catch (error) {
       if (logger) logger.error('Error tracking mesh outputs:', error);
+      return [];
     }
   }
 

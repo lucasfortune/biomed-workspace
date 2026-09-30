@@ -363,22 +363,10 @@ body {
   flex-shrink: 0;
 }
 
-.fb-category-dropdown {
-  width: 100%;
-  padding: 6px 10px;
-  font-size: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background-color: var(--darker-bg);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.fb-category-dropdown:hover,
-.fb-category-dropdown:focus {
-  border-color: var(--primary-color);
-  outline: none;
+.fb-upload-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .fb-btn-upload {
@@ -2326,10 +2314,6 @@ body {
 }
 
 /* Workspace option separator in dropdown */
-.fb-category-dropdown option.fb-option-workspace {
-  border-top: 1px solid var(--border-color);
-  font-style: italic;
-}
 
 /* Modal animations */
 @keyframes modalFadeIn {

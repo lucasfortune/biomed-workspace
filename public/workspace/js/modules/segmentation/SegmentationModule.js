@@ -1673,7 +1673,11 @@ class SegmentationModule extends BaseModule {
    * Reset entire workflow (frontend only - files are preserved in workspace)
    */
   async resetWorkflow() {
-    const confirmed = confirm('Start a new run? This resets the current workflow. Your workspace files will be preserved.');
+    const confirmed = await window.Dialog.confirm({
+      title: 'Start a new run',
+      message: 'This resets the current workflow. Your workspace files are kept.',
+      confirmLabel: 'Start new run'
+    });
 
     if (confirmed) {
       console.log('[SegmentationModule] Resetting workflow (frontend only)...');

@@ -8,51 +8,59 @@ tags:
   - upload
   - drag-drop
   - mrc
+  - detection
 seeAlsoManual:
   - file-browser
   - file-browser.categories
+  - file-browser.workspace-backup
 seeAlsoTags:
   - upload
 ---
 
 # Uploading Files
 
-Upload TIFF images, model files, or restore a workspace backup using the category dropdown and upload button or drag-and-drop.
+Upload images, annotations, model files, bioimage.io packages or a workspace backup with the Upload button or by dropping files onto the sidebar. You do not choose what kind of file it is: the workspace detects the kind from the file.
 
 ## How to Upload
 
-1. Select a category from the dropdown: Raw Images, Annotations, Model Files, or Restore Workspace (ZIP)
+1. Click Upload and pick one or more files, or drag them onto the sidebar
 
-2. Click Upload or drag files onto the sidebar
+2. Wait for the upload to finish
 
-3. Wait for upload to complete
+3. Read the notification: it names each file and the kind it was filed as
 
-## Supported File Types
+## What is Detected
 
-- Raw Images, Annotations: TIFF stacks (.tif, .tiff) or MRC volumes (.mrc)
+- TIFF stacks (.tif, .tiff) and MRC volumes (.mrc): the content decides. An integer stack with at most 100 distinct values is filed as an annotation, everything else as raw image data. MRC volumes are converted to TIFF on import, voxel size included (ADR-010).
 
-- Model Files: PyTorch weights (.pth) and config files (.json)
+- PyTorch weights (.pth, .pt) and configuration files (.json): model files, stored under `models/imported`
 
-- Restore Workspace: ZIP files from a previous workspace download
+- ZIP archives: a bioimage.io package (it contains an `rdf.yaml`) is stored under `models/imported`; a workspace backup (it contains a `metadata.json`) opens the restore confirmation instead of being stored (see Workspace Backup & Restore). Other archives are refused.
 
-## MRC Import
+Files keep their original names. A second file with the same name gets a numbered suffix on disk and a "(2)" in its display name.
 
-MRC volumes (.mrc) are accepted wherever TIFF images are — pick Raw Images or Annotations and upload the .mrc file. It is imported alongside your TIFF stacks and can be worked with the same way (ADR-010).
+## Wrong Guess?
+
+A small 8-bit image with few grey levels can be taken for an annotation. Right-click the file and choose Mark as raw image (or Mark as annotation) to change the kind. Only the tags change; the file stays where it is.
+
+Uploads made from inside a module (the Add button of a file selector) are filed as the kind that selector asks for, so no guessing happens there.
 
 ## File Size Limits
 
-- Individual files: 200 MB maximum
+- Images: 200 MB per file
 
-- Workspace ZIP: 5 GB maximum
+- Model files and packages: 2 GB per file
+
+- Workspace ZIP: 5 GB
 
 ## Drag and Drop
 
-You can drag files directly onto the sidebar. Make sure to select a category first — the overlay will show where files will be uploaded.
+Drop files anywhere on the sidebar. Several files of different kinds can be dropped at once.
 
 ## Tips
 
-- Upload all related files together (e.g., raw images and their annotations)
+- Upload all related files together (raw images and their annotations)
 
-- Use descriptive filenames for easier identification
+- Use descriptive file names; derived files inherit the name of their source
 
 - Recently uploaded files show a 'NEW' badge briefly

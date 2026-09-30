@@ -220,6 +220,40 @@ function createFilesRoutes(dependencies) {
   // ===========================================================================
 
   /**
+   * Change the kind of an uploaded image (raw <-> annotation), for the rare
+   * upload whose content the server guessed wrong (ADR-018). Tags only; the
+   * file stays where it is.
+   * PATCH /api/workspace/file/:fileId/kind   body: { kind: 'raw' | 'annotation' }
+   */
+  router.patch('/file/:fileId/kind', requireAuth, async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const kind = String((req.body && req.body.kind) || '').toLowerCase();
+      if (!['raw', 'annotation'].includes(kind)) {
+        return res.status(400).json({ success: false, error: "kind must be 'raw' or 'annotation'" });
+      }
+      const sessionId = req.session.id;
+      const metadata = workspaceManager.loadMetadata(sessionId);
+      const file = (metadata.files || []).find(f => f.id === fileId);
+      if (!file) return res.status(404).json({ success: false, error: 'File not found' });
+      if (file.category !== 'uploads' || !/\.tiff?$/i.test(file.name || '')) {
+        return res.status(400).json({ success: false, error: 'Only uploaded TIFF images can change kind' });
+      }
+      const others = (file.tags || []).filter(t => t !== 'raw' && t !== 'annotation');
+      file.tags = [kind, ...others];
+      workspaceManager.saveMetadata(sessionId, metadata);
+
+      if (activityLogger) {
+        activityLogger.logActivity(req.session.user.username, 'file_kind_changed', { fileId, kind });
+      }
+      res.json({ success: true, file });
+    } catch (error) {
+      if (logger) logger.error('Change kind error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  /**
    * Duplicate a TIFF stack
    * POST /api/workspace/file/:fileId/duplicate
    */
@@ -244,18 +278,16 @@ function createFilesRoutes(dependencies) {
         return res.status(404).json({ success: false, error: 'Source file not found' });
       }
 
-      // Generate output filename: original_copy.tif (handle conflicts)
-      const baseName = path.basename(file.name, ext);
+      // Output next to the source; the file carries its display name
+      // (<source>_copy.tif) on disk, conflict-safe (ADR-018)
       const dirPath = path.dirname(inputPath);
-      let outputName = `${baseName}_copy${ext}`;
-      let outputPath = path.join(dirPath, outputName);
-      let counter = 1;
-
-      while (fs.existsSync(outputPath)) {
-        outputName = `${baseName}_copy_${counter}${ext}`;
-        outputPath = path.join(dirPath, outputName);
-        counter++;
-      }
+      const displayName = buildDisplayName({
+        sourceName: file.displayName || file.name,
+        operation: 'duplicate',
+        ext
+      });
+      const outputName = workspaceManager.physicalNameFor(dirPath, displayName);
+      const outputPath = path.join(dirPath, outputName);
 
       // Run Python script
       const pythonProcess = spawn(PYTHON_PATH, [
@@ -284,11 +316,7 @@ function createFilesRoutes(dependencies) {
               size: result.size,
               tags: file.tags || [],
               ...(file.voxelSize && { voxelSize: file.voxelSize }),
-              displayName: buildDisplayName({
-                sourceName: file.displayName || file.name,
-                operation: 'duplicate',
-                ext: path.extname(outputName)
-              }),
+              displayName,
               lineage: {
                 processType: 'duplicate',
                 inputs: [fileId],
@@ -360,17 +388,16 @@ function createFilesRoutes(dependencies) {
         return res.status(404).json({ success: false, error: 'Source file not found' });
       }
 
-      // Output next to the source, conflict-safe
-      const baseName = path.basename(file.name, path.extname(file.name));
+      // Output next to the source; the file carries its display name
+      // (<source>_conv.<format>) on disk, conflict-safe (ADR-018)
       const dirPath = path.dirname(inputPath);
-      let outputName = `${baseName}.${format}`;
-      let outputPath = path.join(dirPath, outputName);
-      let counter = 1;
-      while (fs.existsSync(outputPath)) {
-        outputName = `${baseName}_${counter}.${format}`;
-        outputPath = path.join(dirPath, outputName);
-        counter++;
-      }
+      const displayName = buildDisplayName({
+        sourceName: file.displayName || file.name,
+        operation: 'convert',
+        ext: `.${format}`
+      });
+      const outputName = workspaceManager.physicalNameFor(dirPath, displayName);
+      const outputPath = path.join(dirPath, outputName);
 
       const args = ['python/convert_file.py', '--input', inputPath, '--output', outputPath];
       if (format === 'mrc' && file.voxelSize) {
@@ -399,11 +426,7 @@ function createFilesRoutes(dependencies) {
               tags: isMesh ? ['mesh', 'data', format]
                            : [...new Set([...(file.tags || []), 'converted'])],
               ...(voxelSize && { voxelSize }),
-              displayName: buildDisplayName({
-                sourceName: file.displayName || file.name,
-                operation: 'convert',
-                ext: `.${format}`
-              }),
+              displayName,
               lineage: {
                 processType: 'convert',
                 inputs: [fileId],
@@ -477,11 +500,19 @@ function createFilesRoutes(dependencies) {
         return res.status(404).json({ success: false, error: 'Source file not found' });
       }
 
-      // Generate output filenames
-      const baseName = path.basename(file.name, ext);
+      // Output next to the source; the parts carry their display names
+      // (<source>_split_part1.tif) on disk, conflict-safe (ADR-018)
       const dirPath = path.dirname(inputPath);
-      const output1Path = path.join(dirPath, `${baseName}_part1${ext}`);
-      const output2Path = path.join(dirPath, `${baseName}_part2${ext}`);
+      const partName = (qualifier) => buildDisplayName({
+        sourceName: file.displayName || file.name,
+        operation: 'split',
+        ext,
+        qualifier
+      });
+      const display1 = partName('part1');
+      const display2 = partName('part2');
+      const output1Path = path.join(dirPath, workspaceManager.physicalNameFor(dirPath, display1));
+      const output2Path = path.join(dirPath, workspaceManager.physicalNameFor(dirPath, display2));
 
       // Run Python script
       const pythonProcess = spawn(PYTHON_PATH, [
@@ -512,12 +543,7 @@ function createFilesRoutes(dependencies) {
               size: result.part1.size,
               tags: file.tags || [],
               ...(file.voxelSize && { voxelSize: file.voxelSize }),
-              displayName: buildDisplayName({
-                sourceName: file.displayName || file.name,
-                operation: 'split',
-                ext: path.extname(output1Path),
-                qualifier: 'part1'
-              }),
+              displayName: display1,
               lineage: {
                 processType: 'split',
                 inputs: [fileId],
@@ -533,12 +559,7 @@ function createFilesRoutes(dependencies) {
               size: result.part2.size,
               tags: file.tags || [],
               ...(file.voxelSize && { voxelSize: file.voxelSize }),
-              displayName: buildDisplayName({
-                sourceName: file.displayName || file.name,
-                operation: 'split',
-                ext: path.extname(output2Path),
-                qualifier: 'part2'
-              }),
+              displayName: display2,
               lineage: {
                 processType: 'split',
                 inputs: [fileId],

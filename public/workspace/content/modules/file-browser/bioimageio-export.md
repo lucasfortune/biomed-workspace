@@ -24,7 +24,7 @@ seeAlsoTags:
 
 Turn a U-Net trained in the workspace into a bioimage.io model package that other tools, the model zoo and the workspace itself can run.
 
-Right-click a `.pth` model file under Model Files and choose **Export as bioimage.io package...**. This works for models trained in the Segmentation module and for `.pth` files you imported, as long as they are workspace checkpoints.
+Right-click a `.pth` model file under models in the file browser and choose **Export as bioimage.io package...**. This works for models trained in the Segmentation module and for `.pth` files you imported, as long as they are workspace checkpoints.
 
 ## The dialog
 
@@ -38,7 +38,7 @@ The author recorded in the package is the full name of your account.
 
 The export runs on the server in four stages: loading the checkpoint, tracing the network to TorchScript, writing the package, and running the package's own self-test for both weight formats. It takes a few seconds for a small model and up to a minute for a large one. A package that fails its self-test is not kept; the message names the failing check.
 
-The result is a zip under Model Files, tagged `bioimageio`, with a processing history pointing at the model file and the sample image. It contains the model description (rdf.yaml), the architecture file, the state dict, the TorchScript copy, the test tensors, a cover image and a README with the training settings.
+The result is a zip under models in the file browser, tagged `bioimageio`, with a processing history pointing at the model file and the sample image. It contains the model description (rdf.yaml), the architecture file, the state dict, the TorchScript copy, the test tensors, a cover image and a README with the training settings.
 
 ## Using the package
 

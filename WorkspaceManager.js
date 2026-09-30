@@ -1,8 +1,19 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
-const { resolveDisplayNameCollision } = require('./src/helpers/namingHelpers');
+const { resolveDisplayNameCollision, toPhysicalName, uniqueFileName } = require('./src/helpers/namingHelpers');
 const { CACHE_DIRS } = require('./src/config/constants');
+
+// Manifest schema version written by this code (ADR-018: counters, run
+// folders, results-category annotations, sidecar parentId, model cards with
+// lineage, models never in lineage.inputs)
+const MANIFEST_VERSION = '1.3.0';
+
+// Run folder labels: <prefix><n> directly under results/<module>/ or
+// models/<module>/ (ADR-018). Used to bootstrap counters from old manifests.
+const RUN_LABEL_RE = /^(?:results|models)\/[^/]+\/([a-z]+)(\d+)(?:\/|$)/;
+
+const MODEL_EXTENSIONS = ['.pth', '.pt', '.json', '.zip'];
 
 /**
  * WorkspaceManager - Handles workspace initialization and file management
@@ -52,6 +63,7 @@ class WorkspaceManager {
       'annotations': 'uploads',
       'unfinished_annotations': 'results',
       'unfinished_annotations_sidecar': 'results',
+      'imported_models': 'models',
       // Legacy result categories -> results
       'segmentations': 'results',
       'segmented_stack': 'results',
@@ -109,8 +121,8 @@ class WorkspaceManager {
           // Try to infer from existing tags or default to unspecified
           addTag('unspecified');
         }
-        // Ensure type tag exists (weights, config, info)
-        if (!hasTag('weights') && !hasTag('config') && !hasTag('info')) {
+        // Ensure type tag exists (weights, config, info, card)
+        if (!hasTag('weights') && !hasTag('config') && !hasTag('info') && !hasTag('card')) {
           // Infer from filename
           if (fileName) {
             const ext = path.extname(fileName).toLowerCase();
@@ -197,9 +209,10 @@ class WorkspaceManager {
       sessionId: sessionId,
       createdAt: new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
-      version: '1.2.0',
+      version: MANIFEST_VERSION,
       files: [],
-      folders: []
+      folders: [],
+      counters: {}
     };
 
     this.saveMetadata(sessionId, metadata);
@@ -334,9 +347,10 @@ class WorkspaceManager {
         sessionId,
         createdAt: new Date().toISOString(),
         lastAccessed: new Date().toISOString(),
-        version: '1.2.0',
+        version: MANIFEST_VERSION,
         files: [],
-        folders: []
+        folders: [],
+        counters: {}
       };
     }
 
@@ -427,10 +441,192 @@ class WorkspaceManager {
       }
     }
 
+    if (this.normalizeManifest130(metadata)) {
+      changed = true;
+    }
+
     if (changed) {
-      metadata.version = '1.2.0';
+      metadata.version = MANIFEST_VERSION;
     }
     return changed;
+  }
+
+  /**
+   * ADR-018 (schema 1.3.0) upgrade rules, applied on every read:
+   * - `counters` bootstrapped from the highest run label per prefix
+   * - module-written annotations that were category 'uploads' become 'results'
+   *   (tags annotation + data); their class sidecars get lineage
+   * - pre-1.8 model uploads (uploads + raw with a model extension) move to
+   *   'models' with method/type tags
+   * - model ids in lineage.inputs (ADR-016/017 exports and fine-tunes) move
+   *   to lineage.modelFileId (inputs stay data-only, ADR-012)
+   * - zoo model cards get 'bioimageio-import' lineage and the 'card' type tag
+   * - sidecars (info/config/recipe rows) without parentId are linked to the
+   *   main output of the same run folder and processId
+   * @param {object} metadata - Parsed manifest (mutated in place)
+   * @returns {boolean} True when anything was changed
+   */
+  normalizeManifest130(metadata) {
+    let changed = false;
+    const files = metadata.files || [];
+    const byId = new Map(files.map(f => [f.id, f]));
+    const hasTag = (f, t) => Array.isArray(f.tags) && f.tags.includes(t);
+    const addTag = (f, t) => { if (!hasTag(f, t)) { f.tags = [...(f.tags || []), t]; changed = true; } };
+    const dropTag = (f, t) => { if (hasTag(f, t)) { f.tags = f.tags.filter(x => x !== t); changed = true; } };
+
+    for (const f of files) {
+      const p = String(f.path || '').replace(/\\/g, '/');
+      const ext = path.extname(f.name || p).toLowerCase();
+
+      // Module-written annotations that were filed as uploads (copies,
+      // conversions and splits of an upload legitimately stay uploads)
+      if (f.category === 'uploads' && f.lineage && f.lineage.processType === 'annotation') {
+        f.category = 'results';
+        if (!['data', 'wip', 'info'].some(t => hasTag(f, t))) addTag(f, 'data');
+        changed = true;
+      }
+
+      // Pre-1.8 model uploads stored as raw uploads
+      if (f.category === 'uploads' && hasTag(f, 'raw') && MODEL_EXTENSIONS.includes(ext)) {
+        f.category = 'models';
+        f.tags = ext === '.zip' ? ['bioimageio', 'weights']
+          : ext === '.json' ? ['unspecified', 'config']
+          : ['unspecified', 'weights'];
+        changed = true;
+      }
+
+      // Models never sit in lineage.inputs
+      const lin = f.lineage;
+      if (lin && Array.isArray(lin.inputs)) {
+        const modelIds = lin.inputs.filter(id => byId.get(id) && byId.get(id).category === 'models');
+        if (modelIds.length) {
+          lin.inputs = lin.inputs.filter(id => !modelIds.includes(id));
+          if (!lin.modelFileId) lin.modelFileId = modelIds[0];
+          changed = true;
+        }
+      }
+
+      // Zoo model cards
+      if (f.category === 'models' && hasTag(f, 'bioimageio') && /^models\/bioimageio\/(?!exports\/)[^/]+\/model_card\.json$/.test(p)) {
+        if (hasTag(f, 'info')) { dropTag(f, 'info'); addTag(f, 'card'); }
+        if (!f.lineage) {
+          f.lineage = {
+            processType: 'bioimageio-import',
+            processedAt: f.uploadedAt || new Date().toISOString(),
+            inputs: [],
+            processId: path.posix.basename(path.posix.dirname(p))
+          };
+          changed = true;
+        }
+      }
+    }
+
+    // Sidecars that already point at a parent inherit its lineage
+    for (const f of files) {
+      if (!f.parentId || f.lineage) continue;
+      const parent = byId.get(f.parentId);
+      if (parent && parent.lineage) {
+        f.lineage = { ...parent.lineage, inputs: [...(parent.lineage.inputs || [])] };
+        changed = true;
+      }
+    }
+
+    // Sidecars: link to the main output of the same folder and run
+    for (const f of files) {
+      if (f.parentId || f.category === 'uploads' || !Array.isArray(f.tags)) continue;
+      const isSidecar = ['info', 'config', 'recipe'].some(t => f.tags.includes(t)) && !f.tags.includes('card');
+      if (!isSidecar) continue;
+      const dir = path.posix.dirname(String(f.path || '').replace(/\\/g, '/'));
+      const runId = f.lineage && f.lineage.processId;
+      const main = files.find(g => g !== f && g.category === f.category
+        && path.posix.dirname(String(g.path || '').replace(/\\/g, '/')) === dir
+        && Array.isArray(g.tags) && (g.tags.includes('data') || g.tags.includes('weights') || g.tags.includes('wip'))
+        && (!runId || (g.lineage && g.lineage.processId === runId)));
+      if (main) {
+        f.parentId = main.id;
+        if (!f.lineage && main.lineage) f.lineage = { ...main.lineage, inputs: [...(main.lineage.inputs || [])] };
+        changed = true;
+      }
+    }
+
+    // Counters: bootstrap from the highest label per prefix
+    if (!metadata.counters || typeof metadata.counters !== 'object') {
+      metadata.counters = {};
+      changed = true;
+    }
+    for (const f of files) {
+      const m = RUN_LABEL_RE.exec(String(f.path || '').replace(/\\/g, '/'));
+      if (!m) continue;
+      const n = parseInt(m[2], 10);
+      if ((metadata.counters[m[1]] || 0) < n) {
+        metadata.counters[m[1]] = n;
+        changed = true;
+      }
+    }
+
+    return changed;
+  }
+
+  /**
+   * Allocate the next run folder label for a module prefix (ADR-018) and
+   * create the folder(s): results/segmentation/seg3/, models/segmentation/
+   * train2/, ... The counter lives in the manifest (per workspace, per
+   * prefix, monotonic); a label whose folder already exists on disk (a
+   * restored backup without counters) is skipped.
+   * @param {string} sessionId - Session ID
+   * @param {string} prefix - Short module prefix (seg, train, dn, prep, ...)
+   * @param {string[]} areas - Workspace-relative parent dirs, e.g. ['results/segmentation']
+   * @returns {{label: string, dirs: Object<string,string>, relDirs: Object<string,string>}}
+   *   absolute and workspace-relative run directories keyed by area
+   */
+  allocateRun(sessionId, prefix, areas) {
+    const workspacePath = this.getWorkspacePath(sessionId);
+    const metadata = this.loadMetadata(sessionId);
+    if (!metadata.counters) metadata.counters = {};
+    let n = (metadata.counters[prefix] || 0) + 1;
+    const taken = (k) => areas.some(a => fs.existsSync(path.join(workspacePath, a, `${prefix}${k}`)));
+    while (taken(n)) n += 1;
+    metadata.counters[prefix] = n;
+    this.saveMetadata(sessionId, metadata);
+
+    const label = `${prefix}${n}`;
+    const dirs = {};
+    const relDirs = {};
+    for (const area of areas) {
+      const rel = path.posix.join(area, label);
+      const abs = path.join(workspacePath, area, label);
+      fs.mkdirSync(abs, { recursive: true });
+      dirs[area] = abs;
+      relDirs[area] = rel;
+    }
+    return { label, dirs, relDirs };
+  }
+
+  /**
+   * Physical file name for a display name (ADR-018), unique inside `dir`.
+   * @param {string} dir - Absolute directory the file will live in
+   * @param {string} displayName - The display name the row will carry
+   * @returns {string}
+   */
+  physicalNameFor(dir, displayName) {
+    return uniqueFileName(dir, toPhysicalName(displayName));
+  }
+
+  /**
+   * Move a produced file onto its display name inside its directory and
+   * return the new absolute path (no-op when the name already matches).
+   * @param {string} absPath - Current absolute path
+   * @param {string} displayName - Display name to mirror on disk
+   * @returns {string} Absolute path after the rename
+   */
+  adoptDisplayName(absPath, displayName) {
+    if (!absPath || !fs.existsSync(absPath)) return absPath;
+    const dir = path.dirname(absPath);
+    const wanted = toPhysicalName(displayName);
+    if (path.basename(absPath) === wanted) return absPath;
+    const target = path.join(dir, uniqueFileName(dir, wanted));
+    fs.renameSync(absPath, target);
+    return target;
   }
 
   /**
@@ -685,7 +881,7 @@ class WorkspaceManager {
     }
 
     // Clean up mesh preview cache files
-    this.cleanupMeshPreviewCache(workspacePath, filePath);
+    this.cleanupMeshPreviewCache(workspacePath, filePath, fileId);
 
     // Clean up empty .thumbnails directory
     const thumbnailsDir = path.join(workspacePath, '.thumbnails');
@@ -756,7 +952,7 @@ class WorkspaceManager {
       if (fs.existsSync(localSlicesDir)) {
         this.cleanupDirectorySliceCache(localSlicesDir, fileId);
       }
-      this.cleanupMeshPreviewCache(workspacePath, filePath);
+      this.cleanupMeshPreviewCache(workspacePath, filePath, fileId);
     } catch (error) {
       // Cache invalidation is best-effort; stale caches are a lesser evil
       // than failing the rewrite operation
@@ -765,14 +961,15 @@ class WorkspaceManager {
 
   /**
    * Clean up slice cache files for a given file
-   * Handles all cache naming conventions:
+   * Handles all cache naming conventions (ADR-018: every cache is keyed by
+   * file id; the path-hashed keys below are legacy and only cleaned up):
    *   - Standard slices: {fileId}_{slice}_{size}.jpg
-   *   - Annotation slices: raw_{sha1-16 of filePath}_{slice}.png
-   *     (legacy: {base64-32 of filePath}_{slice}_raw.png, a key that collided across files)
-   *   - DL denoising slices: dl_{pathHash}_{slice}_{size}.jpg (pathHash = md5 of normalized path)
+   *   - Annotation slices: raw_{fileId}_{slice}.png
+   *     (legacy: raw_{sha1-16 of path}_{slice}.png and {base64-32 of path}_{slice}_raw.png)
+   *   - DL denoising slices: dl_{fileId}_{slice}_{size}.jpg (legacy: dl_{md5-8 of path}_...)
    * @param {string} workspacePath - Workspace path
    * @param {string} fileId - File ID
-   * @param {string} filePath - Full file path (for computing path-based hashes)
+   * @param {string} filePath - Full file path (for computing legacy path-based hashes)
    */
   cleanupSliceCache(workspacePath, fileId, filePath) {
     const slicesDir = path.join(workspacePath, '.slices');
@@ -784,7 +981,7 @@ class WorkspaceManager {
       const files = fs.readdirSync(slicesDir);
 
       // Build all possible prefixes for this file's cache entries
-      const prefixes = [`${fileId}_`];
+      const prefixes = [`${fileId}_`, `raw_${fileId}_`, `dl_${fileId}_`];
 
       if (filePath) {
         // Annotation raw-slice cache prefix (sha1 of the full path; see annotation.routes.js)
@@ -855,23 +1052,27 @@ class WorkspaceManager {
   }
 
   /**
-   * Clean up mesh preview cache files for a given file path
+   * Clean up mesh preview cache files for a file (keyed by file id since
+   * ADR-018; the legacy key was the first 24 bytes of the absolute path)
    * @param {string} workspacePath - Workspace path
-   * @param {string} filePath - Full file path
+   * @param {string} filePath - Full file path (legacy key)
+   * @param {string} [fileId] - File ID (current key)
    */
-  cleanupMeshPreviewCache(workspacePath, filePath) {
+  cleanupMeshPreviewCache(workspacePath, filePath, fileId = null) {
     const meshPreviewsDir = path.join(workspacePath, '.mesh-previews');
     if (!fs.existsSync(meshPreviewsDir)) {
       return;
     }
 
     try {
-      // Generate the same hash used when creating previews
-      const fileHash = Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32);
+      const prefixes = [];
+      if (fileId) prefixes.push(`${fileId}_`);
+      if (filePath) {
+        prefixes.push(`${Buffer.from(filePath).toString('base64').replace(/[/+=]/g, '_').substring(0, 32)}_`);
+      }
       const files = fs.readdirSync(meshPreviewsDir);
-      const prefix = `${fileHash}_`;
       for (const file of files) {
-        if (file.startsWith(prefix)) {
+        if (prefixes.some(prefix => file.startsWith(prefix))) {
           fs.unlinkSync(path.join(meshPreviewsDir, file));
         }
       }
@@ -1071,14 +1272,17 @@ class WorkspaceManager {
       fs.mkdirSync(dirPath, { recursive: true });
     });
 
-    // Reset metadata (keeping session ID and timestamps)
+    // Reset metadata (keeping session ID and timestamps). Counters restart
+    // at 1: caches are id-keyed, so a reused run label cannot serve stale
+    // slices of a deleted file.
     const newMetadata = {
       sessionId: sessionId,
       createdAt: metadata.createdAt || new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
-      version: '1.2.0',
+      version: MANIFEST_VERSION,
       files: [],
-      folders: []
+      folders: [],
+      counters: {}
     };
 
     this.saveMetadata(sessionId, newMetadata);

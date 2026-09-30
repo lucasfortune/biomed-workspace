@@ -46,7 +46,7 @@ Tick "Show all runnable models" to lift the tag filter. Denoising models will th
 
 - Only the model description is fetched; the weights are downloaded when the first run starts. The server keeps one shared copy, so later runs and other users do not download again.
 
-- A small model card is written to your workspace under Model Files. Every result the model produces records that card in its lineage.
+- A small model card is written to your workspace under models in the file browser. Every result the model produces records that card in its lineage.
 
 - The card in this step shows the input geometry, the number of output channels, the weight format, the license and the citation. Zoo models are published under their own licenses; cite them when you use their output.
 

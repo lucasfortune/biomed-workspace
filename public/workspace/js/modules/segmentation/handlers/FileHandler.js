@@ -33,6 +33,12 @@ class FileHandler {
       title: 'Raw Images',
       icon: 'image',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.raw-images'),
+      // Image stacks produced in the workspace (denoised, preprocessed,
+      // stitched) can be annotated and trained on too (ADR-018)
+      showRecentResults: true,
+      resultTags: ['data'],
+      filterRecentResults: (files) => files.filter(FileSelector.isImageStack),
+      resultCategoryLabels: { results: 'Workspace' },
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('raw_images', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('raw_images', file, uploadedInfo)
@@ -45,12 +51,13 @@ class FileHandler {
       title: 'Annotations',
       icon: 'tag',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step1.annotations'),
-      // Segmentation results (inference output, cleanup output) are label
-      // maps too: they pass the same validator and close the
-      // "correct, then retrain" loop (ADR-014)
+      // Annotations made in the workspace (ADR-018) and segmentation results
+      // (inference output, cleanup output) are label maps too: they pass the
+      // same validator and close the "correct, then retrain" loop (ADR-014)
       showRecentResults: true,
-      resultTags: ['segmentation', 'data'],
-      resultCategoryLabels: { results: 'Segmentation' },
+      resultTags: ['data'],
+      filterRecentResults: (files) => files.filter(FileSelector.isLabelMask),
+      resultCategoryLabels: { results: 'Workspace' },
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('annotations', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('annotations', file, uploadedInfo)
@@ -64,7 +71,9 @@ class FileHandler {
       icon: 'image',
       helpIconHtml: Templates.renderHelpIcon('segmentation.step4.inference-data'),
       showRecentResults: true,
-      resultTags: ['denoising', 'data'],
+      resultTags: ['data'],
+      filterRecentResults: (files) => files.filter(FileSelector.isImageStack),
+      resultCategoryLabels: { results: 'Workspace' },
       stateManager: this.module.state,
       onSelect: (fileInfo) => this.onFileSelected('inference_data', fileInfo),
       onUpload: (file, uploadedInfo) => this.onFileUploaded('inference_data', file, uploadedInfo)

@@ -135,6 +135,22 @@ class WorkspaceService {
   }
 
   /**
+   * Rename a produced file onto its display name (ADR-018)
+   * @see WorkspaceManager.adoptDisplayName
+   */
+  adoptDisplayName(absPath, displayName) {
+    return this.workspaceManager.adoptDisplayName(absPath, displayName);
+  }
+
+  /**
+   * Allocate the next run folder for a module prefix (ADR-018)
+   * @see WorkspaceManager.allocateRun
+   */
+  allocateRun(sessionId, prefix, areas) {
+    return this.workspaceManager.allocateRun(sessionId, prefix, areas);
+  }
+
+  /**
    * Delete a file
    * @param {string} sessionId - Session ID
    * @param {string} fileId - File ID

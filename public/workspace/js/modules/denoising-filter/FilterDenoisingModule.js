@@ -253,6 +253,12 @@ class FilterDenoisingModule extends BaseModule {
         title: 'Input Image Stack',
         icon: 'image',
         helpIconHtml: this.renderHelpIcon('denoising-filter.step1.input'),
+        // Image stacks produced in the workspace (preprocessed, stitched,
+        // denoised) can be filtered as well (ADR-018)
+        showRecentResults: true,
+        resultTags: ['data'],
+        filterRecentResults: (files) => files.filter(FileSelector.isImageStack),
+        resultCategoryLabels: { results: 'Workspace' },
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded

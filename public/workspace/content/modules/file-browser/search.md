@@ -17,7 +17,7 @@ seeAlsoTags:
 
 # Search & Filter
 
-Find files quickly by searching filenames or tags.
+Find files quickly by searching names or tags.
 
 ## Search Box
 
@@ -25,9 +25,9 @@ Type in the search box above the file tree to filter files. Results update as yo
 
 ## What You Can Search
 
-## Filenames
+## Names
 
-Any part of the filename matches. 'sample' finds 'sample_001.tif', 'my_sample.tif', etc.
+Any part of the name matches. 'sample' finds 'sample_raw.tif', 'my_sample.tif', etc. The name on disk matches too.
 
 ## Tags
 
@@ -39,15 +39,19 @@ Every file carries tags (shown in the file info panel). A search word matches wh
 
 - 'segmentation', 'segment', 'result' → segmentation results
 
-- 'denoising', 'denoised', 'clean' → denoised stacks
+- 'denoising', 'denoised' → denoised stacks
 
 - 'mesh', '3d', 'surface' → meshes
 
-- 'weights', 'model', 'pth' → model weights; 'config' → model configuration files
+- 'weights', 'model', 'pth' → model weights; 'config' → model configuration files; 'card' → zoo model cards
 
-- 'preprocess', 'stitching', 'segcleanup' → outputs of those modules; 'recipe' → stitching recipes; 'report', 'csv' → quantification reports
+- 'bioimageio', 'zoo', 'package' → bioimage.io packages and cards
 
-- 'test' → the built-in test data
+- 'preprocess', 'stitching', 'segcleanup', 'cleanup' → outputs of those modules; 'recipe' → stitching recipes; 'report', 'csv' → quantification reports
+
+- 'wip', 'progress', 'unfinished' → annotations saved with Save Progress; 'info', 'metadata' → companion files
+
+- 'sample', 'demo', 'built-in' → the built-in sample data
 
 ## Multi-Word Search
 
@@ -57,7 +61,7 @@ Space-separated words use OR logic. 'mesh model' finds files matching 'mesh' OR 
 
 ## When searching, files display in a flat list (not tree) showing:
 
-- Filename
+- Name
 
 - Parent folder path
 

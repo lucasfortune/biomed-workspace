@@ -189,34 +189,15 @@ class DLDenoisingAPI {
   }
 
   /**
-   * Download a file from the server
-   * @param {string} filePath - Path to the file
-   * @returns {Promise<void>}
+   * Download a tracked workspace file (named by its display name)
+   * @param {string} fileId - Workspace file id
    */
-  async downloadFile(filePath) {
-    // Extract filename from path
-    const filename = filePath.split('/').pop();
-
-    // Create download link
-    const response = await fetch(`/api/files/download`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to download file');
-    }
-
-    // Get blob and trigger download
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
+  downloadFile(fileId) {
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
+    a.href = `/api/workspace/file/${encodeURIComponent(fileId)}/download`;
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   }
 }

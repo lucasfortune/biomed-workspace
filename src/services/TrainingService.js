@@ -262,9 +262,6 @@ class TrainingService {
         success: true
       });
 
-      // Track training outputs in file browser
-      await this.trackTrainingOutputs(training.sessionId, params.output_dir);
-
     } else {
       // Failure
       training.status = 'failed';
@@ -282,40 +279,6 @@ class TrainingService {
         success: false,
         error: errorMessage
       });
-    }
-  }
-
-  /**
-   * Track training output files in workspace
-   * @param {string} sessionId - Session ID
-   * @param {string} outputDir - Training output directory
-   */
-  async trackTrainingOutputs(sessionId, outputDir) {
-    // NOTE: This method is currently not called - file tracking is done in src/app.js onComplete callback
-    if (!this.fileService) {
-      if (this.logger) {
-        this.logger.warn('FileService not configured, skipping output tracking');
-      }
-      return;
-    }
-
-    // Track model files with appropriate tags
-    const filesToTrack = [
-      { path: path.join(outputDir, 'best_model.pth'), category: 'models', tags: ['weights', 'segmentation'] },
-      { path: path.join(outputDir, 'config.json'), category: 'models', tags: ['config', 'segmentation'] },
-      { path: path.join(outputDir, 'results.json'), category: 'models', tags: ['info', 'segmentation'] }
-    ];
-
-    for (const file of filesToTrack) {
-      if (fs.existsSync(file.path)) {
-        await this.fileService.trackModuleOutput(sessionId, file.path, file.category, {
-          tags: file.tags
-        });
-
-        if (this.logger) {
-          this.logger.debug(`Tracked training output: ${path.basename(file.path)}`);
-        }
-      }
     }
   }
 
@@ -469,7 +432,7 @@ class TrainingService {
 
       // Remove entries from workspace metadata if any were tracked
       // (typically files aren't tracked until training completes, but clean up just in case)
-      if (this.fileService?.workspaceManager && sessionId) {
+      if (this.fileService?.workspaceService && sessionId) {
         this.removeFromMetadata(outputDir, sessionId, filesToRemove);
       }
 

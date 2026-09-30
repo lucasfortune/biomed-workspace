@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
 const { findRootFiles, getLineageChain, getProcessingHistoryString, findOriginalDataFile } = require('../helpers/lineageHelpers');
+const { KINDS, detectKind, placeUploadedFile } = require('../helpers/uploadKind');
 
 /**
  * Create workspace routes router
@@ -166,45 +167,76 @@ function createWorkspaceRoutes(dependencies) {
   }
 
   // ===========================================================================
-  // FILE UPLOAD
+  // FILE UPLOAD (ADR-018: the server detects what a file is)
   // ===========================================================================
 
+  /** Convert an uploaded MRC to TIFF in place; resolves {path, size, voxelSize} or {error} */
+  function convertMrc(mrcPath) {
+    const tifPath = mrcPath.replace(/\.mrc$/i, '') + '.tif';
+    return new Promise((resolve) => {
+      const proc = spawn(PYTHON_PATH, [
+        'python/convert_file.py', '--input', mrcPath, '--output', tifPath
+      ]);
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (d) => { stdout += d.toString(); });
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('close', (code) => {
+        const line = stdout.split('\n').find(l => l.startsWith('CONVERT_RESULT:'));
+        if (code === 0 && line) {
+          try {
+            const result = JSON.parse(line.substring(15));
+            return resolve({ path: tifPath, size: result.size, voxelSize: result.voxelSize || null });
+          } catch (e) { /* fall through */ }
+        }
+        const errLine = stdout.split('\n').find(l => l.startsWith('CONVERT_ERROR:'));
+        let message = 'MRC conversion failed';
+        if (errLine) {
+          try { message = JSON.parse(errLine.substring(14)).message || message; } catch (e) { /* keep */ }
+        } else if (stderr) {
+          message = stderr.split('\n').slice(-2).join(' ').trim() || message;
+        }
+        resolve({ error: message });
+      });
+      proc.on('error', (err) => resolve({ error: `Failed to spawn converter: ${err.message}` }));
+    });
+  }
+
+  /** Forget (and delete) a pending workspace-backup upload of this session */
+  function dropPendingRestore(req) {
+    const pending = req.session.pendingRestore;
+    if (pending && pending.path) {
+      fs.unlink(pending.path, () => {});
+    }
+    delete req.session.pendingRestore;
+  }
+
   /**
-   * Upload file to workspace
-   * POST /api/workspace/upload
+   * Upload files to the workspace
+   * POST /api/workspace/upload   (multipart; any field name; several files)
+   *
+   * Body (optional): `kind` - a hint from a module selector ('raw',
+   * 'annotation', 'model'); legacy `category` values are accepted too. The
+   * hint wins for images; every other kind comes from the file itself
+   * (zip peek, extension, TIFF content probe).
+   *
+   * Response: { success, files: [entry...], file: entry, detected: [...],
+   * pendingRestore } - a workspace backup is not placed but parked for the
+   * restore confirmation (pendingRestore: {id, size, originalName}).
    */
   router.post('/upload', requireAuth, upload.any(), async (req, res) => {
+    const uploaded = req.files || [];
+    const cleanupTemp = () => {
+      for (const f of uploaded) {
+        if (f && f.path && fs.existsSync(f.path)) fs.unlink(f.path, () => {});
+      }
+    };
     try {
       const sessionId = req.session.id;
-      let category = 'uploads';
-      let tags = [];
-
-      // Map upload types to proper tags
-      // New system: all uploads use 'uploads' category with 'raw' or 'annotation' tags
-      const uploadCategory = req.body.category || 'uploads';
-      if (uploadCategory === 'inference_data' || uploadCategory === 'raw_images' || uploadCategory === 'raw') {
-        tags = ['raw'];
-      } else if (uploadCategory === 'annotations') {
-        tags = ['annotation'];
-      } else if (uploadCategory === 'imported_models') {
-        // Model files: .zip is a bioimage.io package (ADR-015), .pth weights
-        // and .json configs are workspace U-Net files of unspecified method
-        category = 'models';
-        const firstName = (req.files && req.files[0] && req.files[0].originalname || '').toLowerCase();
-        if (firstName.endsWith('.zip')) {
-          tags = ['bioimageio', 'weights'];
-        } else if (firstName.endsWith('.json')) {
-          tags = ['unspecified', 'config'];
-        } else {
-          tags = ['unspecified', 'weights'];
-        }
-      } else {
-        // Default to raw for unspecified uploads
-        tags = ['raw'];
-      }
 
       // Check approval status - only active users can upload custom files
       if (req.session.user.status !== 'active') {
+        cleanupTemp();
         return res.status(403).json({
           success: false,
           error: 'Custom file upload requires account approval',
@@ -213,102 +245,129 @@ function createWorkspaceRoutes(dependencies) {
         });
       }
 
-      if (!req.files || req.files.length === 0) {
+      if (uploaded.length === 0) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+      }
+
+      const hint = req.body.kind || req.body.category || null;
+      const results = [];
+      const errors = [];
+      let pendingRestore = null;
+
+      for (const file of uploaded) {
+        let tmpPath = file.path;
+        let originalName = file.originalname;
+        let size = file.size;
+        let voxelSize = null;
+
+        try {
+          // MRC uploads are converted to TIFF on import - every module in
+          // the workbench operates on TIFF. Voxel size comes from the header.
+          if (/\.mrc$/i.test(originalName)) {
+            const conversion = await convertMrc(tmpPath);
+            fs.unlink(tmpPath, () => {});
+            if (conversion.error) {
+              errors.push({ name: originalName, error: `Could not import MRC file: ${conversion.error}` });
+              continue;
+            }
+            tmpPath = conversion.path;
+            originalName = originalName.replace(/\.mrc$/i, '.tif');
+            size = conversion.size;
+            voxelSize = conversion.voxelSize;
+          }
+
+          const detected = await detectKind(tmpPath, originalName, { hint, logger });
+          if (!detected.kind) {
+            fs.unlink(tmpPath, () => {});
+            errors.push({ name: originalName, error: `Not uploaded: ${detected.reason}` });
+            continue;
+          }
+
+          const spec = KINDS[detected.kind];
+          if (spec.limit && size > spec.limit) {
+            fs.unlink(tmpPath, () => {});
+            errors.push({
+              name: originalName,
+              error: `File too large for ${spec.label} (${Math.round(size / 1048576)} MB, limit ${Math.round(spec.limit / 1048576)} MB)`
+            });
+            continue;
+          }
+
+          if (detected.kind === 'workspace') {
+            // Parked for the restore confirmation; one pending backup per session
+            dropPendingRestore(req);
+            const id = `restore_${Date.now()}_${Math.round(Math.random() * 1e9)}`;
+            const parked = path.join(path.dirname(tmpPath), `${id}.zip`);
+            fs.renameSync(tmpPath, parked);
+            req.session.pendingRestore = { id, path: parked, size, originalName, receivedAt: new Date().toISOString() };
+            pendingRestore = { id, size, originalName };
+            continue;
+          }
+
+          const placed = placeUploadedFile(workspaceManager, sessionId, tmpPath, originalName, detected.kind);
+
+          // Add file to metadata. Invariant: `name` is the on-disk basename
+          // (name === basename(path)); the user's original filename is the
+          // display name (unique per workspace).
+          const fileEntry = workspaceService.addFileToMetadata(sessionId, {
+            name: placed.name,
+            path: placed.relPath,
+            category: placed.category,
+            tags: placed.tags,
+            size,
+            folderId: null,
+            displayName: originalName,
+            ...(voxelSize && { voxelSize })
+          });
+
+          if (fileService && fileService.isTiffFile(placed.name)) {
+            fileService.generateThumbnailAsync(sessionId, placed.absPath, fileEntry.id);
+            extractVoxelSizeAsync(sessionId, placed.absPath, fileEntry.id);
+          }
+
+          if (activityLogger) {
+            activityLogger.logActivity(req.session.user.username, 'file_upload', {
+              filename: originalName,
+              kind: detected.kind,
+              category: placed.category,
+              size
+            });
+          }
+
+          results.push({
+            ...fileEntry,
+            detectedKind: detected.kind,
+            detectedLabel: spec.label,
+            detectedReason: detected.reason
+          });
+        } catch (fileError) {
+          if (logger) logger.error(`Error placing upload ${originalName}:`, fileError);
+          if (tmpPath && fs.existsSync(tmpPath)) fs.unlink(tmpPath, () => {});
+          errors.push({ name: originalName, error: fileError.message });
+        }
+      }
+
+      if (results.length === 0 && !pendingRestore) {
         return res.status(400).json({
           success: false,
-          error: 'No file uploaded'
-        });
-      }
-
-      const uploadedFile = req.files[0];
-      const workspacePath = workspaceService.getWorkspacePath(sessionId);
-
-      // MRC uploads are converted to TIFF on import - every module in the
-      // workbench operates on TIFF. Voxel size comes from the MRC header.
-      let uploadVoxelSize = null;
-      if (/\.mrc$/i.test(uploadedFile.originalname)) {
-        const tifPath = uploadedFile.path.replace(/\.mrc$/i, '.tif');
-        const conversion = await new Promise((resolve) => {
-          const proc = spawn(PYTHON_PATH, [
-            'python/convert_file.py', '--input', uploadedFile.path, '--output', tifPath
-          ]);
-          let stdout = '';
-          let stderr = '';
-          proc.stdout.on('data', (d) => { stdout += d.toString(); });
-          proc.stderr.on('data', (d) => { stderr += d.toString(); });
-          proc.on('close', (code) => {
-            const line = stdout.split('\n').find(l => l.startsWith('CONVERT_RESULT:'));
-            if (code === 0 && line) {
-              try { return resolve(JSON.parse(line.substring(15))); } catch (e) { /* fall through */ }
-            }
-            const errLine = stdout.split('\n').find(l => l.startsWith('CONVERT_ERROR:'));
-            let message = 'MRC conversion failed';
-            if (errLine) {
-              try { message = JSON.parse(errLine.substring(14)).message || message; } catch (e) { /* keep */ }
-            } else if (stderr) {
-              message = stderr.split('\n').slice(-2).join(' ').trim() || message;
-            }
-            resolve({ error: message });
-          });
-          proc.on('error', (err) => resolve({ error: `Failed to spawn converter: ${err.message}` }));
-        });
-
-        if (conversion.error) {
-          fs.unlink(uploadedFile.path, () => {});
-          return res.status(400).json({
-            success: false,
-            error: `Could not import MRC file: ${conversion.error}`
-          });
-        }
-
-        // Replace the MRC with the converted TIFF
-        fs.unlink(uploadedFile.path, () => {});
-        uploadedFile.path = tifPath;
-        uploadedFile.originalname = uploadedFile.originalname.replace(/\.mrc$/i, '.tif');
-        uploadedFile.size = conversion.size;
-        uploadVoxelSize = conversion.voxelSize || null;
-      }
-
-      // Determine relative path within workspace
-      const relativePath = path.relative(workspacePath, uploadedFile.path);
-
-      // Add file to metadata. Invariant: `name` is the on-disk basename
-      // (name === basename(path)); the user's original filename becomes the
-      // display name, so uploads read cleanly in the UI without the
-      // timestamp prefix.
-      const fileEntry = workspaceService.addFileToMetadata(sessionId, {
-        name: path.basename(relativePath),
-        path: relativePath,
-        category: category,
-        tags: tags,
-        size: uploadedFile.size,
-        folderId: req.body.folderId || null,
-        displayName: uploadedFile.originalname,
-        ...(uploadVoxelSize && { voxelSize: uploadVoxelSize })
-      });
-
-      // Trigger thumbnail generation for TIFF files
-      if (fileService && fileService.isTiffFile(uploadedFile.originalname)) {
-        fileService.generateThumbnailAsync(sessionId, uploadedFile.path, fileEntry.id);
-        // Read physical voxel size from TIFF metadata (ADR-008)
-        extractVoxelSizeAsync(sessionId, uploadedFile.path, fileEntry.id);
-      }
-
-      if (activityLogger) {
-        activityLogger.logActivity(req.session.user.username, 'file_upload', {
-          filename: uploadedFile.originalname,
-          category: category,
-          size: uploadedFile.size
+          error: errors.length === 1 ? errors[0].error : 'No file could be uploaded',
+          errors
         });
       }
 
       res.json({
         success: true,
-        file: fileEntry,
-        message: 'File uploaded successfully'
+        files: results,
+        file: results[0] || null,
+        errors,
+        pendingRestore,
+        message: results.length
+          ? `Uploaded ${results.length} file${results.length === 1 ? '' : 's'}`
+          : 'Workspace backup received'
       });
 
     } catch (error) {
+      cleanupTemp();
       if (logger) {
         logger.error('Error uploading file to workspace:', error);
       }
@@ -318,6 +377,16 @@ function createWorkspaceRoutes(dependencies) {
       });
     }
   });
+
+  /**
+   * Discard a parked workspace backup
+   * DELETE /api/workspace/restore/pending
+   */
+  router.delete('/restore/pending', requireAuth, (req, res) => {
+    dropPendingRestore(req);
+    res.json({ success: true });
+  });
+
 
   // ===========================================================================
   // WORKSPACE EXPORT/IMPORT (ZIP)
@@ -425,7 +494,24 @@ function createWorkspaceRoutes(dependencies) {
         });
       }
 
-      if (!req.file) {
+      // Either a multipart zip (legacy client) or a backup parked by the
+      // upload endpoint (ADR-018: `pendingRestoreId` in a JSON body)
+      let zipPath = req.file ? req.file.path : null;
+      const pending = req.session.pendingRestore || null;
+      const pendingId = req.body && req.body.pendingRestoreId;
+      if (!zipPath && pendingId) {
+        if (!pending || pending.id !== pendingId || !fs.existsSync(pending.path)) {
+          delete req.session.pendingRestore;
+          return res.status(404).json({
+            success: false,
+            error: 'The uploaded backup is no longer available; upload it again'
+          });
+        }
+        zipPath = pending.path;
+        delete req.session.pendingRestore;
+      }
+
+      if (!zipPath) {
         return res.status(400).json({
           success: false,
           error: 'No file uploaded'
@@ -433,7 +519,8 @@ function createWorkspaceRoutes(dependencies) {
       }
 
       // Validate file is a zip
-      if (!req.file.originalname.toLowerCase().endsWith('.zip')) {
+      if (req.file && !req.file.originalname.toLowerCase().endsWith('.zip')) {
+        fs.unlink(zipPath, () => {});
         return res.status(400).json({
           success: false,
           error: 'Only ZIP files are allowed for workspace restore'
@@ -463,13 +550,13 @@ function createWorkspaceRoutes(dependencies) {
       try {
         result = await workspaceService.restoreWorkspace(
           sessionId,
-          req.file.path,
+          zipPath,
           fileService,
           req.session.user?.username,
           progressCallback
         );
       } finally {
-        fs.unlink(req.file.path, () => {});
+        fs.unlink(zipPath, () => {});
       }
 
       res.json({
@@ -825,10 +912,15 @@ function createWorkspaceRoutes(dependencies) {
       const processingHistory = getProcessingHistoryString(actualFileId, metadata.files);
       const originalDataFile = findOriginalDataFile(actualFileId, metadata.files);
 
+      // The model that produced this file (segmentation, DL denoising,
+      // export, fine-tuning): an annotation on the record, not an input
+      const modelId = file.lineage && file.lineage.modelFileId;
+      const modelRow = modelId ? metadata.files.find(f => f.id === modelId) : null;
+
       res.json({
         success: true,
         fileId,
-        fileName: file.name,
+        fileName: file.displayName || file.name,
         hasLineage: !!file.lineage,
         processingHistory,
         chain,
@@ -836,8 +928,14 @@ function createWorkspaceRoutes(dependencies) {
         originalDataFile: originalDataFile ? {
           id: originalDataFile.id,
           name: originalDataFile.name,
+          displayName: originalDataFile.displayName || originalDataFile.name,
           path: originalDataFile.path,
           category: originalDataFile.category
+        } : null,
+        modelFile: modelId ? {
+          id: modelId,
+          name: modelRow ? (modelRow.displayName || modelRow.name) : null,
+          deleted: !modelRow
         } : null,
         hasErrors: roots.hasErrors,
         errors: roots.errors

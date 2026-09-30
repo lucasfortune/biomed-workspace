@@ -56,6 +56,12 @@ class InferenceHandler {
         title: 'Input Image Stack',
         icon: 'folder',
         helpIconHtml: Templates.renderHelpIcon('denoising-dl.step4.data'),
+        // Image stacks produced in the workspace (preprocessed, stitched)
+        // can be denoised as well (ADR-018)
+        showRecentResults: true,
+        resultTags: ['data'],
+        filterRecentResults: (files) => files.filter(FileSelector.isImageStack),
+        resultCategoryLabels: { results: 'Workspace' },
         stateManager: this.module.state,
         onSelect: this.onInferenceInputSelected,
         onUpload: this.onInferenceInputUploaded

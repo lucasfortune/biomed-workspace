@@ -125,55 +125,76 @@ function configureApp(app, dependencies) {
         const configPath = path.join(params.output_dir, 'config.json');
         const resultsPath = path.join(params.output_dir, 'results.json');
 
-        // Chain model display names from the training raw image so they're unique and
-        // self-documenting (e.g. trypB_seg_model.pth) instead of duplicate best_model.pth.
+        // Chain model display names from the training raw image's display
+        // name so they're unique and self-documenting (e.g. trypB_seg_model.pth).
         // A run that continued from a parent model (ADR-017) carries the
         // fine-tune token instead (trypB_ft_model.pth).
         const start = training.startModel || null;
-        const trainSource = params.raw_images ? path.basename(params.raw_images) : 'training';
+        const trainSource = training.rawFileId
+          ? workspaceManager.getSourceDisplayName(training.sessionId, training.rawFileId, 'training')
+          : (params.raw_images ? path.basename(params.raw_images) : 'training');
         const modelName = (qualifier, ext) => buildDisplayName({
           sourceName: trainSource, operation: start ? 'finetune' : 'segmentation', ext, qualifier
         });
 
         // Training outputs record lineage to the raw + annotation input files
-        // (and the parent model for fine-tuning runs). A fresh record per
-        // output; empty inputs when the ids are unavailable (never a lineage
-        // object without an inputs array).
+        // (data only); the parent model of a fine-tuning run is recorded as
+        // modelFileId (ADR-012/018). A fresh record per output; empty inputs
+        // when the ids are unavailable (never a lineage object without an
+        // inputs array).
         const processType = start ? 'segmentation-finetune' : 'segmentation-training';
         const inputIds = (training.inputFileIds || []).filter(Boolean);
-        const trainingLineage = () => inputIds.length
-          ? createLineage(processType, inputIds, params.training_id)
-          : {
-              processType,
-              processedAt: new Date().toISOString(),
-              inputs: [],
-              processId: params.training_id
-            };
+        const trainingLineage = () => {
+          const lineage = inputIds.length
+            ? createLineage(processType, inputIds, params.training_id)
+            : {
+                processType,
+                processedAt: new Date().toISOString(),
+                inputs: [],
+                processId: params.training_id
+              };
+          if (training.parentFileId) lineage.modelFileId = training.parentFileId;
+          return lineage;
+        };
 
         // Fine-tuned bioimage.io package (ADR-017): tracked like an export so
-        // Step 1's package selector and Step 4 pick it up
+        // Step 1's package selector and Step 4 pick it up. It is the main
+        // output of a package run; config/results hang off it.
+        let mainId = null;
+        let mainName = null;
         const pkg = training.outputPackage;
         if (pkg && pkg.zip_path && fs.existsSync(pkg.zip_path)) {
           const parentName = (start && (start.displayName || start.name)) || 'model';
           const entry = await fileService.trackModuleOutput(training.sessionId, pkg.zip_path, 'models', {
             tags: ['bioimageio', 'weights', 'segmentation'],
             displayName: buildDisplayName({ sourceName: parentName, operation: 'finetune', ext: '.zip' }),
-            lineage: trainingLineage()
+            lineage: trainingLineage(),
+            adoptName: true
           });
+          if (entry && entry.absolutePath) pkg.zip_path = entry.absolutePath;
           pkg.fileId = entry ? entry.id : null;
           pkg.fileName = entry ? (entry.displayName || entry.name) : path.basename(pkg.zip_path);
           pkg.relPath = entry ? entry.path : null;
+          if (entry) {
+            mainId = entry.id;
+            mainName = buildDisplayName({ sourceName: parentName, operation: 'finetune', ext: '' });
+          }
         }
 
-        // Track model files with appropriate tags
+        // Track model files with appropriate tags (fixed physical names
+        // best_model.pth / config.json / results.json inside train<n>/)
         if (fs.existsSync(modelPath)) {
-          await fileService.trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth'), lineage: trainingLineage() });
+          const entry = await fileService.trackModuleOutput(training.sessionId, modelPath, 'models', { tags: ['weights', 'segmentation'], displayName: modelName('model', '.pth'), lineage: trainingLineage() });
+          if (entry) mainId = entry.id;
         }
+        const auxName = (qualifier, ext) => mainName
+          ? `${mainName}_${qualifier}${ext}`
+          : modelName(qualifier, ext);
         if (fs.existsSync(configPath)) {
-          await fileService.trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: modelName('config', '.json'), lineage: trainingLineage() });
+          await fileService.trackModuleOutput(training.sessionId, configPath, 'models', { tags: ['config', 'segmentation'], displayName: auxName('config', '.json'), lineage: trainingLineage(), parentId: mainId });
         }
         if (fs.existsSync(resultsPath)) {
-          await fileService.trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: modelName('info', '.json'), lineage: trainingLineage() });
+          await fileService.trackModuleOutput(training.sessionId, resultsPath, 'models', { tags: ['info', 'segmentation'], displayName: auxName('info', '.json'), lineage: trainingLineage(), parentId: mainId });
         }
       }
     });

@@ -69,6 +69,9 @@ class StartModelHandler {
         id: 'start_checkpoint',
         fileType: 'models',
         filterTags: ['weights'],
+        // Segmentation U-Nets and imported checkpoints of unspecified
+        // method; DL denoising models are not starting points (ADR-018)
+        filterFiles: (files) => files.filter(f => !(f.tags || []).includes('denoising')),
         title: 'Workspace model to continue from',
         icon: 'model',
         accept: '.pth',

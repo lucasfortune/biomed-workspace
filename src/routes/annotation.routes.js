@@ -12,7 +12,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { requireAuth } = require('../middleware/auth.middleware');
-const { PYTHON_PATH, DIRECTORIES } = require('../config/constants');
+const { PYTHON_PATH } = require('../config/constants');
 const { buildDisplayName } = require('../helpers/namingHelpers');
 const { createLineage } = require('../helpers/lineageHelpers');
 
@@ -111,14 +111,17 @@ function createAnnotationRoutes(dependencies) {
 
       // Resolve file path from fileId
       let filePath;
+      let cacheKey = null;
       if (path.isAbsolute(fileId)) {
         filePath = fileId;
       } else {
         const metadata = workspaceManager.loadMetadata(sessionId);
-        const file = metadata?.files?.find(f => f.id === fileId);
+        const file = metadata?.files?.find(f => f.id === fileId)
+          || metadata?.files?.find(f => f.path === fileId);
 
         if (file) {
           filePath = path.join(workspacePath, file.path);
+          cacheKey = file.id;
         } else {
           filePath = path.join(workspacePath, fileId);
         }
@@ -138,12 +141,12 @@ function createAnnotationRoutes(dependencies) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }
 
-      // Cache key: a hash of the full path. (The previous key was the first 32
-      // base64 characters of the path, i.e. its first 24 bytes, which is the same
-      // for every file under one install: every stack shared one cache and the
-      // first stack loaded was shown for all others.)
+      // Cache key: the tracked file id (ADR-018), a path hash for untracked
+      // files. (The original key was the first 32 base64 characters of the
+      // path, i.e. its first 24 bytes, which is the same for every file under
+      // one install: every stack shared one cache.)
       purgeLegacyRawSliceCache(cacheDir);
-      const cacheFilename = `raw_${rawSliceHash(filePath)}_${sliceIndex}.png`;
+      const cacheFilename = `raw_${cacheKey || rawSliceHash(filePath)}_${sliceIndex}.png`;
       const cachePath = path.join(cacheDir, cacheFilename);
 
       // Check cache
@@ -195,439 +198,294 @@ function createAnnotationRoutes(dependencies) {
   });
 
   // ===========================================================================
-  // SAVE PROGRESS
+  // SAVE PROGRESS / CREATE (ADR-018: one run folder per annotation)
   // ===========================================================================
 
   /**
-   * Save annotation progress (unfinished annotation)
+   * Write the label TIFF with create_annotation_tiff.py
+   * @returns {Promise<void>} rejects with the script's error message
+   */
+  function writeAnnotationTiff(configData, tiffPath) {
+    const { spawn } = require('child_process');
+    const os = require('os');
+    return new Promise((resolve, reject) => {
+      const tempConfigPath = path.join(os.tmpdir(), `annotation_config_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`);
+      fs.writeFileSync(tempConfigPath, JSON.stringify(configData));
+      const proc = spawn(PYTHON_PATH, [
+        'python/create_annotation_tiff.py',
+        '--config', tempConfigPath,
+        '--output', tiffPath
+      ]);
+      let output = '';
+      let errorOutput = '';
+      proc.stdout.on('data', (data) => { output += data.toString(); });
+      proc.stderr.on('data', (data) => { errorOutput += data.toString(); });
+      proc.on('error', (err) => {
+        try { fs.unlinkSync(tempConfigPath); } catch (e) { /* ignore */ }
+        reject(new Error(`Failed to spawn process: ${err.message}`));
+      });
+      proc.on('close', (code) => {
+        try { fs.unlinkSync(tempConfigPath); } catch (e) { /* ignore */ }
+        if (code !== 0 || !output.includes('SUCCESS:')) {
+          const errorMsg = output.includes('ERROR:')
+            ? output.split('ERROR:')[1].split('\n')[0].trim()
+            : errorOutput || 'Failed to create annotation TIFF';
+          return reject(new Error(errorMsg));
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Source image row (for the display name and the voxel size). The client
+   * may send an id or a workspace-relative path.
+   */
+  function findSource(metadata, sourceFileId) {
+    return (metadata.files || []).find(f => f.id === sourceFileId || f.path === sourceFileId) || null;
+  }
+
+  /**
+   * Save or create an annotation.
+   *
+   * New annotation: a run folder results/annotation/annot<n>/ with the label
+   * TIFF and the classes sidecar, both carrying their display names
+   * (<source>_annot.tif, <source>_annot_classes.json). Category results,
+   * tags annotation + wip (in progress) or annotation + data (complete).
+   *
+   * Existing annotation (existingAnnotationId): the TIFF and sidecar are
+   * rewritten in place; Create promotes a work-in-progress annotation to a
+   * finished one (tags, lineage status, sidecar status) instead of leaving
+   * an orphaned copy behind.
+   *
+   * @param {object} req - Express request
+   * @param {'in_progress'|'complete'} status - Target status
+   * @returns {Promise<{fileId, tiffPath, sidecarPath, promoted}>}
+   */
+  async function saveAnnotation(req, status) {
+    const {
+      sourceFileId,
+      sourceFileName,
+      width,
+      height,
+      slices,
+      sliceData,
+      classes,
+      existingAnnotationId
+    } = req.body;
+
+    const sessionId = req.session.id;
+    const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+    const metadata = workspaceManager.loadMetadata(sessionId);
+    const source = findSource(metadata, sourceFileId);
+    const resolvedSourceId = source ? source.id : sourceFileId;
+    const sourceDisplay = source
+      ? (source.displayName || source.name)
+      : (sourceFileName && sourceFileName !== 'unknown' ? sourceFileName : 'annotation');
+
+    // Existing annotation to rewrite in place (any location: a folder of
+    // this version or one written before ADR-018)
+    let existingFile = existingAnnotationId
+      ? (metadata.files || []).find(f => f.id === existingAnnotationId) || null
+      : null;
+    // A finished annotation is never overwritten by Save Progress or a
+    // second Create: those start a new annotation
+    if (existingFile && !(existingFile.tags || []).includes('wip') && status === 'complete') {
+      existingFile = null;
+    }
+    if (existingFile && !(existingFile.tags || []).includes('wip')) {
+      existingFile = null;
+    }
+    const existingSidecar = existingFile
+      ? (metadata.files || []).find(f => f.parentId === existingFile.id) || null
+      : null;
+
+    let fileId, tiffPath, sidecarPath, dir;
+    if (existingFile) {
+      fileId = existingFile.id;
+      tiffPath = path.join(workspacePath, existingFile.path);
+      dir = path.dirname(tiffPath);
+      sidecarPath = existingSidecar
+        ? path.join(workspacePath, existingSidecar.path)
+        : path.join(dir, path.basename(tiffPath).replace(/\.tiff?$/i, '') + '_classes.json');
+    } else {
+      dir = workspaceManager.allocateRun(sessionId, 'annot', ['results/annotation']).dirs['results/annotation'];
+      fileId = `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      tiffPath = path.join(dir, workspaceManager.physicalNameFor(dir, annotationDisplayName(sourceDisplay, '.tif')));
+      sidecarPath = path.join(dir, workspaceManager.physicalNameFor(dir, annotationDisplayName(sourceDisplay, '.json', 'classes')));
+    }
+
+    await writeAnnotationTiff({ width, height, slices, sliceData: sliceData || {} }, tiffPath);
+
+    // Sidecar JSON (createdAt survives rewrites)
+    let createdAt = new Date().toISOString();
+    if (existingSidecar && fs.existsSync(sidecarPath)) {
+      try { createdAt = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')).createdAt || createdAt; } catch (e) { /* keep */ }
+    }
+    const sidecarData = {
+      version: '1.0.0',
+      sourceFileId: resolvedSourceId,
+      sourceFileName: sourceDisplay,
+      classes: classes || [],
+      createdAt,
+      lastModifiedAt: new Date().toISOString(),
+      status
+    };
+    fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
+
+    const tags = status === 'complete' ? ['annotation', 'data'] : ['annotation', 'wip'];
+    const now = new Date().toISOString();
+
+    if (existingFile) {
+      // Rewrite in place (and promote when completing)
+      const fresh = workspaceManager.loadMetadata(sessionId);
+      const row = fresh.files.find(f => f.id === fileId);
+      if (row) {
+        row.size = fs.statSync(tiffPath).size;
+        row.lastModifiedAt = now;
+        row.tags = tags;
+        if (row.lineage) row.lineage.status = status;
+        row.category = 'results';
+      }
+      const sidecarRow = fresh.files.find(f => f.parentId === fileId);
+      if (sidecarRow) {
+        sidecarRow.size = fs.statSync(sidecarPath).size;
+        sidecarRow.lastModifiedAt = now;
+      }
+      workspaceManager.saveMetadata(sessionId, fresh);
+      workspaceManager.invalidateFileCaches(sessionId, fileId);
+
+      if (!sidecarRow) {
+        workspaceManager.addFileToMetadata(sessionId, {
+          id: `${fileId}_sidecar`,
+          name: path.basename(sidecarPath),
+          path: path.relative(workspacePath, sidecarPath),
+          category: 'results',
+          tags: ['annotation', 'info'],
+          size: fs.statSync(sidecarPath).size,
+          displayName: annotationDisplayName(sourceDisplay, '.json', 'classes'),
+          lineage: annotationLineage(resolvedSourceId, status),
+          parentId: fileId
+        });
+      }
+    } else {
+      workspaceManager.addFileToMetadata(sessionId, {
+        id: fileId,
+        name: path.basename(tiffPath),
+        path: path.relative(workspacePath, tiffPath),
+        category: 'results',
+        tags,
+        size: fs.statSync(tiffPath).size,
+        displayName: annotationDisplayName(sourceDisplay, '.tif'),
+        ...(source && source.voxelSize && { voxelSize: { ...source.voxelSize } }),
+        lineage: annotationLineage(resolvedSourceId, status)
+      });
+      workspaceManager.addFileToMetadata(sessionId, {
+        id: `${fileId}_sidecar`,
+        name: path.basename(sidecarPath),
+        path: path.relative(workspacePath, sidecarPath),
+        category: 'results',
+        tags: ['annotation', 'info'],
+        size: fs.statSync(sidecarPath).size,
+        displayName: annotationDisplayName(sourceDisplay, '.json', 'classes'),
+        lineage: annotationLineage(resolvedSourceId, status),
+        parentId: fileId
+      });
+    }
+
+    return {
+      fileId,
+      tiffPath: path.relative(workspacePath, tiffPath),
+      sidecarPath: path.relative(workspacePath, sidecarPath),
+      promoted: !!existingFile && status === 'complete'
+    };
+  }
+
+  function validateAnnotationBody(req, res, requireClasses) {
+    const { sourceFileId, width, height, slices, classes } = req.body;
+    if (!sourceFileId || !width || !height || !slices) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: sourceFileId, width, height, slices'
+      });
+      return false;
+    }
+    if (requireClasses && (!classes || classes.length === 0)) {
+      res.status(400).json({ success: false, error: 'At least one class is required' });
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Save annotation progress (work in progress)
    * POST /api/annotation/save-progress
    *
    * Request body:
    * {
    *   sourceFileId: string,      // ID of the source image
-   *   sourceFileName: string,    // Name of the source image
+   *   sourceFileName: string,    // Name of the source image (fallback only)
    *   width: number,
    *   height: number,
    *   slices: number,
    *   sliceData: { "0": "base64...", "5": "base64...", ... },
    *   classes: [{ id, name, color, visible }, ...],
-   *   existingAnnotationId: string  // Optional: ID of existing annotation to update
+   *   existingAnnotationId: string  // Optional: ID of the WIP annotation to update
    * }
    */
   router.post('/save-progress', requireAuth, async (req, res) => {
-    const { spawn } = require('child_process');
-    const os = require('os');
-
+    if (!validateAnnotationBody(req, res, false)) return;
     try {
-      const {
-        sourceFileId,
-        sourceFileName,
-        width,
-        height,
-        slices,
-        sliceData,
-        classes,
-        existingAnnotationId
-      } = req.body;
-
-      // Validate required fields
-      if (!sourceFileId || !width || !height || !slices) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing required fields: sourceFileId, width, height, slices'
+      const result = await saveAnnotation(req, 'in_progress');
+      if (logger) logger.info(`[Annotation] Saved progress: ${result.tiffPath}`);
+      if (activityLogger) {
+        activityLogger.logActivity(req.session.user?.username, 'annotation_save_progress', {
+          fileId: result.fileId,
+          sourceFileId: req.body.sourceFileId
         });
       }
-
-      const sessionId = req.session.id;
-      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
-
-      // Create unfinished annotations directory within workspace
-      const annotationsDir = path.join(workspacePath, DIRECTORIES.unfinishedAnnotations);
-      if (!fs.existsSync(annotationsDir)) {
-        fs.mkdirSync(annotationsDir, { recursive: true });
-      }
-
-      // Check if we're updating an existing annotation
-      let existingFile = null;
-      let existingSidecar = null;
-      let tiffFilename, sidecarFilename, tiffPath, sidecarPath, fileId;
-
-      if (existingAnnotationId) {
-        // Find the existing annotation in metadata
-        const metadata = workspaceManager.loadMetadata(sessionId);
-        existingFile = metadata?.files?.find(f => f.id === existingAnnotationId);
-        if (existingFile) {
-          existingSidecar = metadata?.files?.find(f => f.parentId === existingAnnotationId);
-          // Reuse existing filenames and paths
-          tiffFilename = existingFile.name;
-          tiffPath = path.join(workspacePath, existingFile.path);
-          fileId = existingAnnotationId;
-          if (existingSidecar) {
-            sidecarFilename = existingSidecar.name;
-            sidecarPath = path.join(workspacePath, existingSidecar.path);
-          } else {
-            // Create sidecar filename based on TIFF name
-            sidecarFilename = tiffFilename.replace('.tif', '_classes.json');
-            sidecarPath = path.join(annotationsDir, sidecarFilename);
-          }
-          if (logger) logger.info(`[Annotation] Updating existing annotation: ${existingAnnotationId}`);
-        }
-      }
-
-      // If no existing file found, create new filenames
-      if (!existingFile) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const baseName = sourceFileName
-          ? path.basename(sourceFileName, path.extname(sourceFileName))
-          : 'annotation';
-        tiffFilename = `${timestamp}_${baseName}_annotation.tif`;
-        sidecarFilename = `${timestamp}_${baseName}_annotation_classes.json`;
-        tiffPath = path.join(annotationsDir, tiffFilename);
-        sidecarPath = path.join(annotationsDir, sidecarFilename);
-        fileId = `unfinished_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      }
-
-      // Create config file for Python script
-      const configData = {
-        width,
-        height,
-        slices,
-        sliceData: sliceData || {}
-      };
-
-      const tempConfigPath = path.join(os.tmpdir(), `annotation_config_${Date.now()}.json`);
-      fs.writeFileSync(tempConfigPath, JSON.stringify(configData));
-
-      // Call Python script to create TIFF
-      const pythonProcess = spawn(PYTHON_PATH, [
-        'python/create_annotation_tiff.py',
-        '--config', tempConfigPath,
-        '--output', tiffPath
-      ]);
-
-      let output = '';
-      let errorOutput = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
+      res.json({
+        success: true,
+        ...result,
+        message: 'Annotation progress saved successfully'
       });
-
-      pythonProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      pythonProcess.on('close', async (code) => {
-        // Clean up temp config file
-        try {
-          fs.unlinkSync(tempConfigPath);
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-
-        if (code !== 0 || !output.includes('SUCCESS:')) {
-          const errorMsg = output.includes('ERROR:')
-            ? output.split('ERROR:')[1].split('\n')[0].trim()
-            : errorOutput || 'Failed to create annotation TIFF';
-          if (logger) logger.error('Annotation TIFF creation error:', errorMsg);
-          return res.status(500).json({
-            success: false,
-            error: errorMsg
-          });
-        }
-
-        try {
-          // Create sidecar JSON
-          const sidecarData = {
-            version: '1.0.0',
-            sourceFileId,
-            sourceFileName: sourceFileName || 'unknown',
-            classes: classes || [],
-            createdAt: new Date().toISOString(),
-            lastModifiedAt: new Date().toISOString(),
-            status: 'in_progress'
-          };
-
-          fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
-
-          // Update or add to workspace metadata (via the canonical constructor)
-          if (existingFile) {
-            // Update existing file entries in place
-            const metadata = workspaceManager.loadMetadata(sessionId);
-            const tiffIndex = metadata.files.findIndex(f => f.id === fileId);
-            if (tiffIndex !== -1) {
-              metadata.files[tiffIndex].size = fs.statSync(tiffPath).size;
-              metadata.files[tiffIndex].lastModifiedAt = new Date().toISOString();
-            }
-
-            const sidecarIndex = metadata.files.findIndex(f => f.parentId === fileId);
-            if (sidecarIndex !== -1) {
-              metadata.files[sidecarIndex].size = fs.statSync(sidecarPath).size;
-              metadata.files[sidecarIndex].lastModifiedAt = new Date().toISOString();
-            }
-            workspaceManager.saveMetadata(sessionId, metadata);
-
-            // The TIFF was rewritten in place: drop stale caches
-            workspaceManager.invalidateFileCaches(sessionId, fileId);
-
-            if (sidecarIndex === -1) {
-              // Add sidecar if it didn't exist
-              workspaceManager.addFileToMetadata(sessionId, {
-                id: `${fileId}_sidecar`,
-                name: sidecarFilename,
-                path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
-                category: 'results',
-                tags: ['annotation', 'info'],
-                size: fs.statSync(sidecarPath).size,
-                displayName: annotationDisplayName(sourceFileName, '.json', 'classes'),
-                parentId: fileId
-              });
-            }
-          } else {
-            // Add new TIFF file (results category with annotation/wip tags)
-            workspaceManager.addFileToMetadata(sessionId, {
-              id: fileId,
-              name: tiffFilename,
-              path: path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename),
-              category: 'results',
-              tags: ['annotation', 'wip'],
-              size: fs.statSync(tiffPath).size,
-              displayName: annotationDisplayName(sourceFileName, '.tif'),
-              lineage: annotationLineage(sourceFileId, 'in_progress')
-            });
-
-            // Add sidecar file (results category with annotation/info tags)
-            workspaceManager.addFileToMetadata(sessionId, {
-              id: `${fileId}_sidecar`,
-              name: sidecarFilename,
-              path: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
-              category: 'results',
-              tags: ['annotation', 'info'],
-              size: fs.statSync(sidecarPath).size,
-              displayName: annotationDisplayName(sourceFileName, '.json', 'classes'),
-              parentId: fileId
-            });
-          }
-
-          if (logger) logger.info(`[Annotation] Saved progress: ${tiffFilename}`);
-          if (activityLogger) {
-            activityLogger.logActivity(req.session.user?.username, 'annotation_save_progress', {
-              fileId,
-              sourceFileId
-            });
-          }
-
-          res.json({
-            success: true,
-            fileId,
-            tiffPath: path.join(DIRECTORIES.unfinishedAnnotations, tiffFilename),
-            sidecarPath: path.join(DIRECTORIES.unfinishedAnnotations, sidecarFilename),
-            message: 'Annotation progress saved successfully'
-          });
-
-        } catch (metadataError) {
-          if (logger) logger.error('Error saving metadata:', metadataError);
-          res.status(500).json({
-            success: false,
-            error: 'TIFF created but failed to save metadata: ' + metadataError.message
-          });
-        }
-      });
-
     } catch (error) {
       if (logger) logger.error('Error saving annotation progress:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      res.status(500).json({ success: false, error: error.message });
     }
   });
-
-  // ===========================================================================
-  // CREATE ANNOTATION (Final)
-  // ===========================================================================
 
   /**
    * Create final annotation
    * POST /api/annotation/create
    *
-   * Request body: Same as save-progress
-   * Saves to uploads/annotations/ directory with status 'complete'
+   * Request body: same as save-progress. A work-in-progress annotation named
+   * by existingAnnotationId is promoted in place; otherwise a new annotation
+   * is written to results/annotation/annot<n>/ with status 'complete'.
    */
   router.post('/create', requireAuth, async (req, res) => {
-    const { spawn } = require('child_process');
-    const os = require('os');
-
+    if (!validateAnnotationBody(req, res, true)) return;
     try {
-      const {
-        sourceFileId,
-        sourceFileName,
-        width,
-        height,
-        slices,
-        sliceData,
-        classes
-      } = req.body;
-
-      // Validate required fields
-      if (!sourceFileId || !width || !height || !slices) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing required fields: sourceFileId, width, height, slices'
+      const result = await saveAnnotation(req, 'complete');
+      if (logger) logger.info(`[Annotation] Created annotation: ${result.tiffPath}${result.promoted ? ' (promoted)' : ''}`);
+      if (activityLogger) {
+        activityLogger.logActivity(req.session.user?.username, 'annotation_create', {
+          fileId: result.fileId,
+          sourceFileId: req.body.sourceFileId,
+          promoted: result.promoted
         });
       }
-
-      // Validate classes
-      if (!classes || classes.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'At least one class is required'
-        });
-      }
-
-      const sessionId = req.session.id;
-      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
-
-      // Create annotations directory within workspace (final annotations)
-      const annotationsDir = path.join(workspacePath, 'annotations');
-      if (!fs.existsSync(annotationsDir)) {
-        fs.mkdirSync(annotationsDir, { recursive: true });
-      }
-
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const baseName = sourceFileName
-        ? path.basename(sourceFileName, path.extname(sourceFileName))
-        : 'annotation';
-      const tiffFilename = `${timestamp}_${baseName}_annotation.tif`;
-      const sidecarFilename = `${timestamp}_${baseName}_annotation_classes.json`;
-
-      const tiffPath = path.join(annotationsDir, tiffFilename);
-      const sidecarPath = path.join(annotationsDir, sidecarFilename);
-
-      // Create config file for Python script
-      const configData = {
-        width,
-        height,
-        slices,
-        sliceData: sliceData || {}
-      };
-
-      const tempConfigPath = path.join(os.tmpdir(), `annotation_config_${Date.now()}.json`);
-      fs.writeFileSync(tempConfigPath, JSON.stringify(configData));
-
-      // Call Python script to create TIFF
-      const pythonProcess = spawn(PYTHON_PATH, [
-        'python/create_annotation_tiff.py',
-        '--config', tempConfigPath,
-        '--output', tiffPath
-      ]);
-
-      let output = '';
-      let errorOutput = '';
-
-      pythonProcess.stdout.on('data', (data) => {
-        output += data.toString();
+      res.json({
+        success: true,
+        ...result,
+        message: result.promoted ? 'Annotation completed' : 'Annotation created successfully'
       });
-
-      pythonProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      pythonProcess.on('close', async (code) => {
-        // Clean up temp config file
-        try {
-          fs.unlinkSync(tempConfigPath);
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-
-        if (code !== 0 || !output.includes('SUCCESS:')) {
-          const errorMsg = output.includes('ERROR:')
-            ? output.split('ERROR:')[1].split('\n')[0].trim()
-            : errorOutput || 'Failed to create annotation TIFF';
-          if (logger) logger.error('Annotation TIFF creation error:', errorMsg);
-          return res.status(500).json({
-            success: false,
-            error: errorMsg
-          });
-        }
-
-        try {
-          // Create sidecar JSON with 'complete' status
-          const sidecarData = {
-            version: '1.0.0',
-            sourceFileId,
-            sourceFileName: sourceFileName || 'unknown',
-            classes: classes || [],
-            createdAt: new Date().toISOString(),
-            lastModifiedAt: new Date().toISOString(),
-            status: 'complete'  // Final annotation
-          };
-
-          fs.writeFileSync(sidecarPath, JSON.stringify(sidecarData, null, 2));
-
-          // Generate file ID
-          const fileId = `annotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-          // Add to workspace metadata (via the canonical constructor)
-          // TIFF file - completed annotations are user-created content
-          // (uploads category with annotation tag)
-          workspaceManager.addFileToMetadata(sessionId, {
-            id: fileId,
-            name: tiffFilename,
-            path: path.join('annotations', tiffFilename),
-            category: 'uploads',
-            tags: ['annotation'],
-            size: fs.statSync(tiffPath).size,
-            displayName: annotationDisplayName(sourceFileName, '.tif'),
-            lineage: annotationLineage(sourceFileId, 'complete')
-          });
-
-          // Sidecar file (results category with annotation/info tags)
-          workspaceManager.addFileToMetadata(sessionId, {
-            id: `${fileId}_sidecar`,
-            name: sidecarFilename,
-            path: path.join('annotations', sidecarFilename),
-            category: 'results',
-            tags: ['annotation', 'info'],
-            size: fs.statSync(sidecarPath).size,
-            displayName: annotationDisplayName(sourceFileName, '.json', 'classes'),
-            parentId: fileId
-          });
-
-          if (logger) logger.info(`[Annotation] Created final annotation: ${tiffFilename}`);
-          if (activityLogger) {
-            activityLogger.logActivity(req.session.user?.username, 'annotation_create', {
-              fileId,
-              sourceFileId
-            });
-          }
-
-          res.json({
-            success: true,
-            fileId,
-            tiffPath: path.join('annotations', tiffFilename),
-            sidecarPath: path.join('annotations', sidecarFilename),
-            message: 'Annotation created successfully'
-          });
-
-        } catch (metadataError) {
-          if (logger) logger.error('Error saving metadata:', metadataError);
-          res.status(500).json({
-            success: false,
-            error: 'TIFF created but failed to save metadata: ' + metadataError.message
-          });
-        }
-      });
-
     } catch (error) {
       if (logger) logger.error('Error creating annotation:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+      res.status(500).json({ success: false, error: error.message });
     }
   });
+
 
   // ===========================================================================
   // LOAD ANNOTATION

@@ -17,6 +17,7 @@ tags:
 seeAlsoManual:
   - file-browser.batch-operations
   - file-browser.bioimageio-export
+  - file-browser.upload
   - file-browser
 seeAlsoTags:
   - file-operations
@@ -30,31 +31,33 @@ Download, rename, or delete files using the action buttons or right-click contex
 
 Download (⬇️)
 
-Saves the file to your computer. For TIFF stacks, this downloads the complete multi-page file.
+Saves the file to your computer under its display name. For TIFF stacks, this downloads the complete multi-page file.
 
 Rename (✏️)
 
-Change the file's display name — the friendly name shown throughout the workspace. Renaming never touches the underlying file or its path, so lineage, downloads, and module references keep working. If the new name is already taken by another file, a numbered suffix like " (2)" is appended automatically. Useful for organizing files with descriptive names.
+Opens the workspace's rename dialog to change the file's display name, the friendly name shown throughout the workspace and used for downloads. Renaming never touches the underlying file or its path, so lineage, downloads and module references keep working. The extension must stay the same. If the new name is already taken by another file, a numbered suffix like " (2)" is appended automatically.
 
 Delete (🗑️)
 
-Permanently removes the file from your workspace. A confirmation dialog appears to prevent accidents. This cannot be undone.
+Permanently removes the file from your workspace after a confirmation dialog. Companion files go with their main file: deleting a model removes its config and results summary, deleting an annotation removes its classes file, deleting a segmentation removes its info file. The dialog lists what will be deleted. This cannot be undone.
 
 ## Context Menu
 
 Right-click any file for the full set of operations. Which entries appear depends on the file type:
 
-- Download, View Info, Rename — always shown
+- Download, View Info, Rename: always shown
 
-- View JSON — for .json files; opens a syntax-highlighted, read-only viewer (files larger than 10 MB cannot be viewed)
+- View JSON: for .json files; opens a syntax-highlighted, read-only viewer (files larger than 10 MB cannot be viewed)
 
-- Duplicate Stack, Split Stack… — for TIFF stacks (see below)
+- Mark as annotation / Mark as raw image: for uploaded TIFF images, to correct the kind detected at upload (see Uploading Files)
 
-- Convert to… — format conversion offered per type: TIFF ↔ MRC, and mesh .obj to STL, PLY, or glTF (GLB). Converting a TIFF to MRC carries its voxel size through (ADR-010)
+- Duplicate Stack, Split Stack…: for TIFF stacks (see below); not offered for annotations saved with Save Progress
 
-- Export as bioimage.io package… — for .pth model files; packages a workspace U-Net for other tools, the model zoo and tiled inference in the workspace (see bioimage.io Export)
+- Convert to…: format conversion offered per type: TIFF ↔ MRC, and mesh .obj to STL, PLY, or glTF (GLB). Converting a TIFF to MRC carries its voxel size through (ADR-010)
 
-- Delete — always shown (shortcut: Del)
+- Export as bioimage.io package…: for segmentation .pth model files (workspace U-Nets and imported checkpoints, not denoising models); packages the model for other tools, the model zoo and tiled inference in the workspace (see bioimage.io Export)
+
+- Delete: always shown (shortcut: Del)
 
 ## TIFF Stack Operations
 
@@ -62,7 +65,7 @@ Right-clicking on TIFF image stacks provides additional operations:
 
 **Duplicate Stack (📋)**
 
-Creates an exact copy of the TIFF stack in the same folder. The copy is named `<original>_copy.tif`. If a file with that name already exists, a numbered suffix is added (e.g., `_copy_1.tif`). The duplicate retains the same category and tags as the original.
+Creates an exact copy of the TIFF stack in the same folder, named `<original>_copy.tif` (a numbered suffix is added if that name exists). The duplicate keeps the category and tags of the original.
 
 **Split Stack... (✂️)**
 
@@ -72,11 +75,11 @@ Only available for multi-slice TIFF stacks. Opens a dialog where you can:
 - Preview how many slices will be in each part
 - Choose whether to delete the original file after splitting
 
-The result is two new files shown as `<original>_split_part1.tif` and `<original>_split_part2.tif`. Both parts retain the same category and tags as the original, and their processing history will show they were split from the source file.
+The result is two new files, `<original>_split_part1.tif` and `<original>_split_part2.tif`. Both parts keep the category and tags of the original, and their processing history shows they were split from the source file.
 
 ## File Info Details
 
-- Name and path in workspace
+- Name and path in workspace (the path shows the run folder, e.g. `results/segmentation/seg3/`)
 
 - File size
 
@@ -84,11 +87,13 @@ The result is two new files shown as `<original>_split_part1.tif` and `<original
 
 - Upload timestamp
 
-- Voxel size (TIFF stacks only) — see below
+- Voxel size (TIFF stacks only), see below
 
 - ID (the internal file identifier)
 
-- Processing history — the lineage chain, showing steps such as Original Upload, Denoising, Segmentation, Mesh Generation, Preprocessing, Stitching, Segmentation Cleanup, Format Conversion, bioimage.io Export, Duplicated, or Split
+- Processing history: the lineage chain, showing steps such as Original Upload, Denoising, Segmentation, Segmentation Training, Fine-tuning, Mesh Generation, Annotation, Preprocessing, Stitching, Segmentation Cleanup, Format Conversion, bioimage.io Export, bioimage.io Model, Duplicated, or Split
+
+- Model: the model that produced a segmentation, a denoised stack, an exported package or a fine-tuned model. Models are never part of the chain itself, which always leads back to image data
 
 ## Voxel Size
 
@@ -96,8 +101,8 @@ For TIFF stacks, File Info shows a voxel-size row. The physical voxel size is re
 
 ## Convert To
 
-Use Convert to… in the context menu to write a new file in another format. TIFF converts to MRC (and MRC back to TIFF), and mesh .obj files convert to STL, PLY, or glTF (GLB). The converted file is added to the workspace tagged `converted` and shown as `<original>_conv.<format>` (e.g. `stack_conv.stl`), and a TIFF's voxel size is passed to the MRC output.
+Use Convert to… in the context menu to write a new file in another format. TIFF converts to MRC (and MRC back to TIFF), and mesh .obj files convert to STL, PLY, or glTF (GLB). The converted file is added to the workspace tagged `converted` and named `<original>_conv.<format>` (e.g. `stack_conv.stl`), and a TIFF's voxel size is passed to the MRC output.
 
 ## Export as bioimage.io Package
 
-Right-click a `.pth` model file and choose Export as bioimage.io package… to write a bioimage.io model package (zip) from a workspace U-Net. The dialog asks for a name, a license and a sample image; the package is self-tested on the server and then appears under Model Files tagged `bioimageio`, ready for the Segmentation module's bioimage.io workflow or for download. Details in the bioimage.io Export article.
+Right-click a segmentation `.pth` model file and choose Export as bioimage.io package… to write a bioimage.io model package (zip) from a workspace U-Net. The dialog asks for a name, a license and a sample image; the package is self-tested on the server and then appears under `models/bioimageio/export<n>` tagged `bioimageio`, ready for the Segmentation module's bioimage.io workflow or for download. Details in the bioimage.io Export article.

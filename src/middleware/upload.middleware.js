@@ -17,93 +17,45 @@ const { UPLOAD_LIMITS, DATA_PATHS } = require('../config/constants');
  * @returns {multer.StorageEngine} Multer disk storage configuration
  */
 function createStorage(workspaceManager, logger) {
+  // Every upload lands in the scratch folder first (ADR-018): the route
+  // detects what the file is and moves it into the workspace under its
+  // original name. The workspace is initialised here so a first upload
+  // never races the placement.
   return multer.diskStorage({
     destination: function (req, file, cb) {
-      const sessionId = req.session.id;
-
-      // Use workspace directory structure
-      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
-
-      // Initialize workspace if it doesn't exist
-      if (!fs.existsSync(workspacePath)) {
-        logger.debug('[Multer] Initializing workspace for session:', sessionId);
-        workspaceManager.initializeWorkspace(sessionId);
+      try {
+        const sessionId = req.session.id;
+        const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+        if (!fs.existsSync(workspacePath)) {
+          logger.debug('[Multer] Initializing workspace for session:', sessionId);
+          workspaceManager.initializeWorkspace(sessionId);
+        }
+        fs.mkdirSync(DATA_PATHS.tmp, { recursive: true });
+        cb(null, DATA_PATHS.tmp);
+      } catch (err) {
+        cb(err);
       }
-
-      // Determine subdirectory based on field name
-      let subdir = 'uploads/raw'; // Default
-
-      if (file.fieldname === 'raw_images') {
-        subdir = 'uploads/raw';
-      } else if (file.fieldname === 'annotations') {
-        subdir = 'uploads/annotations';
-      } else if (file.fieldname === 'inference_data') {
-        subdir = 'uploads/raw';  // Redirect inference data to raw folder
-      } else if (file.fieldname === 'imported_models') {
-        subdir = 'uploads/imported_models';
-      } else if (file.fieldname === 'meshes') {
-        subdir = 'results/meshes';
-      } else if (file.fieldname === 'file') {
-        // For workspace upload endpoint, use category from body if available
-        subdir = 'uploads/raw'; // Will be moved if needed
-      }
-
-      logger.debug('[Multer] Field name:', file.fieldname, '→ Directory:', subdir);
-
-      const uploadDir = path.join(workspacePath, subdir);
-
-      // Create directory if it doesn't exist
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      logger.debug('[Multer] Upload destination:', uploadDir);
-      cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-      const timestamp = Date.now();
-      cb(null, `${timestamp}-${file.originalname}`);
+      const ext = path.extname(file.originalname || '').toLowerCase().replace(/[^.a-z0-9]/g, '');
+      cb(null, `upload_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`);
     }
   });
 }
 
+const WORKSPACE_UPLOAD_EXT = ['.tif', '.tiff', '.mrc', '.pth', '.pt', '.json', '.zip'];
+
 /**
- * Workspace file filter - accepts files based on category/fieldname
- * - meshes: JSON files
- * - imported_models: PTH, JSON and bioimage.io ZIP package files
- * - all others: TIFF files
+ * Workspace file filter - accepts every kind the workspace can place
+ * (images, models, packages, backups); the route decides the kind from the
+ * content (ADR-018)
  */
 function workspaceFileFilter(req, file, cb) {
-  const fieldname = file.fieldname.toLowerCase();
-  const filename = file.originalname.toLowerCase();
-
-  // Mesh uploads accept JSON files
-  if (fieldname === 'meshes') {
-    if (filename.endsWith('.json')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only JSON files are allowed for mesh data!'), false);
-    }
-    return;
-  }
-
-  // Model imports accept PTH and JSON files
-  if (fieldname === 'imported_models') {
-    if (filename.endsWith('.pth') || filename.endsWith('.json') || filename.endsWith('.zip')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only .pth, .json and bioimage.io .zip files are allowed for models!'), false);
-    }
-    return;
-  }
-
-  // All other categories accept TIFF files (and MRC, which the upload
-  // route converts to TIFF on import - the workbench is TIFF-internal)
-  if (file.mimetype === 'image/tiff' || filename.endsWith('.tif')
-      || filename.endsWith('.tiff') || filename.endsWith('.mrc')) {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (WORKSPACE_UPLOAD_EXT.includes(ext) || file.mimetype === 'image/tiff') {
     cb(null, true);
   } else {
-    cb(new Error('Only TIFF (or MRC) files are allowed!'), false);
+    cb(new Error('Only TIFF/MRC images, .pth/.json model files and .zip archives (bioimage.io packages, workspace backups) can be uploaded'), false);
   }
 }
 
@@ -151,12 +103,14 @@ function workspaceZipFileFilter(req, file, cb) {
 function createUploadMiddleware(workspaceManager, logger) {
   const storage = createStorage(workspaceManager, logger);
 
-  // Workspace upload middleware - accepts files based on category (200MB limit)
+  // Workspace upload middleware. The transport limit is the largest kind's
+  // (workspace backups); the route enforces the per-kind limits (200 MB for
+  // images, 2 GB for models) once it knows what the file is.
   const upload = multer({
     storage: storage,
     fileFilter: workspaceFileFilter,
     limits: {
-      fileSize: UPLOAD_LIMITS.tiffFileSize
+      fileSize: UPLOAD_LIMITS.workspaceZipFileSize
     }
   });
 

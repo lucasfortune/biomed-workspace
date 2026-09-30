@@ -182,11 +182,6 @@ function createStitchingRoutes(dependencies) {
       const stitchId = `stitch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       // Registry entry: socket-room ownership checks + cleanup guard
       sessionTracker.registerJob(stitchId, sessionId, 'stitching');
-      const outputDir = path.join(workspacePath, 'results', 'stitching', stitchId);
-      await fsp.mkdir(outputDir, { recursive: true });
-
-      const safeName = (outputName || 'stitched').replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
-      const outputPath = path.join(outputDir, `${safeName}.tif`);
 
       // Resolve each stack slot: fileId is primary, path the fallback
       // (recipe schema v2; v1 path-only recipes keep working). All
@@ -220,6 +215,24 @@ function createStitchingRoutes(dependencies) {
       }
 
       const inputRelPaths = resolvedStacks.map(r => r.rel);
+
+      // Run folder results/stitching/stitch<n>/ (ADR-018). Display names
+      // chain from the first input stack unless the user typed a name; the
+      // files carry their display names on disk.
+      const outputDir = workspaceManager.allocateRun(sessionId, 'stitch', ['results/stitching']).dirs['results/stitching'];
+      const firstInput = manifestFiles.find(f => f.path === inputRelPaths[0]);
+      const stitchSource = firstInput
+        ? (firstInput.displayName || firstInput.name)
+        : path.basename(inputRelPaths[0] || 'stitch');
+      const typed = String(outputName || '').replace(/\.tiff?$/i, '').trim();
+      const displayName = typed
+        ? `${typed}.tif`
+        : buildDisplayName({ sourceName: stitchSource, operation: 'stitching', ext: '.tif' });
+      const outputPath = path.join(outputDir, workspaceManager.physicalNameFor(outputDir, displayName));
+      const recipeDisplayName = buildDisplayName({
+        sourceName: displayName, operation: 'stitching', ext: '.json', qualifier: 'recipe'
+      }).replace(/_stitch_stitch_/, '_stitch_');
+
       const pythonRecipe = {
         output_path: outputPath,
         mode: recipe.mode === 'labels' ? 'labels' : 'grayscale',
@@ -252,7 +265,7 @@ function createStitchingRoutes(dependencies) {
           fileId: resolvedStacks[i].fileId
         }))
       };
-      const recipePath = path.join(outputDir, 'stitch_recipe.json');
+      const recipePath = path.join(outputDir, workspaceManager.physicalNameFor(outputDir, recipeDisplayName));
       await fsp.writeFile(recipePath, JSON.stringify(savedRecipe, null, 2));
 
       const configPath = path.join(outputDir, `stitch_config_${stitchId}.json`);
@@ -309,11 +322,6 @@ function createStitchingRoutes(dependencies) {
             const voxelSize = inputRelPaths
               .map(rel => metadata?.files?.find(f => f.path === rel)?.voxelSize)
               .find(Boolean);
-            // Display names chain from the first input stack
-            const firstInput = metadata?.files?.find(f => f.path === inputRelPaths[0]);
-            const stitchSource = firstInput
-              ? (firstInput.displayName || firstInput.name)
-              : path.basename(inputRelPaths[0] || 'stitch');
             const outputEntry = workspaceManager.addFileToMetadata(sessionId, {
               name: path.basename(outputPath),
               path: path.relative(workspacePath, outputPath),
@@ -322,11 +330,7 @@ function createStitchingRoutes(dependencies) {
                              : ['stitching', 'raw', 'data'],
               size: stats.size,
               folderId: null,
-              displayName: buildDisplayName({
-                sourceName: stitchSource,
-                operation: 'stitching',
-                ext: path.extname(outputPath)
-              }),
+              displayName,
               ...(voxelSize && { voxelSize }),
               lineage
             });
@@ -339,13 +343,9 @@ function createStitchingRoutes(dependencies) {
               tags: ['stitching', 'recipe'],
               size: recipeStats.size,
               folderId: null,
-              displayName: buildDisplayName({
-                sourceName: stitchSource,
-                operation: 'stitching',
-                ext: path.extname(recipePath),
-                qualifier: 'recipe'
-              }),
-              lineage
+              displayName: recipeDisplayName,
+              ...(outputFileId && { parentId: outputFileId }),
+              lineage: { ...lineage, inputs: [...lineage.inputs] }
             });
           } catch (trackError) {
             if (logger) logger.error('[Stitching] Error tracking output:', trackError);

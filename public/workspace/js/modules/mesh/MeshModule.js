@@ -302,27 +302,14 @@ class MeshModule extends BaseModule {
         stateManager: this.state,
         onSelect: this.onFileSelected,
         onUpload: this.onFileUploaded,
-        // Result categories to include segmentation results
-        resultCategories: ['results', 'segmentations', 'segmented_stack'],
-        resultTags: ['segmentation', 'data'],  // Filter to segmentation data files (not info)
-        resultCategoryLabels: {
-          'results': 'Result',
-          'segmentations': 'Segmentation',
-          'segmented_stack': 'Segmented'
-        },
-        // Custom filter for workspace files (annotations)
-        // Support both new (uploads with annotation tag) and legacy categories
-        filterFiles: (files) => {
-          return files.filter(f => {
-            // New system: uploads with annotation tag
-            if (f.category === 'uploads' && f.tags && f.tags.includes('annotation')) {
-              return true;
-            }
-            // Legacy categories for backward compat
-            return f.category === 'annotations' ||
-                   f.category === 'segmented_stack';
-          });
-        }
+        // Label maps produced in the workspace: segmentation results and
+        // annotations made here (ADR-018)
+        resultCategories: ['results'],
+        resultTags: ['data'],
+        filterRecentResults: (files) => files.filter(FileSelector.isLabelMask),
+        resultCategoryLabels: { 'results': 'Workspace' },
+        // Uploaded masks
+        filterFiles: (files) => files.filter(FileSelector.isLabelMask)
       });
 
       fileSelectorContainer.innerHTML = this.fileSelector.render();
@@ -924,8 +911,10 @@ class MeshModule extends BaseModule {
       return;
     }
 
-    // Build the JSON file path as a relative path (matches how backend stores in metadata)
-    const jsonFilePath = `results/meshes/${this.currentMeshId}/mesh_data.json`;
+    // The completion payload carries the tracked mesh_data.json (id + path);
+    // fall back to the run folder reported by the server
+    const jsonFilePath = this.meshResult.json_file_path
+      || `${this.meshResult.output_rel_dir || `results/meshes/${this.currentMeshId}`}/mesh_data.json`;
 
     // Store result in state for visualization module
     this.state.update('modules.mesh.result', {
@@ -936,7 +925,7 @@ class MeshModule extends BaseModule {
       jsonFile: {
         path: jsonFilePath,
         name: 'mesh_data.json',
-        id: jsonFilePath
+        id: this.meshResult.json_file_id || jsonFilePath
       },
       timestamp: Date.now()
     });

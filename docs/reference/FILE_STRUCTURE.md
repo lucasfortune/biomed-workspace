@@ -4,7 +4,7 @@
 
 This document provides a comprehensive overview of the project's file structure, explaining the purpose of each directory and key files.
 
-**Last Updated:** 2026-09-07 (v1.5.0 data-model consolidation)
+**Last Updated:** 2026-09-30 (v1.11.0 workspace layout and naming, ADR-018)
 **Project Root:** repository root (`image_processing_workspace/`). User data lives under `DATA_DIR` (defaults to the project root; see `src/config/constants.js` DATA_PATHS).
 
 ---
@@ -354,37 +354,39 @@ test_data/
 ```
 workspaces/
 ├── <sessionId>/
-│   ├── metadata.json                  # Single persistent manifest (schema 1.2.0)
-│   ├── uploads/                       # User uploads + seeded samples
+│   ├── metadata.json                  # Single persistent manifest (schema 1.3.0, incl. run counters)
+│   ├── uploads/                       # User uploads (original file names) + seeded samples
 │   │   ├── raw/sample_raw.tif
 │   │   └── annotations/sample_annotation.tif
-│   ├── results/                       # Per-module result subdirectories
-│   │   ├── preprocess/<id>/
-│   │   ├── stitching/<id>/
-│   │   ├── segcleanup/<id>/
-│   │   ├── denoising/<id>/
-│   │   └── segmentation/<trainingId>/
-│   │       ├── inference_result.tif
-│   │       ├── inference_result_metadata.json
-│   │       ├── inference_result_visualization_data.json
-│   │       └── original_data_downsampled.tif
-│   ├── models/                        # Trained/imported models
-│   │   └── segmentation/<trainingId>/
-│   │       ├── best_model.pth         # Best model from training (lowest val loss)
-│   │       ├── config.json            # Training config
-│   │       └── results.json           # Final metrics
-│   ├── annotations/                   # Saved annotations
-│   ├── unfinished_annotations/        # In-progress annotation state
+│   ├── results/                       # One numbered run folder per job (ADR-018)
+│   │   ├── segmentation/seg<n>/       # <source>_seg.tif, <source>_seg_info.json
+│   │   ├── denoising/filter<n>/       # <source>_gaussian.tif | _nlm.tif
+│   │   ├── denoising/dn<n>/           # <source>_n2v.tif | _asn2v.tif + info
+│   │   ├── preprocess/prep<n>/        # <name>.tif + <name>_prep_config.json
+│   │   ├── stitching/stitch<n>/       # <name>.tif + <name>_stitch_recipe.json
+│   │   ├── segcleanup/clean<n>/       # <name>.tif, report CSVs
+│   │   ├── meshes/mesh<n>/            # mesh_data.json, mesh.obj, mesh.mtl, mesh.stl, metadata.json
+│   │   └── annotation/annot<n>/       # <source>_annot.tif + <source>_annot_classes.json
+│   ├── models/
+│   │   ├── segmentation/train<n>/     # best_model.pth, config.json, results.json (+ fine-tuned package)
+│   │   ├── denoising/dn<n>/           # best_model.pth, routed_mask.npy, route_decision.json, config.json, results.json
+│   │   ├── imported/                  # uploaded .pth / .json / bioimage.io .zip files
+│   │   └── bioimageio/
+│   │       ├── export<n>/<name>.zip   # packages exported from workspace models
+│   │       └── zoo/<zooId>/<zooId>_card.json
 │   ├── .thumbnails/                   # Cache (CACHE_DIRS)
-│   ├── .slices/                       # Cache
-│   ├── .mesh-previews/                # Cache
+│   ├── .slices/                       # Cache (id-keyed)
+│   ├── .mesh-previews/                # Cache (id-keyed)
 │   ├── .preprocess/                   # Cache
-│   └── .segcleanup/                   # Cache
+│   ├── .segcleanup/                   # Cache
+│   └── .classifier/                   # Cache (pixel classifier models)
 └── ...
 ```
 
 **Key points:**
-- `metadata.json` is the **sole persistent store** for file registry, lineage and provenance (schema version 1.2.0). `loadMetadata()` runs `normalizeManifest()` on read, which upgrades legacy manifests (categories to uploads/models/results, legacy lineage shapes to canonical `{processType, processedAt, inputs[], processId}`)
+- `metadata.json` is the **sole persistent store** for file registry, lineage and provenance (schema version 1.3.0). `loadMetadata()` runs `normalizeManifest()` on read, which upgrades legacy manifests (categories to uploads/models/results, legacy lineage shapes to canonical `{processType, processedAt, inputs[], processId}`, and the ADR-018 rules: counters, created annotations to results, model ids to `modelFileId`, card lineage, sidecar `parentId`)
+- Run folders are labelled `<prefix><n>` from per-workspace counters in the manifest (`counters`); the job ids used by the in-memory session maps and socket rooms are separate. Files inside a run folder carry their display name on disk; training and mesh artifacts keep conventional names (ADR-018)
+- Uploads land in `DATA_DIR/tmp` first; the upload route detects the kind (content probe for TIFFs, zip peek for packages and backups) and moves the file under its original name (ADR-018)
 - Cache directories (the shared `CACHE_DIRS` constant in `src/config/constants.js`) are excluded from ZIP export and preserved on restore
 - Workspace files are served **only** via authenticated, session-scoped routes (`/workspaces/:sessionId/...` with session ownership checks in `static.routes.js`); there are no unauthenticated static mounts
 

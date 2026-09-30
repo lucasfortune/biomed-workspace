@@ -298,6 +298,8 @@ python -c "import torch; print(torch.__version__)"
 deactivate
 ```
 
+**Uploads (since 1.11.0):** every upload is written to `DATA_DIR/tmp` first and moved into the workspace once its kind is detected, so `DATA_DIR/tmp` must be on the same volume as `DATA_DIR/workspaces` (or the move falls back to a copy). A workspace backup uploaded through the file browser waits there until the user confirms the restore.
+
 **bioimage.io (since 1.8.0, export since 1.9.0, fine-tuning since 1.10.0):** `requirements.txt` installs `bioimageio.core`.
 The Segmentation module lists the model zoo from `https://hypha.aicell.io`
 and downloads model weights on first use, so the server needs outbound

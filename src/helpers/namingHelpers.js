@@ -21,10 +21,19 @@ const OPERATION_TOKENS = {
   'denoising-n2v': 'n2v',
   'denoising-autostructn2v-stage1': 'asn2v',
   'denoising-autostructn2v-stage2': 'asn2v2',
+  // Deep-learning denoising inference / training records (the method-specific
+  // keys above are used when the method is known)
+  denoising: 'dn',
+  'denoising-training': 'dn',
   // Segmentation / inference
   segmentation: 'seg',
+  'segmentation-training': 'seg',
   // Training continued from a parent model (ADR-017)
   finetune: 'ft',
+  'segmentation-finetune': 'ft',
+  // bioimage.io packages (ADR-016) and zoo model cards (ADR-015)
+  'bioimageio-export': 'export',
+  'bioimageio-import': 'card',
   // Mesh generation
   meshGeneration: 'mesh',
   mesh: 'mesh',
@@ -146,11 +155,59 @@ function resolveDisplayNameCollision(candidate, existingNames) {
   return next;
 }
 
+/**
+ * Turn a display name into a file-system safe physical name (ADR-018: files
+ * inside a run folder carry their display name on disk). Whitespace becomes
+ * '_', anything outside [A-Za-z0-9._()-] is dropped, and the result never
+ * starts with a dot or ends up empty.
+ * @param {string} name
+ * @param {string} [fallback='file']
+ * @returns {string}
+ */
+function toPhysicalName(name, fallback = 'file') {
+  const { base, ext } = splitNameExt(String(name || ''));
+  const clean = (s) => s
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9._()-]+/g, '')
+    .replace(/_{2,}/g, '_');
+  const safeBase = clean(base).replace(/^[._]+/, '').slice(0, 120) || fallback;
+  const safeExt = ext ? `.${clean(ext.slice(1)).replace(/^[._]+/, '').toLowerCase()}` : '';
+  return `${safeBase}${safeExt === '.' ? '' : safeExt}`;
+}
+
+/**
+ * Pick a file name that does not exist in `dir` yet: name, name_2, name_3, ...
+ * (the suffix goes before the extension). Purely a disk check; display-name
+ * uniqueness is handled separately by resolveDisplayNameCollision.
+ * @param {string} dir - Absolute directory
+ * @param {string} name - Desired file name
+ * @param {(p: string) => boolean} [exists] - Existence check (fs.existsSync by default)
+ * @returns {string}
+ */
+function uniqueFileName(dir, name, exists) {
+  const fs = require('fs');
+  const path = require('path');
+  const check = exists || ((p) => fs.existsSync(p));
+  if (!check(path.join(dir, name))) return name;
+  const { base, ext } = splitNameExt(name);
+  let counter = 2;
+  let next;
+  do {
+    next = `${base}_${counter}${ext}`;
+    counter += 1;
+  } while (check(path.join(dir, next)));
+  return next;
+}
+
 module.exports = {
   OPERATION_TOKENS,
   MAX_BASE_LENGTH,
   splitNameExt,
   operationToken,
   buildDisplayName,
-  resolveDisplayNameCollision
+  resolveDisplayNameCollision,
+  toPhysicalName,
+  uniqueFileName
 };

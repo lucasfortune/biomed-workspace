@@ -2,8 +2,9 @@
 Output finalization for the denoising package (routed v1.0).
 
 Copies the run's deliverables from the experiment directory into the
-workspace results/models trees (keeping the DL_<trainingId> convention)
-and deletes the intermediate experiment directory.
+workspace run folders (results_dir / models_dir from the config, ADR-018;
+DL_<trainingId> folders when absent) and deletes the intermediate
+experiment directory.
 """
 
 import os
@@ -34,12 +35,15 @@ def finalize_routed_output(config: dict, dirs: dict, results: dict,
     """
     emit_progress('cleanup', {"training_id": training_id, "status": "starting"})
 
+    # The server allocates the run folders (results/denoising/dn<n>/ and
+    # models/denoising/dn<n>/, ADR-018); the DL_<trainingId> convention is
+    # the fallback for configs written by older servers.
     workspace_dir = config.get('workspace_dir',
                                os.path.dirname(dirs['experiment']))
-    results_output_dir = os.path.join(workspace_dir, 'results', 'denoising',
-                                      f'DL_{training_id}')
-    models_output_dir = os.path.join(workspace_dir, 'models', 'denoising',
-                                     f'DL_{training_id}')
+    results_output_dir = config.get('results_dir') or os.path.join(
+        workspace_dir, 'results', 'denoising', f'DL_{training_id}')
+    models_output_dir = config.get('models_dir') or os.path.join(
+        workspace_dir, 'models', 'denoising', f'DL_{training_id}')
     os.makedirs(results_output_dir, exist_ok=True)
     os.makedirs(models_output_dir, exist_ok=True)
 

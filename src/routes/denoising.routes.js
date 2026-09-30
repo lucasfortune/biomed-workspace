@@ -84,12 +84,21 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      // Create output directory
-      const outputDir = path.join(workspacePath, 'results', 'denoising', processingId);
-      fs.mkdirSync(outputDir, { recursive: true });
-
-      // Determine output filename based on method
-      const outputFilename = `${method}_denoised.tif`;
+      // Run folder results/denoising/filter<n>/ (ADR-018); the output file
+      // carries its display name (<source>_<method>.tif) on disk
+      const inputFile = (workspaceManager.loadMetadata(sessionId)?.files || []).find(f =>
+        f.path === inputPath || path.join(workspacePath, f.path) === absoluteInputPath
+      ) || null;
+      const sourceName = inputFile
+        ? (inputFile.displayName || inputFile.name)
+        : path.basename(inputPath);
+      const displayName = buildDisplayName({
+        sourceName,
+        operation: `denoising-${method}`,
+        ext: '.tif'
+      });
+      const outputDir = workspaceManager.allocateRun(sessionId, 'filter', ['results/denoising']).dirs['results/denoising'];
+      const outputFilename = workspaceManager.physicalNameFor(outputDir, displayName);
       const outputPath = path.join(outputDir, outputFilename);
 
       // Build Python command arguments
@@ -163,12 +172,6 @@ function createDenoisingRoutes(dependencies) {
 
           // Track output file in workspace metadata
           try {
-            // Find input file ID for lineage
-            const metadata = workspaceManager.loadMetadata(sessionId);
-            const inputFile = metadata?.files?.find(f =>
-              f.path === inputPath || path.join(workspacePath, f.path) === absoluteInputPath
-            );
-
             // Create lineage
             let lineage = null;
             if (inputFile) {
@@ -177,16 +180,6 @@ function createDenoisingRoutes(dependencies) {
 
             // Get output file size
             const outputStats = fs.existsSync(outputPath) ? fs.statSync(outputPath) : { size: 0 };
-
-            // Build a consistent display name chained from the source file
-            const sourceName = inputFile
-              ? (inputFile.displayName || inputFile.name)
-              : path.basename(inputPath);
-            const displayName = buildDisplayName({
-              sourceName,
-              operation: `denoising-${method}`,
-              ext: '.tif'
-            });
 
             // Add file to metadata
             // New metadata system: results category with denoising/data tags
@@ -198,6 +191,7 @@ function createDenoisingRoutes(dependencies) {
               size: outputStats.size,
               folderId: null,
               displayName,
+              ...(inputFile?.voxelSize && { voxelSize: inputFile.voxelSize }),
               lineage
             });
 
@@ -551,12 +545,16 @@ function createDenoisingRoutes(dependencies) {
         });
       }
 
-      // Generate training ID
+      // Generate training ID (job key for the session map and socket room)
       const trainingId = `dl_denoise_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Create output directory
-      const outputDir = path.join(workspacePath, 'models', 'denoising', trainingId);
-      fs.mkdirSync(outputDir, { recursive: true });
+      // Run folders (ADR-018): results/denoising/dn<n>/ for the denoised
+      // stack, models/denoising/dn<n>/ for the model and its artifacts. The
+      // scratch experiment directory lives under the models folder until
+      // finalize removes it.
+      const run = workspaceManager.allocateRun(sessionId, 'dn', ['results/denoising', 'models/denoising']);
+      const outputDir = run.dirs['models/denoising'];
+      const resultsDir = run.dirs['results/denoising'];
 
       // Build the routed v1.0 training config (see ADR-006):
       //   { input_data, mask: {source, extractor}, recipes: {n2v, structn2v} }
@@ -616,8 +614,10 @@ function createDenoisingRoutes(dependencies) {
           n2v: n2vRecipe,
           structn2v: structRecipe
         },
-        // Add workspace directory for output file organization
+        // Where finalize copies the deliverables (ADR-018 run folders)
         workspace_dir: workspacePath,
+        results_dir: resultsDir,
+        models_dir: outputDir,
         // autoStructN2V pauses after the (seconds-fast, pre-training) mask/route
         // step so the user can approve the discovered mask
         pauseAfterMask: config.pauseAfterMask || false
@@ -895,9 +895,8 @@ function createDenoisingRoutes(dependencies) {
       // (completed by DenoisingService when the process exits)
       sharedSessionTracker.registerJob(inferenceId, sessionId, 'denoising-inference');
 
-      // Create output directory
-      const outputDir = path.join(workspacePath, 'results', 'denoising', inferenceId);
-      fs.mkdirSync(outputDir, { recursive: true });
+      // Run folder results/denoising/dn<n>/ (ADR-018)
+      const outputDir = workspaceManager.allocateRun(sessionId, 'dn', ['results/denoising']).dirs['results/denoising'];
 
       let inferenceParams;
 
@@ -1597,9 +1596,13 @@ function createDenoisingRoutes(dependencies) {
         fs.mkdirSync(slicesDir, { recursive: true });
       }
 
-      // Generate cache filename based on path hash, slice, and size
-      const pathHash = require('crypto').createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
-      const cacheFilename = `dl_${pathHash}_${sliceIndex}_${sizeParam}.jpg`;
+      // Cache key: the tracked file id (ADR-018; cleanup and in-place
+      // rewrites are id-based), falling back to a path hash for untracked
+      // files
+      const cacheFileId = workspaceManager.getFileIdByPath(sessionId, path.relative(workspacePath, normalizedPath).replace(/\\/g, '/'));
+      const cacheKey = cacheFileId
+        || require('crypto').createHash('md5').update(normalizedPath).digest('hex').substring(0, 8);
+      const cacheFilename = `dl_${cacheKey}_${sliceIndex}_${sizeParam}.jpg`;
       const cachePath = path.join(slicesDir, cacheFilename);
 
       // Result files are immutable, so slice JPEGs can be browser-cached

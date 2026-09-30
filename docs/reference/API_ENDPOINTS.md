@@ -394,10 +394,11 @@ Get workspace file tree structure.
 
 ### POST /api/workspace/upload
 
-Upload file to workspace.
+Upload one or more files to the workspace. The server detects what each
+file is (ADR-018); the caller may pass a hint.
 
-**Authentication:** `requireAuth`
-**Status:** ✅ Stable (Phase 1)
+**Authentication:** `requireAuth` (active users only)
+**Status:** ✅ Stable (ADR-018)
 
 #### Request
 
@@ -409,21 +410,20 @@ Upload file to workspace.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| file | File | Yes | TIFF file to upload |
-| category | string | No | File category (raw_images, annotations, inference_data). Default: 'uploads' |
+| file | File | Yes | One or more files (any field name is accepted) |
+| kind | string | No | Hint from a module selector: `raw`, `annotation` or `model`. Wins over the content probe for images. Legacy `category` values (`raw_images`, `annotations`, `imported_models`) are accepted too |
 
-#### Request Example
+**Detection:**
 
-```javascript
-const formData = new FormData();
-formData.append('file', file);
-formData.append('category', 'raw_images');
+| File | Rule | Placed as |
+|------|------|-----------|
+| `.tif` / `.tiff` / `.mrc` | `python/probe_upload.py`: integer data with at most 100 distinct values on a slice sample is an annotation, else raw (MRC converted to TIFF first) | `uploads/raw/` (`raw`) or `uploads/annotations/` (`annotation`) |
+| `.pth` / `.pt` | extension | `models/imported/` (`unspecified`, `weights`) |
+| `.json` | extension | `models/imported/` (`unspecified`, `config`) |
+| `.zip` with `rdf.yaml` / `bioimageio.yaml` | zip listing | `models/imported/` (`bioimageio`, `weights`) |
+| `.zip` with `metadata.json` at the root | zip listing | not placed: parked as `pendingRestore` for `POST /api/workspace/restore` |
 
-const response = await fetch('/api/workspace/upload', {
-  method: 'POST',
-  body: formData
-});
-```
+Files keep their original name (sanitised; `_2`, `_3` on collision); the display name is the original name. Per-kind size limits apply after detection: 200 MB images, 2 GB model files and packages, 5 GB backups.
 
 #### Response
 
@@ -431,14 +431,11 @@ const response = await fetch('/api/workspace/upload', {
 ```javascript
 {
   "success": true,
-  "file": {
-    "name": "image.tif",
-    "path": "uploads/abc123.../image.tif",
-    "size": 1024000,
-    "category": "raw_images",
-    "uploadDate": "2025-11-27T12:00:00.000Z"
-  },
-  "message": "File uploaded successfully"
+  "files": [ { ...fileEntry, "detectedKind": "raw", "detectedLabel": "raw image data", "detectedReason": "integer data with more than 100 distinct values" } ],
+  "file": { ...first entry or null... },
+  "errors": [ { "name": "junk.zip", "error": "Not uploaded: zip is neither a workspace backup ..." } ],
+  "pendingRestore": { "id": "restore_...", "size": 12345, "originalName": "workspace_2026.zip" } | null,
+  "message": "Uploaded 2 files"
 }
 ```
 
@@ -447,17 +444,27 @@ const response = await fetch('/api/workspace/upload', {
 | Status | Condition | Response |
 |--------|-----------|----------|
 | 400 | No file uploaded | `{ success: false, error: "No file uploaded" }` |
-| 400 | Invalid file type | Multer error: "Only TIFF files are allowed!" |
-| 400 | File too large | Multer error: "File too large (max 200MB)" |
+| 400 | No file could be placed | `{ success: false, error, errors: [...] }` |
+| 400 | Unsupported extension | Multer error listing the accepted types |
+| 403 | Account not approved | `{ success: false, error: "Custom file upload requires account approval" }` |
 | 500 | Server error | `{ success: false, error: "Error message" }` |
 
-#### Behavior
+---
 
-- Uses multer for file handling
-- Files stored in `workspaces/<sessionId>/uploads/`
-- Only accepts TIFF files
-- 200MB file size limit
-- Logs activity via `activityLogger.logActivity()`
+### PATCH /api/workspace/file/:fileId/kind
+
+Change the kind of an uploaded TIFF image (`raw` ↔ `annotation`) when the content probe guessed wrong. Tags only; the file stays where it is.
+
+**Body:** `{ "kind": "raw" | "annotation" }`
+**Response:** `{ success: true, file }`; 400 for other files or kinds.
+
+---
+
+### DELETE /api/workspace/restore/pending
+
+Discard a workspace backup parked by the upload endpoint (the user cancelled the restore confirmation).
+
+**Response:** `{ success: true }`
 
 ---
 
@@ -549,13 +556,19 @@ Restore workspace from uploaded ZIP archive.
 
 **Method:** `POST`
 **Endpoint:** `/api/workspace/restore`
-**Content-Type:** `multipart/form-data`
+**Content-Type:** `multipart/form-data` or `application/json`
 
-**Form Parameters:**
+**Form Parameters (legacy multipart form):**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | workspace | File | Yes | ZIP file containing workspace backup |
+
+**JSON body (ADR-018, the file browser's flow):**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| pendingRestoreId | string | Yes | Id of the backup parked by `POST /api/workspace/upload` (`pendingRestore.id`). 404 when it is no longer available |
 
 #### Response
 
@@ -584,7 +597,7 @@ Restore workspace from uploaded ZIP archive.
 
 - Clears existing workspace before restore
 - Extracts ZIP to workspace directory
-- Updates session IDs in metadata files
+- Updates session IDs in metadata files; the manifest is upgraded on the next read (schema 1.3.0: run counters bootstrapped from the folders in use, ADR-018)
 - Regenerates thumbnails asynchronously
 - 5GB file size limit
 - 10-minute timeout
@@ -615,15 +628,16 @@ Get data lineage/provenance for a file.
 ```javascript
 {
   "success": true,
-  "lineage": {
-    "fileId": "abc123",
-    "filename": "denoised_stack.tif",
-    "createdAt": "2026-01-01T12:00:00.000Z",
-    "sourceFiles": ["original_stack.tif"],
-    "operation": "denoising",
-    "parameters": { "method": "gaussian", "sigma": 1.5 },
-    "children": ["segmented_stack.tif", "mesh.stl"]
-  }
+  "fileId": "file_...",
+  "fileName": "trypB_seg.tif",                 // display name
+  "hasLineage": true,
+  "processingHistory": "Original Upload → Segmentation",
+  "chain": [ { "fileId", "fileName", "processType", "file" }, ... ],
+  "rootIds": ["file_..."],
+  "originalDataFile": { "id", "name", "displayName", "path", "category" } | null,
+  "modelFile": { "id": "file_...", "name": "trypB_seg_model.pth", "deleted": false } | null,
+  "hasErrors": false,
+  "errors": []
 }
 ```
 
@@ -631,15 +645,15 @@ Get data lineage/provenance for a file.
 ```javascript
 {
   "success": false,
-  "error": "Lineage record not found"
+  "error": "File not found"
 }
 ```
 
 #### Behavior
 
-- Returns processing history for file
-- Shows source files and derived outputs
-- Includes operation parameters
+- Walks `lineage.inputs` back to the original image data (inputs are data only, ADR-012)
+- `modelFile` names the model recorded in `lineage.modelFileId` (segmentation, DL denoising, bioimage.io export, fine-tuning), which is never part of the chain (ADR-018)
+- Broken chains (deleted inputs) are reported in `errors` as `missing_file`
 
 ---
 
@@ -978,9 +992,13 @@ Get mesh generation status.
   "status": "completed",
   "progress": 100,
   "result": {
-    "meshPath": "workspaces/.../meshes/mesh.stl",
-    "vertexCount": 50000,
-    "faceCount": 100000
+    "output_dir": "/abs/.../results/meshes/mesh1",
+    "output_rel_dir": "results/meshes/mesh1",     // ADR-018 run folder
+    "formats": ["json", "obj", "stl"],
+    "files": [ { "id", "name", "path", "displayName" }, ... ],   // tracked rows
+    "json_file_id": "file_...",                   // mesh_data.json, for the 3D viewer hand-off
+    "json_file_path": "results/meshes/mesh1/mesh_data.json",
+    "statistics": { "totalVertices": 50000, "totalFaces": 100000, "classesProcessed": 2 }
   }
 }
 ```

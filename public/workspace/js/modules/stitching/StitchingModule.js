@@ -468,17 +468,17 @@ class StitchingModule extends BaseModule {
   }
 
   /**
-   * Default output name: the source stack base names joined by "_" plus the
-   * "_stchd" suffix (e.g. "raw1_raw2_stchd"), matching the naming pattern of
-   * the other new-file modules. Falls back to "stitched".
+   * Default output name: the first stack's display name plus the "_stitch"
+   * token, the same name the server would give the output when the field
+   * is left empty (ADR-018). Falls back to "stitched".
    */
   defaultOutputName() {
     const strip = (p) => (p || '').split('/').pop().replace(/\.tiff?$/i, '');
-    const names = (this.workflow === 'recipe'
-      ? (this.recipeStackPaths || [])
-      : (this.stacks || []).map(s => s.name || s.path)
-    ).map(strip).filter(Boolean);
-    return names.length ? `${names.join('_')}_stchd` : 'stitched';
+    const first = this.workflow === 'recipe'
+      ? (this.recipeStackPaths || [])[0]
+      : ((this.stacks || [])[0] && ((this.stacks[0].displayName) || this.stacks[0].name || this.stacks[0].path));
+    const base = strip(first);
+    return base ? `${base}_stitch` : 'stitched';
   }
 
   /** Fill the output-name field with the default, unless the user typed their own. */
@@ -565,7 +565,9 @@ class StitchingModule extends BaseModule {
     return (files || []).filter(f => {
       if (!/\.tiff?$/i.test(f.name)) return false;
       const tags = f.tags || [];
-      if (tags.includes('info') || tags.includes('recipe')) return false;
+      // Sidecars and work-in-progress annotations (which may still carry a
+      // background-role class) are not stacks
+      if (tags.includes('info') || tags.includes('recipe') || tags.includes('wip')) return false;
       const mode = this.fileMode(f);
       if (!mode) return false;
       // The first added stack fixes the mode; only compatible files remain

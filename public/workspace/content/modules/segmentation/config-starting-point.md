@@ -30,8 +30,8 @@ Train a new model, continue training a workspace model, or fine-tune a bioimage.
 The training run in Step 3 always uses the training pairs you validated in Step 1. What differs is where the weights start:
 
 - **New model**: random weights, with the architecture you set below (features and layers). This is the default.
-- **Continue from a workspace model**: pick a `.pth` model from Model Files (one trained here before, or an imported one). The architecture is fixed by that model, so the features and layers fields are locked. The result is a new `.pth` model, listed under Model Files with a processing history that points at the parent and the training pairs.
-- **Fine-tune a bioimage.io model**: pick a package from Model Files (an uploaded package or one exported from a workspace model) or a zoo model from the list. The model's own preprocessing is applied to your slices, its architecture is trained further, and the result is a new bioimage.io package. When training finishes, that package is selected for Step 4 and appears under Model Files, ready for tiled inference, for another round of fine-tuning, or for download.
+- **Continue from a workspace model**: pick a `.pth` model from Model Files (one trained here before, or an imported one). The architecture is fixed by that model, so the features and layers fields are locked. The result is a new `.pth` model, listed under models in the file browser with a processing history that points at the parent and the training pairs.
+- **Fine-tune a bioimage.io model**: pick a package from Model Files (an uploaded package or one exported from a workspace model) or a zoo model from the list. The model's own preprocessing is applied to your slices, its architecture is trained further, and the result is a new bioimage.io package. When training finishes, that package is selected for Step 4 and appears under models in the file browser, ready for tiled inference, for another round of fine-tuning, or for download.
 
 ## What is checked when you pick a model
 

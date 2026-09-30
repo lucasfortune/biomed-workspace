@@ -52,7 +52,10 @@ class ImportHandler {
       this.module.importSelectors.config = new FileSelector({
         id: 'import_config',
         fileType: 'models',
-        filterTags: ['config', 'segmentation'],
+        filterTags: ['config'],
+        // Workspace U-Net configs and uploaded configs (unspecified method);
+        // never DL denoising configs (ADR-018)
+        filterFiles: (files) => files.filter(f => !(f.tags || []).includes('denoising')),
         title: 'Training Configuration',
         icon: 'settings',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.config-file'),
@@ -71,6 +74,9 @@ class ImportHandler {
       this.module.importSelectors.model = new FileSelector({
         id: 'import_model',
         fileType: 'models',
+        filterTags: ['weights'],
+        // Never DL denoising models (ADR-018)
+        filterFiles: (files) => files.filter(f => !(f.tags || []).includes('denoising')),
         title: 'Model Weights',
         icon: 'model',
         helpIconHtml: Templates.renderHelpIcon('segmentation.step1.model-file'),

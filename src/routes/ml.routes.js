@@ -19,6 +19,7 @@ const archiver = require('archiver');
 const { spawn } = require('child_process');
 const { requireAuth, requireApproved } = require('../middleware/auth.middleware');
 const { PYTHON_PATH } = require('../config/constants');
+const { placeUploadedFile } = require('../helpers/uploadKind');
 const PACKAGE_VERSION = require('../../package.json').version;
 
 /**
@@ -227,15 +228,20 @@ function createMLRoutes(dependencies) {
         });
       }
 
-      // Case 2: Regular file upload (single pair)
+      // Case 2: Regular file upload (single pair). The files arrive in the
+      // scratch folder and are placed under their original names (ADR-018).
       {
         if (!req.files || !req.files.raw_images || !req.files.annotations) {
           return res.status(400).json({
             error: 'Both raw images and annotations are required'
           });
         }
-        rawFile = req.files.raw_images[0];
-        annotationFile = req.files.annotations[0];
+        const rawUp = req.files.raw_images[0];
+        const annUp = req.files.annotations[0];
+        const rawPlaced = placeUploadedFile(workspaceManager, sessionId, rawUp.path, rawUp.originalname, 'raw');
+        const annPlaced = placeUploadedFile(workspaceManager, sessionId, annUp.path, annUp.originalname, 'annotation');
+        rawFile = { path: rawPlaced.absPath, filename: rawPlaced.name, originalname: rawUp.originalname, size: rawUp.size };
+        annotationFile = { path: annPlaced.absPath, filename: annPlaced.name, originalname: annUp.originalname, size: annUp.size };
       }
 
       // Validate TIFF stacks
@@ -262,22 +268,24 @@ function createMLRoutes(dependencies) {
         // New metadata system: uploads category with raw/annotation tags
         const rawRelPath = path.relative(workspacePath, rawFile.path);
         rawFileEntry = workspaceManager.addFileToMetadata(sessionId, {
-          name: rawFile.filename || rawFile.originalname,
+          name: rawFile.filename,
           path: rawRelPath,
           category: 'uploads',
           tags: ['raw'],
           size: rawFile.size,
-          folderId: null
+          folderId: null,
+          displayName: rawFile.originalname
         });
 
         const annRelPath = path.relative(workspacePath, annotationFile.path);
         annFileEntry = workspaceManager.addFileToMetadata(sessionId, {
-          name: annotationFile.filename || annotationFile.originalname,
+          name: annotationFile.filename,
           path: annRelPath,
           category: 'uploads',
           tags: ['annotation'],
           size: annotationFile.size,
-          folderId: null
+          folderId: null,
+          displayName: annotationFile.originalname
         });
 
         if (activityLogger) {
@@ -427,19 +435,18 @@ function createMLRoutes(dependencies) {
         config.num_classes = 3;
       }
 
-      const workspacePath = workspaceManager.getWorkspacePath(sessionId);
+      // Run folder models/segmentation/train<n>/ (ADR-018); the training id
+      // stays the job key for the session map and the socket room
+      const run = workspaceManager.allocateRun(sessionId, 'train', ['models/segmentation']);
       const trainingParams = {
         session_id: sessionId,
         training_id: trainingId,
+        run_label: run.label,
         raw_images: req.session.uploadedFiles.raw_images,
         annotations: req.session.uploadedFiles.annotations,
         config: config,
-        output_dir: path.join(workspacePath, 'models', 'segmentation', trainingId)
+        output_dir: run.dirs['models/segmentation']
       };
-
-      if (!fs.existsSync(trainingParams.output_dir)) {
-        fs.mkdirSync(trainingParams.output_dir, { recursive: true });
-      }
 
       // Training pairs (ADR-014): written next to the model so the run is
       // reproducible; the legacy single pair becomes a one-entry list
@@ -509,10 +516,12 @@ function createMLRoutes(dependencies) {
         current_epoch: 0,
         total_epochs: config.num_epochs,
         params: trainingParams,
-        // Lineage tracking: every raw + annotation input file id (all pairs),
-        // plus the parent model when training continues from one (ADR-017)
-        inputFileIds: pairs.flatMap(p => [p.raw_images_id, p.annotations_id])
-          .concat(startRecord && startRecord.fileId ? [startRecord.fileId] : []).filter(Boolean),
+        // Lineage tracking: every raw + annotation input file id (all pairs);
+        // the parent model of a fine-tuning run (ADR-017) is recorded
+        // separately and lands in lineage.modelFileId, never in inputs
+        inputFileIds: pairs.flatMap(p => [p.raw_images_id, p.annotations_id]).filter(Boolean),
+        rawFileId: pairs[0] && pairs[0].raw_images_id || null,
+        parentFileId: startRecord && startRecord.fileId || null,
         startModel: startRecord,
         stage: null,
         outputPackage: null,
@@ -811,12 +820,19 @@ function createMLRoutes(dependencies) {
           mimetype: 'image/tiff'
         };
       }
-      // Case 2: Regular upload
+      // Case 2: Regular upload (placed under its original name, ADR-018)
       else {
         if (!req.file) {
           return res.status(400).json({ error: 'No file provided for inference' });
         }
-        inferenceFile = req.file;
+        const placed = placeUploadedFile(workspaceManager, sessionId, req.file.path, req.file.originalname, 'raw');
+        inferenceFile = {
+          path: placed.absPath,
+          filename: placed.name,
+          originalname: req.file.originalname,
+          size: req.file.size,
+          mimetype: req.file.mimetype
+        };
       }
 
       // Validate TIFF
@@ -847,12 +863,13 @@ function createMLRoutes(dependencies) {
         // New upload - track in metadata
         // New metadata system: uploads category with raw tag
         inferenceFileEntry = workspaceManager.addFileToMetadata(sessionId, {
-          name: inferenceFile.filename || inferenceFile.originalname,
+          name: inferenceFile.filename,
           path: inferenceRelPath,
           category: 'uploads',
           tags: ['raw'],
           size: inferenceFile.size,
-          folderId: null
+          folderId: null,
+          displayName: inferenceFile.originalname
         });
       }
 
@@ -895,49 +912,62 @@ function createMLRoutes(dependencies) {
         });
       }
 
-      const modelFile = req.files.model_file[0];
-      const configFile = req.files.config_file[0];
+      const modelUp = req.files.model_file[0];
+      const configUp = req.files.config_file[0];
+      const dropTemp = () => {
+        for (const f of [modelUp, configUp]) fs.unlink(f.path, () => {});
+      };
 
-      if (!modelFile.originalname.toLowerCase().endsWith('.pth')) {
+      if (!modelUp.originalname.toLowerCase().endsWith('.pth')) {
+        dropTemp();
         return res.status(400).json({
           success: false,
           error: 'Model file must be a .pth file.'
         });
       }
 
-      if (!configFile.originalname.toLowerCase().endsWith('.json')) {
+      if (!configUp.originalname.toLowerCase().endsWith('.json')) {
+        dropTemp();
         return res.status(400).json({
           success: false,
           error: 'Config file must be a .json file.'
         });
       }
 
-      const validationResult = await validateImportedModel(modelFile.path, configFile.path);
+      const validationResult = await validateImportedModel(modelUp.path, configUp.path);
 
       if (validationResult.success) {
         const sessionId = req.session.id;
         const workspacePath = workspaceManager.getWorkspacePath(sessionId);
 
-        // Track imported model files in workspace metadata
-        // New metadata system: models category with unspecified/weights or unspecified/config tags
-        const modelRelPath = path.relative(workspacePath, modelFile.path);
+        // Place both files under models/imported/ with their original names
+        // (ADR-018; name === basename(path)) and track them: models category
+        // with unspecified/weights or unspecified/config tags, the config
+        // living and dying with the weights (parentId)
+        const modelPlaced = placeUploadedFile(workspaceManager, sessionId, modelUp.path, modelUp.originalname, 'weights');
+        const configPlaced = placeUploadedFile(workspaceManager, sessionId, configUp.path, configUp.originalname, 'config');
+        const modelFile = { path: modelPlaced.absPath, size: modelUp.size };
+        const configFile = { path: configPlaced.absPath, size: configUp.size };
+
         const modelEntry = workspaceManager.addFileToMetadata(sessionId, {
-          name: modelFile.originalname,
-          path: modelRelPath,
+          name: modelPlaced.name,
+          path: modelPlaced.relPath,
           category: 'models',
           tags: ['unspecified', 'weights'],
-          size: modelFile.size,
-          folderId: null
+          size: modelUp.size,
+          folderId: null,
+          displayName: modelUp.originalname
         });
 
-        const configRelPath = path.relative(workspacePath, configFile.path);
         const configEntry = workspaceManager.addFileToMetadata(sessionId, {
-          name: configFile.originalname,
-          path: configRelPath,
+          name: configPlaced.name,
+          path: configPlaced.relPath,
           category: 'models',
           tags: ['unspecified', 'config'],
-          size: configFile.size,
-          folderId: null
+          size: configUp.size,
+          folderId: null,
+          displayName: configUp.originalname,
+          parentId: modelEntry.id
         });
 
         req.session.importedModel = {
@@ -960,6 +990,7 @@ function createMLRoutes(dependencies) {
           }
         });
       } else {
+        dropTemp();
         res.status(400).json({
           success: false,
           error: validationResult.error
@@ -992,7 +1023,9 @@ function createMLRoutes(dependencies) {
       for (const [trainingId, session] of trainingSessions.entries()) {
         if (session.sessionId === sessionId && session.status === 'completed') {
           const workspacePath = workspaceManager.getWorkspacePath(sessionId);
-          const modelDir = path.join(workspacePath, 'models', 'segmentation', trainingId);
+          const modelDir = session.params && session.params.output_dir
+            ? session.params.output_dir
+            : path.join(workspacePath, 'models', 'segmentation', trainingId);
           const modelPath = path.join(modelDir, 'best_model.pth');
           const configPath = path.join(modelDir, 'config.json');
 
@@ -1313,19 +1346,12 @@ function createMLRoutes(dependencies) {
         req.session.importedModelResultsDirs = [];
       }
 
-      // Generate output directory path (Python script will generate filename)
-      let outputDir;
-      if (usingBioimageio) {
-        outputDir = path.join(workspacePath, 'results', 'segmentation', `bioimageio_${Date.now()}`);
-      } else if (req.session.importedModel && req.session.importedModel.validated) {
-        const timestamp = Date.now();
-        const importedModelDir = `imported_model_${timestamp}`;
-        outputDir = path.join(workspacePath, 'results', 'segmentation', importedModelDir);
+      // Run folder results/segmentation/seg<n>/ for every inference, whatever
+      // the model source (ADR-018); the script picks the file name inside it
+      // and the tracker renames the outputs onto their display names
+      const outputDir = workspaceManager.allocateRun(sessionId, 'seg', ['results/segmentation']).dirs['results/segmentation'];
+      if (req.session.importedModel && req.session.importedModel.validated) {
         req.session.importedModelResultsDirs.push(outputDir);
-      } else if (training_id) {
-        outputDir = path.join(workspacePath, 'results', 'segmentation', training_id);
-      } else {
-        outputDir = path.join(workspacePath, 'results', 'segmentation', `inference_${inferenceId}`);
       }
 
       // Create a placeholder path for the Python script (it will use the directory)

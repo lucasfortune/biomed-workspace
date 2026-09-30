@@ -149,8 +149,17 @@ class WorkspaceAPI {
   async restoreWorkspace(zipFile, onProgress = null, restoreId = null) {
 
     return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('workspace', zipFile);
+      // Either a File (legacy: uploaded here) or the id of a backup the
+      // upload endpoint parked for confirmation ({ pendingRestoreId })
+      let body;
+      let contentType = null;
+      if (zipFile && zipFile.pendingRestoreId) {
+        body = JSON.stringify({ pendingRestoreId: zipFile.pendingRestoreId });
+        contentType = 'application/json';
+      } else {
+        body = new FormData();
+        body.append('workspace', zipFile);
+      }
 
       const xhr = new XMLHttpRequest();
 
@@ -191,7 +200,8 @@ class WorkspaceAPI {
 
       xhr.open('POST', url);
       xhr.withCredentials = true;
-      xhr.send(formData);
+      if (contentType) xhr.setRequestHeader('Content-Type', contentType);
+      xhr.send(body);
     });
   }
 
@@ -204,11 +214,12 @@ class WorkspaceAPI {
    * @param {File} file - File to upload
    * @param {string} category - File category (raw_images, annotations, etc.)
    */
-  async uploadFile(file, category) {
+  async uploadFile(file, kind = null) {
     const formData = new FormData();
-    // Use category as field name so backend routes to correct directory
-    formData.append(category, file);
-    formData.append('category', category);
+    formData.append('file', file);
+    // Optional kind hint (raw | annotation | model); the server detects the
+    // kind from the file itself when no hint is given (ADR-018)
+    if (kind) formData.append('kind', kind);
 
     const response = await fetch(`${this.baseURL}/api/workspace/upload`, {
       method: 'POST',

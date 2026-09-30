@@ -120,7 +120,7 @@ function createSegcleanupRoutes(dependencies) {
   }
 
   /** Track a produced label stack in metadata; returns the entry or null */
-  function trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId) {
+  function trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId, displayName = null) {
     try {
       const stats = fs.statSync(outputPath);
       const lineage = inputFile
@@ -133,8 +133,8 @@ function createSegcleanupRoutes(dependencies) {
         tags: ['segcleanup', 'segmentation', 'data'],
         size: stats.size,
         folderId: null,
-        ...(inputFile && {
-          displayName: buildDisplayName({
+        ...((displayName || inputFile) && {
+          displayName: displayName || buildDisplayName({
             sourceName: inputFile.displayName || inputFile.name,
             operation: 'segcleanup',
             ext: path.extname(outputPath)
@@ -479,11 +479,18 @@ function createSegcleanupRoutes(dependencies) {
 
       const jobId = `sc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       sessionTracker.registerJob(jobId, sessionId, 'segcleanup');
-      const outputDir = path.join(workspacePath, 'results', 'segcleanup', jobId);
-      await fsp.mkdir(outputDir, { recursive: true });
-      const safeName = (outputName || 'edited')
-        .replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
-      const outputPath = path.join(outputDir, `${safeName}.tif`);
+      // Run folder results/segcleanup/clean<n>/ (ADR-018); the output name
+      // the user typed is the display name and the file carries it on disk
+      const outputDir = workspaceManager.allocateRun(sessionId, 'clean', ['results/segcleanup']).dirs['results/segcleanup'];
+      const typed = String(outputName || '').replace(/\.tiff?$/i, '').trim();
+      const displayName = typed
+        ? `${typed}.tif`
+        : buildDisplayName({
+          sourceName: inputFile ? (inputFile.displayName || inputFile.name) : 'edited',
+          operation: 'segcleanup',
+          ext: '.tif'
+        });
+      const outputPath = path.join(outputDir, workspaceManager.physicalNameFor(outputDir, displayName));
 
       const config = {
         input_path: absolute,
@@ -499,7 +506,7 @@ function createSegcleanupRoutes(dependencies) {
       runJob(['--mode', 'edit-save', '--config', configPath], roomName, async (resultData, stderr) => {
         fsp.unlink(configPath).catch(() => {});
         if (resultData) {
-          const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId);
+          const entry = trackOutput(sessionId, workspacePath, outputPath, inputFile, jobId, displayName);
           // The working copy's quantification (metrics + report CSVs) would be
           // lost with the working copy; keep a copy next to the tracked output
           // so "Create report" still works after saving.
@@ -569,36 +576,49 @@ function createSegcleanupRoutes(dependencies) {
       const workspacePath = workspaceManager.getWorkspacePath(sessionId);
       const absoluteDir = resolveWorkspacePath(workspacePath, reportDir);
 
+      // Reports stay next to the saved output when the quantification was
+      // kept in its run folder; otherwise they get a run folder of their own
+      // (ADR-018: results/segcleanup/clean<n>/)
       const reportId = `report_${Date.now()}`;
-      const destDir = path.join(workspacePath, 'results', 'segcleanup', reportId);
+      const relDir = path.relative(workspacePath, absoluteDir).replace(/\\/g, '/');
+      const destDir = /^results\/segcleanup\/clean\d+$/.test(relDir)
+        ? absoluteDir
+        : workspaceManager.allocateRun(sessionId, 'clean', ['results/segcleanup']).dirs['results/segcleanup'];
+      const sourceName = sourceFileId
+        ? workspaceManager.getSourceDisplayName(sessionId, sourceFileId)
+        : 'segmentation';
 
       const tracked = [];
       for (const name of ['report.csv', 'objects.csv']) {
         const srcPath = path.join(absoluteDir, name);
         if (!fs.existsSync(srcPath)) continue;
         await fsp.mkdir(destDir, { recursive: true });
-        const destPath = path.join(destDir, name);
-        await fsp.copyFile(srcPath, destPath);
+        const displayName = buildDisplayName({
+          sourceName,
+          operation: 'segcleanup',
+          ext: path.extname(name),
+          // 'report' / 'objects' - keeps the two CSVs distinguishable
+          qualifier: path.basename(name, path.extname(name))
+        });
+        const destName = workspaceManager.physicalNameFor(destDir, displayName);
+        const destPath = path.join(destDir, destName);
+        if (destDir === absoluteDir) {
+          await fsp.rename(srcPath, destPath);
+        } else {
+          await fsp.copyFile(srcPath, destPath);
+        }
         const stats = fs.statSync(destPath);
         const lineage = sourceFileId
           ? createLineage('segcleanup', [sourceFileId], reportId)
           : null;
         const entry = workspaceManager.addFileToMetadata(sessionId, {
-          name,
+          name: destName,
           path: path.relative(workspacePath, destPath),
           category: 'results',
           tags: ['segcleanup', 'report'],
           size: stats.size,
           folderId: null,
-          ...(sourceFileId && {
-            displayName: buildDisplayName({
-              sourceName: workspaceManager.getSourceDisplayName(sessionId, sourceFileId),
-              operation: 'segcleanup',
-              ext: path.extname(name),
-              // 'report' / 'objects' - keeps the two CSVs distinguishable
-              qualifier: path.basename(name, path.extname(name))
-            })
-          }),
+          displayName,
           ...(lineage && { lineage })
         });
         tracked.push(entry);

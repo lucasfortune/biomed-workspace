@@ -31,9 +31,10 @@ const hasTag = (f, tag) => Array.isArray(f.tags) && f.tags.includes(tag);
 const isRawImageFile = (f) =>
   (f.category === 'uploads' && hasTag(f, 'raw')) ||
   f.category === 'raw' || f.category === 'raw_images' || f.category === 'inference_data';
-/** Processed image stack (denoised) that can also be annotated */
+/** Processed image stack (denoised, preprocessed, stitched raw) that can also be annotated */
 const isImageResultFile = (f) =>
-  (f.category === 'results' && hasTag(f, 'data') && hasTag(f, 'denoising')) ||
+  (f.category === 'results' && hasTag(f, 'data') && !hasTag(f, 'wip')
+    && (hasTag(f, 'denoising') || hasTag(f, 'raw'))) ||
   f.category === 'denoised_images';
 /**
  * Segmentation result (U-Net inference or Segmentation Cleanup output): a label
@@ -45,9 +46,10 @@ const isSegmentationResult = (f) =>
 /** Unfinished annotation saved with "Save Progress" */
 const isUnfinishedAnnotation = (f) =>
   f.category === 'results' && hasTag(f, 'annotation') && hasTag(f, 'wip');
-/** Finished annotation (created by this module or uploaded as a mask) */
+/** Finished annotation (made by this module, results since ADR-018, or uploaded as a mask) */
 const isFinishedAnnotation = (f) =>
-  f.category === 'uploads' && hasTag(f, 'annotation') && !hasTag(f, 'info');
+  hasTag(f, 'annotation') && !hasTag(f, 'info') && !hasTag(f, 'wip')
+  && (f.category === 'uploads' || f.category === 'results');
 const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -505,11 +507,14 @@ class AnnotationModule extends BaseModule {
     // Back to Hub button
     const backButton = document.getElementById('backToHub');
     if (backButton) {
-      backButton.addEventListener('click', () => {
+      backButton.addEventListener('click', async () => {
         if (this.isDirty) {
-          const confirmed = confirm(
-            'You have unsaved annotations. Are you sure you want to leave?'
-          );
+          const confirmed = await window.Dialog.confirm({
+            title: 'Unsaved annotations',
+            message: 'You have unsaved annotations. Leave without saving?',
+            confirmLabel: 'Leave',
+            danger: true
+          });
           if (!confirmed) return;
         }
         window.workspace.returnToHub();
@@ -1169,13 +1174,17 @@ class AnnotationModule extends BaseModule {
    * Delete a class
    * @param {number} classId - Class ID to delete
    */
-  deleteClass(classId) {
+  async deleteClass(classId) {
     if (!this.brushEngine) return;
 
     // Confirm deletion
-    if (!confirm('Delete this class? All annotations with this class will be removed.')) {
-      return;
-    }
+    const confirmed = await window.Dialog.confirm({
+      title: 'Delete class',
+      message: 'Delete this class? All annotations with this class will be removed.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
 
     this.brushEngine.deleteClass(classId);
     if (this.lastInterpolation?.classId === classId) {
@@ -2198,7 +2207,7 @@ class AnnotationModule extends BaseModule {
 
     return {
       sourceFileId: this.sourceFile?.id || this.sourceFile?.path || 'unknown',
-      sourceFileName: this.sourceFile?.name || 'unknown',
+      sourceFileName: this.sourceFile?.displayName || this.sourceFile?.name || 'unknown',
       width: this.tiffInfo.width,
       height: this.tiffInfo.height,
       slices: this.tiffInfo.sliceCount,
@@ -2546,9 +2555,11 @@ class AnnotationModule extends BaseModule {
 
     // Check if there's anything to save
     if (Object.keys(data.sliceData).length === 0) {
-      const confirmed = confirm(
-        'No annotations have been made. Create an empty annotation anyway?'
-      );
+      const confirmed = await window.Dialog.confirm({
+        title: 'Empty annotation',
+        message: 'No annotations have been made. Create an empty annotation anyway?',
+        confirmLabel: 'Create anyway'
+      });
       if (!confirmed) return;
     }
     const strippedNote = data.strippedBackgroundClass

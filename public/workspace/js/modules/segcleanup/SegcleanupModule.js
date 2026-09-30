@@ -110,10 +110,10 @@ class SegcleanupModule extends BaseModule {
     </span>`;
   }
 
-  /** Default save name for the current file: `{original-filename}_clnd`. */
+  /** Default save name: the source's display name plus the `_clean` token (the server's default too). */
   defaultOutputName() {
-    const base = (this.file?.name || '').replace(/\.tiff?$/i, '');
-    return base ? `${base}_clnd` : 'cleaned';
+    const base = (this.file?.displayName || this.file?.name || '').replace(/\.tiff?$/i, '');
+    return base ? `${base}_clean` : 'cleaned';
   }
 
   renderStep1() {
@@ -287,20 +287,13 @@ class SegcleanupModule extends BaseModule {
         stateManager: this.state,
         onSelect: (file) => this.onFileSelected(file),
         onUpload: (rawFile, uploadedFile) => this.onFileSelected(uploadedFile),
-        resultCategories: ['results', 'segmentations'],
-        resultCategoryLabels: {
-          'results': 'Result',
-          'segmentations': 'Segmentation'
-        },
-        filterRecentResults: (files) => files.filter(f => {
-          if (f.category === 'results') {
-            const tags = f.tags || [];
-            return tags.includes('segmentation') && tags.includes('data');
-          }
-          return f.category === 'segmentations';
-        }),
-        filterFiles: (files) => files.filter(f =>
-          f.category === 'uploads' && (f.tags || []).includes('annotation'))
+        // Label maps produced in the workspace: segmentation results and
+        // annotations made here (ADR-018); uploaded masks in the main list
+        resultCategories: ['results'],
+        resultTags: ['data'],
+        resultCategoryLabels: { 'results': 'Workspace' },
+        filterRecentResults: (files) => files.filter(FileSelector.isLabelMask),
+        filterFiles: (files) => files.filter(FileSelector.isLabelMask)
       });
       fileSelectorContainer.innerHTML = this.fileSelector.render();
       await this.fileSelector.init();

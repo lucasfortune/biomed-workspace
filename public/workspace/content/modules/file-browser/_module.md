@@ -24,7 +24,7 @@ seeAlsoTags:
 
 # File Browser & Workspace
 
-Manage your workspace files: upload data, organize by category, download results, and backup/restore your entire workspace between sessions.
+Manage your workspace files: upload data, find files by name or tag, download results, and back up or restore your entire workspace between sessions.
 
 The File Browser provides complete control over your workspace files. Since this application uses session-based storage (no permanent backend storage), understanding the workspace system is essential for preserving your work.
 
@@ -34,25 +34,25 @@ The File Browser provides complete control over your workspace files. Since this
 
 Every file belongs to one of three categories, refined by tags:
 
-- uploads: source data you bring in — raw TIFF/MRC stacks (`raw` tag) and annotation masks (`annotation` tag)
+- uploads: source data you bring in, raw TIFF/MRC stacks (`raw` tag) and annotation masks (`annotation` tag). The kind is detected when you upload.
 
-- models: trained model weights (.pth) and configs (.json), tagged by method (segmentation or denoising)
+- models: model weights (.pth), configs (.json), bioimage.io packages (.zip) and zoo model cards, tagged by method (segmentation, denoising, bioimageio or unspecified)
 
-- results: outputs from the processing modules — segmentation, denoising, meshes, preprocessing, stitching, and segmentation cleanup
+- results: outputs of the processing modules: segmentation, denoising, meshes, preprocessing, stitching, segmentation cleanup and annotations made in the workspace
 
-The category and tags drive search and the way files group in the tree. See the File Categories article for the full tag scheme.
+The tree shows the folders on disk: uploads by kind, and one numbered folder per run (`seg1`, `prep2`, `annot3`, ...) whose files carry the names you see. The category and tags drive search and the file selectors of the modules. See the File Categories article for the full tag scheme.
 
 File Operations
 
-- Upload: Add files via button or drag-and-drop
+- Upload: add files via button or drag-and-drop; the workspace detects what they are
 
-- Download: Save individual files or batch download as ZIP
+- Download: save individual files or batch download as ZIP
 
-- Rename: Change a file's display name (the underlying file is never touched)
+- Rename: change a file's display name (the underlying file is never touched)
 
-- Delete: Remove files (with confirmation)
+- Delete: remove files (with confirmation); companion files go with their main file
 
-- View Info: See file details and processing history
+- View Info: see file details, the model used and the processing history
 
 Workspace Persistence
 

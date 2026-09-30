@@ -296,13 +296,13 @@ class Workspace {
       const size = stats?.totalSizeMB || '0';
 
       // Show confirmation dialog
-      const confirmed = confirm(
-        `Logging out will permanently delete your workspace files.\n\n` +
-        `Current workspace:\n` +
-        `- ${fileCount} file(s)\n` +
-        `- ${size} MB total size\n\n` +
-        `This action cannot be undone. Do you want to continue?`
-      );
+      const confirmed = await Dialog.confirm({
+        title: 'Log out',
+        message: `Logging out permanently deletes your workspace: ${fileCount} file${fileCount === 1 ? '' : 's'}, ${size} MB.`,
+        warning: 'This cannot be undone. Download the workspace first if you want to keep it.',
+        confirmLabel: 'Log out and delete',
+        danger: true
+      });
 
       if (!confirmed) {
         return;
@@ -594,7 +594,11 @@ class Workspace {
    * @param {string} message - Error message
    */
   showError(message) {
-    alert('Error: ' + message);
+    if (window.Dialog) {
+      Dialog.error(message, this.state);
+    } else {
+      console.error('[Workspace]', message);
+    }
   }
 }
 

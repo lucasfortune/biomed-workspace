@@ -38,6 +38,10 @@ class FileBrowser {
       'segcleanup': ['cleanup', 'cleaned', 'quantification'],
       'recipe': ['recipes', 'alignment'],
       'report': ['reports', 'csv', 'quantification', 'metrics'],
+      'bioimageio': ['bioimage', 'zoo', 'package', 'packages'],
+      'card': ['cards', 'zoo'],
+      'wip': ['progress', 'unfinished', 'in-progress'],
+      'info': ['metadata', 'sidecar', 'companion'],
       'test-data': ['test', 'sample', 'demo'],
       'sample': ['sample', 'demo', 'example', 'built-in']
     };
@@ -281,21 +285,15 @@ class FileBrowser {
         </div>
 
         <div class="fb-upload-section">
-          <select class="fb-category-dropdown" id="fb-upload-category" title="Select upload category">
-            <option value="">Upload to...</option>
-            <option value="raw_images">📷 Raw Images</option>
-            <option value="annotations">🎨 Annotations</option>
-            <option value="imported_models">🧠 Model Files</option>
-            <option value="workspace" class="fb-option-workspace">📦 Restore Workspace (ZIP)</option>
-          </select>
-          <button class="fb-btn-upload" id="fb-upload-btn" title="Upload file" disabled>
+          <button class="fb-btn-upload" id="fb-upload-btn" title="Upload images, annotations, models, bioimage.io packages or a workspace backup. The kind is detected from the file.">
             <span class="fb-upload-icon">⬆️</span>
             <span class="fb-upload-text">Upload</span>
           </button>
+          <span class="fb-upload-hint">TIFF, MRC, .pth, .json, .zip</span>
         </div>
 
         <input type="file" id="fb-file-input" class="fb-file-input-hidden"
-               accept=".tif,.tiff,.mrc,.pth,.json,.zip" multiple style="display: none;">
+               accept=".tif,.tiff,.mrc,.pth,.pt,.json,.zip" multiple style="display: none;">
 
         <div class="fb-upload-progress" id="fb-upload-progress" style="display: none;">
           <div class="fb-progress-bar">
@@ -490,14 +488,16 @@ class FileBrowser {
       }
     });
 
-    // Sort children (directories first, then alphabetically)
+    // Sort children: directories first; run folders (seg1, seg2, ..., seg10)
+    // in numeric order; files by their display name
+    const label = (node) => node.type === 'directory' ? node.name : this.getDisplayName(node);
     const sortChildren = (node) => {
       if (node.children) {
         node.children.sort((a, b) => {
           if (a.type !== b.type) {
             return a.type === 'directory' ? -1 : 1;
           }
-          return a.name.localeCompare(b.name);
+          return label(a).localeCompare(label(b), undefined, { numeric: true, sensitivity: 'base' });
         });
         node.children.forEach(child => sortChildren(child));
       }
@@ -723,19 +723,8 @@ class FileBrowser {
       });
     }
 
-    // Category dropdown - enable/disable upload button
-    const categoryDropdown = this.container.querySelector('#fb-upload-category');
+    // Upload button click (no kind to choose: the server detects it, ADR-018)
     const uploadBtn = this.container.querySelector('#fb-upload-btn');
-
-    if (categoryDropdown && uploadBtn) {
-      categoryDropdown.addEventListener('change', (e) => {
-        const category = e.target.value;
-        uploadBtn.disabled = !category;
-        this.updateFileInputAccept(category);
-      });
-    }
-
-    // Upload button click
     if (uploadBtn) {
       uploadBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -914,23 +903,29 @@ class FileBrowser {
     if (!file) return;
 
     const currentName = this.getDisplayName(file);
-    const newName = prompt('Enter new display name:', currentName);
-    if (!newName || newName === currentName) return;
-
-    // Validate extension matches (keep the suffix meaningful)
-    const oldExt = currentName.split('.').pop().toLowerCase();
-    const newExt = newName.split('.').pop().toLowerCase();
-    if (oldExt !== newExt) {
-      this.state.notify('error', 'File extension must remain the same');
-      return;
-    }
+    const oldExt = currentName.includes('.') ? currentName.split('.').pop().toLowerCase() : '';
+    const newName = await Dialog.prompt({
+      title: 'Rename',
+      message: 'The name shown in the workspace and used for downloads. The file on disk keeps its name.',
+      label: 'New name',
+      value: currentName,
+      confirmLabel: 'Rename',
+      validate: (value) => {
+        const v = value.trim();
+        if (!v) return 'Enter a name.';
+        const ext = v.includes('.') ? v.split('.').pop().toLowerCase() : '';
+        if (ext !== oldExt) return `The extension must stay .${oldExt}.`;
+        return null;
+      }
+    });
+    if (newName == null || newName.trim() === currentName) return;
 
     try {
       this.state.update('ui.loading', true);
 
       const response = await this.api.request(`/api/workspace/file/${fileId}/rename`, {
         method: 'PATCH',
-        body: JSON.stringify({ newName })
+        body: JSON.stringify({ newName: newName.trim() })
       });
 
       if (response.success) {
@@ -953,9 +948,17 @@ class FileBrowser {
     const file = this.state.get('workspace.files').find(f => f.id === fileId);
     if (!file) return;
 
-    if (!confirm(`Delete "${this.getDisplayName(file)}"?\n\nThis action cannot be undone.`)) {
-      return;
-    }
+    const sidecars = (this.state.get('workspace.files') || []).filter(f => f.parentId === fileId);
+    const confirmed = await Dialog.confirm({
+      title: 'Delete file',
+      message: `Delete "${this.getDisplayName(file)}"?`,
+      warning: sidecars.length
+        ? `Its ${sidecars.length === 1 ? 'companion file' : `${sidecars.length} companion files`} (${sidecars.map(s => this.getDisplayName(s)).join(', ')}) will be deleted too. This cannot be undone.`
+        : 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
 
     try {
       this.state.update('ui.loading', true);
@@ -1016,11 +1019,14 @@ class FileBrowser {
 
     // CONFIRMATION DIALOG (REQUIRED)
     const fileWord = selectedIds.length === 1 ? 'file' : 'files';
-    const confirmMessage = `Are you sure you want to delete ${selectedIds.length} ${fileWord}?\n\nThis action cannot be undone.`;
-
-    if (!confirm(confirmMessage)) {
-      return; // User cancelled
-    }
+    const confirmed = await Dialog.confirm({
+      title: 'Delete files',
+      message: `Delete ${selectedIds.length} ${fileWord}?`,
+      warning: 'Companion files (class definitions, configs, reports) are deleted with their main file. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
 
     try {
       // Show loading state
@@ -1134,8 +1140,22 @@ class FileBrowser {
       });
     }
 
-    // Model file action (ADR-016): export a workspace U-Net as a bioimage.io package
-    if (ext === 'pth') {
+    // Uploaded image whose kind was detected from its content (ADR-018):
+    // let the user correct a wrong guess
+    const tags = file.tags || [];
+    if (isTiff && file.category === 'uploads' && (tags.includes('raw') || tags.includes('annotation'))) {
+      const toAnnotation = tags.includes('raw');
+      menuItems.push({ separator: true });
+      menuItems.push({
+        icon: toAnnotation ? '🎨' : '📷',
+        label: toAnnotation ? 'Mark as annotation' : 'Mark as raw image',
+        onClick: () => this.changeKind(fileId, toAnnotation ? 'annotation' : 'raw')
+      });
+    }
+
+    // Model file action (ADR-016): export a workspace U-Net as a bioimage.io
+    // package. DL denoising models are not U-Nets of this kind.
+    if (ext === 'pth' && !tags.includes('denoising')) {
       menuItems.push({ separator: true });
       menuItems.push({
         icon: '📦',
@@ -1144,8 +1164,9 @@ class FileBrowser {
       });
     }
 
-    // Add TIFF-specific operations if applicable
-    if (isTiff) {
+    // Add TIFF-specific operations if applicable (not for work-in-progress
+    // annotations: a copy would lose the classes sidecar)
+    if (isTiff && !tags.includes('wip')) {
       let sliceCount = 1;
       try {
         const response = await this.api.request(`/api/workspace/tiff-info/${fileId}`);
@@ -1170,7 +1191,7 @@ class FileBrowser {
         menuItems.push({
           icon: '✂️',
           label: 'Split Stack...',
-          onClick: () => this.showSplitDialog(fileId, file.name, sliceCount)
+          onClick: () => this.showSplitDialog(fileId, this.getDisplayName(file), sliceCount)
         });
       }
     }
@@ -1215,7 +1236,7 @@ class FileBrowser {
       });
       const data = await response.json();
       if (!data.success) throw new Error(data.error || 'Conversion failed');
-      this.state.notify('success', `Converted: ${data.file.name}`);
+      this.state.notify('success', `Converted: ${this.getDisplayName(data.file)}`);
       this.refresh();
     } catch (error) {
       console.error('[FileBrowser] Convert error:', error);
@@ -1469,6 +1490,19 @@ class FileBrowser {
         }
         valueElement.textContent = text;
         lineageRow.style.display = 'flex';
+
+        // The model that produced the file (ADR-018: never part of the chain)
+        if (data.modelFile) {
+          const modelRow = document.createElement('div');
+          modelRow.className = 'file-info-row';
+          modelRow.innerHTML = `
+            <span class="file-info-label">Model:</span>
+            <span class="file-info-value"></span>`;
+          modelRow.querySelector('.file-info-value').textContent = data.modelFile.deleted
+            ? '(deleted)'
+            : (data.modelFile.name || data.modelFile.id);
+          lineageRow.insertAdjacentElement('afterend', modelRow);
+        }
       } else {
         // Hide the row if there was an error
         lineageRow.style.display = 'none';
@@ -1731,27 +1765,6 @@ class FileBrowser {
   }
 
   /**
-   * Update file input accept attribute based on category
-   * @param {string} category - Selected category
-   */
-  updateFileInputAccept(category) {
-    const fileInput = this.container.querySelector('#fb-file-input');
-    if (!fileInput) return;
-
-    if (category === 'workspace') {
-      fileInput.accept = '.zip';
-      fileInput.multiple = false; // Only one workspace zip at a time
-    } else if (category === 'imported_models') {
-      fileInput.accept = '.pth,.json,.zip';
-      fileInput.multiple = true;
-    } else {
-      // Image categories: TIFF, plus MRC (converted to TIFF on import, ADR-010)
-      fileInput.accept = '.tif,.tiff,.mrc';
-      fileInput.multiple = true;
-    }
-  }
-
-  /**
    * Attach drag-and-drop event listeners to file browser
    *
    * NOTE: Event handlers query DOM elements dynamically inside handlers (not via closure)
@@ -1780,26 +1793,12 @@ class FileBrowser {
     sidebar.addEventListener('dragenter', (e) => {
       // Query elements dynamically - they get re-created on render
       const dropOverlay = this.container.querySelector('#fb-drop-overlay');
-      const categoryDropdown = this.container.querySelector('#fb-upload-category');
       const categoryText = this.container.querySelector('#fb-drop-category-text');
-
-      if (!dropOverlay || !categoryDropdown || !categoryText) return;
-
-      const category = categoryDropdown.value;
-
-      if (!category) {
-        categoryText.textContent = '⚠️ Please select a category first';
-        categoryText.style.color = 'var(--danger-color)';
-      } else {
-        const categoryNames = {
-          raw_images: 'Raw Images',
-          annotations: 'Annotations',
-          imported_models: 'Model Files'
-        };
-        categoryText.textContent = `Uploading to: ${categoryNames[category]}`;
+      if (!dropOverlay) return;
+      if (categoryText) {
+        categoryText.textContent = 'Images, annotations, models, packages or a workspace backup';
         categoryText.style.color = 'var(--primary-color, #4A90E2)';
       }
-
       dropOverlay.style.display = 'flex';
     });
 
@@ -1822,20 +1821,9 @@ class FileBrowser {
     // Handle drop
     sidebar.addEventListener('drop', (e) => {
       const dropOverlay = this.container.querySelector('#fb-drop-overlay');
-      const categoryDropdown = this.container.querySelector('#fb-upload-category');
-
       if (dropOverlay) {
         dropOverlay.style.display = 'none';
       }
-
-      if (!categoryDropdown) return;
-
-      const category = categoryDropdown.value;
-      if (!category) {
-        this.state.notify('error', 'Please select a category before uploading files');
-        return;
-      }
-
       const files = Array.from(e.dataTransfer.files);
       this.handleFileSelection(files);
     });
@@ -1849,46 +1837,35 @@ class FileBrowser {
    * @param {FileList} files - Files to upload
    */
   async handleFileSelection(files) {
-    const categoryDropdown = this.container.querySelector('#fb-upload-category');
-    const category = categoryDropdown.value;
-
-    if (!category) {
-      this.state.notify('error', 'Please select a category first');
-      return;
-    }
-
     if (!files || files.length === 0) return;
 
-    const validationResult = this.validateFiles(files, category);
-
+    const validationResult = this.validateFiles(files);
     if (!validationResult.valid) {
       this.state.notify('error', validationResult.error);
       return;
     }
 
-    // Special handling for workspace restore
-    if (category === 'workspace') {
-      await this.handleWorkspaceRestore(files[0]);
-      return;
-    }
-
-    await this.uploadFiles(Array.from(files), category);
+    await this.uploadFiles(Array.from(files));
   }
 
   /**
-   * Handle workspace restore from ZIP file
-   * @param {File} zipFile - ZIP file to restore from
+   * Restore the workspace from a backup the upload endpoint parked
+   * (ADR-018: the zip was uploaded already; the server recognised it as a
+   * workspace backup and waits for the confirmation)
+   * @param {{id: string, size: number, originalName: string}} pending
    */
-  async handleWorkspaceRestore(zipFile) {
+  async handlePendingRestore(pending) {
     // Show confirmation dialog
-    const confirmed = await this.showRestoreConfirmation();
+    const confirmed = await this.showRestoreConfirmation(pending);
     if (!confirmed) {
+      try {
+        await this.api.request('/api/workspace/restore/pending', { method: 'DELETE' });
+      } catch (e) { /* the server drops stale backups on the next upload */ }
       this.state.notify('info', 'Workspace restore cancelled');
       return;
     }
 
     const uploadBtn = this.container.querySelector('#fb-upload-btn');
-    const categoryDropdown = this.container.querySelector('#fb-upload-category');
     const progressContainer = this.container.querySelector('#fb-upload-progress');
     const progressFill = this.container.querySelector('#fb-progress-fill');
     const progressText = this.container.querySelector('#fb-progress-text');
@@ -1903,9 +1880,6 @@ class FileBrowser {
         uploadBtn.disabled = true;
         uploadBtn.querySelector('.fb-upload-text').textContent = 'Restoring...';
         uploadBtn.classList.add('uploading');
-      }
-      if (categoryDropdown) {
-        categoryDropdown.disabled = true;
       }
 
       // Show progress
@@ -1953,16 +1927,13 @@ class FileBrowser {
         }
       });
 
-      // Update progress text for upload phase
       if (progressText) {
-        progressText.textContent = 'Starting upload...';
+        progressText.textContent = 'Restoring workspace...';
       }
 
-      // Upload and restore workspace
-      // Progress is tracked server-side via Socket.IO:
-      // - Upload phase: 0-50% (server tracks incoming bytes)
-      // - Backend phases: 55-100% (validating, clearing, extracting, updating)
-      const result = await this.api.restoreWorkspace(zipFile, null, restoreId);
+      // Restore from the parked backup. Progress is tracked server-side via
+      // Socket.IO (validating, clearing, extracting, updating: 55-100%)
+      const result = await this.api.restoreWorkspace({ pendingRestoreId: pending.id }, null, restoreId);
 
       // Refresh file browser
       await this.refresh();
@@ -1999,96 +1970,59 @@ class FileBrowser {
         uploadBtn.querySelector('.fb-upload-text').textContent = 'Upload';
         uploadBtn.classList.remove('uploading');
       }
-      if (categoryDropdown) {
-        categoryDropdown.disabled = false;
-        categoryDropdown.value = ''; // Reset selection
-      }
     }
   }
 
   /**
-   * Validate files before upload (client-side)
+   * Validate files before upload (client-side): supported extensions and
+   * the per-kind size limits the server enforces too
    * @param {FileList} files - Files to validate
-   * @param {string} category - Upload category
    * @returns {Object} { valid: boolean, error: string }
    */
-  validateFiles(files, category) {
+  validateFiles(files) {
     const fileArray = Array.from(files);
 
     if (fileArray.length === 0) {
       return { valid: false, error: 'No files selected' };
     }
 
-    // Workspace ZIP validation
-    if (category === 'workspace') {
-      if (fileArray.length !== 1) {
-        return { valid: false, error: 'Please select exactly one workspace ZIP file' };
-      }
-      const file = fileArray[0];
-      if (!file.name.toLowerCase().endsWith('.zip')) {
-        return { valid: false, error: 'Only ZIP files are allowed for workspace restore' };
-      }
-      // Warn for large files but don't block
-      if (file.size > 1024 * 1024 * 1024) { // > 1GB
-        this.state.notify('info', 'Large workspace file detected. Upload may take several minutes.', 5000);
-      }
-      return { valid: true };
-    }
-
-    if (category === 'imported_models') {
-      const invalidFiles = fileArray.filter(file => {
-        const ext = file.name.toLowerCase().split('.').pop();
-        return !['pth', 'json', 'zip'].includes(ext);
-      });
-
-      if (invalidFiles.length > 0) {
-        return {
-          valid: false,
-          error: `Invalid file type(s). Only .pth, .json and bioimage.io .zip files allowed for models.`
-        };
-      }
-
-      // Show info for model uploads
-      if (fileArray.some(f => f.name.toLowerCase().endsWith('.pth'))) {
-        this.state.notify('info', 'Tip: For complete model validation, use the Segmentation module\'s Import Model feature', 5000);
-      }
-
-    } else {
-      const invalidFiles = fileArray.filter(file => {
-        const ext = file.name.toLowerCase().split('.').pop();
-        return !['tif', 'tiff', 'mrc'].includes(ext);
-      });
-
-      if (invalidFiles.length > 0) {
-        return {
-          valid: false,
-          error: `Invalid file type(s). Only TIFF (.tif, .tiff) or MRC (.mrc) files allowed.`
-        };
-      }
-    }
-
-    // Check file sizes (200MB limit for non-workspace files)
-    const maxSize = 200 * 1024 * 1024;
-    const oversizedFiles = fileArray.filter(f => f.size > maxSize);
-
-    if (oversizedFiles.length > 0) {
+    const limits = {
+      tif: 200, tiff: 200, mrc: 200,
+      pth: 2048, pt: 2048, json: 2048,
+      zip: 5120
+    };
+    const bad = fileArray.find(file => !(file.name.toLowerCase().split('.').pop() in limits));
+    if (bad) {
       return {
         valid: false,
-        error: `File(s) too large. Maximum 200MB per file.`
+        error: `${bad.name}: only TIFF/MRC images, .pth/.json model files and .zip archives (bioimage.io packages, workspace backups) can be uploaded`
       };
+    }
+
+    const oversized = fileArray.find(f => f.size > limits[f.name.toLowerCase().split('.').pop()] * 1024 * 1024);
+    if (oversized) {
+      const limit = limits[oversized.name.toLowerCase().split('.').pop()];
+      return {
+        valid: false,
+        error: `${oversized.name} is too large (limit ${limit >= 1024 ? `${limit / 1024} GB` : `${limit} MB`})`
+      };
+    }
+
+    if (fileArray.some(f => f.size > 1024 * 1024 * 1024)) {
+      this.state.notify('info', 'Large file detected. Upload may take several minutes.', 5000);
     }
 
     return { valid: true };
   }
 
   /**
-   * Upload files to workspace
+   * Upload files to the workspace. The server detects what each file is
+   * (ADR-018) and reports it; a workspace backup is parked and handed to
+   * the restore confirmation.
    * @param {Array<File>} files - Files to upload
-   * @param {string} category - Upload category
    */
-  async uploadFiles(files, category) {
+  async uploadFiles(files) {
     const uploadBtn = this.container.querySelector('#fb-upload-btn');
-    const categoryDropdown = this.container.querySelector('#fb-upload-category');
     const progressContainer = this.container.querySelector('#fb-upload-progress');
     const progressFill = this.container.querySelector('#fb-progress-fill');
     const progressText = this.container.querySelector('#fb-progress-text');
@@ -2099,9 +2033,6 @@ class FileBrowser {
       uploadBtn.querySelector('.fb-upload-text').textContent = 'Uploading...';
       uploadBtn.classList.add('uploading');
     }
-    if (categoryDropdown) {
-      categoryDropdown.disabled = true;
-    }
 
     // Show progress bar
     if (progressContainer) {
@@ -2109,52 +2040,55 @@ class FileBrowser {
     }
 
     const totalFiles = files.length;
-    let uploadedCount = 0;
+    let done = 0;
     const uploadedFileIds = [];
+    const detected = [];
+    const errors = [];
+    let pendingRestore = null;
 
     try {
       for (const file of files) {
         if (progressText) {
-          progressText.textContent = `Uploading ${uploadedCount + 1} of ${totalFiles}: ${file.name}`;
+          progressText.textContent = `Uploading ${done + 1} of ${totalFiles}: ${file.name}`;
         }
 
-        const result = await this.api.uploadFile(file, category);
-
-        if (result.success && result.file) {
-          uploadedFileIds.push(result.file.id);
-          uploadedCount++;
-
-          const progress = (uploadedCount / totalFiles) * 100;
-          if (progressFill) {
-            progressFill.style.width = `${progress}%`;
+        try {
+          const result = await this.api.uploadFile(file);
+          for (const entry of (result.files || (result.file ? [result.file] : []))) {
+            uploadedFileIds.push(entry.id);
+            detected.push(`${this.getDisplayName(entry)} as ${entry.detectedLabel || entry.detectedKind || 'a file'}`);
           }
+          for (const err of (result.errors || [])) errors.push(`${err.name}: ${err.error}`);
+          if (result.pendingRestore) pendingRestore = result.pendingRestore;
+        } catch (error) {
+          let errorMsg = error.message;
+          if (errorMsg.includes('403') || errorMsg.includes('approval')) {
+            errorMsg = 'Account approval required to upload. You can use the built-in sample files while waiting.';
+          }
+          errors.push(`${file.name}: ${errorMsg}`);
+        }
+
+        done++;
+        if (progressFill) {
+          progressFill.style.width = `${(done / totalFiles) * 100}%`;
         }
       }
 
-      this.state.notify('success', `Successfully uploaded ${uploadedCount} file(s)`);
-
-      await this.refresh();
-
-      uploadedFileIds.forEach(id => this.markAsRecent(id));
-
-    } catch (error) {
-      console.error('[FileBrowser] Upload error:', error);
-
-      let errorMsg = error.message;
-      if (errorMsg.includes('403') || errorMsg.includes('approval')) {
-        errorMsg = 'Account approval required to upload. You can use the built-in sample files while waiting.';
+      if (detected.length) {
+        this.state.notify('success', `Uploaded ${detected.join('; ')}. Wrong kind? Right-click the file and change it.`, 8000);
       }
+      for (const e of errors) this.state.notify('error', `Upload failed: ${e}`, 8000);
 
-      this.state.notify('error', `Upload failed: ${errorMsg}`);
+      if (uploadedFileIds.length) {
+        await this.refresh();
+        uploadedFileIds.forEach(id => this.markAsRecent(id));
+      }
 
     } finally {
       if (uploadBtn) {
         uploadBtn.disabled = false;
         uploadBtn.querySelector('.fb-upload-text').textContent = 'Upload';
         uploadBtn.classList.remove('uploading');
-      }
-      if (categoryDropdown) {
-        categoryDropdown.disabled = false;
       }
 
       setTimeout(() => {
@@ -2163,6 +2097,30 @@ class FileBrowser {
           if (progressFill) progressFill.style.width = '0%';
         }
       }, 2000);
+    }
+
+    if (pendingRestore) {
+      await this.handlePendingRestore(pendingRestore);
+    }
+  }
+
+  /**
+   * Change the kind of an uploaded image (raw <-> annotation)
+   * @param {string} fileId - File ID
+   * @param {string} kind - 'raw' | 'annotation'
+   */
+  async changeKind(fileId, kind) {
+    try {
+      const response = await this.api.request(`/api/workspace/file/${fileId}/kind`, {
+        method: 'PATCH',
+        body: JSON.stringify({ kind })
+      });
+      if (!response.success) throw new Error(response.error || 'Change failed');
+      await this.refresh();
+      this.state.notify('success', kind === 'annotation' ? 'Marked as annotation' : 'Marked as raw image data');
+    } catch (error) {
+      console.error('[FileBrowser] Change kind error:', error);
+      this.state.notify('error', `Could not change the kind: ${error.message}`);
     }
   }
 
@@ -2179,7 +2137,7 @@ class FileBrowser {
     if (!file) return;
 
     try {
-      this.setLoading(true, `Duplicating ${file.name}...`);
+      this.setLoading(true, `Duplicating ${this.getDisplayName(file)}...`);
 
       const response = await this.api.request(`/api/workspace/file/${fileId}/duplicate`, {
         method: 'POST'
@@ -2188,7 +2146,7 @@ class FileBrowser {
       if (response.success) {
         await this.refresh();
         this.markAsRecent(response.file.id);
-        this.state.notify('success', `Created ${response.file.name}`);
+        this.state.notify('success', `Created ${this.getDisplayName(response.file)}`);
       } else {
         throw new Error(response.error || 'Duplication failed');
       }
@@ -2306,7 +2264,7 @@ class FileBrowser {
     if (!file) return;
 
     try {
-      this.setLoading(true, `Splitting ${file.name}...`);
+      this.setLoading(true, `Splitting ${this.getDisplayName(file)}...`);
 
       const response = await this.api.request(`/api/workspace/file/${fileId}/split`, {
         method: 'POST',
@@ -2517,43 +2475,14 @@ class FileBrowser {
    * Show confirmation dialog for workspace restore
    * @returns {Promise<boolean>} True if user confirms
    */
-  showRestoreConfirmation() {
-    return new Promise((resolve) => {
-      const modal = document.createElement('div');
-      modal.className = 'workspace-confirm-modal';
-      modal.innerHTML = `
-        <div class="workspace-confirm-overlay"></div>
-        <div class="workspace-confirm-content">
-          <h3>Restore Workspace</h3>
-          <p>This will <strong>replace</strong> your current workspace with the contents of the ZIP file.</p>
-          <p class="warning-text">All existing files will be deleted. This cannot be undone.</p>
-          <div class="workspace-confirm-actions">
-            <button class="btn-cancel">Cancel</button>
-            <button class="btn-confirm btn-danger">Replace Workspace</button>
-          </div>
-        </div>
-      `;
-
-      const closeModal = (result) => {
-        modal.remove();
-        resolve(result);
-      };
-
-      // Event handlers
-      modal.querySelector('.workspace-confirm-overlay').addEventListener('click', () => closeModal(false));
-      modal.querySelector('.btn-cancel').addEventListener('click', () => closeModal(false));
-      modal.querySelector('.btn-confirm').addEventListener('click', () => closeModal(true));
-
-      // ESC key to cancel
-      const handleKeydown = (e) => {
-        if (e.key === 'Escape') {
-          document.removeEventListener('keydown', handleKeydown);
-          closeModal(false);
-        }
-      };
-      document.addEventListener('keydown', handleKeydown);
-
-      document.body.appendChild(modal);
+  showRestoreConfirmation(pending = null) {
+    const name = pending && pending.originalName ? ` "${pending.originalName}"` : '';
+    return Dialog.confirm({
+      title: 'Restore Workspace',
+      message: `The uploaded file${name} is a workspace backup. Restoring it replaces your current workspace with its contents.`,
+      warning: 'All existing files will be deleted. This cannot be undone.',
+      confirmLabel: 'Replace Workspace',
+      danger: true
     });
   }
 
@@ -2563,55 +2492,13 @@ class FileBrowser {
    * @returns {Promise<boolean>} True if user confirms
    */
   showDownloadConfirmation(stats) {
-    return new Promise((resolve) => {
-      const sizeDisplay = stats?.totalSizeMB ? `${stats.totalSizeMB} MB` : 'Unknown size';
-      const fileCount = stats?.fileCount || 0;
-
-      const modal = document.createElement('div');
-      modal.className = 'workspace-confirm-modal';
-      modal.innerHTML = `
-        <div class="workspace-confirm-overlay"></div>
-        <div class="workspace-confirm-content">
-          <h3>Download Workspace</h3>
-          <p>This will create a ZIP file containing your entire workspace.</p>
-          <div class="workspace-stats-info">
-            <div class="stat-row">
-              <span class="stat-label">Files:</span>
-              <span class="stat-value">${fileCount}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">Estimated size:</span>
-              <span class="stat-value">${sizeDisplay}</span>
-            </div>
-          </div>
-          <p class="info-text">Large workspaces may take several minutes to download.</p>
-          <div class="workspace-confirm-actions">
-            <button class="btn-cancel">Cancel</button>
-            <button class="btn-confirm">Download ZIP</button>
-          </div>
-        </div>
-      `;
-
-      const closeModal = (result) => {
-        modal.remove();
-        resolve(result);
-      };
-
-      // Event handlers
-      modal.querySelector('.workspace-confirm-overlay').addEventListener('click', () => closeModal(false));
-      modal.querySelector('.btn-cancel').addEventListener('click', () => closeModal(false));
-      modal.querySelector('.btn-confirm').addEventListener('click', () => closeModal(true));
-
-      // ESC key to cancel
-      const handleKeydown = (e) => {
-        if (e.key === 'Escape') {
-          document.removeEventListener('keydown', handleKeydown);
-          closeModal(false);
-        }
-      };
-      document.addEventListener('keydown', handleKeydown);
-
-      document.body.appendChild(modal);
+    const sizeDisplay = stats?.totalSizeMB ? `${stats.totalSizeMB} MB` : 'unknown size';
+    const fileCount = stats?.fileCount || 0;
+    return Dialog.confirm({
+      title: 'Download Workspace',
+      message: `This creates a ZIP file of your entire workspace: ${fileCount} file${fileCount === 1 ? '' : 's'}, about ${sizeDisplay}.`,
+      detail: 'Large workspaces may take several minutes to download.',
+      confirmLabel: 'Download ZIP'
     });
   }
 }

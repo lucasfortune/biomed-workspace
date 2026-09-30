@@ -35,7 +35,7 @@ This cycle repeats for every batch of patches in each epoch. Over time, the loss
 
 ## Runs that start from a model
 
-When Step 2 names a starting point, the status line shows the extra stages: loading the model first (a zoo model is downloaded on first use), and, for a bioimage.io parent, writing the fine-tuned package and running its self-test after the last epoch. The package is then selected for Step 4 and listed under Model Files; a run that continued from a workspace `.pth` model produces a new `.pth` model as usual.
+When Step 2 names a starting point, the status line shows the extra stages: loading the model first (a zoo model is downloaded on first use), and, for a bioimage.io parent, writing the fine-tuned package and running its self-test after the last epoch. The package is then selected for Step 4 and listed under models in the file browser; a run that continued from a workspace `.pth` model produces a new `.pth` model as usual.
 
 ## Which slices take part
 

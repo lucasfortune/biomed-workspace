@@ -37,11 +37,38 @@ class FileService {
    */
   async trackModuleOutput(sessionId, filePath, category, metadata = {}) {
     try {
-      const fileName = path.basename(filePath);
-      const fileSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
-
       // Get relative path from workspace root
       const workspacePath = this.workspaceService.getWorkspacePath(sessionId);
+
+      // Build a consistent display name chained from the source/input file, when lineage
+      // identifies one. Info/auxiliary outputs get an 'info' qualifier so they don't
+      // collide with the primary data output. Files without lineage keep their raw name.
+      const lin = metadata.lineage;
+      const sourceId = lin && Array.isArray(lin.inputs) ? lin.inputs[0] : null;
+      let displayName = null;
+      if (metadata.displayName) {
+        // Caller supplied an explicit display name
+        displayName = metadata.displayName;
+      } else if (lin && lin.processType && sourceId) {
+        const sourceName = this.workspaceService.getSourceDisplayName(sessionId, sourceId);
+        const isInfo = Array.isArray(metadata.tags) && metadata.tags.includes('info');
+        displayName = buildDisplayName({
+          sourceName,
+          operation: lin.processType,
+          ext: path.extname(filePath),
+          qualifier: isInfo ? 'info' : undefined
+        });
+      }
+
+      // ADR-018: a produced file carries its display name on disk. Scripts
+      // that pick their own file names (inference, denoising, packaging) hand
+      // the file over with adoptName, and it is renamed before tracking.
+      if (metadata.adoptName && displayName && this.workspaceService.adoptDisplayName) {
+        filePath = this.workspaceService.adoptDisplayName(filePath, displayName);
+      }
+
+      const fileName = path.basename(filePath);
+      const fileSize = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
       const relativePath = path.relative(workspacePath, filePath);
 
       // Build file entry with explicit tags handling
@@ -63,26 +90,23 @@ class FileService {
         fileData.lineage = metadata.lineage;
       }
 
-      // Build a consistent display name chained from the source/input file, when lineage
-      // identifies one. Info/auxiliary outputs get an 'info' qualifier so they don't
-      // collide with the primary data output. Files without lineage keep their raw name.
-      const lin = metadata.lineage;
-      const sourceId = lin && Array.isArray(lin.inputs) ? lin.inputs[0] : null;
-      if (metadata.displayName) {
-        // Caller supplied an explicit display name
-        fileData.displayName = metadata.displayName;
-      } else if (lin && lin.processType && sourceId) {
-        const sourceName = this.workspaceService.getSourceDisplayName(sessionId, sourceId);
-        const isInfo = Array.isArray(metadata.tags) && metadata.tags.includes('info');
-        fileData.displayName = buildDisplayName({
-          sourceName,
-          operation: lin.processType,
-          ext: path.extname(fileName),
-          qualifier: isInfo ? 'info' : undefined
-        });
+      if (displayName) {
+        fileData.displayName = displayName;
+      }
+
+      // Sidecar link (info/config files live and die with their main output)
+      if (metadata.parentId) {
+        fileData.parentId = metadata.parentId;
+      }
+      if (metadata.voxelSize) {
+        fileData.voxelSize = metadata.voxelSize;
       }
 
       const fileEntry = this.workspaceService.addFileToMetadata(sessionId, fileData);
+      if (fileEntry && metadata.adoptName) {
+        // Callers may need the final location (renamed above)
+        fileEntry.absolutePath = filePath;
+      }
 
       if (this.logger) {
         this.logger.debug(`Tracked ${category} output:`, fileName);
@@ -125,25 +149,57 @@ class FileService {
       }
     }
 
-    // New metadata system: results category with segmentation/data or segmentation/info tags
+    // New metadata system: results category with segmentation/data or
+    // segmentation/info tags. The main output is tracked first so its
+    // sidecars can point at it (parentId); files are renamed onto their
+    // display names (ADR-018) and the result paths updated accordingly.
+    const voxelSize = lineage && Array.isArray(lineage.inputs) && lineage.inputs[0]
+      ? this.inheritedVoxelSize(sessionId, lineage.inputs[0]) : null;
     const filesToTrack = [
-      { path: result.output_path, category: 'results', tags: ['segmentation', 'data'] },
-      { path: result.metadata_path, category: 'results', tags: ['segmentation', 'info'] },
-      { path: result.visualization_path, category: 'results', tags: ['segmentation', 'info'] }
+      { key: 'output_path', tags: ['segmentation', 'data'], main: true },
+      { key: 'metadata_path', tags: ['segmentation', 'info'] },
+      { key: 'visualization_path', tags: ['segmentation', 'info'] }
     ];
 
+    let mainId = null;
     for (const file of filesToTrack) {
-      if (file.path && fs.existsSync(file.path)) {
-        // Pass lineage and tags as part of metadata
-        await this.trackModuleOutput(sessionId, file.path, file.category, { lineage, tags: file.tags });
+      const filePath = result[file.key];
+      if (filePath && fs.existsSync(filePath)) {
+        const entry = await this.trackModuleOutput(sessionId, filePath, 'results', {
+          lineage: lineage ? { ...lineage, inputs: [...(lineage.inputs || [])] } : null,
+          tags: file.tags,
+          adoptName: true,
+          ...(file.main && voxelSize && { voxelSize }),
+          ...(!file.main && mainId && { parentId: mainId })
+        });
+        if (entry) {
+          if (entry.absolutePath) result[file.key] = entry.absolutePath;
+          if (file.main) mainId = entry.id;
+        }
         if (this.logger) {
-          this.logger.debug(`[TRACKING] Tracked ${path.basename(file.path)} (${file.category})`);
+          this.logger.debug(`[TRACKING] Tracked ${path.basename(result[file.key])} (results)`);
         }
       }
     }
 
     if (this.logger) {
       this.logger.debug(`[TRACKING] Completed tracking for inference ${inferenceId} (source: ${source})`);
+    }
+  }
+
+  /**
+   * Voxel size of a source file, for inheritance by derived outputs (ADR-008)
+   * @param {string} sessionId - Session ID
+   * @param {string} fileId - Source file id
+   * @returns {object|null}
+   */
+  inheritedVoxelSize(sessionId, fileId) {
+    try {
+      const metadata = this.workspaceService.loadMetadata(sessionId);
+      const file = (metadata.files || []).find(f => f.id === fileId);
+      return file && file.voxelSize ? { ...file.voxelSize } : null;
+    } catch (e) {
+      return null;
     }
   }
 

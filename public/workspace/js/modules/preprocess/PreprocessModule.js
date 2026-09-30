@@ -372,10 +372,10 @@ class PreprocessModule extends BaseModule {
     if (next === 2) this.enterAdjustStep();
   }
 
-  /** Default save name for the current file: `{original-filename}_ppd`. */
+  /** Default save name: the source's display name plus the `_prep` token (the server's default too). */
   defaultOutputName() {
-    const base = (this.file?.name || '').replace(/\.tiff?$/i, '');
-    return base ? `${base}_ppd` : 'preprocessed';
+    const base = (this.file?.displayName || this.file?.name || '').replace(/\.tiff?$/i, '');
+    return base ? `${base}_prep` : 'preprocessed';
   }
 
   // ==========================================================================

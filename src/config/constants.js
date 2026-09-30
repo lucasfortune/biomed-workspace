@@ -45,8 +45,7 @@ const DIRECTORIES = {
   sessions: 'sessions',
   testData: 'test_data',
   workspaces: 'workspaces',
-  logs: 'logs',
-  unfinishedAnnotations: 'unfinished_annotations'
+  logs: 'logs'
 };
 
 // Per-workspace cache directories: excluded from ZIP export and preserved

@@ -87,7 +87,7 @@ function findRootFiles(fileId, allFiles) {
 
     path.push({
       fileId: currentId,
-      fileName: file.name,
+      fileName: file.displayName || file.name,
       processType: file.lineage?.processType || 'upload'
     });
 
@@ -156,10 +156,6 @@ function getProcessingHistoryString(fileId, allFiles) {
     'denoising-training': 'Denoising Training',
     'denoising-gaussian': 'Gaussian Denoising',
     'denoising-nlm': 'NLM Denoising',
-    'denoising-n2v': 'N2V Denoising',
-    'denoising-autostructn2v': 'autoStructN2V Denoising',
-    'denoising-autostructn2v-stage1': 'autoStructN2V Stage 1',
-    'denoising-autostructn2v-stage2': 'autoStructN2V Stage 2',
     'segmentation': 'Segmentation',
     'segmentation-training': 'Segmentation Training',
     'meshGeneration': 'Mesh Generation',
@@ -171,6 +167,7 @@ function getProcessingHistoryString(fileId, allFiles) {
     'segcleanup': 'Segmentation Cleanup',
     'convert': 'Format Conversion',
     'bioimageio-export': 'bioimage.io Export',
+    'bioimageio-import': 'bioimage.io Model',
     'segmentation-finetune': 'Fine-tuning'
   };
 

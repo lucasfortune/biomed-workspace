@@ -570,9 +570,21 @@ class DenoisingService {
         ? 'denoising-autostructn2v-stage1'
         : 'denoising-n2v';
 
-      // Helper: register one output file when present on disk
-      const track = (filePath, category, tags, lineage = null, qualifier = null) => {
-        if (!filePath || typeof filePath !== 'string' || !fs.existsSync(filePath)) return;
+      const voxelSize = this._inheritedVoxelSize(sessionId, inputFileId);
+
+      // Helper: register one output file when present on disk. The denoised
+      // stack is renamed onto its display name (ADR-018); the model keeps
+      // best_model.pth and its artifacts keep their conventional names inside
+      // models/denoising/dn<n>/ and hang off the model (parentId).
+      const track = (filePath, category, tags, lineage = null, qualifier = null, opts = {}) => {
+        if (!filePath || typeof filePath !== 'string' || !fs.existsSync(filePath)) return null;
+        const displayName = buildDisplayName({
+          sourceName,
+          operation: denoiseOp,
+          ext: path.extname(filePath),
+          qualifier
+        });
+        if (opts.adoptName) filePath = this.workspaceManager.adoptDisplayName(filePath, displayName);
         const relativePath = path.relative(workspacePath, filePath);
         const stats = fs.statSync(filePath);
         const entry = {
@@ -582,40 +594,73 @@ class DenoisingService {
           tags,
           size: stats.size,
           folderId: null,
-          displayName: buildDisplayName({
-            sourceName,
-            operation: denoiseOp,
-            ext: path.extname(filePath),
-            qualifier
-          })
+          displayName
         };
         if (lineage) entry.lineage = lineage;
-        this.workspaceManager.addFileToMetadata(sessionId, entry);
+        if (opts.parentId) entry.parentId = opts.parentId;
+        if (opts.voxelSize) entry.voxelSize = opts.voxelSize;
+        const row = this.workspaceManager.addFileToMetadata(sessionId, entry);
         if (this.logger) {
           this.logger.debug(`Tracked denoising output: ${relativePath}`);
         }
+        return row;
       };
 
       // Routed v1.0 output keys (see finalize_routed_output in python/denoising/output.py).
       // All auxiliary training artifacts carry the same denoising-training lineage as the
       // model so nothing in the run looks like an original upload.
-      track(outputFiles.denoised_stack, 'results', ['denoising', 'data'],
-            makeLineage('denoising'));
-      track(outputFiles.model, 'models', ['weights', 'denoising'],
+      const stack = track(outputFiles.denoised_stack, 'results', ['denoising', 'data'],
+            makeLineage('denoising'), null, { adoptName: true, voxelSize });
+      if (stack && outputFiles.denoised_stack) {
+        outputFiles.denoised_stack = path.join(workspacePath, stack.path);
+        outputFiles.denoised_stack_id = stack.id;
+      }
+      const model = track(outputFiles.model, 'models', ['weights', 'denoising'],
             makeLineage('denoising-training'), 'model');
-      track(outputFiles.routed_mask, 'models', ['info', 'denoising'],
-            makeLineage('denoising-training'), 'mask');
-      track(outputFiles.route_decision, 'models', ['info', 'denoising'],
-            makeLineage('denoising-training'), 'route');
-      track(outputFiles.config, 'models', ['config', 'denoising'],
-            makeLineage('denoising-training'), 'config');
-      track(outputFiles.results, 'models', ['info', 'denoising'],
-            makeLineage('denoising-training'), 'results');
+      const parentId = model ? model.id : null;
+      if (model) outputFiles.model_id = model.id;
+      const mask = track(outputFiles.routed_mask, 'models', ['info', 'denoising'],
+            makeLineage('denoising-training'), 'mask', { parentId });
+      const route = track(outputFiles.route_decision, 'models', ['info', 'denoising'],
+            makeLineage('denoising-training'), 'route', { parentId });
+      const cfg = track(outputFiles.config, 'models', ['config', 'denoising'],
+            makeLineage('denoising-training'), 'config', { parentId });
+      const results = track(outputFiles.results, 'models', ['info', 'denoising'],
+            makeLineage('denoising-training'), 'results', { parentId });
+      // Tracked ids by output key: the client downloads through the
+      // standard workspace file route
+      outputFiles.file_ids = Object.fromEntries([
+        ['denoised_stack', stack], ['model', model], ['routed_mask', mask],
+        ['route_decision', route], ['config', cfg], ['results', results]
+      ].filter(([, row]) => row).map(([key, row]) => [key, row.id]));
+
+      // The launch config written by startTraining is superseded by the
+      // tracked config.json copy; drop it so the run folder holds only
+      // tracked files
+      if (session && session.outputDir) {
+        const launchConfig = path.join(session.outputDir, `config_${trainingId}.json`);
+        try { if (fs.existsSync(launchConfig)) fs.unlinkSync(launchConfig); } catch (e) { /* best effort */ }
+      }
 
     } catch (error) {
       if (this.logger) {
         this.logger.error('Error tracking output files:', error);
       }
+    }
+  }
+
+  /**
+   * Voxel size of the input file, inherited by derived outputs (ADR-008)
+   * @private
+   */
+  _inheritedVoxelSize(sessionId, fileId) {
+    if (!fileId) return null;
+    try {
+      const metadata = this.workspaceManager.loadMetadata(sessionId);
+      const file = (metadata.files || []).find(f => f.id === fileId);
+      return file && file.voxelSize ? { ...file.voxelSize } : null;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -1066,43 +1111,53 @@ class DenoisingService {
       };
 
       // Add to workspace metadata
-      // New metadata system: results category with denoising/data tags
+      // New metadata system: results category with denoising/data tags.
+      // The output is renamed onto its display name (ADR-018).
       const sourceName = this.workspaceManager.getSourceDisplayName(sessionId, inputFileId);
       const denoiseOp = method === 'autostructn2v'
         ? 'denoising-autostructn2v-stage1'
         : 'denoising-n2v';
+      const displayName = buildDisplayName({
+        sourceName,
+        operation: denoiseOp,
+        ext: path.extname(outputPath)
+      });
+      const finalOutputPath = this.workspaceManager.adoptDisplayName(outputPath, displayName);
+      resultData.outputPath = finalOutputPath;
+      const voxelSize = this._inheritedVoxelSize(sessionId, inputFileId);
       const entry = this.workspaceManager.addFileToMetadata(sessionId, {
-        name: path.basename(outputPath),
-        path: relativePath,
+        name: path.basename(finalOutputPath),
+        path: path.relative(workspacePath, finalOutputPath),
         category: 'results',
         tags: ['denoising', 'data'],
-        size: stats.size,
+        size: fs.statSync(finalOutputPath).size,
         folderId: null,
-        displayName: buildDisplayName({
-          sourceName,
-          operation: denoiseOp,
-          ext: path.extname(outputPath)
-        }),
+        displayName,
+        ...(voxelSize && { voxelSize }),
         lineage: makeLineage()
       });
 
       // Track the inference metadata sidecar like every other module's info file
       const metadataPath = resultData.metadataPath;
       if (metadataPath && fs.existsSync(metadataPath)) {
+        const infoName = buildDisplayName({
+          sourceName,
+          operation: denoiseOp,
+          ext: path.extname(metadataPath),
+          qualifier: 'info'
+        });
+        const finalMetadataPath = this.workspaceManager.adoptDisplayName(metadataPath, infoName);
+        resultData.metadataPath = finalMetadataPath;
         this.workspaceManager.addFileToMetadata(sessionId, {
-          name: path.basename(metadataPath),
-          path: path.relative(workspacePath, metadataPath),
+          name: path.basename(finalMetadataPath),
+          path: path.relative(workspacePath, finalMetadataPath),
           category: 'results',
           tags: ['denoising', 'info'],
-          size: fs.statSync(metadataPath).size,
+          size: fs.statSync(finalMetadataPath).size,
           folderId: null,
-          displayName: buildDisplayName({
-            sourceName,
-            operation: denoiseOp,
-            ext: path.extname(metadataPath),
-            qualifier: 'info'
-          }),
-          lineage: makeLineage()
+          displayName: infoName,
+          lineage: makeLineage(),
+          ...(entry && { parentId: entry.id })
         });
       }
 

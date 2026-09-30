@@ -136,7 +136,11 @@ function createBioimageioRoutes({ bioimageioService, workspaceManager, activityL
   // Export of workspace U-Nets (ADR-016): a file action on .pth model files
   // ---------------------------------------------------------------------------
 
-  const isPth = (f) => /\.pth$/i.test(f.name || '');
+  // Exportable: a .pth of a workspace U-Net (segmentation) or an imported
+  // checkpoint of unspecified method; DL denoising models are refused here
+  // instead of failing late in Python (ADR-018)
+  const isPth = (f) => /\.pth$/i.test(f.name || '')
+    && !((f.tags || []).includes('denoising'));
   const isTiff = (f) => /\.tiff?$/i.test(f.name || '');
   const NON_SAMPLE_TAGS = ['annotation', 'segmentation', 'mask', 'result', 'mesh'];
   const MAX_NAME = 100;
@@ -166,12 +170,13 @@ function createBioimageioRoutes({ bioimageioService, workspaceManager, activityL
       const files = workspaceFiles(sessionId);
       const model = files.find(f => f.id === req.params.fileId);
       if (!model) return res.status(404).json({ success: false, error: 'Model file not found in workspace' });
-      if (!isPth(model)) return res.status(400).json({ success: false, error: 'Only .pth model files can be exported' });
+      if (!isPth(model)) return res.status(400).json({ success: false, error: 'Only segmentation .pth model files can be exported' });
 
       const samples = sampleCandidates(files);
       const lineageInputs = model.lineage && Array.isArray(model.lineage.inputs) ? model.lineage.inputs : [];
       const preferred = lineageInputs.map(id => samples.find(f => f.id === id)).find(Boolean) || samples[0] || null;
-      const base = String(model.displayName || model.name).replace(/\.pth$/i, '').replace(/_segmentation_model$/i, '');
+      const base = String(model.displayName || model.name).replace(/\.pth$/i, '')
+        .replace(/_(seg|ft)_model$/i, '').replace(/_segmentation_model$/i, '');
       const user = req.session.user || {};
       res.json({
         success: true,
@@ -204,7 +209,7 @@ function createBioimageioRoutes({ bioimageioService, workspaceManager, activityL
       const files = workspaceFiles(sessionId);
       const model = files.find(f => f.id === String(body.fileId || ''));
       if (!model) return res.status(404).json({ success: false, error: 'Model file not found in workspace' });
-      if (!isPth(model)) return res.status(400).json({ success: false, error: 'Only .pth model files can be exported' });
+      if (!isPth(model)) return res.status(400).json({ success: false, error: 'Only segmentation .pth model files can be exported' });
       if (!confinedPath(workspacePath, model)) {
         return res.status(404).json({ success: false, error: 'Model file not found on disk' });
       }
@@ -216,7 +221,8 @@ function createBioimageioRoutes({ bioimageioService, workspaceManager, activityL
       if (!samplePath) return res.status(404).json({ success: false, error: 'Sample image not found on disk' });
 
       const user = req.session.user || {};
-      const trainingId = model.lineage && model.lineage.processType === 'segmentation-training'
+      const trainingId = model.lineage
+        && ['segmentation-training', 'segmentation-finetune'].includes(model.lineage.processType)
         ? (model.lineage.processId || null) : null;
       const exportId = bioimageioService.startExport({
         sessionId,

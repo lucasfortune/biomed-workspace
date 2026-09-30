@@ -354,20 +354,26 @@ class BioimageioService {
   }
 
   /**
-   * Write `models/bioimageio/<id>/model_card.json` into the workspace and
-   * track it (models + bioimageio + info). Re-selecting the same model
-   * reuses the existing card.
+   * Write `models/bioimageio/zoo/<id>/<id>_card.json` into the workspace and
+   * track it (models + bioimageio + card, lineage bioimageio-import).
+   * Re-selecting the same model reuses the existing card (also one written
+   * by an older version under models/bioimageio/<id>/model_card.json).
    * @returns {Promise<{cardPath: string, fileId: string|null}>}
    */
   async writeModelCard(sessionId, zooId, summary) {
     const workspacePath = this.workspaceManager.getWorkspacePath(sessionId);
-    const dir = path.join(workspacePath, 'models', 'bioimageio', BioimageioService.safeName(zooId));
-    const cardPath = path.join(dir, 'model_card.json');
+    const safeId = BioimageioService.safeName(zooId);
+    const dir = path.join(workspacePath, 'models', 'bioimageio', 'zoo', safeId);
+    const cardName = `${safeId}_card.json`;
+    const cardPath = path.join(dir, cardName);
     const relPath = path.relative(workspacePath, cardPath);
 
-    const existingId = this.workspaceManager.getFileIdByPath(sessionId, relPath);
-    if (existingId && fs.existsSync(cardPath)) {
-      return { cardPath, fileId: existingId };
+    const legacyRel = path.join('models', 'bioimageio', safeId, 'model_card.json');
+    for (const rel of [relPath, legacyRel]) {
+      const existingId = this.workspaceManager.getFileIdByPath(sessionId, rel);
+      if (existingId && fs.existsSync(path.join(workspacePath, rel))) {
+        return { cardPath: path.join(workspacePath, rel), fileId: existingId };
+      }
     }
 
     fs.mkdirSync(dir, { recursive: true });
@@ -392,8 +398,16 @@ class BioimageioService {
     let fileId = null;
     if (this.fileService) {
       const entry = await this.fileService.trackModuleOutput(sessionId, cardPath, 'models', {
-        tags: ['bioimageio', 'info'],
-        displayName: `${BioimageioService.safeName(zooId)}_card.json`
+        tags: ['bioimageio', 'card'],
+        displayName: cardName,
+        // A card is written by the workspace, never uploaded: it carries a
+        // lineage record with no data inputs and the zoo id as process id
+        lineage: {
+          processType: 'bioimageio-import',
+          processedAt: new Date().toISOString(),
+          inputs: [],
+          processId: zooId
+        }
       });
       fileId = entry ? entry.id : null;
     }
@@ -431,8 +445,14 @@ class BioimageioService {
     const exportId = crypto.randomUUID();
     const workspacePath = this.workspaceManager.getWorkspacePath(job.sessionId);
     const modelPath = path.resolve(workspacePath, job.modelFile.path);
-    const slug = BioimageioService.slugify(job.name);
-    const outDir = path.join(workspacePath, 'models', 'bioimageio', 'exports', `${slug}_${Date.now()}`);
+    // Run folder models/bioimageio/export<n>/ (ADR-018); the zip is renamed
+    // onto its display name (<package name>.zip) once written
+    let outDir;
+    try {
+      outDir = this.workspaceManager.allocateRun(job.sessionId, 'export', ['models/bioimageio']).dirs['models/bioimageio'];
+    } catch (err) {
+      outDir = path.join(workspacePath, 'models', 'bioimageio', `export_${Date.now()}`);
+    }
     const record = {
       id: exportId,
       sessionId: job.sessionId,
@@ -468,6 +488,7 @@ class BioimageioService {
       finish(`Could not create the export directory: ${err.message}`);
       return exportId;
     }
+    if (this.logger) this.logger.debug(`[bioimageio] Export ${exportId} writes to ${outDir}`);
 
     const meta = {
       training_id: job.trainingId || null,
@@ -534,15 +555,21 @@ class BioimageioService {
       }
 
       try {
-        const inputs = [job.modelFile.id, job.sampleFileId].filter(Boolean);
-        const lineage = createLineage('bioimageio-export', inputs, exportId);
+        // Data inputs only (the sample image); the exported model is the
+        // record's modelFileId (ADR-012/018)
+        const lineage = job.sampleFileId
+          ? createLineage('bioimageio-export', [job.sampleFileId], exportId)
+          : { processType: 'bioimageio-export', processedAt: new Date().toISOString(), inputs: [], processId: exportId };
+        lineage.modelFileId = job.modelFile.id;
         let entry = null;
         if (this.fileService) {
           entry = await this.fileService.trackModuleOutput(job.sessionId, result.zip_path, 'models', {
             tags: ['bioimageio', 'weights', 'segmentation'],
             displayName: `${job.name}.zip`,
-            lineage
+            lineage,
+            adoptName: true
           });
+          if (entry && entry.absolutePath) result.zip_path = entry.absolutePath;
         }
         finish(null, {
           ...result,

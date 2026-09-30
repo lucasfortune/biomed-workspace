@@ -21,31 +21,29 @@ class ResultsHandler {
       return;
     }
 
-    const filePath = this.module.trainingResult.outputFiles.denoised_stack;
+    const fileId = this.module.trainingResult.outputFiles.denoised_stack_id;
 
-    if (!filePath) {
+    if (!fileId) {
       this.module.state.notify('error', 'No denoised output file found');
       return;
     }
 
-    try {
-      // Download via API
-      const response = await fetch(`/api/dl-denoising/download?path=${encodeURIComponent(filePath)}`);
-      if (!response.ok) throw new Error('Download failed');
+    // Tracked workspace file: the standard download route names it by its
+    // display name
+    this.downloadTracked(fileId);
+  }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filePath.split('/').pop();
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('[ResultsHandler] Error downloading:', error);
-      this.module.state.notify('error', `Failed to download: ${error.message}`);
-    }
+  /**
+   * Download a tracked workspace file through the standard route
+   * @param {string} fileId - Workspace file id
+   */
+  downloadTracked(fileId) {
+    const link = document.createElement('a');
+    link.href = `/api/workspace/file/${encodeURIComponent(fileId)}/download`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   /**
@@ -57,26 +55,15 @@ class ResultsHandler {
       return;
     }
 
-    const filePath = this.module.trainingResult.outputFiles.model;
+    const fileId = this.module.trainingResult.outputFiles.model_id;
 
-    if (!filePath) {
+    if (!fileId) {
       this.module.state.notify('error', 'No model file found');
       return;
     }
 
     try {
-      const response = await fetch(`/api/dl-denoising/download?path=${encodeURIComponent(filePath)}`);
-      if (!response.ok) throw new Error('Download failed');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filePath.split('/').pop();
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      this.downloadTracked(fileId);
     } catch (error) {
       console.error('[ResultsHandler] Error downloading model:', error);
       this.module.state.notify('error', `Failed to download model: ${error.message}`);
@@ -92,15 +79,15 @@ class ResultsHandler {
       return;
     }
 
-    const filePath = this.module.trainingResult.outputFiles.denoised_stack;
+    const fileId = this.module.trainingResult.outputFiles.denoised_stack_id;
 
-    if (!filePath) {
+    if (!fileId) {
       this.module.state.notify('error', 'No denoised output file found');
       return;
     }
 
     try {
-      await this.module.api.downloadFile(filePath);
+      this.downloadTracked(fileId);
     } catch (error) {
       console.error('[ResultsHandler] Error downloading result:', error);
       this.module.state.notify('error', `Failed to download: ${error.message}`);
@@ -117,18 +104,19 @@ class ResultsHandler {
     }
 
     const files = this.module.trainingResult.outputFiles;
-    const downloadPromises = [];
-
-    // Routed v1.0 output keys
-    for (const key of ['denoised_stack', 'model', 'config', 'routed_mask',
-                       'route_decision', 'results']) {
-      if (files[key]) {
-        downloadPromises.push(this.module.api.downloadFile(files[key]));
-      }
-    }
+    const ids = files.file_ids || {};
 
     try {
-      await Promise.all(downloadPromises);
+      // Routed v1.0 output keys, downloaded as tracked workspace files
+      let count = 0;
+      for (const key of ['denoised_stack', 'model', 'config', 'routed_mask',
+                         'route_decision', 'results']) {
+        if (ids[key]) {
+          this.downloadTracked(ids[key]);
+          count++;
+        }
+      }
+      if (!count) throw new Error('No tracked output files');
       this.module.state.notify('success', 'All files downloaded');
     } catch (error) {
       console.error('[ResultsHandler] Error downloading all results:', error);

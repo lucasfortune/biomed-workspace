@@ -192,15 +192,22 @@ function createPreprocessRoutes(dependencies) {
       const preprocessId = `pp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       // Registry entry: socket-room ownership checks + cleanup guard
       sessionTracker.registerJob(preprocessId, sessionId, 'preprocess');
-      const outputDir = path.join(workspacePath, 'results', 'preprocess', preprocessId);
-      await fsp.mkdir(outputDir, { recursive: true });
+      // Run folder results/preprocess/prep<n>/ (ADR-018). The output name the
+      // user typed is the display name; the file carries it on disk.
+      const outputDir = workspaceManager.allocateRun(sessionId, 'prep', ['results/preprocess']).dirs['results/preprocess'];
 
-      const safeName = (outputName || 'preprocessed')
-        .replace(/[^\w.-]/g, '_').replace(/\.tiff?$/i, '');
-      const outputPath = path.join(outputDir, `${safeName}.tif`);
+      const sourceName = inputFile ? (inputFile.displayName || inputFile.name) : path.basename(relInput);
+      const typed = String(outputName || '').replace(/\.tiff?$/i, '').trim();
+      const displayName = typed
+        ? `${typed}.tif`
+        : buildDisplayName({ sourceName, operation: 'preprocess', ext: '.tif' });
+      const outputPath = path.join(outputDir, workspaceManager.physicalNameFor(outputDir, displayName));
+      const configDisplayName = buildDisplayName({
+        sourceName: displayName, operation: 'preprocess', ext: '.json', qualifier: 'config'
+      }).replace(/_prep_prep_/, '_prep_');
 
       const config = { ...ops, input_path: absolute, output_path: outputPath };
-      const configPath = path.join(outputDir, `preprocess_config_${preprocessId}.json`);
+      const configPath = path.join(outputDir, workspaceManager.physicalNameFor(outputDir, configDisplayName));
       await fsp.writeFile(configPath, JSON.stringify(config, null, 2));
 
       const roomName = `preprocess-${preprocessId}`;
@@ -277,19 +284,14 @@ function createPreprocessRoutes(dependencies) {
               tags: ['preprocess', 'raw', 'data'],
               size: stats.size,
               folderId: null,
-              ...(inputFile && {
-                displayName: buildDisplayName({
-                  sourceName: inputFile.displayName || inputFile.name,
-                  operation: 'preprocess',
-                  ext: path.extname(outputPath)
-                })
-              }),
+              displayName,
               ...(voxelSize && { voxelSize }),
               ...(lineage && { lineage })
             });
             outputFileId = outputEntry?.id || null;
 
-            // Track the run manifest like every other module's info file (B7)
+            // Track the run manifest like every other module's info file
+            // (B7); it lives and dies with the output (parentId)
             if (fs.existsSync(configPath)) {
               workspaceManager.addFileToMetadata(sessionId, {
                 name: path.basename(configPath),
@@ -298,14 +300,8 @@ function createPreprocessRoutes(dependencies) {
                 tags: ['preprocess', 'info'],
                 size: fs.statSync(configPath).size,
                 folderId: null,
-                ...(inputFile && {
-                  displayName: buildDisplayName({
-                    sourceName: inputFile.displayName || inputFile.name,
-                    operation: 'preprocess',
-                    ext: '.json',
-                    qualifier: 'config'
-                  })
-                }),
+                displayName: configDisplayName,
+                ...(outputFileId && { parentId: outputFileId }),
                 ...(lineage && { lineage: { ...lineage } })
               });
             }

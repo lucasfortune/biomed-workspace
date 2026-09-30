@@ -23,7 +23,7 @@ seeAlsoTags:
 
 Use a bioimage.io model that is not in the zoo: one you exported from another tool, received from a collaborator, or made from your own workspace U-Net with the file browser's Export as bioimage.io package action.
 
-A bioimage.io package is a zip file containing the model description (rdf.yaml or bioimageio.yaml), the weights and, for PyTorch state dict models, the Python file that defines the architecture. Upload it through the file browser under Model Files, or with the upload button of this selector. The file appears here once it is in the workspace.
+A bioimage.io package is a zip file containing the model description (rdf.yaml or bioimageio.yaml), the weights and, for PyTorch state dict models, the Python file that defines the architecture. Upload it through the file browser under models in the file browser, or with the upload button of this selector. The file appears here once it is in the workspace.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ A state dict package runs its own architecture code on the server when the model
 
 ## Your own models
 
-A package exported from a workspace `.pth` model (right-click the model file under Model Files) is listed here as well, and so is a package produced by fine-tuning in Step 2. Running it this way gives the model tiled inference with a halo, so the stack size no longer has to be a multiple of 2 to the number of layers, and the output conversion defaults to argmax, which reproduces the model's ordinary class map.
+A package exported from a workspace `.pth` model (right-click the model file under models in the file browser) is listed here as well, and so is a package produced by fine-tuning in Step 2. Running it this way gives the model tiled inference with a halo, so the stack size no longer has to be a multiple of 2 to the number of layers, and the output conversion defaults to argmax, which reproduces the model's ordinary class map.
 
 ## Provenance
 
