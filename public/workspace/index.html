@@ -117,14 +117,14 @@
             </div>
 
             <div class="workspace-info">
-              <small>Workspace Version 1.7.0</small>
+              <small>Workspace Version 1.8.0</small>
               <details class="whats-new">
-                <summary>What's new in 1.7.0</summary>
+                <summary>What's new in 1.8.0</summary>
                 <ul>
-                  <li>Segmentation training uses only the slices you labelled, so partially annotated stacks train correctly, and several raw and annotation pairs can be combined in one run.</li>
-                  <li>A validation split you choose replaces the fixed split, and no labels are lost to a test set any more.</li>
-                  <li>Correct a segmentation result in the Annotation module and train on it again; results can also be picked as training masks directly.</li>
-                  <li>From 1.6.0: slice interpolation, classifier suggestions and class protection in the Annotation module.</li>
+                  <li>Run models from the bioimage.io model zoo in the Segmentation module: pick a model, run it on your stack with tiled inference, and get an ordinary segmentation result you can view, correct and train on.</li>
+                  <li>Uploaded bioimage.io packages (.zip) run the same way; the output conversion rule (per channel or argmax) is yours to choose.</li>
+                  <li>Model files uploaded through the file browser now appear in the model selectors.</li>
+                  <li>From 1.7.0: training on partially annotated stacks, several training pairs, a validation split you choose, and the correct-and-retrain loop.</li>
                 </ul>
                 <a href="https://lucasfortune.github.io/the-virtual-parasite/workspace/" class="resource-link" target="_blank" rel="noopener noreferrer">Full changelog &amp; docs</a>
               </details>
