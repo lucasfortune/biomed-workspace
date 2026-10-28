@@ -84,6 +84,17 @@ function loadEnvironment() {
     lines.push('# Comma-separated list of allowed origins, e.g.:');
     lines.push('# ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com');
     lines.push('');
+    lines.push('# Local mode (optional, default false) - for an install on your own machine:');
+    lines.push('# no login, one permanent workspace, no retention cleanup, large upload limits.');
+    lines.push('# Never enable this on a server other people can reach.');
+    lines.push('# LOCAL_MODE=true');
+    lines.push('');
+    lines.push('# Upload limits in MB (optional). Defaults: 200 / 2048 / 5120,');
+    lines.push('# or 20480 / 20480 / 51200 in local mode');
+    lines.push('# UPLOAD_LIMIT_IMAGE_MB=200');
+    lines.push('# UPLOAD_LIMIT_MODEL_MB=2048');
+    lines.push('# UPLOAD_LIMIT_ZIP_MB=5120');
+    lines.push('');
     lines.push('# Data Directory (optional, defaults to project root)');
     lines.push('# Set this to store user data (workspaces, sessions, logs, users.json) separately');
     lines.push('# Useful for production deployments with external storage volumes');
@@ -123,7 +134,8 @@ function loadEnvironment() {
     PORT: process.env.PORT || 3000,
     HOST: process.env.HOST || '127.0.0.1',
     ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || null,
-    DATA_DIR: process.env.DATA_DIR || null  // null means use project root
+    DATA_DIR: process.env.DATA_DIR || null,  // null means use project root
+    LOCAL_MODE: process.env.LOCAL_MODE === 'true'  // ADR-019
   };
 }
 
@@ -139,6 +151,7 @@ function initializeEnvironment() {
     console.log(`[ENV] DEBUG mode: ${env.DEBUG ? 'ENABLED' : 'DISABLED'}`);
     console.log(`[ENV] HOST: ${env.HOST}`);
     console.log(`[ENV] PORT: ${env.PORT}`);
+    console.log(`[ENV] LOCAL_MODE: ${env.LOCAL_MODE ? 'ENABLED (no login, no cleanup)' : 'disabled'}`);
     console.log(`[ENV] ALLOWED_ORIGINS: ${env.ALLOWED_ORIGINS || '(not set, using localhost defaults)'}`);
     console.log(`[ENV] DATA_DIR: ${env.DATA_DIR || '(not set, using project root)'}`);
     return env;

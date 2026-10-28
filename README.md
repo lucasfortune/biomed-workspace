@@ -12,7 +12,7 @@ The workspace is developed within the DFG priority programme SPP 2332
 documentation at
 **[lucasfortune.github.io/the-virtual-parasite](https://lucasfortune.github.io/the-virtual-parasite/workspace/)**.
 
-![Version](https://img.shields.io/badge/version-1.11.0-blue)
+![Version](https://img.shields.io/badge/version-1.12.0-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-18+-339933)
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-green)
@@ -107,6 +107,25 @@ node manageUsers.js approve <username>
 
 `node manageUsers.js` without arguments lists all commands (reject, remove,
 reset-password, ban-email, ...).
+
+### Local mode (single-user install)
+
+On your own machine the login, the 48-hour retention and the upload limits
+only get in the way. Add this line to `.env` and restart:
+
+```
+LOCAL_MODE=true
+```
+
+The app then opens straight into the workspace as a built-in local user,
+keeps one permanent workspace at `workspaces/local/`, never cleans it up,
+and raises the upload limits to 20 GB for images and models and 50 GB
+for workspace backups (set `UPLOAD_LIMIT_IMAGE_MB`, `UPLOAD_LIMIT_MODEL_MB`
+and `UPLOAD_LIMIT_ZIP_MB` in `.env` to choose your own, in either mode).
+No `users.json` is needed. Local mode has no authentication at all, so
+leave `HOST` at its default of 127.0.0.1 unless you understand who can
+reach the machine. Design notes in
+[ADR-019](docs/decisions/019_local_mode.md).
 
 ### Common commands
 

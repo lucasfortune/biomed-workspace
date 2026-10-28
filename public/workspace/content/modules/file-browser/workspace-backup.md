@@ -26,7 +26,9 @@ Download your entire workspace as a ZIP file and restore it later to continue yo
 
 ## Why This Matters
 
-This application uses session-based storage: your workspace is kept for up to 48 hours after your last activity, then it is deleted automatically. Your login session expires on the same 48-hour schedule, and logging out (after its confirmation dialog) deletes the workspace immediately. Anything not downloaded before then, uploaded files and generated results alike, is gone.
+On the public server the application uses session-based storage: your workspace is kept for up to 48 hours after your last activity, then it is deleted automatically. Your login session expires on the same 48-hour schedule, and logging out (after its confirmation dialog) deletes the workspace immediately. Anything not downloaded before then, uploaded files and generated results alike, is gone.
+
+A local installation in local mode keeps its single workspace indefinitely; there, backups are for moving work between machines, for example from a laptop to the public server or to a workstation.
 
 ## The workspace backup/restore feature solves this by letting you
 

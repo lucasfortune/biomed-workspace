@@ -8,6 +8,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { requireAuth, requireAdmin } = require('../middleware/auth.middleware');
+const { LOCAL_MODE } = require('../config/constants');
 
 /**
  * Create static routes router
@@ -27,6 +28,9 @@ function createStaticRoutes(dependencies) {
    * Welcome page (landing page)
    */
   router.get('/', (req, res) => {
+    if (LOCAL_MODE) {
+      return res.redirect('/workspace'); // ADR-019: nothing to log in to
+    }
     res.sendFile(path.join(__dirname, '../../public', 'welcome.html'));
   });
 

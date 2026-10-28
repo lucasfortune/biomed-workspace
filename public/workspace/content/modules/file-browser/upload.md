@@ -47,11 +47,15 @@ Uploads made from inside a module (the Add button of a file selector) are filed 
 
 ## File Size Limits
 
+On the public server:
+
 - Images: 200 MB per file
 
 - Model files and packages: 2 GB per file
 
 - Workspace ZIP: 5 GB
+
+A local installation on your own machine can set its own limits in its `.env` file, and in local mode they default to 20 GB for images and models and 50 GB for workspace ZIPs. The file browser always checks against the limits the server you are using reports.
 
 ## Drag and Drop
 

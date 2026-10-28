@@ -1983,10 +1983,13 @@ class FileBrowser {
       return { valid: false, error: 'No files selected' };
     }
 
+    // Per-kind limits in MB as the server reports them (ADR-019); the
+    // numbers below are only a fallback for a client that has not asked yet
+    const mb = this.state.get('workspace.uploadLimitsMb') || { image: 200, model: 2048, zip: 5120 };
     const limits = {
-      tif: 200, tiff: 200, mrc: 200,
-      pth: 2048, pt: 2048, json: 2048,
-      zip: 5120
+      tif: mb.image, tiff: mb.image, mrc: mb.image,
+      pth: mb.model, pt: mb.model, json: mb.model,
+      zip: mb.zip
     };
     const bad = fileArray.find(file => !(file.name.toLowerCase().split('.').pop() in limits));
     if (bad) {

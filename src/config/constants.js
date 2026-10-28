@@ -52,12 +52,37 @@ const DIRECTORIES = {
 // (not user data) by clearWorkspace on restore. One list, used by both.
 const CACHE_DIRS = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '.segcleanup', '.classifier'];
 
-// File upload limits
+// Local mode (ADR-019): a single-user install on someone's own machine.
+// No login, one stable workspace, no retention cleanup, generous upload
+// limits. Unset (the default) the server behaves as the public instance.
+const LOCAL_MODE = process.env.LOCAL_MODE === 'true';
+const LOCAL_SESSION_ID = 'local';
+const LOCAL_USER = {
+  username: 'local',
+  fullName: 'Local user',
+  email: '',
+  institution: '',
+  status: 'active',
+  isAdmin: true
+};
+
+// File upload limits, in MB from .env (UPLOAD_LIMIT_IMAGE_MB,
+// UPLOAD_LIMIT_MODEL_MB, UPLOAD_LIMIT_ZIP_MB); defaults differ by mode
+function limitMb(name, publicDefault, localDefault) {
+  const raw = parseInt(process.env[name], 10);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return LOCAL_MODE ? localDefault : publicDefault;
+}
+const UPLOAD_LIMITS_MB = {
+  image: limitMb('UPLOAD_LIMIT_IMAGE_MB', 200, 20 * 1024),   // TIFF / MRC stacks
+  model: limitMb('UPLOAD_LIMIT_MODEL_MB', 2 * 1024, 20 * 1024), // .pth / .json / bioimage.io zip
+  zip: limitMb('UPLOAD_LIMIT_ZIP_MB', 5 * 1024, 50 * 1024)      // workspace backup zip
+};
 const UPLOAD_LIMITS = {
-  tiffFileSize: 200 * 1024 * 1024,        // 200MB for TIFF stacks
-  modelFileSize: 2 * 1024 * 1024 * 1024,  // 2GB for model files
+  tiffFileSize: UPLOAD_LIMITS_MB.image * 1024 * 1024,
+  modelFileSize: UPLOAD_LIMITS_MB.model * 1024 * 1024,
   maxModelFiles: 2,                        // Maximum 2 files (model + config)
-  workspaceZipFileSize: 5 * 1024 * 1024 * 1024  // 5GB for workspace ZIP files
+  workspaceZipFileSize: UPLOAD_LIMITS_MB.zip * 1024 * 1024
 };
 
 // Retention policy (ONE policy, stated honestly in the UI/docs): workspaces
@@ -65,19 +90,23 @@ const UPLOAD_LIMITS = {
 // session cookie expires on the same schedule so login lifetime and data
 // lifetime match. Decision (2026-09-07, ADR-012): 48 h - small user base,
 // storage affordable; revisit if the platform grows into storage pressure.
-const RETENTION_HOURS = 48;
+// Local mode (ADR-019): no retention at all; the session is kept a year
+// and rolls on every request, and the cleanup service is not started.
+const RETENTION_HOURS = LOCAL_MODE ? 365 * 24 : 48;
 
 // Session configuration
 const SESSION_CONFIG = {
   ttl: RETENTION_HOURS * 60 * 60,             // seconds
-  cookieMaxAge: RETENTION_HOURS * 60 * 60 * 1000  // milliseconds
+  cookieMaxAge: RETENTION_HOURS * 60 * 60 * 1000,  // milliseconds
+  rolling: LOCAL_MODE,                         // extend the cookie on every request
+  fixedSessionId: LOCAL_MODE ? LOCAL_SESSION_ID : null  // one session for everyone
 };
 
 // Cleanup service configuration
 const CLEANUP_CONFIG = {
   intervalMs: 15 * 60 * 1000,                       // Run cleanup every 15 minutes
   gracePeriodMs: RETENTION_HOURS * 60 * 60 * 1000,  // Retention after last activity
-  enableOnStartup: true                              // Start cleanup service when server starts
+  enableOnStartup: !LOCAL_MODE                       // Start cleanup service when server starts
 };
 
 // Allowed file types
@@ -189,7 +218,11 @@ module.exports = {
   DIRECTORIES,
   CACHE_DIRS,
   RETENTION_HOURS,
+  LOCAL_MODE,
+  LOCAL_SESSION_ID,
+  LOCAL_USER,
   UPLOAD_LIMITS,
+  UPLOAD_LIMITS_MB,
   SESSION_CONFIG,
   CLEANUP_CONFIG,
   ALLOWED_FILE_TYPES,

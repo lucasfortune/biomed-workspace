@@ -56,6 +56,8 @@ File Operations
 
 Workspace Persistence
 
-Important: All data is session-based and temporary. Your workspace is kept for up to 48 hours after your last activity and is then deleted automatically; logging out (after confirmation) deletes it immediately. Use the workspace download/restore features to save and continue your work across sessions.
+Important: On the public server all data is session-based and temporary. Your workspace is kept for up to 48 hours after your last activity and is then deleted automatically; logging out (after confirmation) deletes it immediately. Use the workspace download/restore features to save and continue your work across sessions.
+
+None of this applies to a local installation running in local mode (the sidebar says "Local mode" instead of an approval status): there is one permanent workspace, nothing expires, and there is no logout.
 
 See the related articles for detailed information on each feature.

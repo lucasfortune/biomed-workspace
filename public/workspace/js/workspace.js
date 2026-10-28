@@ -151,9 +151,14 @@ class Workspace {
           username: response.user.username,
           fullName: response.user.fullName,
           status: response.user.status,
-          isAdmin: response.user.isAdmin
+          isAdmin: response.user.isAdmin,
+          localMode: response.localMode === true // ADR-019
         });
 
+        // ADR-019: effective upload limits (MB), differ by mode and .env
+        if (response.uploadLimitsMb) {
+          this.state.update('workspace.uploadLimitsMb', response.uploadLimitsMb);
+        }
         console.log('[Workspace] User authenticated:', response.user.username);
       } else {
         // Redirect to login
@@ -233,7 +238,16 @@ class Workspace {
 
     if (userStatus) {
       const status = this.state.get('user.status');
-      userStatus.textContent = status === 'active' ? '✓ Approved' : '⏳ Pending';
+      userStatus.textContent = this.state.get('user.localMode')
+        ? 'Local mode'
+        : (status === 'active' ? '✓ Approved' : '⏳ Pending');
+    }
+
+    // ADR-019: in local mode there is nothing to log out of, and logging out
+    // would delete the only workspace
+    if (this.state.get('user.localMode')) {
+      const logoutBtn = document.getElementById('btn-logout');
+      if (logoutBtn) logoutBtn.hidden = true;
     }
   }
 

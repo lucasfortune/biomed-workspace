@@ -17,7 +17,8 @@ const socketIo = require('socket.io');
 const path = require('path');
 
 // Configuration
-const { PYTHON_PATH, validatePythonPath, CLEANUP_CONFIG, DATA_DIR, DATA_PATHS, ensureDataDirectories } = require('./src/config/constants');
+const { PYTHON_PATH, validatePythonPath, CLEANUP_CONFIG, DATA_DIR, DATA_PATHS, ensureDataDirectories, LOCAL_MODE, UPLOAD_LIMITS_MB } = require('./src/config/constants');
+const { localModeUser } = require('./src/middleware/localMode.middleware');
 
 // Core modules
 const activityLogger = require('./activityLogger');
@@ -164,6 +165,7 @@ const io = socketIo(server);
 // ownership gate can verify job ownership.
 const sessionMiddleware = createSessionMiddleware(env, { sessionsDir: DATA_PATHS.sessions });
 io.engine.use(sessionMiddleware);
+io.engine.use(localModeUser); // no-op unless LOCAL_MODE (ADR-019)
 
 // Initialize Socket.IO handlers
 initializeSocketHandlers(io, logger);
@@ -207,6 +209,10 @@ const HOST = env.HOST;
 
 server.listen(PORT, HOST, () => {
   logger.info(`Server running on http://${HOST}:${PORT}`);
+  if (LOCAL_MODE) {
+    logger.info('LOCAL MODE: no login, one workspace, no retention cleanup, upload limits ' +
+      `${UPLOAD_LIMITS_MB.image} MB images / ${UPLOAD_LIMITS_MB.model} MB models / ${UPLOAD_LIMITS_MB.zip} MB backups (ADR-019)`);
+  }
 
   // Start cleanup service for abandoned workspaces
   if (CLEANUP_CONFIG.enableOnStartup) {

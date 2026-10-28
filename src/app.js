@@ -17,6 +17,7 @@ const { validateTrainingConfig } = require('./helpers/validation');
 
 // Middleware
 const { createSessionMiddleware } = require('./middleware/session.middleware');
+const { localModeUser } = require('./middleware/localMode.middleware');
 const { createUploadMiddleware } = require('./middleware/upload.middleware');
 const { globalErrorHandler } = require('./middleware/error.middleware');
 
@@ -286,6 +287,7 @@ function configureApp(app, dependencies) {
   // Session middleware (the shared instance also attached to Socket.IO;
   // created here only when the caller doesn't provide one, e.g. in tests)
   app.use(sessionMiddleware || createSessionMiddleware(env, { sessionsDir: DATA_PATHS.sessions }));
+  app.use(localModeUser); // no-op unless LOCAL_MODE (ADR-019)
 
   // CORS configuration
   const allowedOrigins = env.ALLOWED_ORIGINS

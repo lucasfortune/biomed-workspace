@@ -5,6 +5,7 @@
  */
 
 const multer = require('multer');
+const { UPLOAD_LIMITS_MB } = require('../config/constants');
 
 /**
  * Global error handler middleware
@@ -18,7 +19,9 @@ function globalErrorHandler(error, req, res, next) {
   // Handle Multer errors
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large (max 200MB)' });
+      // Transport limit of the multer instance that threw; the per-kind
+      // limits are enforced (and phrased) by the routes themselves (ADR-019)
+      return res.status(400).json({ error: `File too large (max ${UPLOAD_LIMITS_MB.zip} MB per upload)` });
     }
     if (error.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({ error: 'Too many files' });

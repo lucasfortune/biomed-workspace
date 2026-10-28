@@ -5,6 +5,7 @@
  */
 
 const express = require('express');
+const { LOCAL_MODE, UPLOAD_LIMITS_MB } = require('../config/constants');
 
 /**
  * Create authentication routes router
@@ -31,6 +32,9 @@ function createAuthRoutes(dependencies) {
    */
   router.get('/check-auth', (req, res) => {
     const userInfo = authService.getAuthenticatedUserInfo(req.session?.user);
+    // ADR-019: the client adapts its UI and upload checks to the mode
+    userInfo.localMode = LOCAL_MODE;
+    userInfo.uploadLimitsMb = { ...UPLOAD_LIMITS_MB };
     res.json(userInfo);
   });
 
@@ -133,6 +137,11 @@ function createAuthRoutes(dependencies) {
    * @body {boolean} deleteWorkspace - Whether to delete workspace files on logout
    */
   router.post('/logout', (req, res) => {
+    if (LOCAL_MODE) {
+      // ADR-019: logging out deletes the workspace, and in local mode that
+      // workspace is the only one; the UI hides the button, this backs it up
+      return res.status(400).json({ success: false, error: 'Logout is not available in local mode' });
+    }
     const username = req.session?.user?.username || 'unknown';
     const sessionId = req.session?.id;
     const deleteWorkspace = req.body?.deleteWorkspace === true;

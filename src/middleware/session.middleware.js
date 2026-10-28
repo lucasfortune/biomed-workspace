@@ -23,7 +23,15 @@ function createSessionMiddleware(env, options = {}) {
   const isProduction = process.env.NODE_ENV === 'production';
   const sessionsDir = options.sessionsDir || './sessions';
 
+  // Local mode (ADR-019): every new session gets the same fixed id, so the
+  // workspace at workspaces/<id>/ survives lost cookies and other browsers
+  const genid = SESSION_CONFIG.fixedSessionId
+    ? () => SESSION_CONFIG.fixedSessionId
+    : undefined;
+
   return session({
+    ...(genid ? { genid } : {}),
+    rolling: SESSION_CONFIG.rolling === true,
     store: new FileStore({
       path: sessionsDir,
       ttl: SESSION_CONFIG.ttl,
