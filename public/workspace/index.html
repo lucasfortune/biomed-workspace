@@ -117,14 +117,13 @@
             </div>
 
             <div class="workspace-info">
-              <small>Workspace Version 1.11.0</small>
+              <small>Workspace Version 1.12.0</small>
               <details class="whats-new">
-                <summary>What's new in 1.11.0</summary>
+                <summary>What's new in 1.12.0</summary>
                 <ul>
-                  <li>Readable workspace: every run gets a numbered folder (seg1, prep2, annot3) and files carry their names on disk; uploads keep their original names.</li>
-                  <li>Upload without choosing a kind: drop images, annotations, models, packages or a backup and the workspace detects what they are (right-click to correct a guess).</li>
-                  <li>Annotations made here live in one folder each and are completed in place; deleting an output removes its companion files; the file info names the model that produced a file.</li>
-                  <li>From 1.10.0: fine-tuning from a workspace model or a bioimage.io model in Step 2 of the Segmentation module.</li>
+                  <li>Local mode for installs on your own machine: set LOCAL_MODE=true in .env and the workspace opens without a login, keeps one permanent workspace, never cleans it up, and accepts uploads of up to 20 GB.</li>
+                  <li>Upload limits are now set in .env on every install, and the file browser checks against the limits the server actually enforces.</li>
+                  <li>From 1.11.0: readable run folders and file names, upload without choosing a kind, annotations completed in place.</li>
                 </ul>
                 <a href="https://lucasfortune.github.io/the-virtual-parasite/workspace/" class="resource-link" target="_blank" rel="noopener noreferrer">Full changelog &amp; docs</a>
               </details>

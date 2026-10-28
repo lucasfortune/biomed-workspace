@@ -1,6 +1,6 @@
 # Developer Documentation
 
-Technical documentation for the BioMed Workspace (version 1.11.0). For using
+Technical documentation for the BioMed Workspace (version 1.12.0). For using
 the platform, see the
 [user documentation](https://lucasfortune.github.io/the-virtual-parasite/workspace/);
 the in-app help articles live in `public/workspace/content/` and are synced
@@ -64,6 +64,7 @@ A starting point for new modules is the template in
 | [ADR-016](decisions/016_bioimageio_export.md) | Export of workspace U-Nets as bioimage.io packages |
 | [ADR-017](decisions/017_finetuning_starting_points.md) | Training from a starting point: workspace checkpoints and bioimage.io models |
 | [ADR-018](decisions/018_workspace_layout_naming_and_upload_detection.md) | Workspace layout, naming, sidecars and upload detection |
+| [ADR-019](decisions/019_local_mode.md) | Local mode: single-user installs without login, retention or upload limits |
 
 ---
 
