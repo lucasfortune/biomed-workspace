@@ -91,6 +91,10 @@ no separate installation.
 
 ### First login
 
+Installing for yourself on your own machine? Skip this section and switch
+on [local mode](#local-mode-single-user-install) instead; it needs no
+accounts at all.
+
 Accounts require approval by an admin. Create the first admin from the
 command line:
 
@@ -111,21 +115,42 @@ reset-password, ban-email, ...).
 ### Local mode (single-user install)
 
 On your own machine the login, the 48-hour retention and the upload limits
-only get in the way. Add this line to `.env` and restart:
+only get in the way. Local mode switches all three off.
 
-```
-LOCAL_MODE=true
-```
+1. Start the server once (`npm start`) if you have not yet: this creates
+   the `.env` file in the app directory, next to `server.js`.
+2. Open `.env` in a text editor and add this line anywhere (the generated
+   file already contains it commented out, so you can also just remove the
+   `#`):
 
-The app then opens straight into the workspace as a built-in local user,
-keeps one permanent workspace at `workspaces/local/`, never cleans it up,
-and raises the upload limits to 20 GB for images and models and 50 GB
-for workspace backups (set `UPLOAD_LIMIT_IMAGE_MB`, `UPLOAD_LIMIT_MODEL_MB`
-and `UPLOAD_LIMIT_ZIP_MB` in `.env` to choose your own, in either mode).
-No `users.json` is needed. Local mode has no authentication at all, so
-leave `HOST` at its default of 127.0.0.1 unless you understand who can
-reach the machine. Design notes in
-[ADR-019](docs/decisions/019_local_mode.md).
+   ```
+   LOCAL_MODE=true
+   ```
+
+   `TRUE`, `1`, `yes` and `on` work too; anything else leaves local mode
+   off.
+3. Restart the server. The startup log prints a line beginning with
+   `LOCAL MODE`, and http://localhost:3000 opens straight into the
+   workspace.
+
+What changes:
+
+- No login and no accounts: you are a built-in admin user named `local`,
+  and `users.json` is not needed.
+- One permanent workspace at `workspaces/local/`. Nothing expires, the
+  cleanup service does not run, and there is no logout. Workspaces created
+  before the switch stay on disk but are not shown; download them as a
+  backup first if you want to carry them over, and restore them afterwards.
+- Upload limits of 20 GB for images and models and 50 GB for workspace
+  backups. Set `UPLOAD_LIMIT_IMAGE_MB`, `UPLOAD_LIMIT_MODEL_MB` and
+  `UPLOAD_LIMIT_ZIP_MB` in `.env` to choose your own; these three work in
+  either mode.
+
+To go back, set `LOCAL_MODE=false` (or delete the line) and restart.
+
+Local mode has no authentication at all, so leave `HOST` at its default
+of 127.0.0.1 unless you understand who can reach the machine. Design
+notes in [ADR-019](docs/decisions/019_local_mode.md).
 
 ### Common commands
 
