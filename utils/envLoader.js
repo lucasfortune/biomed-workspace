@@ -135,7 +135,7 @@ function loadEnvironment() {
     HOST: process.env.HOST || '127.0.0.1',
     ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || null,
     DATA_DIR: process.env.DATA_DIR || null,  // null means use project root
-    LOCAL_MODE: process.env.LOCAL_MODE === 'true'  // ADR-019
+    LOCAL_MODE: ['true', '1', 'yes', 'on'].includes(String(process.env.LOCAL_MODE || '').trim().toLowerCase())  // ADR-019
   };
 }
 

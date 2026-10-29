@@ -55,7 +55,7 @@ const CACHE_DIRS = ['.thumbnails', '.slices', '.mesh-previews', '.preprocess', '
 // Local mode (ADR-019): a single-user install on someone's own machine.
 // No login, one stable workspace, no retention cleanup, generous upload
 // limits. Unset (the default) the server behaves as the public instance.
-const LOCAL_MODE = process.env.LOCAL_MODE === 'true';
+const LOCAL_MODE = ['true', '1', 'yes', 'on'].includes(String(process.env.LOCAL_MODE || '').trim().toLowerCase());
 const LOCAL_SESSION_ID = 'local';
 const LOCAL_USER = {
   username: 'local',
