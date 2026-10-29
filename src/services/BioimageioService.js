@@ -90,6 +90,17 @@ class BioimageioService {
   }
 
   /**
+   * A file reference in a manifest is either a plain path/URL string or,
+   * since spec 0.5.12, an object { source, sha256 }. Returns the string
+   * form or null.
+   */
+  static fileRef(value) {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && typeof value.source === 'string') return value.source;
+    return null;
+  }
+
+  /**
    * Where the pytorch_state_dict architecture code comes from: a file in
    * the model package (URL) or an importable library module. Null when the
    * model has no state dict or the form is unknown.
@@ -105,7 +116,7 @@ class BioimageioService {
       source = arch.split(':')[0];                       // format 0.4: "unet.py:UNet2d"
     } else if (arch && typeof arch === 'object') {
       if (arch.import_from) importFrom = String(arch.import_from);
-      else if (arch.source) source = String(arch.source);
+      else if (arch.source) source = BioimageioService.fileRef(arch.source);
     }
     if (importFrom) return { import_from: importFrom };
     if (!source) return null;
@@ -130,7 +141,7 @@ class BioimageioService {
 
     const id = artifact.alias || m.id;
     if (!id) return null;
-    const cover = Array.isArray(m.covers) && m.covers.length ? String(m.covers[0]) : null;
+    const cover = Array.isArray(m.covers) && m.covers.length ? BioimageioService.fileRef(m.covers[0]) : null;
     const coverUrl = cover
       ? (/^https?:\/\//.test(cover) ? cover : `${HUB_FILE_BASE}/${id}/files/${cover}`)
       : null;
