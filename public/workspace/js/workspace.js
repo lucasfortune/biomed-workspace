@@ -152,13 +152,12 @@ class Workspace {
           fullName: response.user.fullName,
           status: response.user.status,
           isAdmin: response.user.isAdmin,
-          localMode: response.localMode === true // ADR-019
+          localMode: response.localMode === true, // ADR-019
+          // ADR-019: effective upload limits (MB), differ by mode and .env.
+          // Kept on `user`, not `workspace`: initializeWorkspace() replaces
+          // the whole workspace object and would drop them
+          uploadLimitsMb: response.uploadLimitsMb || null
         });
-
-        // ADR-019: effective upload limits (MB), differ by mode and .env
-        if (response.uploadLimitsMb) {
-          this.state.update('workspace.uploadLimitsMb', response.uploadLimitsMb);
-        }
         console.log('[Workspace] User authenticated:', response.user.username);
       } else {
         // Redirect to login

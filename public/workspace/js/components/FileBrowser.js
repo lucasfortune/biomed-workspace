@@ -1985,7 +1985,7 @@ class FileBrowser {
 
     // Per-kind limits in MB as the server reports them (ADR-019); the
     // numbers below are only a fallback for a client that has not asked yet
-    const mb = this.state.get('workspace.uploadLimitsMb') || { image: 200, model: 2048, zip: 5120 };
+    const mb = this.state.get('user.uploadLimitsMb') || { image: 200, model: 2048, zip: 5120 };
     const limits = {
       tif: mb.image, tiff: mb.image, mrc: mb.image,
       pth: mb.model, pt: mb.model, json: mb.model,

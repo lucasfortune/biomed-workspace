@@ -57,7 +57,9 @@ class StateManager {
         username: null,
         fullName: null,
         status: null,
-        isAdmin: false
+        isAdmin: false,
+        localMode: false,
+        uploadLimitsMb: null // ADR-019, filled from /check-auth
       }
     };
 
@@ -210,7 +212,9 @@ class StateManager {
         username: null,
         fullName: null,
         status: null,
-        isAdmin: false
+        isAdmin: false,
+        localMode: false,
+        uploadLimitsMb: null // ADR-019, filled from /check-auth
       }
     };
 
